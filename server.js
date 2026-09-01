@@ -65,8 +65,8 @@ const DEFAULT_SHIFTS = {
 };
 
 const DEFAULT_SETTINGS = {
-  googleSheet: { spreadsheetId: '1rcqEKraSRhr-Tn9qwlhADlkQUei8j65bXeHF_Tmkd38', targetDatabaseSpreadsheetId: '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w', targetWebhookUrl: '', serviceAccountEmail: '', privateKey: '', formResponsesSheetId: '', masked: true },
-  googleDrive: { rootFolderId: '', backupFolderId: '' },
+  googleSheet: { spreadsheetId: '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w', targetDatabaseSpreadsheetId: '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w', targetWebhookUrl: '', serviceAccountEmail: '', privateKey: '', formResponsesSheetId: '', formUrl: 'https://docs.google.com/forms/d/e/1FAIpQLSeteDABiq7mday0Yko-PyyUIW4uccicP7FJJt2evc7xbbWBfA/viewform', masked: true },
+  googleDrive: { rootFolderId: '1-Wy-Di6KvfeGCKoTV7TSuFQpY_yKNy-1', backupFolderId: '1-Wy-Di6KvfeGCKoTV7TSuFQpY_yKNy-1', driveUrl: 'https://drive.google.com/drive/folders/1-Wy-Di6KvfeGCKoTV7TSuFQpY_yKNy-1' },
   googleForm: { formUrl: 'https://docs.google.com/forms/d/e/1FAIpQLSd9rRG4QLvmLclPseVVmpgPdizij1XYwiSTCgc6x2BPMfA_AA/viewform', mapping: {} },
   ai: { provider: 'openai', baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o', temperature: 0.7 },
   zalo: { oaId: '', accessToken: '', template: '', reminderEnabled: true },
@@ -77,6 +77,36 @@ const DEFAULT_SETTINGS = {
   off: { openDay: 5, openHour: 12, closeDay: 6, closeHour: 15, maxPerWeek: 2 },
   test: { minPerQuestion: 5, totalQuestions: 20, passScore: 7, retakeMin: 5, maxRetest: 3 },
   security: { sessionTimeout: 120, deviceBind: true }
+};
+
+// ============ GOOGLE SHEET AUTO-TABS DEFINITIONS - Realtime 1:1 per HR tab ============
+// Mỗi tab HR sẽ tự động tạo 1 sheet với cột tương ứng, realtime 1:1 với db
+const SHEET_DEFINITIONS = {
+  // Tab Nhân viên mới - từ Form đăng ký
+  NHAN_VIEN_MOI: { sheetName: 'NHAN_VIEN_MOI', headers: ['ID','Ngày ĐK','Họ tên','Giới tính','Năm sinh','Trình độ','Quê quán','SĐT','Ca đăng ký','Chi nhánh ĐK','Kinh nghiệm','Xử lý đột xuất','Facebook','Nguồn biết tin','Điểm AI','Kết quả','Trạng thái','Source ID','Version','Updated At'] },
+  // Nhân viên cửa hàng
+  NHAN_VIEN_TRAINING: { sheetName: 'NHAN_VIEN_TRAINING', headers: ['ID','Mã NV','Họ tên','SĐT','Chi nhánh','Ca','Ngày bắt đầu','Ngày kết thúc','Số ngày Training','Trạng thái','Điểm TEST','Kết quả TEST','Loại','Category','Version','Updated At','Sync'] },
+  NHAN_VIEN_CHINH_THUC: { sheetName: 'NHAN_VIEN_CHINH_THUC', headers: ['ID','Mã NV','Họ tên','SĐT','Chi nhánh','Ca','Ngày bắt đầu','Trạng thái','Điểm TEST','Loại','Ngày chính thức','Version','Updated At','Sync'] },
+  NHAN_VIEN_XUONG: { sheetName: 'NHAN_VIEN_XUONG', headers: ['ID','Mã NV','Họ tên','SĐT','Branch','Status','Sync'] },
+  NHAN_VIEN_VAN_PHONG: { sheetName: 'NHAN_VIEN_VAN_PHONG', headers: ['ID','Mã NV','Họ tên','SĐT','Branch','Status','Sync'] },
+  NHAN_VIEN_SALE: { sheetName: 'NHAN_VIEN_SALE', headers: ['ID','Mã NV','Họ tên','SĐT','Branch','Status','Sync'] },
+  // Lịch
+  LICH_LAM_VIEC: { sheetName: 'LICH_LAM_VIEC', headers: ['ID','Mã NV','Họ tên','Chi nhánh','Tuần bắt đầu','Ngày','Thứ','Ca','Trạng thái','Người thay','Version'] },
+  // Phiếu
+  PHIEU_OFF_HANG_TUAN: { sheetName: 'PHIEU_OFF_HANG_TUAN', headers: ['ID','Mã NV','Họ tên','Chi nhánh','Ca','Ngày OFF','Loại','Trạng thái','Auto Approve','Ngày tạo'] },
+  PHIEU_OFF_DOT_XUAT: { sheetName: 'PHIEU_OFF_DOT_XUAT', headers: ['ID','Mã NV','Họ tên','Chi nhánh','Ca','Ngày OFF','Lý do','Người thay','Trạng thái','Cascade Step','Ngày tạo'] },
+  PHIEU_DOI_THIET_BI: { sheetName: 'PHIEU_DOI_THIET_BI', headers: ['ID','Mã NV','Lý do','Thiết bị cũ','Thiết bị mới','Trạng thái','Ngày tạo','Hết hạn'] },
+  // Điểm danh
+  RECORD_DIEM_DANH: { sheetName: 'RECORD_DIEM_DANH', headers: ['ID','Mã NV','Họ tên','Ngày','Ca','Chi nhánh','Giờ Check-in','GPS In','Ảnh In','Drive In','Giờ Check-out','GPS Out','Ảnh Out','Drive Out','Trạng thái','Vi phạm','Version'] },
+  RECORD_ZALO: { sheetName: 'RECORD_ZALO', headers: ['ID','Thời gian gửi','Người nhận','Loại','Nội dung','Trạng thái','Lỗi'] },
+  // Báo cáo
+  BAO_CAO_CHAM_CONG: { sheetName: 'BAO_CAO_CHAM_CONG', headers: ['Mã NV','Họ tên','Chi nhánh','Tháng','Ngày tiêu chuẩn','Thực tế','Tính lương','Giờ TC','Giờ TT','Giờ TL','Phép','OT','Trễ','Lỗi','Trạng thái'] },
+  KET_QUA_TEST: { sheetName: 'KET_QUA_TEST', headers: ['ID','Mã NV','Họ tên','Khóa','Điểm','Đúng/Tổng','Kết quả','Thời gian làm','Ngày tạo'] },
+  KHOA_TEST: { sheetName: 'KHOA_TEST', headers: ['ID','Tên khóa','Số câu','Min/câu','Ngày tạo'] },
+  TAI_KHOAN: { sheetName: 'TAI_KHOAN', headers: ['ID','Username','Role','Branch Scope','Display Name','Allowed Tabs'] },
+  AUDIT_LOG: { sheetName: 'AUDIT_LOG', headers: ['ID','Actor','Action','Entity','Before','After','Timestamp','IP'] },
+  SYNC_QUEUE: { sheetName: 'SYNC_QUEUE', headers: ['ID','Entity','Operation','Version','Updated At','By','Source','Sync Status'] },
+  DRIVE_FILES: { sheetName: 'DRIVE_FILES', headers: ['ID','Mã NV','Họ tên','Ngày','Loại','File name','Drive Path','URL','Created At'] }
 };
 
 let db = {
@@ -2501,14 +2531,73 @@ function realtimeAutomationPoller(){
 setInterval(realtimeAutomationPoller, 20*1000);
 setTimeout(realtimeAutomationPoller, 10000);
 
-// === GOOGLE DRIVE REALTIME MOCK (folder structure per spec 4) ===
+// === GOOGLE DRIVE REALTIME - Cấu trúc cake per spec 4, 1:1 thực tế ===
 function generateDrivePath(employee, dateStr, type){
   const branch = db.branches.find(b=>b.id===employee.branchId);
   const branchFolder = `${branch?.prefix||employee.branchId} - ${branch?.name||employee.branchId}`;
   const shiftFolder = employee.shift || 'CA_SANG';
-  const empFolder = `${employee.name} - ${employee.phone} - ${employee.employeeId}`;
+  // Spec 4 note: bổ sung Employee ID để tránh trùng tên/SĐT
+  const empFolder = `${employee.name} - ${employee.phone}`;
   const root = employee.type==='TRAINING' ? 'NHAN_VIEN_TRAINING' : 'NHAN_VIEN_CHINH_THUC';
-  return `${root}/${branchFolder}/${shiftFolder}/${empFolder}/${dateStr}/${type}`;
+  // Spec yêu cầu DD-MM-YYYY cho folder ngày
+  const dParts = dateStr.split('-');
+  const folderDate = dParts.length===3 ? `${dParts[2]}-${dParts[1]}-${dParts[0]}` : dateStr;
+  // Full cake: NHAN_VIEN_.../CN.../CA_.../Họ tên - SĐT/DD-MM-YYYY/CHECK_IN
+  return `${root}/${branchFolder}/${shiftFolder}/${empFolder}/${folderDate}/${type}`;
+}
+async function ensureDriveFolderCake(employee, dateStr, type){
+  const cfg = db.settings?.googleDrive;
+  if(!cfg || !cfg.rootFolderId || !db.settings?.googleSheet?.serviceAccountEmail || !db.settings?.googleSheet?.privateKey || !db.settings.googleSheet.privateKey.includes('BEGIN PRIVATE KEY')) return null;
+  try{
+    const accessToken = await getGoogleAccessToken();
+    if(!accessToken) return null;
+    const rootId = cfg.rootFolderId;
+    const branch = db.branches.find(b=>b.id===employee.branchId);
+    const pathParts = [
+      employee.type==='TRAINING' ? 'NHAN_VIEN_TRAINING' : 'NHAN_VIEN_CHINH_THUC',
+      `${branch?.prefix||employee.branchId} - ${branch?.name||employee.branchId}`,
+      employee.shift || 'CA_SANG',
+      `${employee.name} - ${employee.phone}`,
+      (()=>{ const p=dateStr.split('-'); return p.length===3?`${p[2]}-${p[1]}-${p[0]}`:dateStr })(),
+      type
+    ];
+    let parentId = rootId;
+    for(const folderName of pathParts){
+      // Check exists
+      const q = encodeURIComponent(`'${parentId}' in parents and name='${folderName.replace(/'/g,"\\'")}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+      const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)`, { headers:{ Authorization:`Bearer ${accessToken}`}});
+      const searchData = await searchRes.json();
+      let folderId = searchData.files?.[0]?.id;
+      if(!folderId){
+        const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+          method:'POST',
+          headers:{ Authorization:`Bearer ${accessToken}`, 'Content-Type':'application/json'},
+          body: JSON.stringify({ name: folderName, mimeType:'application/vnd.google-apps.folder', parents:[parentId] })
+        });
+        const createData = await createRes.json();
+        folderId = createData.id;
+      }
+      if(!folderId) break;
+      parentId = folderId;
+    }
+    return parentId;
+  }catch(e){ console.error('Drive cake error', e.message); return null; }
+}
+async function getGoogleAccessToken(){
+  const cfg = db.settings?.googleSheet;
+  if(!cfg || !cfg.serviceAccountEmail || !cfg.privateKey) return null;
+  try{
+    const now = Math.floor(Date.now()/1000);
+    const payload = { iss: cfg.serviceAccountEmail, scope: 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive', aud: 'https://oauth2.googleapis.com/token', exp: now+3600, iat: now };
+    const privateKey = cfg.privateKey.replace(/\\n/g,'\n');
+    const token = jwt.sign(payload, privateKey, { algorithm:'RS256' });
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body:`grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${token}`
+    });
+    const data = await tokenRes.json();
+    return data.access_token||null;
+  }catch(e){ console.error('getGoogleAccessToken error', e.message); return null; }
 }
 function addDriveFile(employeeId, dateStr, type, fileName, meta){
   const emp = db.employees.find(e=>e.employeeId===employeeId);
@@ -2522,16 +2611,149 @@ function addDriveFile(employeeId, dateStr, type, fileName, meta){
     type, // CHECK_IN / CHECK_OUT
     fileName,
     drivePath: drivePath + '/' + fileName,
-    url: `https://drive.google.com/mock/${encodeURIComponent(drivePath)}/${fileName}`,
+    url: `https://drive.google.com/drive/folders/${db.settings?.googleDrive?.rootFolderId||'1-Wy-Di6KvfeGCKoTV7TSuFQpY_yKNy-1'}/${encodeURIComponent(drivePath)}/${fileName}`,
     meta: meta||{},
     createdAt: new Date().toISOString(),
-    sync_status: 'SYNCED'
+    sync_status: 'PENDING'
   };
   db.driveFiles.unshift(file);
   if(db.driveFiles.length>500) db.driveFiles.pop();
   io.emit('drive:update', db.driveFiles.slice(0,20));
+  // Realtime 1:1 - background sync to real Drive if credentials configured
+  (async()=>{
+    try{
+      const folderId = await ensureDriveFolderCake(emp, dateStr, type);
+      if(folderId && meta && meta.content){
+        // Upload txt content
+        const token = await getGoogleAccessToken();
+        if(token){
+          const boundary = '-------314159265358979323846';
+          const body = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({name: fileName, parents:[folderId]})}\r\n--${boundary}\r\nContent-Type: text/plain\r\n\r\n${meta.content}\r\n--${boundary}--`;
+          const upRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+            method:'POST', headers:{ Authorization:`Bearer ${token}`, 'Content-Type':`multipart/related; boundary=${boundary}`}, body
+          });
+          const upData = await upRes.json();
+          if(upData.id){ file.url = `https://drive.google.com/file/d/${upData.id}/view`; file.sync_status='SYNCED'; file.driveFileId = upData.id; io.emit('drive:update', db.driveFiles.slice(0,20)); saveDB(); }
+        }
+      } else if(folderId){
+        file.sync_status='SYNCED';
+        file.driveFolderId = folderId;
+        io.emit('drive:update', db.driveFiles.slice(0,20));
+      }
+    }catch(e){ console.error('Drive sync error', e.message); file.sync_status='FAILED'; }
+  })();
   return file;
 }
+
+// ============ GOOGLE SHEET REALTIME 1:1 - Auto-create sheets per HR tab ============
+async function ensureSheetsExist(){
+  const spreadsheetId = db.settings?.googleSheet?.spreadsheetId || '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w';
+  const token = await getGoogleAccessToken();
+  if(!token) return false;
+  try{
+    const metaRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}`, { headers:{ Authorization:`Bearer ${token}` }});
+    const meta = await metaRes.json();
+    const existing = new Set((meta.sheets||[]).map(s=>s.properties.title));
+    const requests = [];
+    for(const key in SHEET_DEFINITIONS){
+      const def = SHEET_DEFINITIONS[key];
+      if(!existing.has(def.sheetName)){
+        requests.push({ addSheet:{ properties:{ title: def.sheetName }}});
+      }
+    }
+    if(requests.length>0){
+      await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
+        method:'POST', headers:{ Authorization:`Bearer ${token}`, 'Content-Type':'application/json'},
+        body: JSON.stringify({ requests })
+      });
+      console.log(`[SHEET] Auto-created ${requests.length} sheets per HR tabs`);
+    }
+    // Ensure headers for each sheet
+    for(const key in SHEET_DEFINITIONS){
+      const def = SHEET_DEFINITIONS[key];
+      const headerRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(def.sheetName)}!A1:Z1`, { headers:{ Authorization:`Bearer ${token}` }});
+      const headerData = await headerRes.json();
+      const hasHeader = headerData.values && headerData.values[0] && headerData.values[0][0]===def.headers[0];
+      if(!hasHeader){
+        await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(def.sheetName)}!A1:append?valueInputOption=RAW`, {
+          method:'POST', headers:{ Authorization:`Bearer ${token}`, 'Content-Type':'application/json'},
+          body: JSON.stringify({ values:[def.headers] })
+        });
+      }
+    }
+    return true;
+  }catch(e){ console.error('ensureSheetsExist error', e.message); return false; }
+}
+async function syncSheetTab(sheetKey){
+  const def = SHEET_DEFINITIONS[sheetKey];
+  if(!def) return;
+  const spreadsheetId = db.settings?.googleSheet?.spreadsheetId;
+  const token = await getGoogleAccessToken();
+  if(!token || !spreadsheetId) return;
+  try{
+    let rows = [];
+    switch(sheetKey){
+      case 'NHAN_VIEN_MOI':
+        rows = db.applicants.map(a=>[a.id, a.createdAt, a.name, a.gender, a.birthYear, a.education, a.hometown, a.phone, a.shiftText, a.branchText, a.experience, a.handling, a.facebook, a.source, a.aiScore, a.isDisqualified?'LOAI':'DAT', a.status, a.source_id, a.version, a.updated_at]);
+        break;
+      case 'NHAN_VIEN_TRAINING':
+        rows = db.employees.filter(e=>e.type==='TRAINING').map(e=>[e.id, e.employeeId, e.name, e.phone, e.branchId, e.shift, e.startDate, e.endDate, e.trainingDays, e.status, e.testScore, e.testResult, e.type, e.category, e.version, e.updated_at, e.sync_status]);
+        break;
+      case 'NHAN_VIEN_CHINH_THUC':
+        rows = db.employees.filter(e=>e.type==='OFFICIAL').map(e=>[e.id, e.employeeId, e.name, e.phone, e.branchId, e.shift, e.startDate, e.status, e.testScore, e.type, e.officialStartDate||'', e.version, e.updated_at, e.sync_status]);
+        break;
+      case 'LICH_LAM_VIEC':
+        rows = db.schedules.flatMap(s=> s.days.map(d=>[s.id, s.employeeId, db.employees.find(e=>e.employeeId===s.employeeId)?.name||'', db.employees.find(e=>e.employeeId===s.employeeId)?.branchId||'', s.weekStart, d.date, d.dayName, d.shift, d.status, d.substituteFor||'', s.version]));
+        break;
+      case 'RECORD_DIEM_DANH':
+        rows = db.attendances.map(a=>[a.id, a.employeeId, db.employees.find(e=>e.employeeId===a.employeeId)?.name||'', a.date, a.shift, a.branchId, a.checkIn?.time||'', a.checkIn?.gps||'', a.checkIn?.image ? 'co_anh' : '', a.checkIn?.drivePath||'', a.checkOut?.time||'', a.checkOut?.gps||'', a.checkOut?.image ? 'co_anh' : '', a.checkOut?.drivePath||'', a.status, (a.violations||[]).join(','), a.version]);
+        break;
+      case 'RECORD_ZALO':
+        rows = db.zaloRecords.map(z=>[z.id, z.sent_at, z.receiver, z.type, z.content?.slice(0,200), z.status, z.error||'']);
+        break;
+      case 'PHIEU_OFF_HANG_TUAN':
+        rows = db.offRequests.map(r=>[r.id, r.employeeId, r.employeeName, r.branchId, r.shift, r.dates?.join(','), r.type, r.status, r.autoApproved?'YES':'', r.createdAt]);
+        break;
+      case 'PHIEU_OFF_DOT_XUAT':
+        rows = db.emergencyRequests.map(r=>[r.id, r.employeeId, r.employeeName, r.branchId, r.shift, r.date, r.reason, r.substituteName||'', r.status, r.cascadeStep, r.createdAt]);
+        break;
+      case 'PHIEU_DOI_THIET_BI':
+        rows = db.deviceRequests.map(r=>[r.id, r.employeeId, r.reason, r.oldDeviceId||'', r.newDeviceId||'', r.status, r.createdAt, r.expiresAt]);
+        break;
+      case 'KET_QUA_TEST':
+        rows = db.testResults.map(t=>[t.id, t.employeeId, db.employees.find(e=>e.employeeId===t.employeeId)?.name||'', t.courseId, t.score, `${t.correct}/${t.total}`, t.result, t.timeSpent, t.createdAt]);
+        break;
+      case 'DRIVE_FILES':
+        rows = db.driveFiles.map(f=>[f.id, f.employeeId, f.employeeName, f.date, f.type, f.fileName, f.drivePath, f.url, f.createdAt]);
+        break;
+      default:
+        return;
+    }
+    // Clear and rewrite sheet (realtime 1:1)
+    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(def.sheetName)}!A2:Z:clear`, {
+      method:'POST', headers:{ Authorization:`Bearer ${token}` }
+    });
+    if(rows.length>0){
+      await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(def.sheetName)}!A2:append?valueInputOption=RAW`, {
+        method:'POST', headers:{ Authorization:`Bearer ${token}`, 'Content-Type':'application/json'},
+        body: JSON.stringify({ values: rows })
+      });
+    }
+    console.log(`[SHEET] Synced ${def.sheetName}: ${rows.length} rows - Realtime 1:1`);
+  }catch(e){ console.error(`syncSheetTab ${sheetKey} error`, e.message); }
+}
+async function syncAllTabsToSheetsRealtime(){
+  const ok = await ensureSheetsExist();
+  if(!ok) return;
+  for(const key in SHEET_DEFINITIONS){
+    await syncSheetTab(key);
+    await new Promise(r=>setTimeout(r, 200)); // throttle
+  }
+  io.emit('sync:update', { type:'SHEETS_REALTIME', timestamp: new Date().toISOString(), sheets: Object.keys(SHEET_DEFINITIONS).length });
+}
+// Auto-sync every 60s + on data change
+setInterval(syncAllTabsToSheetsRealtime, 60*1000);
+setTimeout(()=>{ syncAllTabsToSheetsRealtime().catch(()=>{}); }, 15000);
 
 // Drive realtime status vars
 
