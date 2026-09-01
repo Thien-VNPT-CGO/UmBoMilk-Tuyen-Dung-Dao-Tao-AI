@@ -14,3 +14,5 @@ data/*.json
 
 *.bundle
 
+test_private.js
+

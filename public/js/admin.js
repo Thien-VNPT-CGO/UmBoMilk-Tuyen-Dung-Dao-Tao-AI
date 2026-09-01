@@ -4123,7 +4123,7 @@ async function loadSettings(){
     if (document.getElementById('setSheetId')) document.getElementById('setSheetId').value = s.googleSheet?.spreadsheetId || '1rcqEKraSRhr-Tn9qwlhADlkQUei8j65bXeHF_Tmkd38';
     if (document.getElementById('setTargetDatabaseSheetId')) document.getElementById('setTargetDatabaseSheetId').value = s.googleSheet?.targetDatabaseSpreadsheetId || '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w';
     if (document.getElementById('setTargetWebhookUrl')) document.getElementById('setTargetWebhookUrl').value = s.googleSheet?.targetWebhookUrl || 'https://script.google.com/macros/s/AKfycbz_umbomilk_apps_script/exec';
-    if (document.getElementById('setSheetEmail')) document.getElementById('setSheetEmail').value = s.googleSheet?.serviceAccountEmail || 'umbomilk-sa@umbomilk-hr.iam.gserviceaccount.com';
+    if (document.getElementById('setSheetEmail')) document.getElementById('setSheetEmail').value = s.googleSheet?.serviceAccountEmail || 'umbomilk-hr@umbomilk-hr.iam.gserviceaccount.com';
     if (document.getElementById('setSheetKey')) document.getElementById('setSheetKey').value = m.googleSheet?.privateKey || s.googleSheet?.privateKey || '••••••••Nrfw';
     if (document.getElementById('setFormId')) document.getElementById('setFormId').value = s.googleSheet?.formResponsesSheetId || '1rcqEKraSRhr-Tn9qwlhADlkQUei8j65bXeHF_Tmkd38';
     if (document.getElementById('setDriveId')) document.getElementById('setDriveId').value = s.googleDrive?.rootFolderId || '1DriveFolderID_UmBoMilk_CV_2026';
