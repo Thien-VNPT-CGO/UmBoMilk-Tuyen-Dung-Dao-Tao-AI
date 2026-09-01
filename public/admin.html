@@ -73,8 +73,8 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
         <div class="text-[11px] font-semibold text-pink-600 flex items-center gap-2"><span class="w-2 h-2 bg-pink-500 rounded-full animate-pulse inline-block"></span>Realtime • <span id="headerBranch">CN2 - 261 Tô Hiến Thành</span></div>
       </div>
     </div>
-    <!-- Realtime Live System Status Indicators (6 Services) -->
-    <div class="hidden lg:flex items-center gap-1.5 overflow-x-auto py-1 scrollbar-none">
+    <!-- Realtime Live System Status Indicators (6 Services) - HIỂN THỊ ĐẦY ĐỦ -->
+    <div class="flex flex-wrap items-center gap-1.5 py-1 max-w-[640px]">
       <!-- 1. Database chính -->
       <div id="statusDbMaster" class="flex items-center gap-1.5 bg-emerald-50 border border-emerald-300 text-emerald-800 text-[11px] font-black px-2.5 py-1 rounded-full shadow-2xs" title="Database chính (Sheet ID: 17iXM0zc...) - Chạy API Thật">
         <span class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
@@ -126,11 +126,59 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
       <button onclick="logout()" class="w-9 h-9 rounded-xl bg-white hover:bg-pink-50 text-pink-600 border border-pink-200 flex items-center justify-center"><i class="fa-solid fa-right-from-bracket text-sm"></i></button>
     </div>
   </header>
+  <!-- System Status Full Bar - hiển thị đầy đủ 6 dịch vụ -->
+  <div id="systemStatusFull" class="bg-white border-b border-pink-200 px-4 lg:px-6 py-3 shadow-sm">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-2">
+        <span class="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center shadow"><i class="fa-solid fa-server text-xs"></i></span>
+        <div>
+          <div class="text-xs font-black text-slate-900">Trạng thái hệ thống Realtime</div>
+          <div class="text-[11px] text-slate-500">6 dịch vụ • Đồng bộ 15s • Socket.io • Rule Engine</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <span id="systemStatusTime" class="text-[11px] font-bold bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-full text-slate-600">--:--:--</span>
+        <button onclick="toggleSystemStatusDetail()" class="text-xs font-bold bg-pink-500 hover:bg-pink-600 text-white px-3 py-1.5 rounded-xl shadow flex items-center gap-1.5"><i class="fa-solid fa-circle-info"></i> Chi tiết</button>
+      </div>
+    </div>
+    <div id="systemStatusDetail" class="hidden mt-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+      <div class="bg-slate-50 border border-slate-200 rounded-xl p-3">
+        <div class="text-[11px] font-black text-slate-700 flex items-center gap-1.5"><i class="fa-solid fa-database text-emerald-600"></i> Database chính <span class="ml-auto w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span></div>
+        <div class="text-[11px] font-mono text-slate-600 mt-1 break-all">17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w</div>
+        <div class="text-[11px] text-emerald-700 font-bold mt-1">TRỰC TUYẾN • Sync API Thật</div>
+      </div>
+      <div class="bg-slate-50 border border-slate-200 rounded-xl p-3">
+        <div class="text-[11px] font-black text-slate-700 flex items-center gap-1.5"><i class="fa-solid fa-file-excel text-emerald-600"></i> Sheet Form Đăng ký <span class="ml-auto w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span></div>
+        <div class="text-[11px] font-mono text-slate-600 mt-1 break-all">1rcqEKraSRhr-Tn9qwlhADlkQUei8j65bXeHF_Tmkd38</div>
+        <div class="text-[11px] text-emerald-700 font-bold mt-1">TRỰC TUYẾN • CSV 15s</div>
+      </div>
+      <div class="bg-slate-50 border border-slate-200 rounded-xl p-3">
+        <div class="text-[11px] font-black text-slate-700 flex items-center gap-1.5"><i class="fa-solid fa-brain text-emerald-600"></i> AI Chấm điểm <span class="ml-auto w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span></div>
+        <div class="text-[11px] text-slate-600 mt-1">14 tiêu chí • 0-14 điểm • Ngưỡng 8 đạt</div>
+        <div class="text-[11px] text-emerald-700 font-bold mt-1">TRỰC TUYẾN</div>
+      </div>
+      <div class="bg-slate-50 border border-slate-200 rounded-xl p-3">
+        <div class="text-[11px] font-black text-slate-700 flex items-center gap-1.5"><i class="fa-solid fa-video text-emerald-600"></i> Google Meet <span class="ml-auto w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span></div>
+        <div class="text-[11px] text-slate-600 mt-1">Tự tạo Meet link • Khóa 30 phút/ứng viên</div>
+        <div class="text-[11px] text-emerald-700 font-bold mt-1">TRỰC TUYẾN</div>
+      </div>
+      <div class="bg-slate-50 border border-slate-200 rounded-xl p-3">
+        <div class="text-[11px] font-black text-slate-700 flex items-center gap-1.5"><i class="fa-solid fa-paper-plane text-emerald-600"></i> Zalo Bot <span id="zaloDetailDot" class="ml-auto w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span></div>
+        <div class="text-[11px] text-slate-600 mt-1 break-all">OA + Bot Webhook</div>
+        <div id="zaloDetailText" class="text-[11px] text-emerald-700 font-bold mt-1">TRỰC TUYẾN</div>
+      </div>
+      <div class="bg-gradient-to-br from-pink-500 to-rose-500 text-white rounded-xl p-3 shadow">
+        <div class="text-[11px] font-black flex items-center gap-1.5"><i class="fa-solid fa-wifi"></i> Socket.io Realtime <span class="ml-auto w-2 h-2 bg-white rounded-full animate-ping"></span></div>
+        <div id="socketDetailText" class="text-[11px] font-bold mt-1">TRỰC TUYẾN • 0 clients</div>
+        <div id="automationHeartbeat" class="text-[10px] opacity-90 mt-1">AUTO --:--:--</div>
+      </div>
+    </div>
+  </div>
 
   <div class="flex flex-1 overflow-hidden">
     <!-- Sidebar - Drawer for phone -->
     <div id="sidebarOverlay" class="fixed inset-0 bg-black/40 backdrop-blur-sm z-20 hidden lg:hidden" onclick="toggleSidebar()"></div>
-    <aside id="sidebar" class="w-[300px] max-w-[85vw] bg-white border-r border-pink-200 flex-shrink-0 hidden lg:flex lg:flex-col fixed lg:sticky top-[64px] left-0 z-30 shadow-2xl lg:shadow-none h-[calc(100vh-64px)] overflow-y-auto overflow-x-hidden scrollbar-thin p-3 space-y-1 pt-4 lg:pt-3">
+    <aside id="sidebar" class="w-[300px] max-w-[85vw] bg-white border-r border-pink-200 flex-shrink-0 hidden lg:flex lg:flex-col fixed lg:sticky top-[64px] left-0 z-30 shadow-2xl lg:shadow-none h-full lg:h-full overflow-y-auto overflow-x-hidden scrollbar-thin p-3 space-y-1 pt-4 lg:pt-3" style="max-height:calc(100vh - 64px - 72px)">
       <div class="space-y-1" id="navMenu"></div>
       <div class="mt-4 p-3 bg-gradient-to-br from-pink-50 to-rose-50 border border-pink-200 rounded-2xl">
         <div class="text-xs font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-bolt text-pink-500"></i> Rule Engine</div>
@@ -143,7 +191,7 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
     </aside>
 
     <!-- Main - cố định, cuộn riêng, phân trang khi nhiều dữ liệu -->
-    <main class="flex-1 min-w-0 h-[calc(100vh-64px)] overflow-y-auto overflow-x-hidden scrollbar-thin p-4 lg:p-6 pb-20 lg:pb-6 bg-[#faf5f8]">
+    <main class="flex-1 min-w-0 overflow-y-auto overflow-x-hidden scrollbar-thin p-4 lg:p-6 pb-20 lg:pb-6 bg-[#faf5f8]" style="max-height:calc(100vh - 64px - 72px)">
       <!-- Dashboard -->
       <section id="tab-dashboard" class="tab-section">
         <div class="flex flex-wrap items-center justify-between gap-3 mb-4">

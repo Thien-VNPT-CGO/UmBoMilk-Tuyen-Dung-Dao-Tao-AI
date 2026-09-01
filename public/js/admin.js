@@ -181,6 +181,18 @@ function updateModeBadge(){
 }
 
 
+function toggleSystemStatusDetail(){
+  const d=document.getElementById('systemStatusDetail');
+  if(!d) return;
+  d.classList.toggle('hidden');
+}
+setInterval(()=>{
+  const el=document.getElementById('systemStatusTime');
+  if(el) el.textContent = new Date().toLocaleTimeString('vi-VN');
+  const sEl=document.getElementById('socketDetailText');
+  if(sEl && socket) sEl.textContent = socket.connected ? `TRỰC TUYẾN • ${socket.id.slice(0,4)}` : 'NGOẠI TUYẾN';
+},1000);
+
 function getDefaultTabsForRole(role) {
   if (role === 'Admin') return NAV.map(n => n.id);
   if (role === 'HR') return ['dashboard', 'applicants', 'interviews', 'employees-store', 'schedule', 'requests'];
