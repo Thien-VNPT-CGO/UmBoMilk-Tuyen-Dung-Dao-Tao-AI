@@ -382,9 +382,8 @@ function audit(actor, action, entity, before, after, ip='127.0.0.1'){
 
 async function syncToGoogleSheet(item){
   const webhookUrl = db.settings?.googleSheet?.targetWebhookUrl;
-  const secret = process.env.GOOGLE_SHEET_WEBHOOK_SECRET;
-  if(!webhookUrl) throw new Error('Missing Google Sheet webhook URL');
-  if(!secret) throw new Error('Missing GOOGLE_SHEET_WEBHOOK_SECRET');
+  const secret = process.env.GOOGLE_SHEET_WEBHOOK_SECRET || db.settings?.googleSheet?.secret || 'umbomilk_secret_2026';
+  if(!webhookUrl) throw new Error('Chưa cấu hình Google Sheet Webhook URL trong Cài đặt');
 
   const sheetMap = {
     APPLICANT: 'NHAN_VIEN_MOI',
@@ -412,12 +411,35 @@ async function syncToGoogleSheet(item){
 }
 
 function addSyncQueue(entity, operation, payload, actor, source='WEB_HR'){
-  const item = { id: uuidv4(), entity, operation, payload, version: payload.version||1, updated_at: new Date().toISOString(), updated_by: actor, source, sync_status: 'PENDING', retryCount:0 };
+  const webhookUrl = db.settings?.googleSheet?.targetWebhookUrl;
+  const secret = process.env.GOOGLE_SHEET_WEBHOOK_SECRET || db.settings?.googleSheet?.secret || 'umbomilk_secret_2026';
+  const initialStatus = (!webhookUrl) ? 'UNCONFIGURED' : 'PENDING';
+  const item = { 
+    id: uuidv4(), 
+    entity, 
+    operation, 
+    payload, 
+    version: payload.version||1, 
+    updated_at: new Date().toISOString(), 
+    updated_by: actor, 
+    source, 
+    sync_status: initialStatus, 
+    retryCount:0 
+  };
+  if(initialStatus==='UNCONFIGURED'){
+    item.error = !webhookUrl ? 'Chưa cấu hình Google Sheet Webhook URL' : 'Thiếu GOOGLE_SHEET_WEBHOOK_SECRET';
+  }
   db.syncQueue.unshift(item);
   if(db.syncQueue.length>200) db.syncQueue.pop();
-  syncToGoogleSheet(item)
-    .then(()=>{ item.sync_status='SYNCED'; item.syncedAt=new Date().toISOString(); delete item.error; saveDB(); io.emit('sync:update', db.syncQueue); })
-    .catch(err=>{ item.sync_status='FAILED'; item.error=err.message; item.retryCount=(item.retryCount||0)+1; saveDB(); io.emit('sync:update', db.syncQueue); });
+
+  if(initialStatus==='PENDING'){
+    syncToGoogleSheet(item)
+      .then(()=>{ item.sync_status='SYNCED'; item.syncedAt=new Date().toISOString(); delete item.error; saveDB(); io.emit('sync:update', db.syncQueue); })
+      .catch(err=>{ item.sync_status='FAILED'; item.error=err.message; item.retryCount=(item.retryCount||0)+1; saveDB(); io.emit('sync:update', db.syncQueue); });
+  } else {
+    saveDB();
+    io.emit('sync:update', db.syncQueue);
+  }
   return item;
 }
 function generateEmployeeId(branchId){
@@ -2541,36 +2563,40 @@ function realtimeAutomationPoller(){
   });
   if(changed) saveDB();
   // 3. Sync queue auto-retry (exponential backoff, realtime)
-  const retryableSync = db.syncQueue.filter(item =>
-    (item.sync_status==='FAILED' || item.sync_status==='PENDING') &&
-    (item.retryCount||0) < 5 && !item._retrying &&
-    (!item.nextRetryAt || new Date(item.nextRetryAt).getTime() <= now)
-  );
-  retryableSync.slice(0,3).forEach(item=>{
-    item._retrying = true;
-    item.sync_status='PENDING';
-    item.retryCount = (item.retryCount||0)+1;
-    syncToGoogleSheet(item)
-      .then(()=>{
-        item.sync_status='SYNCED';
-        item.retriedAt=item.syncedAt=new Date().toISOString();
-        delete item.error;
-        delete item.nextRetryAt;
-      })
-      .catch(err=>{
-        item.sync_status='FAILED';
-        item.error=err.message;
-        item.nextRetryAt = new Date(Date.now() + Math.pow(2, item.retryCount)*5000).toISOString();
-      })
-      .finally(()=>{ delete item._retrying; saveDB(); io.emit('sync:update', db.syncQueue); });
-    changed=true;
-  });
-  if(changed) saveDB();
-  const pendingSync = db.syncQueue.filter(s=>s.sync_status==='FAILED' || s.sync_status==='PENDING');
-  pendingSync.forEach(item=>{
-    if((item.retryCount||0) >= 5 && item.sync_status==='FAILED') item.sync_status='DEAD';
-  });
-  if(pendingSync.some(item=>item.sync_status==='DEAD')) saveDB();
+  const secret = process.env.GOOGLE_SHEET_WEBHOOK_SECRET || db.settings?.googleSheet?.secret || 'umbomilk_secret_2026';
+  const hasWebhookConfig = !!(db.settings?.googleSheet?.targetWebhookUrl && secret);
+  if(hasWebhookConfig){
+    const retryableSync = db.syncQueue.filter(item =>
+      (item.sync_status==='FAILED' || item.sync_status==='PENDING' || item.sync_status==='UNCONFIGURED') &&
+      (item.retryCount||0) < 5 && !item._retrying &&
+      (!item.nextRetryAt || new Date(item.nextRetryAt).getTime() <= now)
+    );
+    retryableSync.slice(0,3).forEach(item=>{
+      item._retrying = true;
+      item.sync_status='PENDING';
+      item.retryCount = (item.retryCount||0)+1;
+      syncToGoogleSheet(item)
+        .then(()=>{
+          item.sync_status='SYNCED';
+          item.retriedAt=item.syncedAt=new Date().toISOString();
+          delete item.error;
+          delete item.nextRetryAt;
+        })
+        .catch(err=>{
+          item.sync_status='FAILED';
+          item.error=err.message;
+          item.nextRetryAt = new Date(Date.now() + Math.pow(2, item.retryCount)*5000).toISOString();
+        })
+        .finally(()=>{ delete item._retrying; saveDB(); io.emit('sync:update', db.syncQueue); });
+      changed=true;
+    });
+    if(changed) saveDB();
+    const pendingSync = db.syncQueue.filter(s=>s.sync_status==='FAILED' || s.sync_status==='PENDING');
+    pendingSync.forEach(item=>{
+      if((item.retryCount||0) >= 5 && item.sync_status==='FAILED') item.sync_status='DEAD';
+    });
+    if(pendingSync.some(item=>item.sync_status==='DEAD')) saveDB();
+  }
   // ponytail: queue chạy tối đa 3 tác vụ/poll; chuyển sang worker bền vững khi chạy đa instance.
   // 4. Broadcast realtime health + sync status
   io.emit('automation:heartbeat', {
@@ -4253,6 +4279,33 @@ app.post('/api/reports/reset', authMiddleware, roleCheck(['Admin']), (req,res)=>
 // ============ AUDIT / SYNC / ZALO / NOTIF ============
 app.get('/api/audit-logs', authMiddleware, (req,res)=> res.json(db.auditLogs));
 app.get('/api/sync-queue', authMiddleware, (req,res)=> res.json(db.syncQueue));
+app.post('/api/sync-queue/clear-failed', authMiddleware, (req,res)=>{
+  const beforeCount = db.syncQueue.length;
+  db.syncQueue = db.syncQueue.filter(s=>s.sync_status !== 'FAILED' && s.sync_status !== 'DEAD' && s.sync_status !== 'UNCONFIGURED');
+  const removed = beforeCount - db.syncQueue.length;
+  saveDB();
+  io.emit('sync:update', db.syncQueue);
+  res.json({ success: true, removedCount: removed, remainingCount: db.syncQueue.length });
+});
+app.post('/api/sync-queue/clear-all', authMiddleware, (req,res)=>{
+  db.syncQueue = [];
+  saveDB();
+  io.emit('sync:update', db.syncQueue);
+  res.json({ success: true, remainingCount: 0 });
+});
+app.post('/api/sync-queue/retry-all', authMiddleware, async (req,res)=>{
+  const failedItems = db.syncQueue.filter(s=>s.sync_status==='FAILED' || s.sync_status==='DEAD' || s.sync_status==='UNCONFIGURED');
+  failedItems.forEach(item => {
+    item.sync_status = 'PENDING';
+    item.retryCount = 0;
+    delete item.nextRetryAt;
+    delete item.error;
+  });
+  saveDB();
+  io.emit('sync:update', db.syncQueue);
+  setTimeout(realtimeAutomationPoller, 100);
+  res.json({ success: true, retriedCount: failedItems.length });
+});
 app.post('/api/sync-queue/:id/retry', authMiddleware, async (req,res)=>{
   const item = db.syncQueue.find(s=>s.id===req.params.id);
   if(!item) return res.status(404).json({error:'Not found'});

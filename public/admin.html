@@ -209,7 +209,13 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
         </div>
         <div class="grid lg:grid-cols-2 gap-4 mt-4">
           <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm">
-            <div class="font-bold text-pink-900 text-sm flex items-center justify-between">Sync Queue <span class="text-[11px] bg-pink-100 text-pink-700 px-2 py-0.5 rounded-full border border-pink-200">SYNCED/PENDING/FAILED/CONFLICT</span></div>
+            <div class="font-bold text-pink-900 text-sm flex items-center justify-between flex-wrap gap-1">
+              <span>Sync Queue <span class="text-[11px] bg-pink-100 text-pink-700 px-2 py-0.5 rounded-full border border-pink-200">SYNCED/PENDING/FAILED/UNCONFIGURED</span></span>
+              <div class="flex items-center gap-1">
+                <button onclick="retryAllSyncQueue()" class="text-[11px] font-bold bg-pink-500 text-white px-2 py-0.5 rounded-lg hover:bg-pink-600 shadow-xs"><i class="fa-solid fa-rotate-right"></i> Thử lại</button>
+                <button onclick="clearFailedSyncQueue()" class="text-[11px] font-bold bg-rose-500 text-white px-2 py-0.5 rounded-lg hover:bg-rose-600 shadow-xs"><i class="fa-solid fa-trash-can"></i> Xóa lỗi</button>
+              </div>
+            </div>
             <div id="dashSync" class="mt-3 space-y-2 max-h-[220px] overflow-auto scrollbar-thin"></div>
           </div>
           <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm">

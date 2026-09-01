@@ -551,12 +551,21 @@ function connectSocket(){
   });
   socket.on('sync:update', (data)=>{
     const q = Array.isArray(data)? data : [];
+    syncQueue = q;
+    if(typeof renderDashSync === 'function') renderDashSync();
     const retrying = q.filter(x=>x.sync_status==='PENDING' && x._retrying).length;
     const failed = q.filter(x=>x.sync_status==='FAILED' && (x.retryCount||0)<5).length;
+    const unconfigured = q.filter(x=>x.sync_status==='UNCONFIGURED').length;
     const dead = q.filter(x=>x.sync_status==='DEAD').length;
-    if(retrying>0) showToast(`Sync realtime: ${retrying} mục đang retry`, 'info');
-    else if(failed>0) showToast(`⚠️ Sync realtime: ${failed} mục chờ lượt retry`, 'warning');
-    if(dead>0) showToast(`⛔ Sync realtime: ${dead} mục dừng sau 5 lần lỗi. Kiểm tra webhook/secret.`, 'error');
+    
+    const countKey = `${retrying}_${failed}_${unconfigured}_${dead}`;
+    if(window._lastSyncToastCount !== countKey){
+      window._lastSyncToastCount = countKey;
+      if(retrying>0) showToast(`Sync realtime: ${retrying} mục đang retry`, 'info');
+      else if(failed>0) showToast(`⚠️ Sync realtime: ${failed} mục chờ lượt retry`, 'warning');
+      else if(unconfigured>0) showToast(`ℹ️ Sync realtime: ${unconfigured} mục chưa cấu hình Google Sheet Webhook`, 'warning');
+      if(dead>0) showToast(`⛔ Sync realtime: ${dead} mục dừng sau 5 lần lỗi. Kiểm tra webhook/secret.`, 'error');
+    }
   });
 
   // Listen for realtime AUTO-PASS event from server poller
@@ -700,10 +709,41 @@ function renderDashSync(){
   if(syncQueue.length===0) el.innerHTML='<div class="text-xs text-slate-400 text-center py-4">Không có sync queue</div>';
   else el.innerHTML = syncQueue.slice(0,8).map(s=>`
     <div class="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
-      <div><div class="text-xs font-bold text-slate-700">${s.entity} • ${s.operation}</div><div class="text-[11px] text-slate-500">${fmtDMYTime(s.updated_at)} • ${s.source}</div></div>
-      <span class="text-[11px] font-black px-2 py-1 rounded-full ${s.sync_status==='SYNCED'?'bg-pink-100 text-pink-700':s.sync_status==='PENDING'?'bg-pink-100 text-pink-700':s.sync_status==='FAILED'?'bg-red-100 text-red-700':'bg-purple-100 text-purple-700'}">${s.sync_status}</span>
+      <div class="flex-1 min-w-0 mr-2">
+        <div class="text-xs font-bold text-slate-700 truncate">${s.entity} • ${s.operation}</div>
+        <div class="text-[11px] text-slate-500 truncate">${fmtDMYTime(s.updated_at)} • ${s.source}${s.error ? ` <span class="text-rose-500 font-normal">(${s.error})</span>` : ''}</div>
+      </div>
+      <span class="text-[11px] font-black px-2 py-1 rounded-full ${s.sync_status==='SYNCED'?'bg-pink-100 text-pink-700':s.sync_status==='PENDING'?'bg-pink-100 text-pink-700':s.sync_status==='FAILED'?'bg-red-100 text-red-700':s.sync_status==='UNCONFIGURED'?'bg-amber-100 text-amber-700':'bg-purple-100 text-purple-700'}">${s.sync_status}</span>
     </div>
   `).join('');
+}
+
+async function clearFailedSyncQueue(){
+  try {
+    const res = await api('/api/sync-queue/clear-failed', { method: 'POST', headers: { Authorization: 'Bearer ' + token } });
+    showToast(`Đã xóa ${res.removedCount || 0} mục lỗi Sync Queue`, 'success');
+  } catch(e) {
+    showToast(e.message || 'Lỗi khi xóa Sync Queue', 'error');
+  }
+}
+
+async function clearAllSyncQueue(){
+  if(!confirm('Bạn có chắc chắn muốn xóa toàn bộ Sync Queue?')) return;
+  try {
+    await api('/api/sync-queue/clear-all', { method: 'POST', headers: { Authorization: 'Bearer ' + token } });
+    showToast('Đã xóa toàn bộ Sync Queue', 'success');
+  } catch(e) {
+    showToast(e.message || 'Lỗi khi xóa Sync Queue', 'error');
+  }
+}
+
+async function retryAllSyncQueue(){
+  try {
+    const res = await api('/api/sync-queue/retry-all', { method: 'POST', headers: { Authorization: 'Bearer ' + token } });
+    showToast(`Đã gửi yêu cầu thử lại ${res.retriedCount || 0} mục Sync`, 'info');
+  } catch(e) {
+    showToast(e.message || 'Lỗi khi thử lại Sync Queue', 'error');
+  }
 }
 function renderDashAudit(){
   const el=document.getElementById('dashAudit');
