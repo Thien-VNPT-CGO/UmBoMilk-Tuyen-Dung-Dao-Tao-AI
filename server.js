@@ -4272,6 +4272,7 @@ app.post('/api/system/reset', authMiddleware, roleCheck(['Admin']), (req,res)=>{
   const before = JSON.parse(JSON.stringify(db));
   if(scope==='ALL'){
     db.employees=[]; db.applicants=[]; db.attendances=[]; db.schedules=[]; db.offRequests=[]; db.emergencyRequests=[]; db.deviceRequests=[]; db.testResults=[]; db.keys=[]; db.zaloRecords=[]; db.notifications=[]; db.syncQueue=[]; db.auditLogs=[];
+    db.driveFiles=[]; db.payrollSnapshots=[]; db.overtimeRequests=[]; db.leaveRequests=[]; db.payrollPeriods=[]; db.attendanceAdjustments=[]; db.penalties=[];
   } else if(scope==='EMPLOYEES'){
     db.employees=[]; db.keys=[]; db.attendances=[]; db.schedules=[];
   }
