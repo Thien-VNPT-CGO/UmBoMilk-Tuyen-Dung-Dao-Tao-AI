@@ -11,3 +11,6 @@ dist/
 data/*.json
 !data/.gitkeep
 
+
+*.bundle
+
