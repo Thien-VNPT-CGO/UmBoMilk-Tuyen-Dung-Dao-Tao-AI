@@ -4333,11 +4333,12 @@ app.get('/api/dashboard/charts', authMiddleware, (req,res)=>{
 
 // ============ SYSTEM RESET ============
 app.post('/api/system/reset', authMiddleware, roleCheck(['Admin']), (req,res)=>{
-  const { scope } = req.body; // e.g., EMPLOYEES, ALL but keep settings
-  const before = JSON.parse(JSON.stringify(db));
+  const { scope } = req.body; // ALL = reset mọi dữ liệu vận hành, giữ settings
   if(scope==='ALL'){
+    const keepSettings = db.settings;
     db.employees=[]; db.applicants=[]; db.attendances=[]; db.schedules=[]; db.offRequests=[]; db.emergencyRequests=[]; db.deviceRequests=[]; db.testResults=[]; db.keys=[]; db.zaloRecords=[]; db.notifications=[]; db.syncQueue=[]; db.auditLogs=[];
     db.driveFiles=[]; db.payrollSnapshots=[]; db.overtimeRequests=[]; db.leaveRequests=[]; db.payrollPeriods=[]; db.attendanceAdjustments=[]; db.penalties=[];
+    db.settings = keepSettings || DEFAULT_SETTINGS;
   } else if(scope==='EMPLOYEES'){
     db.employees=[]; db.keys=[]; db.attendances=[]; db.schedules=[];
   }
@@ -4346,6 +4347,8 @@ app.post('/api/system/reset', authMiddleware, roleCheck(['Admin']), (req,res)=>{
   io.emit('system:reset', {scope});
   res.json({success:true});
 });
+// ponytail: giữ nguyên settings để không làm gãy webhook/secret; nếu cần reset riêng cấu hình thì thêm scope SETTINGS sau.
+
 
 // Serve frontend
 app.get('/', (req,res)=> res.sendFile(path.join(__dirname,'public','index.html')));
