@@ -637,12 +637,20 @@ async function submitTrainingOffRegistration() {
       method: 'POST',
       body: JSON.stringify({ employeeId: employee.employeeId, offDates: checked })
     });
+    employee.registeredOffDates = res.registeredOffDates || checked;
+    localStorage.setItem('emp_data', JSON.stringify(employee));
     showToast('Đã đăng ký 5 ngày OFF thử việc thành công!', 'success');
     renderTrainingOffPicker();
-    loadSchedule();
+    await loadSchedule();
   } catch (e) {
     showToast(e.message, 'error');
   }
+}
+
+function applyTrainingOffState(offDates) {
+  if (!Array.isArray(offDates) || offDates.length !== 5) return;
+  employee.registeredOffDates = offDates;
+  localStorage.setItem('emp_data', JSON.stringify(employee));
 }
 
 function updateClock(){
