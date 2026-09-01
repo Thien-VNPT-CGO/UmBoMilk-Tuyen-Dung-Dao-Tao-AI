@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: umbomilk-hr
+    runtime: docker
+    region: singapore
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: JWT_SECRET
+        generateValue: true
+      - key: SECRET_ENCRYPTION_KEY
+        generateValue: true
+      - key: ALLOWED_ORIGINS
+        value: "*"
+
+# Postgres free 90 ngày (tùy chọn, nếu cần 24/7 DB thay db.json)
+# databases:
+#   - name: umbomilk-db
+#     region: singapore
+#     plan: free
+#     ipAllowList: []
