@@ -36,7 +36,7 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
 }
 </style>
 </head>
-<body class="bg-[#faf5f8] min-h-screen">
+<body class="bg-[#faf5f8] h-screen overflow-hidden flex flex-col">
 <!-- Login overlay -->
 <div id="loginOverlay" class="fixed inset-0 z-[100] bg-gradient-to-br from-pink-500 via-rose-500 to-pink-700 flex items-center justify-center p-4">
   <div class="bg-white rounded-[24px] shadow-2xl w-full max-w-md overflow-hidden">
@@ -127,10 +127,10 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
     </div>
   </header>
 
-  <div class="flex">
+  <div class="flex flex-1 overflow-hidden">
     <!-- Sidebar - Drawer for phone -->
     <div id="sidebarOverlay" class="fixed inset-0 bg-black/40 backdrop-blur-sm z-20 hidden lg:hidden" onclick="toggleSidebar()"></div>
-    <aside id="sidebar" class="w-[300px] max-w-[85vw] bg-white border-r border-pink-200 min-h-[calc(100vh-64px)] lg:min-h-[calc(100vh-64px)] overflow-y-auto scrollbar-thin p-3 space-y-1 hidden lg:block fixed lg:sticky top-[64px] lg:top-[64px] bottom-0 lg:bottom-auto left-0 z-30 pt-4 lg:pt-3 shadow-2xl lg:shadow-none h-[calc(100vh-64px)] lg:h-auto">
+    <aside id="sidebar" class="w-[300px] max-w-[85vw] bg-white border-r border-pink-200 flex-shrink-0 hidden lg:flex lg:flex-col fixed lg:sticky top-[64px] left-0 z-30 shadow-2xl lg:shadow-none h-[calc(100vh-64px)] overflow-y-auto overflow-x-hidden scrollbar-thin p-3 space-y-1 pt-4 lg:pt-3">
       <div class="space-y-1" id="navMenu"></div>
       <div class="mt-4 p-3 bg-gradient-to-br from-pink-50 to-rose-50 border border-pink-200 rounded-2xl">
         <div class="text-xs font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-bolt text-pink-500"></i> Rule Engine</div>
@@ -142,8 +142,8 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
       </div>
     </aside>
 
-    <!-- Main -->
-    <main class="flex-1 min-w-0 p-4 lg:p-6 pb-20 lg:pb-6">
+    <!-- Main - cố định, cuộn riêng, phân trang khi nhiều dữ liệu -->
+    <main class="flex-1 min-w-0 h-[calc(100vh-64px)] overflow-y-auto overflow-x-hidden scrollbar-thin p-4 lg:p-6 pb-20 lg:pb-6 bg-[#faf5f8]">
       <!-- Dashboard -->
       <section id="tab-dashboard" class="tab-section">
         <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
@@ -181,15 +181,16 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
         </div>
         <div class="bg-white rounded-2xl border border-pink-200 overflow-hidden shadow-sm">
           <div class="p-3 border-b border-pink-100 flex gap-2">
-            <input id="searchApplicant" placeholder="Tìm tên, SĐT, email..." class="flex-1 px-3 py-2 rounded-xl border border-pink-200 text-sm outline-none focus:border-pink-400 focus:ring-2 focus:ring-pink-100" oninput="renderApplicants()">
-            <select id="filterApplicantStatus" class="px-3 py-2 rounded-xl border border-pink-200 text-sm" onchange="renderApplicants()"><option value="">Tất cả trạng thái</option><option>NEW_APPLICANT</option><option>INTERVIEW</option><option>PASS</option><option>CONVERTED</option></select>
+            <input id="searchApplicant" placeholder="Tìm tên, SĐT, email..." class="flex-1 px-3 py-2 rounded-xl border border-pink-200 text-sm outline-none focus:border-pink-400 focus:ring-2 focus:ring-pink-100" oninput="pagination.applicants.page=1; renderApplicants()">
+            <select id="filterApplicantStatus" class="px-3 py-2 rounded-xl border border-pink-200 text-sm" onchange="pagination.applicants.page=1; renderApplicants()"><option value="">Tất cả trạng thái</option><option>NEW_APPLICANT</option><option>INTERVIEW</option><option>PASS</option><option>CONVERTED</option></select>
           </div>
-          <div class="overflow-auto max-h-[65vh] scrollbar-thin">
+          <div class="overflow-auto max-h-[55vh] scrollbar-thin">
             <table class="w-full text-sm">
               <thead class="bg-gradient-to-r from-rose-500 via-pink-600 to-rose-600 text-white text-[11px] font-black uppercase tracking-wider sticky top-0 border-b-2 border-rose-500/50 shadow-sm"><tr><th class="px-3.5 py-3 text-left">Ứng viên</th><th class="px-3.5 py-3">Chi nhánh</th><th class="px-3.5 py-3">AI Score</th><th class="px-3.5 py-3">Điểm Hồ Sơ PV</th><th class="px-3.5 py-3">Trạng thái</th><th class="px-3.5 py-3 text-right">Hành động</th></tr></thead>
               <tbody id="applicantsTbody" class="divide-y divide-pink-100"></tbody>
             </table>
           </div>
+          <div id="applicantsPagination" class="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-pink-50/50 border-t border-pink-100"></div>
         </div>
       </section>
 
@@ -227,7 +228,7 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
             </div>
           </div>
 
-          <div class="overflow-auto max-h-[65vh] scrollbar-thin">
+          <div class="overflow-auto max-h-[60vh] scrollbar-thin">
             <table class="w-full text-sm">
               <thead class="bg-gradient-to-r from-rose-500 via-pink-600 to-rose-600 text-white text-[11px] font-black uppercase tracking-wider sticky top-0 border-b-2 border-rose-500/50 shadow-sm">
                 <tr>
@@ -244,6 +245,7 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
               </tbody>
             </table>
           </div>
+          <div id="interviewsPagination" class="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-pink-50/50 border-t border-pink-100"></div>
         </div>
       </section>
 
@@ -261,7 +263,7 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
             <p class="text-xs text-rose-100 mt-1 font-medium">Quản lý lộ trình 12 ngày thử việc, tiến độ Training (7/7 ngày) & chuyển nhân viên chính thức</p>
           </div>
           <div class="flex items-center gap-2.5 relative z-10">
-            <select id="empBranchFilter" class="px-3.5 py-2.5 rounded-2xl bg-white/20 hover:bg-white/25 border border-white/35 text-white font-bold text-xs backdrop-blur-md focus:bg-rose-950 focus:outline-none transition shadow-xs" onchange="renderEmployeesStore()">
+            <select id="empBranchFilter" class="px-3.5 py-2.5 rounded-2xl bg-white/20 hover:bg-white/25 border border-white/35 text-white font-bold text-xs backdrop-blur-md focus:bg-rose-950 focus:outline-none transition shadow-xs" onchange="pagination.employees.page=1; renderEmployeesStore()">
               <option value="" class="bg-rose-950 text-white">Tất cả Chi nhánh</option>
               <option value="CN1" class="bg-rose-950 text-white">CN1 - 130 Vạn kiếp</option>
               <option value="CN2" class="bg-rose-950 text-white">CN2 - 261 Tô Hiến Thành</option>
@@ -303,7 +305,7 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
               <span id="empStoreTabLabel" class="text-xs font-black tracking-wider text-pink-900 uppercase">DANH SÁCH NHÂN VIÊN TRAINING</span>
             </div>
             <div class="flex items-center gap-2">
-              <select id="empStoreFilter" class="px-3 py-1.5 rounded-xl bg-white border border-pink-200 text-xs font-bold text-pink-700 focus:border-pink-400 focus:ring-2 focus:ring-pink-100 outline-none" onchange="renderEmployeesStore()">
+              <select id="empStoreFilter" class="px-3 py-1.5 rounded-xl bg-white border border-pink-200 text-xs font-bold text-pink-700 focus:border-pink-400 focus:ring-2 focus:ring-pink-100 outline-none" onchange="pagination.employees.page=1; renderEmployeesStore()">
                 <option value="">Tất cả trạng thái</option>
                 <option value="TRAINING">Training</option>
                 <option value="WAITING_TEST">Chờ TEST</option>
@@ -332,6 +334,8 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
               <tbody id="employeesTable" class="divide-y divide-slate-100"></tbody>
             </table>
           </div>
+          <!-- Pagination - cố định khi nhiều dữ liệu -->
+          <div id="employeesPagination" class="flex flex-wrap items-center justify-between gap-3 px-5 py-3 bg-pink-50/50 border-t border-pink-100"></div>
         </div>
       </section>
 
@@ -473,12 +477,13 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
         <div id="reportSub-monthly" class="report-sub hidden">
           <div class="bg-white rounded-2xl border border-pink-200 overflow-hidden shadow-sm">
             <div class="p-3 bg-pink-50 border-b flex justify-between items-center"><span class="text-xs font-black text-pink-900">BẢNG CHỐT CÔNG — Mỗi NV 1 dòng</span><span class="text-[11px] bg-white border px-2 py-1 rounded-full">Công tiêu chuẩn • Thực tế • Tính lương • Giờ • Tăng ca • Trễ • Lỗi</span></div>
-            <div class="overflow-auto max-h-[65vh] scrollbar-thin">
+            <div class="overflow-auto max-h-[60vh] scrollbar-thin">
               <table class="w-full text-xs">
                 <thead class="bg-gradient-to-r from-rose-500 via-pink-600 to-rose-600 text-white text-[11px] font-black uppercase sticky top-0"><tr><th class="px-3 py-2 text-left">Mã NV / Họ tên / CN</th><th class="px-2 py-2">Công TC</th><th class="px-2 py-2">Thực tế</th><th class="px-2 py-2">Tính lương</th><th class="px-2 py-2">Giờ</th><th class="px-2 py-2">Trễ</th><th class="px-2 py-2">Lỗi</th><th class="px-2 py-2">Trạng thái</th></tr></thead>
                 <tbody id="reportMonthlyTbody" class="divide-y"></tbody>
               </table>
             </div>
+            <div id="reportMonthlyPagination" class="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-pink-50/50 border-t border-pink-100"></div>
           </div>
         </div>
         <!-- 03 Chi tiết -->

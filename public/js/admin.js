@@ -19,6 +19,13 @@ let users = [];
 let payrollData = [];
 let reportData = [];
 let currentEmpStoreTab = localStorage.getItem('empStoreTab') || 'TRAINING';
+let pagination = {
+  employees: { page: 1, limit: 10 },
+  applicants: { page: 1, limit: 10 },
+  interviews: { page: 1, limit: 8 },
+  reportMonthly: { page: 1, limit: 10 },
+  attendance: { page: 1, limit: 12 }
+};
 
 const SHIFT_MAP = {
   'Ca Sáng': 'CA_SANG',
@@ -337,6 +344,33 @@ async function api(path, opts={}){
   const data = await res.json().catch(()=>({}));
   if(!res.ok) throw new Error(data.error||'Lỗi API');
   return data;
+}
+// Pagination helper - khung giữa cố định, chia trang khi nhiều dữ liệu
+function renderPagination(containerId, total, page, limit, onPageChange){
+  const el = document.getElementById(containerId);
+  if(!el) return;
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  if(totalPages <=1){
+    el.innerHTML = `<span class="text-xs font-bold text-pink-700 bg-white border border-pink-200 px-3 py-1.5 rounded-full">Tổng ${total} • 1 trang</span><span class="text-[11px] text-slate-500">Hiển thị ${total} dòng</span>`;
+    return;
+  }
+  let pages = '';
+  const maxShow = 5;
+  let start = Math.max(1, page - Math.floor(maxShow/2));
+  let end = Math.min(totalPages, start + maxShow -1);
+  if(end - start +1 < maxShow) start = Math.max(1, end - maxShow +1);
+  for(let i=start;i<=end;i++){
+    pages += `<button onclick="${onPageChange}(${i})" class="min-w-[36px] h-8 rounded-xl text-xs font-black border ${i===page?'bg-gradient-to-r from-pink-500 to-rose-500 text-white border-pink-500 shadow':'bg-white border-pink-200 text-pink-700 hover:bg-pink-50'}">${i}</button>`;
+  }
+  el.innerHTML = `
+    <div class="flex items-center gap-2 text-xs font-bold text-slate-600"><span class="bg-white border border-pink-200 px-3 py-1.5 rounded-full">Tổng ${total} • Trang ${page}/${totalPages}</span><span class="hidden sm:inline text-[11px] text-slate-400">${limit} dòng/trang</span></div>
+    <div class="flex items-center gap-1.5">
+      <button onclick="${onPageChange}(1)" ${page===1?'disabled':''} class="w-8 h-8 rounded-xl bg-white border border-pink-200 text-pink-700 disabled:opacity-40 hover:bg-pink-50 flex items-center justify-center"><i class="fa-solid fa-angles-left text-[11px]"></i></button>
+      <button onclick="${onPageChange}(${page-1})" ${page===1?'disabled':''} class="w-8 h-8 rounded-xl bg-white border border-pink-200 text-pink-700 disabled:opacity-40 hover:bg-pink-50 flex items-center justify-center"><i class="fa-solid fa-angle-left text-[11px]"></i></button>
+      ${pages}
+      <button onclick="${onPageChange}(${page+1})" ${page===totalPages?'disabled':''} class="w-8 h-8 rounded-xl bg-white border border-pink-200 text-pink-700 disabled:opacity-40 hover:bg-pink-50 flex items-center justify-center"><i class="fa-solid fa-angle-right text-[11px]"></i></button>
+      <button onclick="${onPageChange}(${totalPages})" ${page===totalPages?'disabled':''} class="w-8 h-8 rounded-xl bg-white border border-pink-200 text-pink-700 disabled:opacity-40 hover:bg-pink-50 flex items-center justify-center"><i class="fa-solid fa-angles-right text-[11px]"></i></button>
+    </div>`;
 }
 
 // Auth
@@ -675,7 +709,16 @@ function renderApplicants(){
     if(q && !(a.name.toLowerCase().includes(q) || a.phone.includes(q) || (a.email&&a.email.toLowerCase().includes(q)) || (a.hometown&&a.hometown.toLowerCase().includes(q)) || (a.facebook&&a.facebook.toLowerCase().includes(q)))) return false;
     return true;
   });
-  tbody.innerHTML = list.map(a=>`
+  // Pagination - khung giữa cố định
+  const totalApp = list.length;
+  const pag = pagination.applicants;
+  const totalPages = Math.max(1, Math.ceil(totalApp / pag.limit));
+  if(pag.page > totalPages) pag.page = totalPages;
+  if(pag.page <1) pag.page=1;
+  const start = (pag.page-1)*pag.limit;
+  const paginated = list.slice(start, start+pag.limit);
+  renderPagination('applicantsPagination', totalApp, pag.page, pag.limit, 'goApplicantsPage');
+  tbody.innerHTML = paginated.map(a=>`
     <tr class="hover:bg-slate-50">
       <td class="px-3 py-3">
         <div class="font-bold text-pink-900 text-sm flex items-center gap-2">${a.name} ${a.gender?`<span class="text-[11px] bg-pink-100 text-pink-700 px-2 py-0.5 rounded-full">${a.gender} • ${a.birthYear||''}</span>`:''}</div>
@@ -752,8 +795,11 @@ function renderApplicants(){
       </td>
     </tr>
   `).join('') || `<tr><td colspan="6" class="text-center py-8 text-sm text-slate-400">Không có ứng viên - dữ liệu từ Form sẽ đổ về đây realtime</td></tr>`;
+  // scroll main to top when paginating
+  const mainEl = document.querySelector('main'); if(mainEl && paginated.length>0) { /* keep scroll */ }
 }
 
+function goApplicantsPage(p){ pagination.applicants.page=p; renderApplicants(); const m=document.querySelector('main'); if(m) m.scrollTop=0; }
 function viewApplicant(id){
   const a = applicants.find(x=>x.id===id);
   if(!a) return;
@@ -2285,18 +2331,27 @@ function renderEmployeesStore(){
     if(elO) elO.textContent = cOfficialAll;
   }catch(_){}
 
+  // Pagination - khung giữa cố định, chia trang khi nhiều dữ liệu
+  const totalEmp = list.length;
+  const empPag = pagination.employees;
+  const totalEmpPages = Math.max(1, Math.ceil(totalEmp / empPag.limit));
+  if(empPag.page > totalEmpPages) empPag.page = totalEmpPages;
+  if(empPag.page <1) empPag.page =1;
+  const empStart = (empPag.page -1)*empPag.limit;
+  const paginatedEmp = list.slice(empStart, empStart + empPag.limit);
   // Empty state per tab
   const tableEl = document.getElementById('employeesTable');
   if (tableEl) {
-    if(list.length===0){
+    if(totalEmp===0){
       const emptyMsg = currentEmpStoreTab==='TRAINING' 
         ? `<div class="text-pink-600 font-bold">Chưa có nhân viên Training</div><div class="text-slate-500 text-xs mt-1">Nhân viên mới từ Form sau khi duyệt sẽ vào tab này (7 ngày Training) • Lọc: ${branchF||'Tất cả CN'}</div>`
         : `<div class="text-emerald-600 font-bold">Chưa có nhân viên Chính thức</div><div class="text-slate-500 text-xs mt-1">Chỉ 2 ngày OFF/tuần (T6 12:00→T7 15:00) • AI sắp lịch T2→CN • Lọc: ${branchF||'Tất cả CN'}</div>`;
       const colspan = currentEmpStoreTab==='OFFICIAL' ? 7 : 8;
       tableEl.innerHTML = `<tr><td colspan="${colspan}" class="px-4 py-10 text-center bg-white"><div class="w-12 h-12 bg-pink-100 text-pink-600 rounded-xl flex items-center justify-center mx-auto"><i class="fa-solid ${currentEmpStoreTab==='TRAINING'?'fa-graduation-cap':'fa-user-check'}"></i></div><div class="mt-3 text-sm">${emptyMsg}</div></td></tr>`;
+      renderPagination('employeesPagination', 0, 1, empPag.limit, 'goEmpPage');
       return;
     }
-    tableEl.innerHTML = list.map(e => {
+    tableEl.innerHTML = paginatedEmp.map(e => {
       const trainProgress = getEmployeeTrainingProgress(e);
       const offInfo = getEmployeeOffProgress(e);
       const trialInfo = getEmployeeTrialWindowInfo(e);
@@ -2474,8 +2529,10 @@ function renderEmployeesStore(){
         </tr>
       `;
     }).join('');
+    renderPagination('employeesPagination', totalEmp, empPag.page, empPag.limit, 'goEmpPage');
   }
 }
+function goEmpPage(p){ pagination.employees.page = p; renderEmployeesStore(); document.querySelector('#tab-employees-store')?.scrollIntoView({behavior:'smooth'}); const main=document.querySelector('main'); if(main) main.scrollTop=0; }
 function renderBeta(){
   const ws = employees.filter(e=>e.category==='WORKSHOP');
   const off = employees.filter(e=>e.category==='OFFICE');
