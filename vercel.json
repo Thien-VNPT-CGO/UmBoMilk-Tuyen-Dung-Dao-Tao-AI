@@ -1,4 +1,5 @@
 {
+  "builds": [{ "src": "public/**", "use": "@vercel/static" }],
   "cleanUrls": true,
   "trailingSlash": false,
   "headers": [
