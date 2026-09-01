@@ -65,7 +65,7 @@ const DEFAULT_SHIFTS = {
 };
 
 const DEFAULT_SETTINGS = {
-  googleSheet: { spreadsheetId: '1rcqEKraSRhr-Tn9qwlhADlkQUei8j65bXeHF_Tmkd38', targetDatabaseSpreadsheetId: '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w', targetWebhookUrl: 'https://script.google.com/macros/s/AKfycbz_umbomilk_apps_script/exec', serviceAccountEmail: 'umbomilk-hr@umbomilk-hr.iam.gserviceaccount.com', privateKey: '', formResponsesSheetId: '1rcqEKraSRhr-Tn9qwlhADlkQUei8j65bXeHF_Tmkd38', formUrl: 'https://docs.google.com/forms/d/e/1FAIpQLSeteDABiq7mday0Yko-PyyUIW4uccicP7FJJt2evc7xbbWBfA/viewform', masked: true },
+  googleSheet: { spreadsheetId: '1rcqEKraSRhr-Tn9qwlhADlkQUei8j65bXeHF_Tmkd38', targetDatabaseSpreadsheetId: '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w', targetWebhookUrl: 'https://script.google.com/macros/s/AKfycbyh2yuRzV_txN3UCq_llPFK5j74WyoxVvmO1us_H1EGw7ykcBO_fYbZ0lrznHbDY3PE/exec', serviceAccountEmail: 'umbomilk-hr@umbomilk-hr.iam.gserviceaccount.com', privateKey: '', formResponsesSheetId: '1rcqEKraSRhr-Tn9qwlhADlkQUei8j65bXeHF_Tmkd38', formUrl: 'https://docs.google.com/forms/d/e/1FAIpQLSeteDABiq7mday0Yko-PyyUIW4uccicP7FJJt2evc7xbbWBfA/viewform', masked: true },
   googleDrive: { rootFolderId: '1-Wy-Di6KvfeGCKoTV7TSuFQpY_yKNy-1', backupFolderId: '1-Wy-Di6KvfeGCKoTV7TSuFQpY_yKNy-1', driveUrl: 'https://drive.google.com/drive/folders/1-Wy-Di6KvfeGCKoTV7TSuFQpY_yKNy-1' },
   googleForm: { formUrl: 'https://docs.google.com/forms/d/e/1FAIpQLSd9rRG4QLvmLclPseVVmpgPdizij1XYwiSTCgc6x2BPMfA_AA/viewform', mapping: {} },
   ai: { provider: 'openai', baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o', temperature: 0.7 },
@@ -379,14 +379,45 @@ function audit(actor, action, entity, before, after, ip='127.0.0.1'){
   saveDB();
   io.emit('audit:new', log);
 }
+
+async function syncToGoogleSheet(item){
+  const webhookUrl = db.settings?.googleSheet?.targetWebhookUrl;
+  const secret = process.env.GOOGLE_SHEET_WEBHOOK_SECRET;
+  if(!webhookUrl) throw new Error('Missing Google Sheet webhook URL');
+  if(!secret) throw new Error('Missing GOOGLE_SHEET_WEBHOOK_SECRET');
+
+  const sheetMap = {
+    APPLICANT: 'NHAN_VIEN_MOI',
+    EMPLOYEE: item.payload?.type === 'OFFICIAL' ? 'NHAN_VIEN_CHINH_THUC' : 'NHAN_VIEN_TRAINING',
+    PERSON: 'NHAN_VIEN_MOI',
+    ATTENDANCE: 'RECORD_DIEM_DANH',
+    SCHEDULE: 'LICH_LAM_VIEC',
+    OFF_REQUEST: 'PHIEU_OFF_HANG_TUAN',
+    EMERGENCY_REQUEST: 'PHIEU_OFF_DOT_XUAT',
+    DEVICE_REQUEST: 'PHIEU_DOI_THIET_BI',
+    TEST_RESULT: 'KET_QUA_TEST',
+    ZALO: 'RECORD_ZALO'
+  };
+  const sheetName = sheetMap[item.entity];
+  if(!sheetName) throw new Error(`No Google Sheet mapping for ${item.entity}`);
+
+  const res = await fetch(webhookUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ secret, sheetName, operation: item.operation, payload: item.payload }),
+  });
+  const data = await res.json().catch(()=> ({}));
+  if(!res.ok || !data.success) throw new Error(data.error || `Webhook HTTP ${res.status}`);
+  return data;
+}
+
 function addSyncQueue(entity, operation, payload, actor, source='WEB_HR'){
-  const item = { id: uuidv4(), entity, operation, payload, version: payload.version||1, updated_at: new Date().toISOString(), updated_by: actor, source, sync_status: Math.random()<0.9?'SYNCED':'PENDING', retryCount:0 };
-  // simulate retry
-  if(item.sync_status==='PENDING'){
-    setTimeout(()=>{ item.sync_status = Math.random()<0.8?'SYNCED':'FAILED'; if(item.sync_status==='FAILED') item.retryCount++; saveDB(); io.emit('sync:update', item); }, 2000);
-  }
+  const item = { id: uuidv4(), entity, operation, payload, version: payload.version||1, updated_at: new Date().toISOString(), updated_by: actor, source, sync_status: 'PENDING', retryCount:0 };
   db.syncQueue.unshift(item);
   if(db.syncQueue.length>200) db.syncQueue.pop();
+  syncToGoogleSheet(item)
+    .then(()=>{ item.sync_status='SYNCED'; item.syncedAt=new Date().toISOString(); delete item.error; saveDB(); io.emit('sync:update', db.syncQueue); })
+    .catch(err=>{ item.sync_status='FAILED'; item.error=err.message; item.retryCount=(item.retryCount||0)+1; saveDB(); io.emit('sync:update', db.syncQueue); });
   return item;
 }
 function generateEmployeeId(branchId){
@@ -2513,14 +2544,17 @@ function realtimeAutomationPoller(){
   const pendingSync = db.syncQueue.filter(s=>s.sync_status==='FAILED' || s.sync_status==='PENDING');
   if(pendingSync.length>0){
     pendingSync.slice(0,3).forEach(item=>{
-      if((item.retryCount||0) >=5) return;
+      if((item.retryCount||0) >=5 || item._retrying) return;
       const shouldRetry = !item.nextRetryAt || new Date(item.nextRetryAt).getTime() <= now;
       if(shouldRetry){
+        item._retrying = true;
+        item.sync_status='PENDING';
         item.retryCount = (item.retryCount||0)+1;
         item.nextRetryAt = new Date(now + Math.pow(2, item.retryCount)*5000).toISOString(); // 10s,20s,40s...
-        // mock retry success 80%
-        if(Math.random()<0.8){ item.sync_status='SYNCED'; item.retriedAt = new Date().toISOString(); }
-        else { item.sync_status='FAILED'; }
+        syncToGoogleSheet(item)
+          .then(()=>{ item.sync_status='SYNCED'; item.retriedAt=new Date().toISOString(); item.syncedAt=new Date().toISOString(); delete item.error; })
+          .catch(err=>{ item.sync_status='FAILED'; item.error=err.message; })
+          .finally(()=>{ delete item._retrying; saveDB(); io.emit('sync:update', db.syncQueue); });
         io.emit('sync:update', db.syncQueue);
         changed=true;
       }
@@ -4208,15 +4242,26 @@ app.post('/api/reports/reset', authMiddleware, roleCheck(['Admin']), (req,res)=>
 // ============ AUDIT / SYNC / ZALO / NOTIF ============
 app.get('/api/audit-logs', authMiddleware, (req,res)=> res.json(db.auditLogs));
 app.get('/api/sync-queue', authMiddleware, (req,res)=> res.json(db.syncQueue));
-app.post('/api/sync-queue/:id/retry', authMiddleware, (req,res)=>{
+app.post('/api/sync-queue/:id/retry', authMiddleware, async (req,res)=>{
   const item = db.syncQueue.find(s=>s.id===req.params.id);
   if(!item) return res.status(404).json({error:'Not found'});
   item.sync_status='PENDING';
   item.retryCount=(item.retryCount||0)+1;
-  setTimeout(()=>{ item.sync_status='SYNCED'; saveDB(); io.emit('sync:update', db.syncQueue); }, 1500);
-  saveDB();
-  io.emit('sync:update', db.syncQueue);
-  res.json(item);
+  try {
+    await syncToGoogleSheet(item);
+    item.sync_status='SYNCED';
+    item.syncedAt=new Date().toISOString();
+    delete item.error;
+    saveDB();
+    io.emit('sync:update', db.syncQueue);
+    res.json(item);
+  } catch (err) {
+    item.sync_status='FAILED';
+    item.error=err.message;
+    saveDB();
+    io.emit('sync:update', db.syncQueue);
+    res.status(502).json(item);
+  }
 });
 app.get('/api/zalo-records', authMiddleware, (req,res)=> res.json(db.zaloRecords));
 app.get('/api/notifications', (req,res)=>{
