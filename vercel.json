@@ -1,0 +1,24 @@
+{
+  "version": 2,
+  "public": true,
+  "cleanUrls": true,
+  "trailingSlash": false,
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Frame-Options", "value": "SAMEORIGIN" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" }
+      ]
+    }
+  ],
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "https://umbomilk-hr.onrender.com/api/:path*" },
+    { "source": "/socket.io/:path*", "destination": "https://umbomilk-hr.onrender.com/socket.io/:path*" },
+    { "source": "/health", "destination": "https://umbomilk-hr.onrender.com/health" }
+  ],
+  "redirects": [
+    { "source": "/admin", "destination": "/admin.html" },
+    { "source": "/employee", "destination": "/employee.html" }
+  ]
+}
