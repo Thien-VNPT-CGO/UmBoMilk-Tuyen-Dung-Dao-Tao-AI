@@ -2175,21 +2175,30 @@ function syncLiveGoogleSheetCSV(spreadsheetId) {
   });
 }
 
-// Background auto-polling Google Sheet every 15 seconds
-setInterval(() => {
-  syncLiveGoogleSheetCSV();
+// Background auto-polling Google Sheet every 15 seconds - realtime 1:1 cho cả DB + Form responses
+setInterval(async () => {
+  await syncLiveGoogleSheetCSV();
+  const formSid = db.settings.googleSheet.formResponsesSheetId;
+  if(formSid && formSid !== db.settings.googleSheet.spreadsheetId) {
+    await syncLiveGoogleSheetCSV(formSid);
+  }
 }, 15000);
 
 app.post('/api/recruitment/sync-form', authMiddleware, async (req,res)=>{
   const cfg = db.settings.googleSheet;
-  const sid = cfg.spreadsheetId || '1rcqEKraSRhr-Tn9qwlhADlkQUei8j65bXeHF_Tmkd38';
+  const sid = cfg.spreadsheetId || '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w';
   const added = await syncLiveGoogleSheetCSV(sid);
-  const q = { id: uuidv4(), entity:'APPLICANT', operation:'SYNC_SHEET_REAL', payload:{added, spreadsheetId: sid}, version:1, updated_at: new Date().toISOString(), updated_by:req.user.username, source:'SHEET', sync_status:'SYNCED' };
+  // Also sync form responses sheet if configured (để Vercel thấy data từ Form)
+  let addedForm = 0;
+  if(cfg.formResponsesSheetId && cfg.formResponsesSheetId !== sid){
+    addedForm = await syncLiveGoogleSheetCSV(cfg.formResponsesSheetId);
+  }
+  const q = { id: uuidv4(), entity:'APPLICANT', operation:'SYNC_SHEET_REAL', payload:{added, addedForm, spreadsheetId: sid, formResponsesSheetId: cfg.formResponsesSheetId}, version:1, updated_at: new Date().toISOString(), updated_by:req.user.username, source:'SHEET', sync_status:'SYNCED' };
   db.syncQueue.unshift(q);
   saveDB();
   io.emit('applicants:update', db.applicants);
   io.emit('sync:update', db.syncQueue);
-  res.json({ added, total: db.applicants.length, source:'SHEET_LIVE_REAL', spreadsheetId: sid });
+  res.json({ added, addedForm, total: db.applicants.length, source:'SHEET_LIVE_REAL', spreadsheetId: sid, formResponsesSheetId: cfg.formResponsesSheetId });
 });
 
 // ============ KEYS ============
