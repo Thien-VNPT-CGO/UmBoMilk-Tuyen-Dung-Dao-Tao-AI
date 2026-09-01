@@ -4190,6 +4190,57 @@ async function loadSettings(){
     if (document.getElementById('setPenaltyAbsent')) document.getElementById('setPenaltyAbsent').value = s.attendance?.penaltyAbsent || 100000;
     if (document.getElementById('setOffMax')) document.getElementById('setOffMax').value = s.off?.maxPerWeek || 2;
     if (document.getElementById('setTestMin')) document.getElementById('setTestMin').value = s.test?.minPerQuestion || 5;
+    // ENV lock - khóa khi dùng Render ENV (server.js:386)
+    const envLocked = data.envLocked || {};
+    const lockMap = {
+      'googleSheet.spreadsheetId': 'setSheetId',
+      'googleSheet.targetDatabaseSpreadsheetId': 'setTargetDatabaseSheetId',
+      'googleSheet.targetWebhookUrl': 'setTargetWebhookUrl',
+      'googleSheet.serviceAccountEmail': 'setSheetEmail',
+      'googleSheet.privateKey': 'setSheetKey',
+      'googleSheet.formResponsesSheetId': 'setFormId',
+      'googleSheet.secret': 'setSheetSecret'
+    };
+    let lockedCount = 0;
+    Object.entries(lockMap).forEach(([path, id])=>{
+      const el = document.getElementById(id);
+      if(!el) return;
+      if(envLocked[path]){
+        lockedCount++;
+        el.disabled = true;
+        el.classList.add('bg-slate-100','opacity-60','cursor-not-allowed','border-amber-300');
+        el.title = '🔒 Đang bị khóa bởi ENV Render - đổi trên Render Dashboard → Environment, không sửa trên UI';
+        // Thêm badge 🔒 bên cạnh label nếu chưa có
+        const label = el.closest('div')?.querySelector('label');
+        if(label && !label.querySelector('.env-lock-badge')){
+          const badge = document.createElement('span');
+          badge.className = 'env-lock-badge ml-2 text-xs bg-amber-100 text-amber-700 border border-amber-300 rounded-full px-2 py-0.5';
+          badge.textContent = '🔒 ENV';
+          badge.title = 'Giá trị đang lấy từ Render ENV, không thể sửa trên UI';
+          label.appendChild(badge);
+        }
+      } else {
+        el.disabled = false;
+        el.classList.remove('bg-slate-100','opacity-60','cursor-not-allowed','border-amber-300');
+        el.title = '';
+        const label = el.closest('div')?.querySelector('label');
+        const badge = label?.querySelector('.env-lock-badge');
+        if(badge) badge.remove();
+      }
+    });
+    // Banner cảnh báo ENV
+    const settingsCard = document.getElementById('settings') || document.querySelector('[id*="settings"]');
+    let banner = document.getElementById('envLockBanner');
+    if(lockedCount>0){
+      if(!banner){
+        banner = document.createElement('div');
+        banner.id = 'envLockBanner';
+        banner.className = 'mb-3 bg-amber-50 border border-amber-300 text-amber-800 rounded-xl px-3 py-2 text-xs flex items-start gap-2';
+        banner.innerHTML = `<span class="text-sm">🔒</span><div><b>${lockedCount} field Google Sheet đang bị khóa bởi ENV Render</b><br>Đổi trên Render Dashboard → Environment → Save → Deploy. Sửa trên UI sẽ bị bỏ qua.<br><span class="text-amber-600">Chi tiết: ${Object.keys(envLocked).join(', ')}</span></div>`;
+        const firstInput = document.getElementById('setSheetId');
+        if(firstInput && firstInput.parentElement && firstInput.parentElement.parentElement) firstInput.parentElement.parentElement.prepend(banner);
+      }
+    } else if(banner) banner.remove();
     updateModeBadge(s);
     // users
     loadUsers();
@@ -4219,8 +4270,20 @@ async function saveSettings(){
     off:{maxPerWeek:parseInt(document.getElementById('setOffMax').value)},
     test:{minPerQuestion:parseInt(document.getElementById('setTestMin').value)},
   };
-  await api('/api/settings', {method:'PUT', body:JSON.stringify({settings:payload}), headers:{Authorization:'Bearer '+token}});
-  showToast('Đã lưu cài đặt hệ thống + Audit Log','success');
+  try{
+    const res = await api('/api/settings', {method:'PUT', body:JSON.stringify({settings:payload}), headers:{Authorization:'Bearer '+token}});
+    if(res.blocked && res.blocked.length>0){
+      showToast(res.warning || `🔒 ${res.blocked.length} field bị khóa ENV, không lưu: ${res.blocked.join(', ')}`,'error');
+    } else {
+      showToast('Đã lưu cài đặt hệ thống + Audit Log','success');
+    }
+    // reload để cập nhật envLocked
+    setTimeout(loadSettings, 500);
+  }catch(e){
+    if(e.message.includes('423') || e.message.includes('khóa bởi ENV')){
+      showToast(e.message,'error');
+    } else throw e;
+  }
 }
 
 // testNotificationChannel removed - Email & SMS notification feature removed from project

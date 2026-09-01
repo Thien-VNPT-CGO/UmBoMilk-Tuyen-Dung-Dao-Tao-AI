@@ -65,14 +65,28 @@ const DEFAULT_SHIFTS = {
 };
 
 const DEFAULT_SETTINGS = {
-  googleSheet: { spreadsheetId: '1rcqEKraSRhr-Tn9qwlhADlkQUei8j65bXeHF_Tmkd38', targetDatabaseSpreadsheetId: '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w', targetWebhookUrl: 'https://script.google.com/macros/s/AKfycbyh2yuRzV_txN3UCq_llPFK5j74WyoxVvmO1us_H1EGw7ykcBO_fYbZ0lrznHbDY3PE/exec', serviceAccountEmail: 'umbomilk-hr@umbomilk-hr.iam.gserviceaccount.com', privateKey: '', formResponsesSheetId: '1rcqEKraSRhr-Tn9qwlhADlkQUei8j65bXeHF_Tmkd38', formUrl: 'https://docs.google.com/forms/d/e/1FAIpQLSeteDABiq7mday0Yko-PyyUIW4uccicP7FJJt2evc7xbbWBfA/viewform', masked: true },
+  // Operational Data Hub - Ràng buộc chuẩn theo Spec 3 (28/08/2026)
+  // - spreadsheetId / formResponsesSheetId: Sheet nộp Form (Nguồn vào) - 1rcq...
+  // - targetDatabaseSpreadsheetId: Sheet Database chính (Nguồn xuất 20 cột) - 17iXM...
+  // - targetWebhookUrl: Apps Script Webhook (cần deploy từ scripts/google-apps-script.gs)
+  googleSheet: {
+    spreadsheetId: '1rcqEKraSRhr-Tn9qwlhADlkQUei8j65bXeHF_Tmkd38',
+    formResponsesSheetId: '1rcqEKraSRhr-Tn9qwlhADlkQUei8j65bXeHF_Tmkd38',
+    targetDatabaseSpreadsheetId: '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w',
+    targetWebhookUrl: 'https://script.google.com/macros/s/AKfycbz_umbomilk_apps_script/exec',
+    secret: 'umbomilk_secret_2026',
+    serviceAccountEmail: 'umbomilk-hr@umbomilk-hr.iam.gserviceaccount.com',
+    privateKey: '',
+    formUrl: 'https://docs.google.com/forms/d/e/1FAIpQLSeteDABiq7mday0Yko-PyyUIW4uccicP7FJJt2evc7xbbWBfA/viewform',
+    masked: true
+  },
   googleDrive: { rootFolderId: '1-Wy-Di6KvfeGCKoTV7TSuFQpY_yKNy-1', backupFolderId: '1-Wy-Di6KvfeGCKoTV7TSuFQpY_yKNy-1', driveUrl: 'https://drive.google.com/drive/folders/1-Wy-Di6KvfeGCKoTV7TSuFQpY_yKNy-1' },
   googleForm: { formUrl: 'https://docs.google.com/forms/d/e/1FAIpQLSd9rRG4QLvmLclPseVVmpgPdizij1XYwiSTCgc6x2BPMfA_AA/viewform', mapping: {} },
   ai: { provider: 'openai', baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o', temperature: 0.7 },
   zalo: { oaId: '', accessToken: '', template: '', reminderEnabled: true },
   calendar: { clientId: '', clientSecret: '', calendarId: '', duration: 30, reminderOnce: true },
   scoring: { criteria: [{ name: 'Kinh nghiệm', weight: 30 }, { name: 'Giao tiếp', weight: 25 }, { name: 'Thái độ', weight: 25 }, { name: 'Sẵn sàng ca', weight: 20 }], passThreshold: 70 },
-  attendance: { checkInOpenBefore: 30, lateThreshold: 15, earlyLeaveThreshold: 15, penaltyLate: 30000, penaltyAbsent: 100000, penaltyNoCheckout: 50000 },
+  attendance: { checkInOpenBefore: 30, checkInCloseAfter: 60, lateThreshold: 15, earlyLeaveThreshold: 15, penaltyLate: 30000, penaltyAbsent: 100000, penaltyNoCheckout: 50000 },
   payroll: { trainingRate: 21000, officialRate: 25500, shifts: DEFAULT_SHIFTS },
   off: { openDay: 5, openHour: 12, closeDay: 6, closeHour: 15, maxPerWeek: 2 },
   test: { minPerQuestion: 5, totalQuestions: 20, passScore: 7, retakeMin: 5, maxRetest: 3 },
@@ -170,6 +184,7 @@ function decryptSettingsSecrets(settings){
   // decrypt known secret fields transparently for internal use
   const fields = [
     ['googleSheet','privateKey'],
+    ['googleSheet','secret'],
     ['ai','apiKey'],
     ['zalo','accessToken'],
     ['calendar','clientSecret']
@@ -189,6 +204,7 @@ function maskSecretValue(val){
 function getMaskedSettings(settings){
   const m = JSON.parse(JSON.stringify(settings));
   if(m.googleSheet?.privateKey) m.googleSheet.privateKey = maskSecretValue(settings.googleSheet.privateKey);
+  if(m.googleSheet?.secret) m.googleSheet.secret = maskSecretValue(settings.googleSheet.secret);
   if(m.ai?.apiKey) m.ai.apiKey = maskSecretValue(settings.ai.apiKey);
   if(m.zalo?.accessToken) m.zalo.accessToken = maskSecretValue(settings.zalo.accessToken);
   if(m.calendar?.clientSecret) m.calendar.clientSecret = maskSecretValue(settings.calendar.clientSecret);
@@ -207,7 +223,7 @@ function loadDB() {
       // ensure branches correct (CN2 fix)
       db.branches = DEFAULT_BRANCHES;
       if (!db.settings) db.settings = DEFAULT_SETTINGS;
-      else db.settings = { ...DEFAULT_SETTINGS, ...db.settings, googleSheet: { ...DEFAULT_SETTINGS.googleSheet, ...(db.settings.googleSheet||{}) }, ai: { ...DEFAULT_SETTINGS.ai, ...(db.settings.ai||{}) }, zalo: { ...DEFAULT_SETTINGS.zalo, ...(db.settings.zalo||{}) }, calendar: { ...DEFAULT_SETTINGS.calendar, ...(db.settings.calendar||{}) } };
+      else db.settings = { ...DEFAULT_SETTINGS, ...db.settings, googleSheet: { ...DEFAULT_SETTINGS.googleSheet, ...(db.settings.googleSheet||{}) }, ai: { ...DEFAULT_SETTINGS.ai, ...(db.settings.ai||{}) }, zalo: { ...DEFAULT_SETTINGS.zalo, ...(db.settings.zalo||{}) }, calendar: { ...DEFAULT_SETTINGS.calendar, ...(db.settings.calendar||{}) }, attendance: { ...DEFAULT_SETTINGS.attendance, ...(db.settings.attendance||{}) } };
       // ensure payroll shifts
       if (!db.settings.payroll) db.settings.payroll = DEFAULT_SETTINGS.payroll;
       if (!db.payrollPeriods) db.payrollPeriods = [];
@@ -244,6 +260,9 @@ function saveDB() {
       }
       if(clone.settings.calendar?.clientSecret && !clone.settings.calendar.clientSecret.startsWith('enc:') && clone.settings.calendar.clientSecret.length>10 && !clone.settings.calendar.clientSecret.includes('•')){
         clone.settings.calendar.clientSecret = encryptSecret(clone.settings.calendar.clientSecret);
+      }
+      if(clone.settings.googleSheet?.secret && !clone.settings.googleSheet.secret.startsWith('enc:') && clone.settings.googleSheet.secret.length>5 && !clone.settings.googleSheet.secret.includes('•')){
+        clone.settings.googleSheet.secret = encryptSecret(clone.settings.googleSheet.secret);
       }
     }
     // atomic write: write to temp then rename
@@ -370,6 +389,19 @@ function getMonday(d){
 }
 
 loadDB();
+// Override từ Render ENV nếu có (ưu tiên ENV > DB > DEFAULT) - phục vụ deploy Render
+if(process.env.GOOGLE_SHEET_SPREADSHEET_ID) db.settings.googleSheet.spreadsheetId = process.env.GOOGLE_SHEET_SPREADSHEET_ID;
+if(process.env.GOOGLE_SHEET_FORM_RESPONSES_ID) db.settings.googleSheet.formResponsesSheetId = process.env.GOOGLE_SHEET_FORM_RESPONSES_ID;
+if(process.env.GOOGLE_SHEET_TARGET_DATABASE_ID) db.settings.googleSheet.targetDatabaseSpreadsheetId = process.env.GOOGLE_SHEET_TARGET_DATABASE_ID;
+if(process.env.GOOGLE_SHEET_WEBHOOK_URL) db.settings.googleSheet.targetWebhookUrl = process.env.GOOGLE_SHEET_WEBHOOK_URL;
+if(process.env.GOOGLE_SHEET_WEBHOOK_SECRET) db.settings.googleSheet.secret = process.env.GOOGLE_SHEET_WEBHOOK_SECRET;
+if(process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL) db.settings.googleSheet.serviceAccountEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+if(process.env.GOOGLE_PRIVATE_KEY) {
+  const pk = process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n');
+  if(pk.includes('BEGIN PRIVATE KEY')) db.settings.googleSheet.privateKey = pk;
+}
+// Log ràng buộc đã áp dụng
+console.log(`[CONFIG] Google Sheet Hub: Form=${db.settings.googleSheet.formResponsesSheetId.slice(0,8)}... DB=${db.settings.googleSheet.targetDatabaseSpreadsheetId.slice(0,8)}... Webhook=${db.settings.googleSheet.targetWebhookUrl ? 'SET' : 'EMPTY'}`);
 
 // ============ HELPERS ============
 function audit(actor, action, entity, before, after, ip='127.0.0.1'){
@@ -405,8 +437,17 @@ async function syncToGoogleSheet(item){
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ secret, sheetName, operation: item.operation, payload: item.payload }),
   });
-  const data = await res.json().catch(()=> ({}));
-  if(!res.ok || !data.success) throw new Error(data.error || `Webhook HTTP ${res.status}`);
+  const text = await res.text();
+  let data; try{ data=JSON.parse(text); }catch(e){ data={ success: res.ok, raw: text.slice(0,300)}; }
+  if(!res.ok || !data.success){
+    // Chi tiết lỗi để admin chẩn đoán webhook/secret
+    let msg = data.error || `Webhook HTTP ${res.status}`;
+    if(res.status===401 || (msg && msg.toLowerCase().includes('unauthorized'))){
+      msg = `Unauthorized (401) - Sai GOOGLE_SHEET_WEBHOOK_SECRET. Kiểm tra Apps Script secret vs Settings > Google Sheet > Secret. Hiện dùng secret: ${secret.slice(0,4)}•••• (webhook: ${webhookUrl.slice(0,50)}...)`;
+    }
+    if(res.status===404) msg += ' - Webhook URL không tồn tại (kiểm tra Script deployment)';
+    throw new Error(msg);
+  }
   return data;
 }
 
@@ -2616,8 +2657,8 @@ function generateDrivePath(employee, dateStr, type){
   const branch = db.branches.find(b=>b.id===employee.branchId);
   const branchFolder = `${branch?.prefix||employee.branchId} - ${branch?.name||employee.branchId}`;
   const shiftFolder = employee.shift || 'CA_SANG';
-  // Spec 4 note: bổ sung Employee ID để tránh trùng tên/SĐT
-  const empFolder = `${employee.name} - ${employee.phone}`;
+  // Spec 4 note: bổ sung Employee ID để tránh trùng tên/SĐT khi đổi số
+  const empFolder = `${employee.name} - ${employee.phone} - ${employee.employeeId}`;
   const root = employee.type==='TRAINING' ? 'NHAN_VIEN_TRAINING' : 'NHAN_VIEN_CHINH_THUC';
   // Spec yêu cầu DD-MM-YYYY cho folder ngày
   const dParts = dateStr.split('-');
@@ -2637,7 +2678,7 @@ async function ensureDriveFolderCake(employee, dateStr, type){
       employee.type==='TRAINING' ? 'NHAN_VIEN_TRAINING' : 'NHAN_VIEN_CHINH_THUC',
       `${branch?.prefix||employee.branchId} - ${branch?.name||employee.branchId}`,
       employee.shift || 'CA_SANG',
-      `${employee.name} - ${employee.phone}`,
+      `${employee.name} - ${employee.phone} - ${employee.employeeId}`,
       (()=>{ const p=dateStr.split('-'); return p.length===3?`${p[2]}-${p[1]}-${p[0]}`:dateStr })(),
       type
     ];
@@ -3022,9 +3063,19 @@ app.post('/api/employees/:id/evaluate-test', authMiddleware, (req, res) => {
 });
 
 app.post('/api/attendance/checkin', (req,res)=>{
-  const { employeeId, gps, address, image, shift } = req.body;
+  const { employeeId, gps, address, image, shift, isCameraCapture } = req.body;
   const emp = db.employees.find(e=>e.employeeId===employeeId);
   if(!emp) return res.status(404).json({error:'Employee not found'});
+  // Spec 16.1 - dữ liệu bắt buộc
+  if(!image || typeof image!=='string' || image.length<100) return res.status(400).json({error:'Ảnh Check-in bắt buộc - phải chụp trực tiếp bằng camera (không cho upload gallery)'});
+  // Chặn upload gallery: phải là ảnh chụp trực tiếp data:image/* base64, không chấp nhận URL/generic
+  if(!image.startsWith('data:image/')) return res.status(400).json({error:'Ảnh phải được chụp trực tiếp từ camera (data:image), không cho upload từ thư viện'});
+  // Optional flag từ client để đảm bảo camera live
+  if(isCameraCapture === false) return res.status(400).json({error:'Không cho upload ảnh có sẵn từ Gallery - phải chụp trực tiếp'});
+  if(!gps || typeof gps!=='string' || !gps.includes(',')) return res.status(400).json({error:'GPS bắt buộc khi Check-in'});
+  // Validate GPS format: lat, lng
+  if(!/^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?/.test(gps)) return res.status(400).json({error:'GPS không hợp lệ (định dạng: lat, lng)'});
+  if(!address || address.trim().length<3) return res.status(400).json({error:'Địa chỉ/GPS address bắt buộc khi Check-in'});
 
   // Check-in lockdown during Online App Test
   if (emp.testSchedule && emp.testSchedule.type === 'ONLINE_APP' && emp.status === 'WAITING_TEST') {
@@ -3068,6 +3119,12 @@ app.post('/api/attendance/checkin', (req,res)=>{
 
   if(now < open) {
     return res.status(400).json({error: `Chưa đến giờ mở Check-in. Camera sẽ mở lúc ${open.toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit'})}`});
+  }
+  // Spec 16: Đóng Check-in theo ngưỡng cho phép (Rule Engine) - default 60 phút sau giờ bắt đầu
+  const closeAfter = db.settings?.attendance?.checkInCloseAfter ?? 60;
+  const close = new Date(shiftStart.getTime() + closeAfter*60000);
+  if(now > close){
+    return res.status(400).json({error: `Đã đóng Check-in. Cửa sổ Check-in: ${open.toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'})} - ${close.toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'})}. Vui lòng liên hệ HR.`});
   }
 
   const isOfficial = emp.type === 'OFFICIAL' || emp.status === 'OFFICIAL';
@@ -3135,9 +3192,16 @@ app.post('/api/attendance/checkin', (req,res)=>{
 });
 
 app.post('/api/attendance/checkout', (req,res)=>{
-  const { employeeId, gps, address, image } = req.body;
+  const { employeeId, gps, address, image, isCameraCapture } = req.body;
   const emp = db.employees.find(e=>e.employeeId===employeeId);
   if(!emp) return res.status(404).json({error:'Employee not found'});
+  // Spec 17 - dữ liệu bắt buộc
+  if(!image || typeof image!=='string' || image.length<100) return res.status(400).json({error:'Ảnh Check-out bắt buộc - phải chụp trực tiếp bằng camera'});
+  if(!image.startsWith('data:image/')) return res.status(400).json({error:'Ảnh phải được chụp trực tiếp từ camera (data:image), không cho upload từ thư viện'});
+  if(isCameraCapture === false) return res.status(400).json({error:'Không cho upload ảnh có sẵn từ Gallery - phải chụp trực tiếp'});
+  if(!gps || typeof gps!=='string' || !gps.includes(',')) return res.status(400).json({error:'GPS bắt buộc khi Check-out'});
+  if(!/^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?/.test(gps)) return res.status(400).json({error:'GPS không hợp lệ (định dạng: lat, lng)'});
+  if(!address || address.trim().length<3) return res.status(400).json({error:'Địa chỉ/GPS address bắt buộc khi Check-out'});
   const today = new Date().toISOString().split('T')[0];
   const record = db.attendances.find(a=>a.employeeId===employeeId && a.date===today);
   if(!record || !record.checkIn) return res.status(400).json({error:'Bạn chưa Check-in ca làm việc'});
@@ -3733,20 +3797,39 @@ app.post('/api/courses/:id/submit', (req,res)=>{
   res.json({ testResult: testRes, employee: emp });
 });
 
+// Helper: xác định field nào đang bị ENV khóa (Render)
+function getEnvLocked(){
+  const locked = {};
+  if(process.env.GOOGLE_SHEET_SPREADSHEET_ID) locked['googleSheet.spreadsheetId']=true;
+  if(process.env.GOOGLE_SHEET_FORM_RESPONSES_ID) locked['googleSheet.formResponsesSheetId']=true;
+  if(process.env.GOOGLE_SHEET_TARGET_DATABASE_ID) locked['googleSheet.targetDatabaseSpreadsheetId']=true;
+  if(process.env.GOOGLE_SHEET_WEBHOOK_URL) locked['googleSheet.targetWebhookUrl']=true;
+  if(process.env.GOOGLE_SHEET_WEBHOOK_SECRET) locked['googleSheet.secret']=true;
+  if(process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL) locked['googleSheet.serviceAccountEmail']=true;
+  if(process.env.GOOGLE_PRIVATE_KEY) locked['googleSheet.privateKey']=true;
+  return locked;
+}
 // ============ SETTINGS ============
 // FIX P0.2: không bao giờ trả raw secret - chỉ trả masked, realtime masked
 app.get('/api/settings', authMiddleware, roleCheck(['Admin','HR','Manager']), (req,res)=>{
   const masked = getMaskedSettings(db.settings);
+  const envLocked = getEnvLocked();
   // HR/Manager chỉ được xem, không thấy secret thật
-  res.json({ settings: masked, masked });
+  res.json({ settings: masked, masked, envLocked });
 });
 app.get('/api/settings/masked', authMiddleware, (req,res)=>{
   res.json(getMaskedSettings(db.settings));
 });
 app.put('/api/settings', authMiddleware, roleCheck(['Admin']), (req,res)=>{
   const before = JSON.parse(JSON.stringify(db.settings));
+  const envLocked = getEnvLocked();
+  const blocked = [];
   const { path: p, value } = req.body; // alternative: full object
   if(p && value!==undefined){
+    // Khóa khi dùng ENV
+    if(envLocked[p]){
+      return res.status(423).json({ error: `🔒 Field ${p} đang bị khóa bởi ENV Render (process.env). Vui lòng đổi trên Render Dashboard → Environment, không sửa trên UI.` , envLocked });
+    }
     // set nested
     const keys = p.split('.');
     let cur = db.settings;
@@ -3758,23 +3841,49 @@ app.put('/api/settings', authMiddleware, roleCheck(['Admin']), (req,res)=>{
       cur[keys[keys.length-1]] = value;
     }
   } else {
-    // full replace but keep masking logic
+    // full replace but keep masking logic + ENV lock
     const incoming = req.body.settings || req.body;
     Object.keys(incoming).forEach(k=>{
       if(db.settings[k]){
         Object.keys(incoming[k]).forEach(sub=>{
+          const fullPath = `${k}.${sub}`;
+          if(envLocked[fullPath]){
+            blocked.push(fullPath);
+            return;
+          }
           const val = incoming[k][sub];
           if(typeof val==='string' && val.includes('•')) return;
           db.settings[k][sub]=val;
         });
       }
     });
+    if(blocked.length>0){
+      console.log(`[SETTINGS] Blocked ENV-locked fields: ${blocked.join(', ')}`);
+    }
   }
   audit(req.user.username,'UPDATE_SETTINGS','SETTINGS',getMaskedSettings(before),getMaskedSettings(db.settings), req.ip);
-  addSyncQueue('SETTINGS','UPDATE',getMaskedSettings(db.settings), req.user.username, 'WEB_HR');
+  // FIX: SETTINGS không đồng bộ lên Google Sheet (không có sheet mapping) -> bỏ queue để tránh DEAD
+  // Nếu đổi webhook/secret thì auto-reset các mục DEAD/FAILED để thử lại
+  const webhookChanged = (before.googleSheet?.targetWebhookUrl !== db.settings.googleSheet?.targetWebhookUrl) || (before.googleSheet?.secret !== db.settings.googleSheet?.secret);
+  if(webhookChanged){
+    let resetCount=0;
+    db.syncQueue.forEach(item=>{
+      if(item.sync_status==='DEAD' || item.sync_status==='FAILED'){
+        item.sync_status='PENDING';
+        item.retryCount=0;
+        delete item.nextRetryAt;
+        delete item.error;
+        resetCount++;
+      }
+    });
+    if(resetCount>0) console.log(`[SETTINGS] Webhook/secret changed -> reset ${resetCount} DEAD/FAILED to PENDING`);
+  }
   saveDB();
   io.emit('settings:update', getMaskedSettings(db.settings));
-  res.json(getMaskedSettings(db.settings));
+  io.emit('sync:update', db.syncQueue);
+  const resp = getMaskedSettings(db.settings);
+  // Trả thêm envLocked và blocked để UI biết khóa
+  res.json({ settings: resp, masked: resp, envLocked: getEnvLocked(), blocked, warning: blocked.length>0 ? `🔒 ${blocked.length} field bị khóa bởi ENV Render, không lưu qua UI: ${blocked.join(', ')}` : undefined });
 });
 
 
@@ -4309,8 +4418,11 @@ app.post('/api/sync-queue/retry-all', authMiddleware, async (req,res)=>{
 app.post('/api/sync-queue/:id/retry', authMiddleware, async (req,res)=>{
   const item = db.syncQueue.find(s=>s.id===req.params.id);
   if(!item) return res.status(404).json({error:'Not found'});
+  // Reset để cho phép thử lại đủ 5 lần (fix lỗi dừng sau 5 lần)
   item.sync_status='PENDING';
-  item.retryCount=(item.retryCount||0)+1;
+  item.retryCount=0;
+  delete item.nextRetryAt;
+  delete item.error;
   try {
     await syncToGoogleSheet(item);
     item.sync_status='SYNCED';
@@ -4326,6 +4438,51 @@ app.post('/api/sync-queue/:id/retry', authMiddleware, async (req,res)=>{
     io.emit('sync:update', db.syncQueue);
     res.status(502).json(item);
   }
+});
+// Diagnostic: test webhook/secret mà không cần tạo queue - giúp admin kiểm tra ngay
+app.post('/api/sync/test-webhook', authMiddleware, roleCheck(['Admin']), async (req,res)=>{
+  const webhookUrl = req.body.webhookUrl || db.settings?.googleSheet?.targetWebhookUrl;
+  const secret = req.body.secret || process.env.GOOGLE_SHEET_WEBHOOK_SECRET || db.settings?.googleSheet?.secret || 'umbomilk_secret_2026';
+  if(!webhookUrl) return res.status(400).json({ error:'Chưa cấu hình webhookUrl', hint:'Vào Cài đặt > Google Sheet > Webhook URL' });
+  try{
+    const testRes = await fetch(webhookUrl, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ secret, sheetName:'TEST', operation:'PING', payload:{ test:true, timestamp: new Date().toISOString() } })
+    });
+    const text = await testRes.text();
+    let data; try{ data=JSON.parse(text);}catch(e){ data={ raw: text.slice(0,500)}; }
+    const ok = testRes.ok && (data.success || text.includes('success') || testRes.status===200);
+    res.json({
+      webhookUrl: webhookUrl.slice(0,60)+'...',
+      secretMasked: secret.slice(0,4)+'••••',
+      httpStatus: testRes.status,
+      ok,
+      response: data,
+      raw: text.slice(0,800),
+      hint: !ok && testRes.status===401 ? 'Sai secret - kiểm tra lại Apps Script doGet/doPost secret phải khớp với Settings > Google Sheet > Secret' : undefined
+    });
+  }catch(e){
+    res.status(502).json({ error: e.message, webhookUrl, secretMasked: secret.slice(0,4)+'••••' });
+  }
+});
+// Diagnostic: chi tiết sync queue + webhook config
+app.get('/api/sync/diagnostic', authMiddleware, roleCheck(['Admin']), (req,res)=>{
+  const webhookUrl = db.settings?.googleSheet?.targetWebhookUrl;
+  const secret = process.env.GOOGLE_SHEET_WEBHOOK_SECRET || db.settings?.googleSheet?.secret || 'umbomilk_secret_2026';
+  const counts = {};
+  db.syncQueue.forEach(i=>{ counts[i.sync_status]=(counts[i.sync_status]||0)+1; });
+  const topErrors = [...db.syncQueue.filter(i=>i.error).slice(0,5).map(i=>({id:i.id.slice(0,8), entity:i.entity, status:i.sync_status, retry:i.retryCount, error:i.error?.slice(0,150)}))];
+  res.json({
+    webhookConfigured: !!webhookUrl,
+    webhookUrl: webhookUrl ? webhookUrl.slice(0,70)+'...' : null,
+    secretSource: process.env.GOOGLE_SHEET_WEBHOOK_SECRET ? 'ENV' : (db.settings?.googleSheet?.secret ? 'DB_SETTINGS' : 'DEFAULT'),
+    secretMasked: secret.slice(0,4)+'••••',
+    counts,
+    total: db.syncQueue.length,
+    topErrors,
+    hint: counts.DEAD ? `${counts.DEAD} mục DEAD (dừng sau 5 lần) - bấm Retry All sau khi sửa webhook/secret` : undefined
+  });
 });
 app.get('/api/zalo-records', authMiddleware, (req,res)=> res.json(db.zaloRecords));
 app.get('/api/notifications', (req,res)=>{

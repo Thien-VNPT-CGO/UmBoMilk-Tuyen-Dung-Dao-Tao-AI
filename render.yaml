@@ -18,6 +18,21 @@ services:
         generateValue: true
       - key: ALLOWED_ORIGINS
         value: "*"
+      # Google Sheet Operational Data Hub - Ràng buộc Spec 3
+      - key: GOOGLE_SHEET_SPREADSHEET_ID
+        value: 1rcqEKraSRhr-Tn9qwlhADlkQUei8j65bXeHF_Tmkd38
+      - key: GOOGLE_SHEET_TARGET_DATABASE_ID
+        value: 17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w
+      - key: GOOGLE_SHEET_WEBHOOK_URL
+        value: https://script.google.com/macros/s/AKfycbz_umbomilk_apps_script/exec
+      - key: GOOGLE_SHEET_WEBHOOK_SECRET
+        value: umbomilk_secret_2026
+      - key: GOOGLE_SERVICE_ACCOUNT_EMAIL
+        value: umbomilk-hr@umbomilk-hr.iam.gserviceaccount.com
+      # Private Key phải set thủ công trên Render Dashboard (Environment) - dạng 1 dòng với \n
+      # Ví dụ: -----BEGIN PRIVATE KEY-----\nMIIEv...==\n-----END PRIVATE KEY-----\n
+      - key: GOOGLE_PRIVATE_KEY
+        sync: false
 
 # Postgres free 90 ngày (tùy chọn, nếu cần 24/7 DB thay db.json)
 # databases:

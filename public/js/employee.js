@@ -718,7 +718,7 @@ async function submitCheckin(){
   const gps=document.getElementById('gpsCheckin').textContent;
   const addr=document.getElementById('addrCheckin').textContent;
   try{
-    const res = await api('/api/attendance/checkin', {method:'POST', body:JSON.stringify({employeeId:employee.employeeId, gps, address:addr, image:capturedCheckin, shift:employee.shift})});
+    const res = await api('/api/attendance/checkin', {method:'POST', body:JSON.stringify({employeeId:employee.employeeId, gps, address:addr, image:capturedCheckin, shift:employee.shift, isCameraCapture:true})});
     document.getElementById('checkinResult').className='mt-2 text-xs font-bold rounded-xl px-3 py-2 bg-pink-100 text-pink-700 border border-pink-200';
     document.getElementById('checkinResult').textContent='Check-in thành công lúc '+res.checkIn.time+' • '+(res.status!=='CHECKED_IN'?'VI PHẠM: '+res.status:'ĐÚNG GIỜ');
     document.getElementById('checkinResult').classList.remove('hidden');
@@ -736,7 +736,7 @@ async function submitCheckout(){
   const gps=document.getElementById('gpsCheckout').textContent;
   const addr=document.getElementById('addrCheckout').textContent;
   try{
-    const res = await api('/api/attendance/checkout', {method:'POST', body:JSON.stringify({employeeId:employee.employeeId, gps, address:addr, image:capturedCheckout})});
+    const res = await api('/api/attendance/checkout', {method:'POST', body:JSON.stringify({employeeId:employee.employeeId, gps, address:addr, image:capturedCheckout, isCameraCapture:true})});
     document.getElementById('checkoutResult').className='mt-2 text-xs font-bold rounded-xl px-3 py-2 bg-pink-100 text-pink-700 border border-pink-200';
     document.getElementById('checkoutResult').textContent='Check-out thành công lúc '+res.checkOut.time+' • Ca hoàn thành';
     document.getElementById('checkoutResult').classList.remove('hidden');
