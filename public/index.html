@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ụm Bò Milk - Hệ thống Nhân sự 2026</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script>
+tailwind.config={theme:{extend:{fontFamily:{sans:['Be Vietnam Pro','sans-serif']}, colors:{brand:{50:'#fdf2f8',100:'#fce7f3',500:'#ec4899',600:'#db2777',700:'#be185d',800:'#9d174d',900:'#831843'}}}}
+</script>
+<style>body{font-family:'Be Vietnam Pro',sans-serif}</style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-pink-50 via-white to-rose-50">
+<!-- Header -->
+<nav class="bg-white/90 backdrop-blur border-b border-pink-200 sticky top-0 z-50 shadow-sm">
+  <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-pink-500 to-rose-500 flex items-center justify-center text-white font-black text-lg shadow-md">ỤM</div>
+      <div>
+        <div class="font-black text-pink-900 leading-none">ỤM BÒ MILK</div>
+        <div class="text-xs text-pink-600 font-medium">Tuyển dụng • Đào tạo • Chấm công 2026</div>
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <span id="modeBadge" class="hidden md:inline-flex items-center gap-2 text-xs font-black bg-green-50 border border-green-200 text-green-700 px-3 py-1.5 rounded-full"><span id="modeDot" class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span><span id="modeText">ONLINE</span></span>
+      <span class="hidden md:inline-flex items-center gap-2 text-xs font-semibold bg-pink-100 text-pink-700 px-3 py-1.5 rounded-full border border-pink-200"><span class="w-2 h-2 bg-pink-500 rounded-full animate-pulse"></span>Realtime Socket.io</span>
+      <span class="text-xs bg-white text-pink-700 px-3 py-1.5 rounded-full font-bold border border-pink-200 shadow-sm">CONFIDENTIAL - INTERNAL</span>
+    </div>
+  </div>
+</nav>
+
+<!-- Hero -->
+<div class="max-w-7xl mx-auto px-6 pt-10 pb-6">
+  <div class="grid lg:grid-cols-2 gap-8 items-center">
+    <div>
+      <div class="inline-flex items-center gap-2 bg-white border border-pink-200 rounded-full px-4 py-1.5 text-xs font-bold text-pink-700 shadow-sm mb-4">
+        <i class="fa-solid fa-shield-halved text-pink-500"></i> MASTER SPEC 28/08/2026 • ĐÃ CHUẨN HÓA
+      </div>
+      <h1 class="text-4xl lg:text-5xl font-black text-pink-950 leading-tight">Hệ thống <span class="bg-gradient-to-r from-pink-500 to-rose-500 bg-clip-text text-transparent">Nhân sự Nội bộ</span><br>Ụm Bò Milk</h1>
+      <p class="mt-4 text-pink-800/70 font-medium leading-relaxed">Tuyển dụng → Phỏng vấn → Training → Kiểm tra đầu ra → Chính thức → Lịch làm việc → Chấm công → Nghỉ OFF → Dữ liệu tính lương.<br><span class="text-sm bg-white px-2 py-1 rounded border border-pink-200 shadow-sm">2 Web App liên kết chung dữ liệu • Rule Engine • Audit Log • Google Sheet/Drive Sync</span></p>
+      <div class="mt-6 flex flex-wrap gap-3">
+        <div class="flex items-center gap-2 text-sm font-semibold text-pink-900"><i class="fa-solid fa-circle-check text-pink-500"></i> CN2 = 261 Tô Hiến Thành chuẩn hóa</div>
+        <div class="flex items-center gap-2 text-sm font-semibold text-pink-900"><i class="fa-solid fa-circle-check text-pink-500"></i> Mã NV: CNxxx_UBMDDMMYYYY_NVxxxx</div>
+        <div class="flex items-center gap-2 text-sm font-semibold text-pink-900"><i class="fa-solid fa-circle-check text-pink-500"></i> TEST 20 câu • 5s/câu • Rule &lt;5 | 5-7 | &gt;7</div>
+      </div>
+    </div>
+    <div class="bg-white rounded-[24px] shadow-xl border border-pink-200 p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="font-black text-pink-900">Chọn cổng đăng nhập</h3>
+        <span class="text-xs font-bold bg-pink-100 text-pink-700 px-3 py-1 rounded-full border border-pink-200">REALTIME</span>
+      </div>
+      <!-- Admin Card -->
+      <a href="/admin" class="group block rounded-2xl border-2 border-pink-300 bg-gradient-to-br from-pink-500 to-rose-500 p-[1px] hover:shadow-lg transition">
+        <div class="bg-gradient-to-br from-pink-500 to-rose-500 rounded-2xl p-5 text-white relative overflow-hidden">
+          <div class="absolute -right-6 -top-6 w-24 h-24 bg-white/20 rounded-full blur-2xl"></div>
+          <div class="flex items-start justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-12 h-12 bg-white/20 backdrop-blur rounded-xl flex items-center justify-center text-xl"><i class="fa-solid fa-user-shield"></i></div>
+              <div>
+                <div class="font-black text-lg leading-none">Web App Quản trị HR</div>
+                <div class="text-xs font-medium text-white/90">Admin • HR • Manager • Umbomilk</div>
+              </div>
+            </div>
+            <i class="fa-solid fa-arrow-right group-hover:translate-x-1 transition"></i>
+          </div>
+          <div class="mt-4 grid grid-cols-3 gap-2 text-center">
+            <div class="bg-white/15 backdrop-blur rounded-xl py-2 border border-white/10"><div class="text-xs font-bold">13 TABS</div><div class="text-[11px] opacity-90">Dashboard→Cài đặt</div></div>
+            <div class="bg-white/15 backdrop-blur rounded-xl py-2 border border-white/10"><div class="text-xs font-bold">RBAC</div><div class="text-[11px] opacity-90">Branch Scope</div></div>
+            <div class="bg-white/15 backdrop-blur rounded-xl py-2 border border-white/10"><div class="text-xs font-bold">SOCKET</div><div class="text-[11px] opacity-90">Live Sync</div></div>
+          </div>
+          <div class="mt-3 text-xs font-medium bg-white text-pink-600 inline-flex px-3 py-1.5 rounded-full gap-2 items-center shadow"><i class="fa-solid fa-right-to-bracket"></i> Đăng nhập HR — demo: admin/admin123</div>
+        </div>
+      </a>
+      <!-- Employee Card -->
+      <a href="/employee" class="group block rounded-2xl border-2 border-pink-200 hover:border-pink-300 bg-white p-[1px] hover:shadow-lg transition mt-4">
+        <div class="bg-white rounded-2xl p-5 relative overflow-hidden">
+          <div class="flex items-start justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-12 h-12 bg-gradient-to-br from-pink-500 to-rose-500 rounded-xl flex items-center justify-center text-white text-xl shadow-md"><i class="fa-solid fa-id-badge"></i></div>
+              <div>
+                <div class="font-black text-lg leading-none text-pink-900">Web App Nhân viên</div>
+                <div class="text-xs font-medium text-pink-600/70">Training & Chính thức • Mã NV + Key</div>
+              </div>
+            </div>
+            <i class="fa-solid fa-arrow-right text-pink-300 group-hover:translate-x-1 group-hover:text-pink-500 transition"></i>
+          </div>
+          <div class="mt-4 grid grid-cols-3 gap-2 text-center">
+            <div class="bg-pink-50 border border-pink-200 rounded-xl py-2"><div class="text-xs font-bold text-pink-800">9 TABS</div><div class="text-[11px] text-pink-600">Điểm danh→Tài khoản</div></div>
+            <div class="bg-rose-50 border border-rose-200 rounded-xl py-2"><div class="text-xs font-bold text-rose-800">DEVICE</div><div class="text-[11px] text-rose-600">Binding 1-1</div></div>
+            <div class="bg-pink-50 border border-pink-200 rounded-xl py-2"><div class="text-xs font-bold text-pink-800">TEST</div><div class="text-[11px] text-pink-600">E-learning</div></div>
+          </div>
+          <div class="mt-3 text-xs font-bold bg-gradient-to-r from-pink-500 to-rose-500 text-white inline-flex px-3 py-1.5 rounded-full gap-2 items-center shadow"><i class="fa-solid fa-mobile-screen"></i> Dùng mã NV để đăng nhập</div>
+        </div>
+      </a>
+      <div class="mt-4 flex items-center gap-2 text-[11px] font-semibold text-pink-700 bg-pink-50 border border-pink-200 rounded-xl px-3 py-2">
+        <i class="fa-solid fa-lightbulb text-pink-500"></i> Tất cả tab hoạt động realtime qua Socket.io — thay đổi ở Admin sẽ phản chiếu ngay ở Nhân viên và ngược lại.
+      </div>
+    </div>
+  </div>
+
+  <!-- Feature grid -->
+  <div class="grid md:grid-cols-4 gap-4 mt-10">
+    <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm hover:shadow-md transition">
+      <div class="w-9 h-9 rounded-xl bg-pink-100 text-pink-600 flex items-center justify-center"><i class="fa-solid fa-calendar-check"></i></div>
+      <div class="font-bold text-pink-900 mt-3 text-sm">Chấm công GPS + Camera</div>
+      <div class="text-xs text-slate-500 mt-1">Check-in/out bắt buộc ảnh chụp trực tiếp, GPS, timestamp, lưu Drive đúng cấu trúc folder</div>
+    </div>
+    <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm hover:shadow-md transition">
+      <div class="w-9 h-9 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center"><i class="fa-solid fa-rotate"></i></div>
+      <div class="font-bold text-pink-900 mt-3 text-sm">OFF Auto Approve</div>
+      <div class="text-xs text-slate-500 mt-1">T6 12:00 → T7 15:00 • 2 ngày/tuần • Cùng CN+ca+ngày chỉ 1 người • FCFS</div>
+    </div>
+    <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm hover:shadow-md transition">
+      <div class="w-9 h-9 rounded-xl bg-pink-100 text-pink-600 flex items-center justify-center"><i class="fa-solid fa-people-arrows"></i></div>
+      <div class="font-bold text-pink-900 mt-3 text-sm">OFF đột xuất Cascade</div>
+      <div class="text-xs text-slate-500 mt-1">Cùng CN+ca → 10p → cùng CN khác ca • Phải có người thay mới duyệt</div>
+    </div>
+    <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm hover:shadow-md transition">
+      <div class="w-9 h-9 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center"><i class="fa-solid fa-calculator"></i></div>
+      <div class="font-bold text-pink-900 mt-3 text-sm">Payroll Rule Engine</div>
+      <div class="text-xs text-slate-500 mt-1">Training 21k/h • Chính thức 25.5k/h • Lương = ca hợp lệ - phạt + điều chỉnh</div>
+    </div>
+  </div>
+
+  <!-- Spec summary -->
+  <div class="bg-white rounded-2xl border border-pink-200 p-6 mt-6 shadow-sm">
+    <h3 class="font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-list-check text-pink-500"></i> Tiêu chí nghiệm thu cốt lõi — đã bao phủ toàn bộ</h3>
+    <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-2 mt-4 text-xs font-medium">
+      <div class="flex gap-2 bg-pink-50 border border-pink-200 rounded-lg px-3 py-2"><i class="fa-solid fa-check text-pink-500 mt-0.5"></i><span>Google Form → Nhân viên mới không trùng, có AI breakdown</span></div>
+      <div class="flex gap-2 bg-pink-50 border border-pink-200 rounded-lg px-3 py-2"><i class="fa-solid fa-check text-pink-500 mt-0.5"></i><span>Mã NV đúng prefix CN, không trùng, CN2 = 261 Tô Hiến Thành</span></div>
+      <div class="flex gap-2 bg-pink-50 border border-pink-200 rounded-lg px-3 py-2"><i class="fa-solid fa-check text-pink-500 mt-0.5"></i><span>RBAC + Branch Scope chặn đúng quyền</span></div>
+      <div class="flex gap-2 bg-pink-50 border border-pink-200 rounded-lg px-3 py-2"><i class="fa-solid fa-check text-pink-500 mt-0.5"></i><span>Key 1 thiết bị, revoke không mất dữ liệu, EXPIRED 30p</span></div>
+      <div class="flex gap-2 bg-pink-50 border border-pink-200 rounded-lg px-3 py-2"><i class="fa-solid fa-check text-pink-500 mt-0.5"></i><span>Check-in/out đủ ảnh/GPS/timestamp, folder Drive chuẩn</span></div>
+      <div class="flex gap-2 bg-pink-50 border border-pink-200 rounded-lg px-3 py-2"><i class="fa-solid fa-check text-pink-500 mt-0.5"></i><span>1 ca hợp lệ = CHECK-IN + CHECK-OUT</span></div>
+      <div class="flex gap-2 bg-pink-50 border border-pink-200 rounded-lg px-3 py-2"><i class="fa-solid fa-check text-pink-500 mt-0.5"></i><span>OFF Auto Approve + Emergency cascade đúng logic</span></div>
+      <div class="flex gap-2 bg-pink-50 border border-pink-200 rounded-lg px-3 py-2"><i class="fa-solid fa-check text-pink-500 mt-0.5"></i><span>TEST 20 câu ≥5s/câu, điểm &lt;5 FAILED 5-7 RETEST &gt;7 DAT</span></div>
+      <div class="flex gap-2 bg-pink-50 border border-pink-200 rounded-lg px-3 py-2"><i class="fa-solid fa-check text-pink-500 mt-0.5"></i><span>FAILED → ARCHIVED giữ lịch sử, không xóa vĩnh viễn</span></div>
+      <div class="flex gap-2 bg-pink-50 border border-pink-200 rounded-lg px-3 py-2"><i class="fa-solid fa-check text-pink-500 mt-0.5"></i><span>Báo cáo chấm công đủ dữ liệu kế toán</span></div>
+      <div class="flex gap-2 bg-pink-50 border border-pink-200 rounded-lg px-3 py-2"><i class="fa-solid fa-check text-pink-500 mt-0.5"></i><span>Google Sheet sync retry + CONFLICT + Audit Log</span></div>
+      <div class="flex gap-2 bg-pink-50 border border-pink-200 rounded-lg px-3 py-2"><i class="fa-solid fa-check text-pink-500 mt-0.5"></i><span>Settings không hard-code, secret masked</span></div>
+    </div>
+  </div>
+
+  <div class="text-center mt-8 text-xs font-semibold text-pink-800/50">© 2026 Ụm Bò Milk • Phiên bản 28/08/2026 • <span class="font-mono">um-bo-milk-app v1.0.0</span> • Build with Rule Engine + Socket.io Realtime</div>
+</div>
+<script src="/socket.io/socket.io.js"></script>
+<script>
+(function(){
+  const badge=document.getElementById('modeBadge');
+  const dot=document.getElementById('modeDot');
+  const text=document.getElementById('modeText');
+  if(!badge) return;
+  let mode=localStorage.getItem('app_mode')||'AUTO';
+  function update(){
+    const hasSheet = true; // index has no settings, check via API later
+    fetch('/api/branches').then(()=>{}).catch(()=>{});
+    const socketOnline = !!(window.io && document.querySelector('.animate-pulse'));
+    let isOnline = mode==='ONLINE' ? true : mode==='DEMO' ? false : true;
+    // simple: if socket script loaded, assume ONLINE
+    if(typeof io!=='undefined'){
+      try{ const s=io(); s.on('connect',()=>{ badge.className='hidden md:inline-flex items-center gap-2 bg-green-50 border border-green-200 text-green-700 text-xs font-black px-3 py-1.5 rounded-full'; dot.className='w-2 h-2 bg-green-500 rounded-full animate-pulse'; text.textContent='ONLINE'; s.disconnect(); }); s.on('connect_error',()=>{ badge.className='hidden md:inline-flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-700 text-xs font-black px-3 py-1.5 rounded-full'; dot.className='w-2 h-2 bg-amber-500 rounded-full'; text.textContent='DEMO'; }); }catch(e){}
+    }
+    badge.onclick=()=>{
+      if(mode==='AUTO') mode='DEMO'; else if(mode==='DEMO') mode='ONLINE'; else mode='AUTO';
+      localStorage.setItem('app_mode',mode);
+      if(mode==='ONLINE'){ badge.className='hidden md:inline-flex items-center gap-2 bg-green-50 border border-green-200 text-green-700 text-xs font-black px-3 py-1.5 rounded-full'; dot.className='w-2 h-2 bg-green-500 rounded-full animate-pulse'; text.textContent='ONLINE';}
+      else if(mode==='DEMO'){ badge.className='hidden md:inline-flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-700 text-xs font-black px-3 py-1.5 rounded-full'; dot.className='w-2 h-2 bg-amber-500 rounded-full'; text.textContent='DEMO';}
+      else text.textContent='AUTO';
+    };
+  }
+  document.addEventListener('DOMContentLoaded', update);
+  setTimeout(update, 800);
+})();
+</script>
+</body>
+</html>

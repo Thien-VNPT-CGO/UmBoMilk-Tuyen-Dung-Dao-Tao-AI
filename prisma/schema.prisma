@@ -1,0 +1,145 @@
+// Ụm Bò Milk - Prisma schema cho realtime Postgres (thay thế db.json)
+// Chạy: npx prisma migrate dev --name init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Employee {
+  id           String   @id @default(cuid())
+  employeeId   String   @unique
+  name         String
+  phone        String   @unique
+  branchId     String
+  shift        String
+  startDate    String?
+  endDate      String?
+  trainingDays Int?
+  status       String
+  testScore    Float?
+  testResult   String?
+  type         String
+  category     String
+  avatar       String?
+  version      Int      @default(1)
+  updatedAt    DateTime @updatedAt
+  updatedBy    String?
+  source       String?
+  syncStatus   String?
+
+  attendances Attendance[]
+  schedules   Schedule[]
+  keys        Key[]
+  @@index([branchId, status])
+}
+
+model Applicant {
+  id               String @id @default(cuid())
+  name             String
+  phone            String @unique
+  branchPreference String
+  aiScore          Int?
+  aiBreakdown      Json?
+  status           String
+  sourceId         String @unique
+  createdAt        DateTime @default(now())
+  version          Int @default(1)
+  syncStatus       String?
+}
+
+model Attendance {
+  id         String   @id @default(cuid())
+  employeeId String
+  date       String
+  shift      String
+  branchId   String
+  checkIn    Json?
+  checkOut   Json?
+  status     String
+  violations Json?
+  version    Int @default(1)
+  updatedAt  DateTime @updatedAt
+  syncStatus String?
+
+  employee Employee @relation(fields: [employeeId], references: [employeeId])
+  @@unique([employeeId, date])
+  @@index([date, branchId])
+}
+
+model Schedule {
+  id         String @id @default(cuid())
+  employeeId String
+  weekStart  String
+  days       Json
+  version    Int @default(1)
+  updatedAt  DateTime @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [employeeId])
+  @@unique([employeeId, weekStart])
+}
+
+model Key {
+  id         String @id @default(cuid())
+  employeeId String @unique
+  key        String
+  deviceId   String?
+  boundAt    DateTime?
+  status     String
+  version    Int @default(1)
+  updatedAt  DateTime @updatedAt
+  employee Employee @relation(fields: [employeeId], references: [employeeId])
+}
+
+model OffRequest {
+  id         String @id @default(cuid())
+  employeeId String
+  dates      Json
+  status     String
+  createdAt  DateTime @default(now())
+}
+
+model EmergencyRequest {
+  id           String @id @default(cuid())
+  employeeId   String
+  date         String
+  status       String
+  cascadeStep  Int @default(1)
+  timeoutAt    DateTime?
+  substituteId String?
+}
+
+model PayrollPeriod {
+  id        String @id @default(cuid())
+  month     String @unique
+  status    String
+  lockedAt  DateTime?
+  lockedBy  String?
+  snapshotId String?
+}
+
+model PayrollSnapshot {
+  id        String @id @default(cuid())
+  periodId  String
+  month     String
+  data      Json
+  code      String
+  lockedAt  DateTime @default(now())
+}
+
+model AuditLog {
+  id        String @id @default(cuid())
+  actor     String
+  action    String
+  entity    String
+  before    Json?
+  after     Json?
+  timestamp DateTime @default(now())
+  ip        String?
+}
+
+// Các bảng còn lại: OvertimeRequest, LeaveRequest, DriveFile, ZaloRecord tương tự - có thể generate từ db.json

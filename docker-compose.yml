@@ -1,0 +1,28 @@
+version: "3.9"
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    networks:
+      - umb-network
+  # Khi cần DB thật, bật postgres và đổi DATA_FILE sang PG
+  # postgres:
+  #   image: postgres:16-alpine
+  #   environment:
+  #     POSTGRES_DB: umb_milk
+  #     POSTGRES_USER: umb
+  #     POSTGRES_PASSWORD: changeme
+  #   volumes:
+  #     - pgdata:/var/lib/postgresql/data
+  #   networks:
+  #     - umb-network
+networks:
+  umb-network:
+# volumes:
+#   pgdata:

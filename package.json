@@ -1,0 +1,29 @@
+{
+  "name": "um-bo-milk-hr-system",
+  "version": "1.0.0",
+  "description": "Ụm Bò Milk - Hệ thống Tuyển dụng, Đào tạo, Nhân sự & Chấm công nội bộ 2026",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "test": "node --test test/*.test.js",
+    "health": "node -e \"fetch('http://localhost:3000/health').then(r=>r.json()).then(console.log)\"",
+    "docker:build": "docker build -t um-bo-milk-hr .",
+    "docker:up": "docker-compose up -d"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^17.4.2",
+    "express": "^4.19.2",
+    "express-rate-limit": "^8.7.0",
+    "express-validator": "^7.3.2",
+    "helmet": "^8.3.0",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^1.4.5-lts.1",
+    "nodemailer": "^9.0.6",
+    "socket.io": "^4.7.5",
+    "uuid": "^9.0.1"
+  }
+}

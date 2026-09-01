@@ -1,0 +1,13 @@
+node_modules/
+npm-debug.log
+.env
+.env.local
+data/db.json
+data/*.tmp
+data/db_backup*.json
+.DS_Store
+dist/
+
+data/*.json
+!data/.gitkeep
+

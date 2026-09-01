@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#ec4899">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Ụm Bò Milk - Admin HR</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="/socket.io/socket.io.js"></script>
+<script>tailwind.config={theme:{extend:{fontFamily:{sans:['Be Vietnam Pro','sans-serif']}}}}</script>
+<style>
+body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: transparent; -webkit-font-smoothing: antialiased; background:#fdf2f8;}
+.scrollbar-thin::-webkit-scrollbar{width:5px;height:5px}.scrollbar-thin::-webkit-scrollbar-thumb{background:#f9a8d4;border-radius:99px}
+.scrollbar-thin::-webkit-scrollbar-track{background:transparent}
+.nav-active{background:linear-gradient(135deg,#ec4899 0%,#e11d48 100%)!important;color:white!important;box-shadow:0 4px 14px rgba(236,72,153,.35)!important; border:1px solid rgba(236,72,153,.15)!important}
+.nav-active .nav-icon{background:rgba(255,255,255,.22)!important;color:white!important;border-color:rgba(255,255,255,.25)!important}
+.nav-active i{color:white!important}
+.nav-active .nav-desc{color:rgba(255,255,255,.85)!important}
+.nav-active .nav-badge{background:rgba(255,255,255,.22)!important;color:white!important;border-color:rgba(255,255,255,.2)!important}
+.nav-group{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#94a3b8;padding:14px 10px 6px 10px;margin-top:4px;display:flex;align-items:center;gap:8px}
+.nav-group::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,#fce7f3,transparent)}
+.nav-item{position:relative;display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:14px;font-size:13px;font-weight:600;color:#475569;transition:all .18s cubic-bezier(.4,0,.2,1);border:1px solid transparent}
+.nav-item:hover{background:#fdf2f8;color:#be185d;border-color:#fce7f3;transform:translateX(2px)}
+.nav-item:active{transform:scale(.98)}
+.nav-icon{width:34px;height:34px;border-radius:11px;background:#f8fafc;border:1px solid #f1f5f9;display:flex;align-items:center;justify-content:center;font-size:13px;color:#64748b;flex-shrink:0;transition:all .18s}
+.nav-item:hover .nav-icon{background:white;border-color:#fce7f3;color:#ec4899;box-shadow:0 2px 8px rgba(236,72,153,.12)}
+.nav-badge{font-size:10px;font-weight:800;padding:2px 7px;border-radius:99px;background:#fdf2f8;color:#be185d;border:1px solid #fce7f3;white-space:nowrap}
+.nav-desc{font-size:11px;font-weight:500;color:#94a3b8;line-height:1}
+@media (max-width: 768px){ body{font-size:15px; background:#fdf2f8} header{height:56px; padding:0 12px; backdrop-filter:blur(16px); background:rgba(255,255,255,0.96); border-bottom:1px solid #fce7f3} header .w-9{width:36px;height:36px} #kpiGrid{grid-template-columns: repeat(2, minmax(0,1fr)); gap:10px} #kpiGrid .bg-white{padding:14px; border-radius:18px; box-shadow:0 2px 8px rgba(236,72,153,0.06); border:1px solid #fce7f3} #kpiGrid .w-10{width:42px;height:42px; border-radius:14px; font-size:16px} .overflow-auto{-webkit-overflow-scrolling: touch; scroll-behavior:smooth} table{font-size:13px} table thead th{padding:10px 8px; font-size:11px} table tbody td{padding:10px 8px} #sidebar{top:56px; width:280px; max-width:85vw; height:calc(100vh - 56px); padding:10px 10px 16px 10px; background:#ffffff; border-right:1px solid #f1f5f9; box-shadow:4px 0 24px rgba(0,0,0,.04); overflow-y:auto; overflow-x:hidden} #sidebar::-webkit-scrollbar{width:4px} #sidebar::-webkit-scrollbar-thumb{background:#f1f5f9} #mobileNavAdmin{height:64px; background:rgba(255,255,255,.98); border-top:1px solid #fce7f3; box-shadow:0 -2px 16px rgba(236,72,153,0.08); padding:4px 4px max(8px, env(safe-area-inset-bottom)) 4px; gap:2px; backdrop-filter:blur(12px)} #mobileNavAdmin button{flex:1; min-height:52px; border-radius:14px; margin:0 1px; transition:all 0.2s; padding:6px 2px; gap:3px; font-weight:700} #mobileNavAdmin button.active{color:#ec4899; background:#fdf2f8}
+}
+</style>
+</head>
+<body class="bg-[#faf5f8] min-h-screen">
+<!-- Login overlay -->
+<div id="loginOverlay" class="fixed inset-0 z-[100] bg-gradient-to-br from-pink-500 via-rose-500 to-pink-700 flex items-center justify-center p-4">
+  <div class="bg-white rounded-[24px] shadow-2xl w-full max-w-md overflow-hidden">
+    <div class="bg-gradient-to-br from-pink-500 to-rose-500 p-8 text-white text-center relative overflow-hidden">
+      <div class="absolute -right-10 -top-10 w-32 h-32 bg-white/20 rounded-full blur-2xl"></div>
+      <div class="w-14 h-14 bg-white rounded-2xl flex items-center justify-center mx-auto text-pink-600 font-black text-xl shadow-lg">ỤM</div>
+      <div class="font-black text-xl mt-3">ĐĂNG NHẬP QUẢN TRỊ</div>
+      <div class="text-xs font600 opacity-90 mt-1">Web App Quản trị HR • RBAC • Branch Scope</div>
+    </div>
+    <form id="loginForm" class="p-8 space-y-4">
+      <div>
+        <label class="text-xs font-bold text-slate-700">Tài khoản</label>
+        <div class="relative mt-1"><i class="fa-solid fa-user absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i><input id="username" value="" class="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:border-pink-500 focus:ring-2 focus:ring-pink-100 outline-none font-medium text-sm" placeholder="Nhập tài khoản"></div>
+      </div>
+      <div>
+        <label class="text-xs font-bold text-slate-700">Mật khẩu</label>
+        <div class="relative mt-1"><i class="fa-solid fa-lock absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i><input id="password" type="password" value="" class="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:border-pink-500 focus:ring-2 focus:ring-pink-100 outline-none font-medium text-sm" placeholder="••••••••"><button type="button" onclick="togglePass()" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"><i class="fa-solid fa-eye"></i></button></div>
+      </div>
+      <div id="loginError" class="hidden text-xs font-bold bg-red-50 text-red-700 border border-red-200 rounded-xl px-3 py-2"></div>
+      <button type="submit" class="w-full bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white font-black py-3 rounded-xl shadow-lg shadow-pink-200 transition flex items-center justify-center gap-2"><i class="fa-solid fa-right-to-bracket"></i> ĐĂNG NHẬP</button>
+    </form>
+  </div>
+</div>
+
+<!-- App layout -->
+<div id="app" class="hidden">
+  <!-- Topbar -->
+  <header class="h-[64px] bg-white border-b border-pink-200 flex items-center justify-between px-4 lg:px-6 sticky top-0 z-40 shadow-sm">
+    <div class="flex items-center gap-3">
+      <button onclick="toggleSidebar()" class="lg:hidden w-9 h-9 rounded-xl bg-pink-100 text-pink-600 flex items-center justify-center"><i class="fa-solid fa-bars"></i></button>
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-pink-500 to-rose-500 flex items-center justify-center text-white font-black shadow">ỤM</div>
+      <div class="hidden sm:block">
+        <div class="font-black text-pink-900 leading-none text-sm">ỤM BÒ MILK • HR ADMIN</div>
+        <div class="text-[11px] font-semibold text-pink-600 flex items-center gap-2"><span class="w-2 h-2 bg-pink-500 rounded-full animate-pulse inline-block"></span>Realtime • <span id="headerBranch">CN2 - 261 Tô Hiến Thành</span></div>
+      </div>
+    </div>
+    <!-- Realtime Live System Status Indicators (6 Services) -->
+    <div class="hidden lg:flex items-center gap-1.5 overflow-x-auto py-1 scrollbar-none">
+      <!-- 1. Database chính -->
+      <div id="statusDbMaster" class="flex items-center gap-1.5 bg-emerald-50 border border-emerald-300 text-emerald-800 text-[11px] font-black px-2.5 py-1 rounded-full shadow-2xs" title="Database chính (Sheet ID: 17iXM0zc...) - Chạy API Thật">
+        <span class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+        <i class="fa-solid fa-database text-emerald-600"></i>
+        <span>CƠ SỞ DỮ LIỆU: TRỰC TUYẾN</span>
+      </div>
+
+      <!-- 2. GG Sheet Đăng ký -->
+      <div id="statusFormSheet" class="flex items-center gap-1.5 bg-emerald-50 border border-emerald-300 text-emerald-800 text-[11px] font-black px-2.5 py-1 rounded-full shadow-2xs" title="Google Sheet đăng ký Form (Sheet ID: 1rcqEKra...) - Đồng bộ CSV Realtime">
+        <span class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+        <i class="fa-solid fa-file-excel text-emerald-600"></i>
+        <span>SHEET FORM: TRỰC TUYẾN</span>
+      </div>
+
+      <!-- 3. AI Scoring Engine -->
+      <div id="statusAI" class="flex items-center gap-1.5 bg-emerald-50 border border-emerald-300 text-emerald-800 text-[11px] font-black px-2.5 py-1 rounded-full shadow-2xs" title="AI Tự Động Chấm Điểm 14 Tiêu Chí">
+        <span class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+        <i class="fa-solid fa-brain text-emerald-600"></i>
+        <span id="statusAiText">AI CHẤM: TRỰC TUYẾN (14 TIÊU CHÍ)</span>
+      </div>
+
+      <!-- 4. Google Meet -->
+      <div id="statusMeet" class="flex items-center gap-1.5 bg-emerald-50 border border-emerald-300 text-emerald-800 text-[11px] font-black px-2.5 py-1 rounded-full shadow-2xs" title="Tự động tạo Link Google Meet Phỏng Vấn & Khóa Lịch 30 phút">
+        <span class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+        <i class="fa-solid fa-video text-emerald-600"></i>
+        <span>LỊCH MEET: TRỰC TUYẾN</span>
+      </div>
+
+      <!-- 5. Zalo Bot -->
+      <div id="statusZalo" class="flex items-center gap-1.5 bg-emerald-50 border border-emerald-300 text-emerald-800 text-[11px] font-black px-2.5 py-1 rounded-full shadow-2xs" title="Cổng gửi tin nhắn Zalo Bot / Zalo OA Tự Động">
+        <span id="statusZaloDot" class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+        <i class="fa-solid fa-paper-plane text-emerald-600"></i>
+        <span id="statusZaloText">BOT ZALO: TRỰC TUYẾN</span>
+      </div>
+
+      <!-- 6. Online Socket -->
+      <div id="statusOnline" class="flex items-center gap-1.5 bg-emerald-500 text-white text-[11px] font-black px-2.5 py-1 rounded-full shadow-xs" title="Trạng thái kết nối Realtime Socket.IO">
+        <span class="w-2 h-2 bg-white rounded-full animate-ping"></span>
+        <i class="fa-solid fa-wifi"></i>
+        <span id="statusOnlineText">TRỰC TUYẾN</span>
+      </div>
+    </div>
+      <div class="h-8 w-px bg-pink-200 mx-1"></div>
+      <div class="text-right hidden sm:block">
+        <div id="userName" class="text-sm font-black text-slate-800 leading-none">Admin</div>
+        <div id="userRole" class="text-[11px] font-bold text-pink-600">Admin • Full quyền</div>
+      </div>
+      <div class="w-9 h-9 rounded-full bg-gradient-to-br from-pink-500 to-rose-500 text-white flex items-center justify-center font-black text-sm shadow">A</div>
+      <button onclick="logout()" class="w-9 h-9 rounded-xl bg-white hover:bg-pink-50 text-pink-600 border border-pink-200 flex items-center justify-center"><i class="fa-solid fa-right-from-bracket text-sm"></i></button>
+    </div>
+  </header>
+
+  <div class="flex">
+    <!-- Sidebar - Drawer for phone -->
+    <div id="sidebarOverlay" class="fixed inset-0 bg-black/40 backdrop-blur-sm z-20 hidden lg:hidden" onclick="toggleSidebar()"></div>
+    <aside id="sidebar" class="w-[300px] max-w-[85vw] bg-white border-r border-pink-200 min-h-[calc(100vh-64px)] lg:min-h-[calc(100vh-64px)] overflow-y-auto scrollbar-thin p-3 space-y-1 hidden lg:block fixed lg:sticky top-[64px] lg:top-[64px] bottom-0 lg:bottom-auto left-0 z-30 pt-4 lg:pt-3 shadow-2xl lg:shadow-none h-[calc(100vh-64px)] lg:h-auto">
+      <div class="space-y-1" id="navMenu"></div>
+      <div class="mt-4 p-3 bg-gradient-to-br from-pink-50 to-rose-50 border border-pink-200 rounded-2xl">
+        <div class="text-xs font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-bolt text-pink-500"></i> Rule Engine</div>
+        <div class="text-[11px] font-medium text-pink-700 mt-1">Lương, OFF, chấm công, key đều qua Rule Engine — AI chỉ chấm CV & voice.</div>
+        <div class="mt-2 flex gap-1">
+          <span class="text-[10px] font-bold bg-white border border-pink-200 rounded-full px-2 py-0.5 text-pink-700">OFF 2 ngày</span>
+          <span class="text-[10px] font-bold bg-white border border-pink-200 rounded-full px-2 py-0.5 text-pink-700">21k / 25.5k</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="flex-1 min-w-0 p-4 lg:p-6 pb-20 lg:pb-6">
+      <!-- Dashboard -->
+      <section id="tab-dashboard" class="tab-section">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <h2 class="text-xl font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-chart-line text-pink-500"></i> Tổng quan</h2>
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-bold bg-white border border-pink-200 rounded-full px-3 py-1.5 text-pink-700">Realtime KPI • Auto refresh</span>
+            <button onclick="loadDashboard()" class="text-xs font-bold bg-gradient-to-r from-pink-500 to-rose-500 text-white px-3 py-1.5 rounded-full hover:from-pink-600 hover:to-rose-600 shadow"><i class="fa-solid fa-rotate"></i> Refresh</button>
+          </div>
+        </div>
+        <div id="kpiGrid" class="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-3"></div>
+        <div class="grid lg:grid-cols-3 gap-4 mt-4">
+          <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm"><div class="font-bold text-pink-900 text-sm mb-3">Nhân sự theo chi nhánh</div><canvas id="branchChart" height="180"></canvas></div>
+          <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm"><div class="font-bold text-pink-900 text-sm mb-3">Tỷ lệ Training → Chính thức</div><canvas id="testChart" height="180"></canvas></div>
+          <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm"><div class="font-bold text-pink-900 text-sm mb-3">Đi trễ theo tháng (2026)</div><canvas id="lateChart" height="180"></canvas></div>
+        </div>
+        <div class="grid lg:grid-cols-2 gap-4 mt-4">
+          <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm">
+            <div class="font-bold text-pink-900 text-sm flex items-center justify-between">Sync Queue <span class="text-[11px] bg-pink-100 text-pink-700 px-2 py-0.5 rounded-full border border-pink-200">SYNCED/PENDING/FAILED/CONFLICT</span></div>
+            <div id="dashSync" class="mt-3 space-y-2 max-h-[220px] overflow-auto scrollbar-thin"></div>
+          </div>
+          <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm">
+            <div class="font-bold text-pink-900 text-sm">Audit Log gần đây</div>
+            <div id="dashAudit" class="mt-3 space-y-2 max-h-[220px] overflow-auto scrollbar-thin"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Nhân viên mới -->
+      <section id="tab-applicants" class="tab-section hidden">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <h2 class="text-xl font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-user-plus text-pink-500"></i> Nhân viên mới <span class="text-xs font-bold bg-pink-100 text-pink-700 px-2 py-1 rounded-full border border-pink-200">Google Form Sync</span></h2>
+          <div class="flex gap-2">
+            <a href="https://docs.google.com/forms/d/e/1FAIpQLSd9rRG4QLvmLclPseVVmpgPdizij1XYwiSTCgc6x2BPMfA_AA/viewform" target="_blank" class="text-xs font-bold bg-white border border-pink-200 text-pink-700 px-3 py-2 rounded-xl hover:bg-pink-50 flex items-center gap-1"><i class="fa-solid fa-arrow-up-right-from-square"></i> Mở Form</a>
+          </div>
+        </div>
+        <div class="bg-white rounded-2xl border border-pink-200 overflow-hidden shadow-sm">
+          <div class="p-3 border-b border-pink-100 flex gap-2">
+            <input id="searchApplicant" placeholder="Tìm tên, SĐT, email..." class="flex-1 px-3 py-2 rounded-xl border border-pink-200 text-sm outline-none focus:border-pink-400 focus:ring-2 focus:ring-pink-100" oninput="renderApplicants()">
+            <select id="filterApplicantStatus" class="px-3 py-2 rounded-xl border border-pink-200 text-sm" onchange="renderApplicants()"><option value="">Tất cả trạng thái</option><option>NEW_APPLICANT</option><option>INTERVIEW</option><option>PASS</option><option>CONVERTED</option></select>
+          </div>
+          <div class="overflow-auto max-h-[65vh] scrollbar-thin">
+            <table class="w-full text-sm">
+              <thead class="bg-gradient-to-r from-rose-500 via-pink-600 to-rose-600 text-white text-[11px] font-black uppercase tracking-wider sticky top-0 border-b-2 border-rose-500/50 shadow-sm"><tr><th class="px-3.5 py-3 text-left">Ứng viên</th><th class="px-3.5 py-3">Chi nhánh</th><th class="px-3.5 py-3">AI Score</th><th class="px-3.5 py-3">Điểm Hồ Sơ PV</th><th class="px-3.5 py-3">Trạng thái</th><th class="px-3.5 py-3 text-right">Hành động</th></tr></thead>
+              <tbody id="applicantsTbody" class="divide-y divide-pink-100"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Lịch Phỏng Vấn (Google Meet) -->
+      <section id="tab-interviews" class="tab-section hidden">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <div>
+            <h2 class="text-xl font-black text-pink-900 flex items-center gap-2">
+              <i class="fa-solid fa-calendar-check text-rose-500"></i> Lịch Phỏng Vấn & Google Meet
+            </h2>
+            <div class="text-xs text-slate-500 mt-0.5">Danh sách ứng viên đã được HR xếp lịch phỏng vấn và khóa khung giờ 30 phút</div>
+          </div>
+          <div class="flex items-center gap-2">
+            <span id="interviewCountBadge" class="text-xs font-bold bg-pink-100 text-pink-700 border border-pink-200 px-3 py-1.5 rounded-full">0 Lịch phỏng vấn</span>
+            <button onclick="loadInterviews()" class="text-xs font-bold bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white px-3.5 py-1.5 rounded-xl shadow flex items-center gap-1.5 transition">
+              <i class="fa-solid fa-rotate"></i> Làm mới
+            </button>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-2xl border border-pink-200 overflow-hidden shadow-sm">
+          <div class="p-3 bg-pink-50/50 border-b border-pink-100 flex flex-wrap gap-2 items-center justify-between">
+            <div class="flex flex-1 gap-2 min-w-[250px]">
+              <input id="searchInterview" placeholder="Tìm tên ứng viên, SĐT, link Meet..." class="w-full px-3 py-2 rounded-xl border border-pink-200 text-sm outline-none focus:border-pink-400 focus:ring-2 focus:ring-pink-100" oninput="renderInterviewsTable()">
+            </div>
+            <div class="flex gap-2">
+              <input id="filterInterviewDate" type="date" class="px-3 py-2 rounded-xl border border-pink-200 text-xs font-bold focus:border-pink-400 outline-none" onchange="renderInterviewsTable()">
+              <select id="filterInterviewBranch" class="px-3 py-2 rounded-xl border border-pink-200 text-xs font-bold" onchange="renderInterviewsTable()">
+                <option value="">Tất cả Chi nhánh</option>
+                <option value="CN1">CN1 - 130 Vạn kiếp</option>
+                <option value="CN2">CN2 - 261 Tô Hiến Thành</option>
+                <option value="CN3">CN3 - 120 Hoàng Diệu 2</option>
+                <option value="CN4">CN4 - 111 Tôn Đản</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="overflow-auto max-h-[65vh] scrollbar-thin">
+            <table class="w-full text-sm">
+              <thead class="bg-gradient-to-r from-rose-500 via-pink-600 to-rose-600 text-white text-[11px] font-black uppercase tracking-wider sticky top-0 border-b-2 border-rose-500/50 shadow-sm">
+                <tr>
+                  <th class="px-3.5 py-3 text-left">Thời gian Phỏng vấn</th>
+                  <th class="px-3.5 py-3 text-left">Ứng viên & SĐT</th>
+                  <th class="px-3.5 py-3 text-left">Chi nhánh PV</th>
+                  <th class="px-3.5 py-3 text-left">Link Google Meet</th>
+                  <th class="px-3.5 py-3 text-center">Điểm Hồ Sơ PV</th>
+                  <th class="px-3.5 py-3 text-right">Thao tác Phỏng vấn</th>
+                </tr>
+              </thead>
+              <tbody id="interviewsTbody" class="divide-y divide-pink-100">
+                <!-- Rendered dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Nhân viên cửa hàng -->
+      <section id="tab-employees-store" class="tab-section hidden">
+        <div class="bg-gradient-to-r from-rose-500 via-pink-600 to-rose-600 rounded-3xl p-6 text-white mb-5 shadow-xl shadow-pink-500/15 flex flex-wrap items-center justify-between gap-4 border border-rose-400/30 relative overflow-hidden">
+          <div class="absolute -right-8 -bottom-8 w-40 h-40 bg-white/10 rounded-full blur-xl pointer-events-none"></div>
+          <div class="relative z-10">
+            <h2 class="text-xl font-black flex items-center gap-2.5">
+              <span class="w-10 h-10 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-white shadow-sm">
+                <i class="fa-solid fa-store text-lg"></i>
+              </span>
+              Nhân viên Cửa hàng
+            </h2>
+            <p class="text-xs text-rose-100 mt-1 font-medium">Quản lý lộ trình 12 ngày thử việc, tiến độ Training (7/7 ngày) & chuyển nhân viên chính thức</p>
+          </div>
+          <div class="flex items-center gap-2.5 relative z-10">
+            <select id="empBranchFilter" class="px-3.5 py-2.5 rounded-2xl bg-white/20 hover:bg-white/25 border border-white/35 text-white font-bold text-xs backdrop-blur-md focus:bg-rose-950 focus:outline-none transition shadow-xs" onchange="renderEmployeesStore()">
+              <option value="" class="bg-rose-950 text-white">Tất cả Chi nhánh</option>
+              <option value="CN1" class="bg-rose-950 text-white">CN1 - 130 Vạn kiếp</option>
+              <option value="CN2" class="bg-rose-950 text-white">CN2 - 261 Tô Hiến Thành</option>
+              <option value="CN3" class="bg-rose-950 text-white">CN3 - 120 Hoàng Diệu 2</option>
+              <option value="CN4" class="bg-rose-950 text-white">CN4 - 111 Tôn Đản</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Sub Tabs: Training / Chính thức -->
+        <div class="flex gap-2 bg-white border border-pink-200 rounded-2xl p-2 shadow-sm mb-4">
+          <button onclick="switchEmpStoreTab('TRAINING')" id="empSubTab-TRAINING" class="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-black transition bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow">
+            <i class="fa-solid fa-graduation-cap"></i> Nhân viên Training <span id="countEmpTrainingTab" class="bg-white text-pink-600 px-2 py-0.5 rounded-full text-xs">0</span>
+          </button>
+          <button onclick="switchEmpStoreTab('OFFICIAL')" id="empSubTab-OFFICIAL" class="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold transition bg-white border border-pink-200 text-pink-700 hover:bg-pink-50">
+            <i class="fa-solid fa-user-check"></i> Nhân viên Chính thức <span id="countEmpOfficialTab" class="bg-pink-100 text-pink-700 px-2 py-0.5 rounded-full text-xs">0</span>
+          </button>
+        </div>
+        <!-- Import Official Controls - only visible on OFFICIAL tab -->
+        <div id="importOfficialControls" class="hidden bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl p-3 mb-4 flex flex-wrap items-center justify-between gap-3 shadow-sm">
+          <div class="flex items-center gap-2">
+            <span class="w-8 h-8 rounded-xl bg-emerald-500 text-white flex items-center justify-center"><i class="fa-solid fa-file-import"></i></span>
+            <div>
+              <div class="text-sm font-black text-emerald-900">Import nhân viên Chính thức (dữ liệu cũ)</div>
+              <div class="text-xs text-emerald-700">Hỗ trợ CSV/XLSX • Tự sinh Mã NV & Key • Bỏ qua SĐT trùng</div>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <button onclick="downloadOfficialTemplate()" class="px-4 py-2 rounded-xl bg-white border border-emerald-200 text-emerald-700 font-bold text-xs hover:bg-emerald-50 flex items-center gap-1.5 shadow-2xs"><i class="fa-solid fa-download"></i> File mẫu</button>
+            <button onclick="document.getElementById('importOfficialFile').click()" class="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-black text-xs shadow flex items-center gap-1.5"><i class="fa-solid fa-upload"></i> Import dữ liệu</button>
+            <input type="file" id="importOfficialFile" accept=".csv,.xlsx,.xls" class="hidden" onchange="handleOfficialImport(event)">
+          </div>
+        </div>
+
+        <div class="bg-white rounded-3xl border border-pink-200/80 overflow-hidden shadow-sm">
+          <div class="px-5 py-3 bg-pink-50/60 border-b border-pink-100 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-pink-500 animate-pulse"></span>
+              <span id="empStoreTabLabel" class="text-xs font-black tracking-wider text-pink-900 uppercase">DANH SÁCH NHÂN VIÊN TRAINING</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <select id="empStoreFilter" class="px-3 py-1.5 rounded-xl bg-white border border-pink-200 text-xs font-bold text-pink-700 focus:border-pink-400 focus:ring-2 focus:ring-pink-100 outline-none" onchange="renderEmployeesStore()">
+                <option value="">Tất cả trạng thái</option>
+                <option value="TRAINING">Training</option>
+                <option value="WAITING_TEST">Chờ TEST</option>
+                <option value="RETEST">Chờ thi lại</option>
+                <option value="PASSED_TEST">Đậu TEST</option>
+                <option value="FAILED_TEST">FAILED</option>
+                <option value="ARCHIVED">ARCHIVED</option>
+              </select>
+              <span id="empCountBadge" class="text-xs font-black bg-gradient-to-r from-pink-500 to-rose-500 text-white px-3 py-1 rounded-full shadow-xs">0 NV</span>
+            </div>
+          </div>
+          <div class="overflow-x-auto scrollbar-thin">
+            <table class="w-full text-sm text-left">
+              <thead class="bg-gradient-to-r from-rose-500 via-pink-600 to-rose-600 text-white text-[11px] font-black uppercase tracking-wider border-b-2 border-rose-500/50 shadow-sm">
+                <tr>
+                  <th id="thEmpId" class="px-4 py-3.5 whitespace-nowrap">Mã NV & Ngày thử việc</th>
+                  <th class="px-4 py-3.5 whitespace-nowrap">Họ tên / SĐT</th>
+                  <th class="px-4 py-3.5 text-center whitespace-nowrap">CN / Ca làm</th>
+                  <th id="thProgress" class="px-4 py-3.5 text-center whitespace-nowrap">Tiến độ Training (Realtime)</th>
+                  <th id="thOff" class="px-4 py-3.5 text-center whitespace-nowrap">Số ngày OFF đã chọn</th>
+                  <th id="thStatus" class="px-4 py-3.5 text-center whitespace-nowrap">Trạng thái Thử việc</th>
+                  <th id="thTest" class="px-4 py-3.5 text-center whitespace-nowrap">TEST</th>
+                  <th class="px-4 py-3.5 text-right whitespace-nowrap">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody id="employeesTable" class="divide-y divide-slate-100"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Beta tabs -->
+      <section id="tab-beta-workshop" class="tab-section hidden">
+        <div class="bg-white rounded-2xl border border-pink-200 p-8 text-center shadow-sm">
+          <div class="w-16 h-16 bg-pink-100 text-pink-600 rounded-2xl flex items-center justify-center mx-auto text-2xl"><i class="fa-solid fa-industry"></i></div>
+          <div class="font-black text-pink-900 mt-3">Nhân viên Xưởng — BETA</div>
+          <div class="text-sm text-slate-500 mt-1">Schema đã sẵn sàng (category=WORKSHOP). Chưa áp logic cửa hàng cứng, có thể mở rộng ca/xưởng riêng.</div>
+          <div id="betaWorkshopList" class="mt-4 grid md:grid-cols-3 gap-3 text-left"></div>
+        </div>
+      </section>
+      <section id="tab-beta-office" class="tab-section hidden">
+        <div class="bg-white rounded-2xl border border-pink-200 p-8 text-center shadow-sm">
+          <div class="w-16 h-16 bg-pink-100 text-pink-600 rounded-2xl flex items-center justify-center mx-auto text-2xl"><i class="fa-solid fa-building"></i></div>
+          <div class="font-black text-pink-900 mt-3">Nhân viên Văn phòng — BETA</div>
+          <div class="text-sm text-slate-500 mt-1">Schema đã sẵn sàng (category=OFFICE). Tái sử dụng Employee/Schedule/Attendance/Request/Payroll.</div>
+          <div id="betaOfficeList" class="mt-4"></div>
+        </div>
+      </section>
+      <section id="tab-beta-sale" class="tab-section hidden">
+        <div class="bg-white rounded-2xl border border-pink-200 p-8 text-center shadow-sm">
+          <div class="w-16 h-16 bg-pink-100 text-pink-600 rounded-2xl flex items-center justify-center mx-auto text-2xl"><i class="fa-solid fa-bullhorn"></i></div>
+          <div class="font-black text-pink-900 mt-3">Nhân viên Sale — BETA</div>
+          <div class="text-sm text-slate-500 mt-1">Schema đã sẵn sàng (category=SALE). Có thể tái sử dụng toàn bộ module.</div>
+          <div id="betaSaleList" class="mt-4"></div>
+        </div>
+      </section>
+
+      <!-- Lịch làm việc - 5 loại nhân viên -->
+      <section id="tab-schedule" class="tab-section hidden">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <h2 class="text-xl font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-calendar-days text-pink-500"></i> Lịch làm việc <span class="text-xs font-bold bg-pink-100 text-pink-700 px-2 py-1 rounded-full border border-pink-200">T2 → CN • 5 nhóm</span></h2>
+          <div class="flex gap-2 items-center">
+            <select id="scheduleBranch" class="px-3 py-2 rounded-xl border border-pink-200 text-xs font-bold focus:border-pink-400 focus:ring-2 focus:ring-pink-100 outline-none" onchange="loadSchedules()"><option value="">Tất cả CN</option><option value="CN1">CN1 - 130 Vạn kiếp</option><option value="CN2">CN2 - 261 Tô Hiến Thành</option><option value="CN3">CN3 - 120 Hoàng Diệu 2</option><option value="CN4">CN4 - 111 Tôn Đản</option></select>
+            <button onclick="changeScheduleWeek(-7)" class="px-3 py-2 rounded-xl bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white text-xs font-bold transition flex items-center gap-1 shadow-2xs cursor-pointer" title="Xem lịch tuần trước">
+              <i class="fa-solid fa-chevron-left"></i> Tuần trước
+            </button>
+            <input id="scheduleWeek" type="date" class="px-3 py-2 rounded-xl border border-pink-200 text-xs font-bold focus:border-pink-400 focus:ring-2 focus:ring-pink-100 outline-none" onchange="loadSchedules()">
+            <button onclick="changeScheduleWeek(7)" class="px-3 py-2 rounded-xl bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white text-xs font-bold transition flex items-center gap-1 shadow-2xs cursor-pointer" title="Xem lịch tuần sau">
+              Tuần sau <i class="fa-solid fa-chevron-right"></i>
+            </button>
+          </div>
+        </div>
+        <!-- Sub tabs 5 loại -->
+        <div class="flex flex-wrap gap-2 mb-4 bg-white border border-pink-200 rounded-2xl p-2 shadow-sm">
+          <button onclick="switchScheduleCategory('TRAINING')" id="schedTab-TRAINING" class="flex-1 min-w-[140px] flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-black transition bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow"><i class="fa-solid fa-graduation-cap"></i> Training <span id="countTraining" class="bg-white text-pink-600 px-2 py-0.5 rounded-full text-[11px]">0</span></button>
+          <button onclick="switchScheduleCategory('OFFICIAL')" id="schedTab-OFFICIAL" class="flex-1 min-w-[140px] flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold transition bg-white border border-pink-200 text-pink-700 hover:bg-pink-50"><i class="fa-solid fa-user-check"></i> Chính thức <span id="countOfficial" class="bg-pink-100 text-pink-700 px-2 py-0.5 rounded-full text-[11px]">0</span></button>
+          <button onclick="switchScheduleCategory('WORKSHOP')" id="schedTab-WORKSHOP" class="flex-1 min-w-[140px] flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold transition bg-white border border-pink-200 text-pink-700 hover:bg-pink-50"><i class="fa-solid fa-industry"></i> Xưởng <span id="countWorkshop" class="bg-pink-100 text-pink-700 px-2 py-0.5 rounded-full text-[11px]">0</span></button>
+          <button onclick="switchScheduleCategory('OFFICE')" id="schedTab-OFFICE" class="flex-1 min-w-[140px] flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold transition bg-white border border-pink-200 text-pink-700 hover:bg-pink-50"><i class="fa-solid fa-building"></i> Văn phòng <span id="countOffice" class="bg-pink-100 text-pink-700 px-2 py-0.5 rounded-full text-[11px]">0</span></button>
+          <button onclick="switchScheduleCategory('SALE')" id="schedTab-SALE" class="flex-1 min-w-[140px] flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold transition bg-white border border-pink-200 text-pink-700 hover:bg-pink-50"><i class="fa-solid fa-bullhorn"></i> Sale <span id="countSale" class="bg-pink-100 text-pink-700 px-2 py-0.5 rounded-full text-[11px]">0</span></button>
+        </div>
+        <div class="flex items-center gap-2 mb-3">
+          <span class="text-xs font-bold text-pink-700 bg-pink-50 border border-pink-200 px-3 py-1 rounded-full" id="scheduleCategoryLabel">Lịch Nhân viên Training • T2→CN</span>
+          <span class="text-xs font-bold bg-white border border-pink-200 px-3 py-1 rounded-full text-pink-600" id="scheduleCategoryCount">0 lịch</span>
+          <button onclick="renderSchedules()" class="ml-auto text-xs font-bold bg-white border border-pink-200 text-pink-700 px-3 py-1 rounded-full hover:bg-pink-50"><i class="fa-solid fa-rotate"></i> Tải lại</button>
+        </div>
+        <div id="scheduleGrid" class="grid gap-3"></div>
+      </section>
+
+      <!-- Duyệt phiếu -->
+      <section id="tab-requests" class="tab-section hidden">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-xl font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-clipboard-check text-pink-500"></i> Duyệt phiếu yêu cầu</h2>
+          <span class="text-xs font-bold bg-pink-100 text-pink-700 px-3 py-1 rounded-full border border-pink-200"><span id="pendingCount">0</span> chờ xử lý</span>
+        </div>
+        <div class="grid lg:grid-cols-2 gap-4">
+          <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm">
+            <div class="font-bold text-sm text-pink-900 flex items-center gap-2"><i class="fa-solid fa-mobile-screen text-pink-500"></i> Reset thiết bị / Đổi điện thoại</div>
+            <div id="deviceRequestsList" class="mt-3 space-y-2 max-h-[500px] overflow-auto scrollbar-thin"></div>
+          </div>
+          <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm">
+            <div class="font-bold text-sm text-pink-900 flex items-center gap-2"><i class="fa-solid fa-person-circle-question text-pink-500"></i> OFF đột xuất & Tìm người thay ca</div>
+            <div id="emergencyListAdmin" class="mt-3 space-y-2 max-h-[500px] overflow-auto scrollbar-thin"></div>
+          </div>
+        </div>
+        <div class="bg-white rounded-2xl border border-pink-200 p-4 mt-4 shadow-sm">
+          <div class="font-bold text-sm text-pink-900">OFF hàng tuần (Auto Approve)</div>
+          <div id="offRequestsAdmin" class="mt-3 space-y-2 max-h-[300px] overflow-auto scrollbar-thin"></div>
+        </div>
+      </section>
+
+      <!-- Record điểm danh -->
+      <section id="tab-attendance" class="tab-section hidden">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <h2 class="text-xl font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-camera text-pink-500"></i> Record điểm danh</h2>
+          <div class="flex gap-2">
+            <input id="attDate" type="date" class="px-3 py-2 rounded-xl border border-pink-200 text-xs">
+            <select id="attBranch" class="px-3 py-2 rounded-xl border border-pink-200 text-xs font-bold"><option value="">Tất cả CN</option><option value="CN1">CN1 - 130 Vạn kiếp</option><option value="CN2">CN2 - 261 Tô Hiến Thành</option><option value="CN3">CN3 - 120 Hoàng Diệu 2</option><option value="CN4">CN4 - 111 Tôn Đản</option></select>
+            <button onclick="renderAttendances()" class="px-4 py-2 rounded-xl bg-gradient-to-r from-pink-500 to-rose-500 text-white text-xs font-bold shadow">Lọc</button>
+          </div>
+        </div>
+        <div id="attendanceList" class="grid md:grid-cols-2 xl:grid-cols-3 gap-3"></div>
+      </section>
+
+      <!-- Record Zalo -->
+      <section id="tab-zalo" class="tab-section hidden">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-xl font-black text-pink-900 flex items-center gap-2"><i class="fa-brands fa-viber text-pink-500"></i> Record Zalo</h2>
+          <span class="text-xs font-bold bg-pink-100 text-pink-700 px-3 py-1 rounded-full border border-pink-200">QUEUED/SENT/DELIVERED/FAILED</span>
+        </div>
+        <div class="bg-white rounded-2xl border border-pink-200 overflow-hidden shadow-sm">
+          <div class="overflow-auto max-h-[70vh] scrollbar-thin">
+            <table class="w-full text-sm">
+              <thead class="bg-gradient-to-r from-rose-500 via-pink-600 to-rose-600 text-white text-[11px] font-black uppercase tracking-wider sticky top-0 border-b-2 border-rose-500/50 shadow-sm"><tr><th class="px-3.5 py-3 text-left">Thời gian</th><th class="px-3.5 py-3">Người nhận</th><th class="px-3.5 py-3">Loại</th><th class="px-3.5 py-3">Nội dung</th><th class="px-3.5 py-3">Trạng thái</th></tr></thead>
+              <tbody id="zaloTbody" class="divide-y divide-pink-100"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Báo cáo chấm công - 7 màn hình Spec -->
+      <section id="tab-report" class="tab-section hidden">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <h2 class="text-xl font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-file-invoice text-pink-500"></i> Báo cáo chấm công <span class="text-xs font-bold bg-white border border-pink-200 px-2 py-1 rounded-full text-pink-600">Kế toán • HR • Dữ liệu tính lương</span></h2>
+          <div class="flex gap-2 items-center">
+            <input id="reportMonth" type="month" class="px-3 py-2 rounded-xl border border-pink-200 text-xs font-bold">
+            <select id="reportBranch" class="px-3 py-2 rounded-xl border border-pink-200 text-xs font-bold"><option value="">Tất cả CN</option><option value="CN1">CN1 - 130 Vạn kiếp</option><option value="CN2">CN2 - 261 Tô Hiến Thành</option><option value="CN3">CN3 - 120 Hoàng Diệu 2</option><option value="CN4">CN4 - 111 Tôn Đản</option></select>
+            <button onclick="loadReportAll()" class="px-4 py-2 rounded-xl bg-gradient-to-r from-pink-500 to-rose-500 text-white text-xs font-black shadow">Xem báo cáo</button>
+            <button id="reportResetAllBtn" onclick="resetReportAll()" class="hidden px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-black shadow flex items-center gap-1.5" title="Chỉ Admin - Xoá toàn bộ dữ liệu báo cáo (chấm công) về 0"><i class="fa-solid fa-trash-can"></i> Xoá tất cả</button>
+          </div>
+        </div>
+        <!-- Sub-nav 7 màn hình -->
+        <div class="flex flex-wrap gap-1.5 bg-white border border-pink-200 rounded-2xl p-1.5 shadow-sm mb-4">
+          <button onclick="switchReportTab('overview')" id="reportTab-overview" class="flex-1 min-w-[110px] px-3 py-2 rounded-xl text-xs font-black bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow">Tổng quan</button>
+          <button onclick="switchReportTab('monthly')" id="reportTab-monthly" class="flex-1 min-w-[110px] px-3 py-2 rounded-xl text-xs font-bold bg-white border border-pink-200 text-pink-700 hover:bg-pink-50">Bảng chốt công</button>
+          <button onclick="switchReportTab('daily')" id="reportTab-daily" class="flex-1 min-w-[110px] px-3 py-2 rounded-xl text-xs font-bold bg-white border border-pink-200 text-pink-700 hover:bg-pink-50">Chi tiết</button>
+          <button onclick="switchReportTab('anomalies')" id="reportTab-anomalies" class="flex-1 min-w-[110px] px-3 py-2 rounded-xl text-xs font-bold bg-white border border-pink-200 text-pink-700 hover:bg-pink-50">Sai lệch</button>
+          <button onclick="switchReportTab('adjust')" id="reportTab-adjust" class="flex-1 min-w-[110px] px-3 py-2 rounded-xl text-xs font-bold bg-white border border-pink-200 text-pink-700 hover:bg-pink-50">Điều chỉnh</button>
+          <button onclick="switchReportTab('period')" id="reportTab-period" class="flex-1 min-w-[110px] px-3 py-2 rounded-xl text-xs font-bold bg-white border border-pink-200 text-pink-700 hover:bg-pink-50">Chốt kỳ</button>
+          <button onclick="switchReportTab('export')" id="reportTab-export" class="flex-1 min-w-[110px] px-3 py-2 rounded-xl text-xs font-bold bg-white border border-pink-200 text-pink-700 hover:bg-pink-50">Xuất báo cáo</button>
+        </div>
+        <!-- 01 Tổng quan -->
+        <div id="reportSub-overview" class="report-sub">
+          <div id="reportKPI" class="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-3"></div>
+          <div class="mt-3 bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-800 flex items-center gap-2"><i class="fa-solid fa-circle-info"></i> Kỳ công tính từ 01 → cuối tháng • Chấm công chỉ trả về số liệu (số phút trễ, giờ làm...), Tính lương tự tính tiền — không hard-code phạt/tăng ca</div>
+        </div>
+        <!-- 02 Bảng chốt công -->
+        <div id="reportSub-monthly" class="report-sub hidden">
+          <div class="bg-white rounded-2xl border border-pink-200 overflow-hidden shadow-sm">
+            <div class="p-3 bg-pink-50 border-b flex justify-between items-center"><span class="text-xs font-black text-pink-900">BẢNG CHỐT CÔNG — Mỗi NV 1 dòng</span><span class="text-[11px] bg-white border px-2 py-1 rounded-full">Công tiêu chuẩn • Thực tế • Tính lương • Giờ • Tăng ca • Trễ • Lỗi</span></div>
+            <div class="overflow-auto max-h-[65vh] scrollbar-thin">
+              <table class="w-full text-xs">
+                <thead class="bg-gradient-to-r from-rose-500 via-pink-600 to-rose-600 text-white text-[11px] font-black uppercase sticky top-0"><tr><th class="px-3 py-2 text-left">Mã NV / Họ tên / CN</th><th class="px-2 py-2">Công TC</th><th class="px-2 py-2">Thực tế</th><th class="px-2 py-2">Tính lương</th><th class="px-2 py-2">Giờ</th><th class="px-2 py-2">Trễ</th><th class="px-2 py-2">Lỗi</th><th class="px-2 py-2">Trạng thái</th></tr></thead>
+                <tbody id="reportMonthlyTbody" class="divide-y"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <!-- 03 Chi tiết -->
+        <div id="reportSub-daily" class="report-sub hidden">
+          <div class="bg-white rounded-2xl border border-pink-200 p-3 shadow-sm flex gap-2 items-center">
+            <select id="reportDailyEmp" class="flex-1 px-3 py-2 rounded-xl border border-pink-200 text-sm"></select>
+            <button onclick="loadReportDaily()" class="px-4 py-2 rounded-xl bg-pink-500 text-white text-xs font-bold">Xem chi tiết</button>
+          </div>
+          <div class="bg-white rounded-2xl border border-pink-200 overflow-hidden shadow-sm mt-3">
+            <div class="overflow-auto max-h-[60vh] scrollbar-thin">
+              <table class="w-full text-xs">
+                <thead class="bg-slate-900 text-white text-[11px] font-black sticky top-0"><tr><th class="px-3 py-2">Ngày</th><th class="px-2 py-2">Ca</th><th class="px-2 py-2">Giờ vào</th><th class="px-2 py-2">Giờ ra</th><th class="px-2 py-2">Thực làm</th><th class="px-2 py-2">Trễ</th><th class="px-2 py-2">Trạng thái</th></tr></thead>
+                <tbody id="reportDailyTbody" class="divide-y"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <!-- 04 Sai lệch -->
+        <div id="reportSub-anomalies" class="report-sub hidden">
+          <div class="bg-white rounded-2xl border border-pink-200 p-3 shadow-sm flex justify-between items-center"><span class="text-sm font-black text-pink-900">Sai lệch cần xử lý trước khi chốt</span><span id="anomalyCount" class="text-xs font-bold bg-red-100 text-red-700 px-3 py-1 rounded-full">0 lỗi</span></div>
+          <div id="anomalyList" class="mt-3 space-y-2 max-h-[60vh] overflow-auto"></div>
+        </div>
+        <!-- 05 Điều chỉnh -->
+        <div id="reportSub-adjust" class="report-sub hidden">
+          <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm">
+            <div class="font-bold text-sm text-pink-900 mb-2">Tạo yêu cầu điều chỉnh (giữ gốc + Audit)</div>
+            <div class="grid md:grid-cols-4 gap-2">
+              <select id="adjEmp" class="px-3 py-2 rounded-xl border text-sm"></select>
+              <input id="adjDate" type="date" class="px-3 py-2 rounded-xl border text-sm">
+              <select id="adjField" class="px-3 py-2 rounded-xl border text-sm"><option value="checkOut">Giờ ra</option><option value="checkIn">Giờ vào</option></select>
+              <input id="adjValue" placeholder="Giá trị mới (HH:MM)" class="px-3 py-2 rounded-xl border text-sm">
+            </div>
+            <input id="adjReason" placeholder="Lý do (bắt buộc)" class="w-full mt-2 px-3 py-2 rounded-xl border text-sm">
+            <button onclick="createAdjustment()" class="mt-2 px-4 py-2 rounded-xl bg-pink-500 text-white text-xs font-bold">Gửi yêu cầu</button>
+          </div>
+          <div id="adjustList" class="mt-3 space-y-2 max-h-[50vh] overflow-auto"></div>
+        </div>
+        <!-- 06 Chốt kỳ -->
+        <div id="reportSub-period" class="report-sub hidden">
+          <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm">
+            <div class="flex gap-2 items-center"><input id="periodMonth" type="month" class="px-3 py-2 rounded-xl border text-sm"><button onclick="createPeriod()" class="px-4 py-2 rounded-xl bg-pink-500 text-white text-xs font-bold">Tạo kỳ</button><button onclick="loadPeriods()" class="px-3 py-2 rounded-xl bg-white border text-xs">↻</button></div>
+            <div id="periodList" class="mt-3 space-y-2"></div>
+            <div class="mt-3 bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800">ĐÃ CHỐT → không cho sửa Giờ vào/ra, ca, phép, tăng ca. Muốn sửa phải Mở lại + nhập lý do + Lưu lịch sử.</div>
+          </div>
+        </div>
+        <!-- 07 Xuất -->
+        <div id="reportSub-export" class="report-sub hidden">
+          <div class="grid md:grid-cols-2 gap-3">
+            <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm">
+              <div class="font-bold text-sm text-pink-900">Dữ liệu tính lương (quan trọng nhất)</div>
+              <div class="text-xs text-slate-500 mt-1">Dùng làm đầu vào cho tính lương/kế toán — đã tách thực tế/tính lương, số phút trễ, tăng ca</div>
+              <button onclick="exportPayrollInput()" class="mt-3 w-full py-2 rounded-xl bg-gradient-to-r from-pink-500 to-rose-500 text-white text-xs font-black">Tải Du_lieu_tinh_luong_YYYY-MM.csv</button>
+            </div>
+            <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm">
+              <div class="font-bold text-sm">Các báo cáo khác</div>
+              <div class="mt-2 flex flex-wrap gap-2">
+                <button onclick="exportReport()" class="px-3 py-2 rounded-xl bg-white border text-xs font-bold">Chấm công chi tiết (CSV)</button>
+                <button onclick="exportAnomalies()" class="px-3 py-2 rounded-xl bg-white border text-xs font-bold">Sai lệch (CSV)</button>
+                <button onclick="loadReports()" class="px-3 py-2 rounded-xl bg-white border text-xs font-bold">Bảng lương Rule Engine</button>
+              </div>
+              <div id="payrollGrid" class="mt-3 grid md:grid-cols-1 gap-3 max-h-[40vh] overflow-auto"></div>
+            </div>
+          </div>
+        </div>
+        <!-- Hidden legacy for compatibility -->
+        <div class="hidden"><table><tbody id="reportTbody"></tbody></table></div>
+      </section>
+
+      <!-- E-learning -->
+      <section id="tab-elearning" class="tab-section hidden">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-xl font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-graduation-cap text-pink-500"></i> E-learning & TEST đầu ra</h2>
+          <span class="text-xs font-bold bg-pink-100 text-pink-700 px-3 py-1 rounded-full border border-pink-200">20 câu • ≥5s/câu • 100s tối thiểu</span>
+        </div>
+        <div class="grid lg:grid-cols-3 gap-4">
+          <div class="lg:col-span-2 bg-white rounded-2xl border border-pink-200 p-4 shadow-sm">
+            <div id="courseAdmin" class="space-y-3"></div>
+          </div>
+          <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm">
+            <div class="font-bold text-sm text-pink-900">Kết quả TEST gần đây</div>
+            <div id="testResultsAdmin" class="mt-3 space-y-2 max-h-[600px] overflow-auto scrollbar-thin"></div>
+            <div class="mt-4 bg-pink-50 border border-pink-200 rounded-xl p-3 text-xs">
+              <div class="font-black text-pink-900">Quy tắc chuyển trạng thái:</div>
+              <div class="mt-1 space-y-1 font-medium">
+                <div class="flex justify-between"><span>&lt; 5</span><span class="font-bold text-rose-600">FAILED → ARCHIVED</span></div>
+                <div class="flex justify-between"><span>5 ≤ điểm ≤ 7</span><span class="font-bold text-pink-600">CHƯA ĐỦ ĐK • Giữ Training</span></div>
+                <div class="flex justify-between"><span>&gt; 7</span><span class="font-bold text-green-600">ĐẠT → Chính thức</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Cài đặt -->
+      <section id="tab-settings" class="tab-section hidden">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-xl font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-gear text-pink-500"></i> Cài đặt hệ thống</h2>
+          <span class="text-xs font-bold bg-white text-pink-700 border border-pink-200 px-3 py-1 rounded-full"><i class="fa-solid fa-lock text-pink-500"></i> Chỉ Admin • Secret masked</span>
+        </div>
+        <div class="grid lg:grid-cols-2 gap-4">
+          <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm">
+            <div class="font-bold text-sm text-pink-900">Google Sheet - Operational Data Hub</div>
+            <div class="mt-3 space-y-3 text-sm">
+              <div><label class="text-xs font-bold text-pink-700">Sheet nộp Form (Nguồn vào)</label><input id="setSheetId" class="w-full mt-1 px-3 py-2 rounded-xl border border-pink-200 text-sm focus:border-pink-400 focus:ring-2 focus:ring-pink-100 outline-none"></div>
+              <div><label class="text-xs font-bold text-pink-700">Sheet Database chính (Nguồn xuất ra 20 cột)</label><input id="setTargetDatabaseSheetId" class="w-full mt-1 px-3 py-2 rounded-xl border border-pink-200 text-sm font-bold text-pink-900 focus:border-pink-400 focus:ring-2 focus:ring-pink-100 outline-none" placeholder="17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w"></div>
+              <div><label class="text-xs font-bold text-pink-700">Webhook URL đồng bộ (Apps Script URL)</label><input id="setTargetWebhookUrl" class="w-full mt-1 px-3 py-2 rounded-xl border border-pink-200 text-xs font-mono" placeholder="https://script.google.com/macros/s/.../exec"></div>
+              <div><label class="text-xs font-bold text-pink-700">Service Account Email</label><input id="setSheetEmail" class="w-full mt-1 px-3 py-2 rounded-xl border border-pink-200 text-sm focus:border-pink-400 focus:ring-2 focus:ring-pink-100 outline-none"></div>
+              <div><label class="text-xs font-bold text-pink-700">Private Key (masked)</label><input id="setSheetKey" class="w-full mt-1 px-3 py-2 rounded-xl border border-pink-200 text-sm font-mono text-xs"></div>
+            </div>
+          </div>
+          <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm">
+            <div class="font-bold text-sm text-pink-900">Google Drive & Calendar & Meet</div>
+            <div class="mt-3 space-y-3 text-sm">
+              <div><label class="text-xs font-bold text-pink-700">Drive Root Folder ID</label><input id="setDriveId" class="w-full mt-1 px-3 py-2 rounded-xl border border-pink-200 text-sm"></div>
+              <div class="grid grid-cols-2 gap-3">
+                <div><label class="text-xs font-bold text-pink-700">OAuth Client ID</label><input id="setCalId" class="w-full mt-1 px-3 py-2 rounded-xl border border-pink-200 text-xs"></div>
+                <div><label class="text-xs font-bold text-pink-700">OAuth Secret (masked)</label><input id="setCalSecret" class="w-full mt-1 px-3 py-2 rounded-xl border border-pink-200 text-xs"></div>
+              </div>
+              <div><label class="text-xs font-bold text-pink-700">Calendar ID</label><input id="setCalCalId" class="w-full mt-1 px-3 py-2 rounded-xl border border-pink-200 text-sm"></div>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm">
+            <div class="flex justify-between items-center border-b border-pink-100 pb-2">
+              <div class="font-bold text-sm text-pink-900 flex items-center gap-1.5"><i class="fa-solid fa-robot text-blue-600"></i> AI Provider (Gemini / OpenAI)</div>
+              <span class="text-[10px] bg-blue-100 text-blue-700 font-bold px-2 py-0.5 rounded-full">Active</span>
+            </div>
+            <div class="mt-3 space-y-3 text-sm">
+              <div class="grid grid-cols-2 gap-3">
+                <div><label class="text-xs font-bold text-pink-700">AI Provider</label><select id="setAiProvider" class="w-full mt-1 px-3 py-2 rounded-xl border border-pink-200 text-sm"><option>gemini</option><option>openai</option><option>anthropic</option></select></div>
+                <div><label class="text-xs font-bold text-pink-700">Model</label><input id="setAiModel" class="w-full mt-1 px-3 py-2 rounded-xl border border-pink-200 text-sm"></div>
+              </div>
+              <div><label class="text-xs font-bold text-pink-700">AI API Key (masked)</label><input id="setAiKey" class="w-full mt-1 px-3 py-2 rounded-xl border border-pink-200 text-sm"></div>
+            </div>
+          </div>
+          <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm">
+            <div class="font-bold text-sm text-pink-900">Chấm công & Lương & OFF</div>
+            <div class="mt-3 space-y-3 text-sm">
+              <div class="grid grid-cols-3 gap-2">
+                <div><label class="text-[11px] font-bold text-pink-700">Late Thresh (phút)</label><input id="setLateTh" type="number" class="w-full mt-1 px-2 py-2 rounded-xl border border-pink-200 text-sm"></div>
+                <div><label class="text-[11px] font-bold text-pink-700">Training (đ/h)</label><input id="setTrainRate" type="number" class="w-full mt-1 px-2 py-2 rounded-xl border border-pink-200 text-sm"></div>
+                <div><label class="text-[11px] font-bold text-pink-700">Official (đ/h)</label><input id="setOffRate" type="number" class="w-full mt-1 px-2 py-2 rounded-xl border border-pink-200 text-sm"></div>
+              </div>
+              <div class="grid grid-cols-3 gap-2">
+                <div><label class="text-[11px] font-bold text-pink-700">Phạt trễ (đ)</label><input id="setPenaltyLate" type="number" class="w-full mt-1 px-2 py-2 rounded-xl border border-pink-200 text-sm"></div>
+                <div><label class="text-[11px] font-bold text-pink-700">Phạt vắng (đ)</label><input id="setPenaltyAbsent" type="number" class="w-full mt-1 px-2 py-2 rounded-xl border border-pink-200 text-sm"></div>
+                <div><label class="text-[11px] font-bold text-pink-700">OFF max/tuần</label><input id="setOffMax" type="number" class="w-full mt-1 px-2 py-2 rounded-xl border border-pink-200 text-sm"></div>
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <div><label class="text-[11px] font-bold text-pink-700">Sớm trước (phút)</label><input id="setEarlyTh" type="number" class="w-full mt-1 px-2 py-2 rounded-xl border border-pink-200 text-sm"></div>
+                <div><label class="text-[11px] font-bold text-pink-700">TEST min/câu (s)</label><input id="setTestMin" type="number" class="w-full mt-1 px-2 py-2 rounded-xl border border-pink-200 text-sm"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="mt-4 flex gap-2">
+          <button onclick="saveSettings()" class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white font-black text-sm shadow"><i class="fa-solid fa-floppy-disk"></i> Lưu cài đặt (Audit Log)</button>
+          <button onclick="loadSettings()" class="px-6 py-2.5 rounded-xl bg-white border border-pink-200 font-bold text-sm text-pink-700">Tải lại</button>
+          <button onclick="resetSystem()" class="ml-auto px-6 py-2.5 rounded-xl bg-white border border-rose-200 hover:bg-rose-50 text-rose-600 font-bold text-sm"><i class="fa-solid fa-triangle-exclamation"></i> Reset hệ thống</button>
+        </div>
+        <div class="mt-4 grid lg:grid-cols-2 gap-4">
+          <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm">
+            <div class="font-bold text-sm text-pink-900">Tài khoản & Phân quyền</div>
+            <div class="mt-3 flex gap-2">
+              <input id="newUserName" placeholder="username" class="px-3 py-2 rounded-xl border border-pink-200 text-sm flex-1">
+              <input id="newUserPass" placeholder="password" class="px-3 py-2 rounded-xl border border-pink-200 text-sm flex-1">
+              <select id="newUserRole" class="px-3 py-2 rounded-xl border border-pink-200 text-sm"><option>HR</option><option>Manager</option><option>Umbomilk</option><option>Admin</option></select>
+              <button onclick="createUser()" class="px-4 py-2 rounded-xl bg-pink-500 text-white text-sm font-bold hover:bg-pink-600">Tạo</button>
+            </div>
+            <div id="usersList" class="mt-3 space-y-2 max-h-[240px] overflow-auto scrollbar-thin"></div>
+          </div>
+          <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm">
+            <div class="font-bold text-sm text-pink-900">Sync Status & Audit</div>
+            <div class="mt-2 flex gap-2">
+              <button onclick="document.getElementById('tab-audit').scrollIntoView()" class="text-xs font-bold bg-pink-500 text-white px-3 py-1.5 rounded-full">Xem Audit Log</button>
+              <span class="text-xs bg-pink-50 text-pink-700 px-3 py-1.5 rounded-full font-bold border border-pink-200">Version + updated_at + source</span>
+            </div>
+            <div id="settingsSync" class="mt-3 space-y-2 max-h-[240px] overflow-auto scrollbar-thin"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Audit standalone -->
+      <section id="tab-audit" class="tab-section hidden">
+        <h2 class="text-xl font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-shield-halved text-pink-500"></i> Audit Log & Security</h2>
+        <div class="bg-white rounded-2xl border border-pink-200 overflow-hidden mt-4 shadow-sm">
+          <div class="overflow-auto max-h-[70vh] scrollbar-thin">
+            <table class="w-full text-sm">
+              <thead class="bg-gradient-to-r from-rose-500 via-pink-600 to-rose-600 text-white text-[11px] font-black uppercase tracking-wider sticky top-0 border-b-2 border-rose-500/50 shadow-sm"><tr><th class="px-3.5 py-3 text-left">Thời gian</th><th class="px-3.5 py-3">Actor</th><th class="px-3.5 py-3">Action</th><th class="px-3.5 py-3">Entity</th><th class="px-3.5 py-3">Chi tiết</th></tr></thead>
+              <tbody id="auditTbody" class="divide-y divide-pink-100"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <!-- Bottom nav for phone - HR -->
+  <nav id="mobileNavAdmin" class="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-pink-200 flex items-center justify-around px-1 py-1 z-30 shadow-[0_-4px_12px_rgba(236,72,153,0.12)] pb-safe">
+    <button onclick="switchTab('dashboard')" id="mnav-dashboard" class="flex flex-col items-center gap-0.5 py-2 px-2 rounded-xl text-pink-600 min-w-[56px]"><i class="fa-solid fa-chart-line text-base"></i><span class="text-[10px] font-bold leading-none">Tổng quan</span></button>
+    <button onclick="switchTab('applicants')" id="mnav-applicants" class="flex flex-col items-center gap-0.5 py-2 px-2 rounded-xl text-slate-500 min-w-[56px]"><i class="fa-solid fa-user-plus text-base"></i><span class="text-[10px] font-bold leading-none">Mới</span></button>
+    <button onclick="switchTab('employees-store')" id="mnav-employees-store" class="flex flex-col items-center gap-0.5 py-2 px-2 rounded-xl text-slate-500 min-w-[56px]"><i class="fa-solid fa-store text-base"></i><span class="text-[10px] font-bold leading-none">Cửa hàng</span></button>
+    <button onclick="switchTab('schedule')" id="mnav-schedule" class="flex flex-col items-center gap-0.5 py-2 px-2 rounded-xl text-slate-500 min-w-[56px]"><i class="fa-solid fa-calendar-days text-base"></i><span class="text-[10px] font-bold leading-none">Lịch</span></button>
+    <button onclick="switchTab('requests')" id="mnav-requests" class="flex flex-col items-center gap-0.5 py-2 px-2 rounded-xl text-slate-500 min-w-[56px] relative"><i class="fa-solid fa-clipboard-check text-base"></i><span class="text-[10px] font-bold leading-none">Duyệt</span><span id="mPendingDot" class="hidden absolute top-1 right-2 w-2 h-2 bg-red-500 rounded-full"></span></button>
+    <button onclick="toggleSidebar()" class="flex flex-col items-center gap-0.5 py-2 px-2 rounded-xl text-slate-500 min-w-[56px]"><i class="fa-solid fa-bars text-base"></i><span class="text-[10px] font-bold leading-none">Thêm</span></button>
+  </nav>
+</div>
+
+<!-- Modals -->
+<div id="modal" class="fixed inset-0 z-50 hidden">
+  <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeModal()"></div>
+  <div class="absolute inset-0 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-auto scrollbar-thin">
+      <div class="sticky top-0 bg-white border-b border-pink-200 px-6 py-4 flex items-center justify-between">
+        <div id="modalTitle" class="font-black text-pink-900"></div>
+        <button onclick="closeModal()" class="w-8 h-8 rounded-xl bg-pink-100 hover:bg-pink-200 text-pink-600 flex items-center justify-center"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div id="modalBody" class="p-6"></div>
+    </div>
+  </div>
+</div>
+
+<script src="/js/admin.js"></script>
+</body>
+</html>
