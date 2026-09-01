@@ -2541,26 +2541,37 @@ function realtimeAutomationPoller(){
   });
   if(changed) saveDB();
   // 3. Sync queue auto-retry (exponential backoff, realtime)
+  const retryableSync = db.syncQueue.filter(item =>
+    (item.sync_status==='FAILED' || item.sync_status==='PENDING') &&
+    (item.retryCount||0) < 5 && !item._retrying &&
+    (!item.nextRetryAt || new Date(item.nextRetryAt).getTime() <= now)
+  );
+  retryableSync.slice(0,3).forEach(item=>{
+    item._retrying = true;
+    item.sync_status='PENDING';
+    item.retryCount = (item.retryCount||0)+1;
+    syncToGoogleSheet(item)
+      .then(()=>{
+        item.sync_status='SYNCED';
+        item.retriedAt=item.syncedAt=new Date().toISOString();
+        delete item.error;
+        delete item.nextRetryAt;
+      })
+      .catch(err=>{
+        item.sync_status='FAILED';
+        item.error=err.message;
+        item.nextRetryAt = new Date(Date.now() + Math.pow(2, item.retryCount)*5000).toISOString();
+      })
+      .finally(()=>{ delete item._retrying; saveDB(); io.emit('sync:update', db.syncQueue); });
+    changed=true;
+  });
+  if(changed) saveDB();
   const pendingSync = db.syncQueue.filter(s=>s.sync_status==='FAILED' || s.sync_status==='PENDING');
-  if(pendingSync.length>0){
-    pendingSync.slice(0,3).forEach(item=>{
-      if((item.retryCount||0) >=5 || item._retrying) return;
-      const shouldRetry = !item.nextRetryAt || new Date(item.nextRetryAt).getTime() <= now;
-      if(shouldRetry){
-        item._retrying = true;
-        item.sync_status='PENDING';
-        item.retryCount = (item.retryCount||0)+1;
-        item.nextRetryAt = new Date(now + Math.pow(2, item.retryCount)*5000).toISOString(); // 10s,20s,40s...
-        syncToGoogleSheet(item)
-          .then(()=>{ item.sync_status='SYNCED'; item.retriedAt=new Date().toISOString(); item.syncedAt=new Date().toISOString(); delete item.error; })
-          .catch(err=>{ item.sync_status='FAILED'; item.error=err.message; })
-          .finally(()=>{ delete item._retrying; saveDB(); io.emit('sync:update', db.syncQueue); });
-        io.emit('sync:update', db.syncQueue);
-        changed=true;
-      }
-    });
-    if(changed) saveDB();
-  }
+  pendingSync.forEach(item=>{
+    if((item.retryCount||0) >= 5 && item.sync_status==='FAILED') item.sync_status='DEAD';
+  });
+  if(pendingSync.some(item=>item.sync_status==='DEAD')) saveDB();
+  // ponytail: queue chạy tối đa 3 tác vụ/poll; chuyển sang worker bền vững khi chạy đa instance.
   // 4. Broadcast realtime health + sync status
   io.emit('automation:heartbeat', {
     now: new Date().toISOString(),

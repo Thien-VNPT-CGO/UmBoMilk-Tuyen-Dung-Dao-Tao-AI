@@ -551,8 +551,12 @@ function connectSocket(){
   });
   socket.on('sync:update', (data)=>{
     const q = Array.isArray(data)? data : [];
-    const failed = q.filter(x=>x.sync_status==='FAILED').length;
-    if(failed>0) showToast(`⚠️ Sync realtime: ${failed} mục FAILED đang retry tự động`, 'warning');
+    const retrying = q.filter(x=>x.sync_status==='PENDING' && x._retrying).length;
+    const failed = q.filter(x=>x.sync_status==='FAILED' && (x.retryCount||0)<5).length;
+    const dead = q.filter(x=>x.sync_status==='DEAD').length;
+    if(retrying>0) showToast(`Sync realtime: ${retrying} mục đang retry`, 'info');
+    else if(failed>0) showToast(`⚠️ Sync realtime: ${failed} mục chờ lượt retry`, 'warning');
+    if(dead>0) showToast(`⛔ Sync realtime: ${dead} mục dừng sau 5 lần lỗi. Kiểm tra webhook/secret.`, 'error');
   });
 
   // Listen for realtime AUTO-PASS event from server poller
