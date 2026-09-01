@@ -4,6 +4,7 @@ let empKey = localStorage.getItem('emp_key')||'';
 let deviceId = localStorage.getItem('device_id') || ('dev_'+Math.random().toString(36).substring(2,10));
 localStorage.setItem('device_id', deviceId);
 let socket=null;
+const API_BASE = location.hostname.includes('vercel.app') ? 'https://umbomilk-hr.onrender.com' : '';
 let branches=[];
 let testCourses=[];
 let currentTest=null;
@@ -335,7 +336,8 @@ function switchTab(id){
 async function api(path, opts={}){
   const headers={'Content-Type':'application/json'};
   if(token) headers['Authorization']='Bearer '+token;
-  const res = await fetch(path, {...opts, headers:{...headers, ...(opts.headers||{})}});
+  const url = path.startsWith('http') ? path : API_BASE + path;
+  const res = await fetch(url, {...opts, headers:{...headers, ...(opts.headers||{})}});
   const data = await res.json().catch(()=>({}));
   if(!res.ok) throw new Error(data.error||'Lỗi');
   return data;
@@ -418,7 +420,9 @@ function logout(){
 function connectSocket(){
   if(socket) socket.disconnect();
   const empToken = localStorage.getItem('employee_token') || localStorage.getItem('emp_token');
-  socket=io({ auth: { token: empToken || '' }, transports: ['websocket','polling'] });
+  const isVercel = location.hostname.includes('vercel.app');
+  const socketUrl = isVercel ? 'https://umbomilk-hr.onrender.com' : undefined;
+  socket=io(socketUrl, { auth: { token: empToken || '' }, transports: ['websocket','polling'], timeout: 20000, reconnection: true, reconnectionAttempts: 10, reconnectionDelay: 1000 });
   socket.on('connect', ()=>{
     document.getElementById('syncBadge').textContent='SYNCED • Socket Connected';
     document.getElementById('syncBadge').className='hidden md:inline-flex text-[11px] font-bold bg-pink-100 text-pink-700 border border-pink-200 px-2.5 py-1 rounded-full';

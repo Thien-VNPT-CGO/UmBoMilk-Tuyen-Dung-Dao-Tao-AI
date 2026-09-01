@@ -1,4 +1,4 @@
-const API = '';
+const API = location.hostname.includes('vercel.app') ? 'https://umbomilk-hr.onrender.com' : '';
 let token = localStorage.getItem('admin_token');
 let currentUser = JSON.parse(localStorage.getItem('admin_user') || 'null');
 let socket = null;
@@ -494,11 +494,17 @@ function updateSystemStatusIndicators(s) {
 
 function connectSocket(){
   if(socket) socket.disconnect();
-  socket = io({ auth: { token: token || localStorage.getItem('admin_token') }, transports: ['websocket','polling'] });
+  const isVercel = location.hostname.includes('vercel.app');
+  const socketUrl = isVercel ? 'https://umbomilk-hr.onrender.com' : undefined;
+  socket = io(socketUrl, { auth: { token: token || localStorage.getItem('admin_token') }, transports: ['websocket','polling'], timeout: 20000, reconnection: true, reconnectionAttempts: 10, reconnectionDelay: 1000 });
   socket.on('connect', ()=>{
     updateModeBadge();
   });
   socket.on('disconnect', ()=>{
+    updateModeBadge();
+  });
+  socket.on('connect_error', (err)=>{
+    console.error('Socket connect_error (Vercel→Render proxy):', err.message);
     updateModeBadge();
   });
   const refreshEvents = ['employees:update','applicants:update','attendances:update','schedules:update','offRequests:update','emergencyRequests:update','deviceRequests:update','zalo:update','audit:new','sync:update','keys:update','notifications:update','testResults:update','settings:update','interviews:update','drive:update','overtime:update','leave:update','payrollPeriods:update','payrollSnapshots:update'];
