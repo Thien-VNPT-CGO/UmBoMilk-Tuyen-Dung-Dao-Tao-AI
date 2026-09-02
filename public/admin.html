@@ -73,45 +73,45 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
         <div class="text-[11px] font-semibold text-pink-600 flex items-center gap-2"><span class="w-2 h-2 bg-pink-500 rounded-full animate-pulse inline-block"></span>Realtime • <span id="headerBranch">Số 10 Đặng Thai Mai, P. Phú Nhuận, TP.Hồ Chí Minh</span></div>
       </div>
     </div>
-    <!-- Realtime Live System Status Indicators (6 Services) - HIỂN THỊ ĐẦY ĐỦ -->
-    <div class="flex flex-wrap items-center gap-1.5 py-1 max-w-[640px]">
+    <!-- Realtime Live System Status Indicators (6 Services) - 1 HÀNG -->
+    <div class="flex flex-nowrap items-center gap-1 py-1 overflow-x-auto whitespace-nowrap scrollbar-thin max-w-[min(820px,62vw)] pr-1">
       <!-- 1. Database chính -->
-      <div id="statusDbMaster" class="flex items-center gap-1.5 bg-emerald-50 border border-emerald-300 text-emerald-800 text-[11px] font-black px-2.5 py-1 rounded-full shadow-2xs" title="Database chính (Sheet ID: 17iXM0zc...) - Chạy API Thật">
+      <div id="statusDbMaster" class="flex flex-shrink-0 items-center gap-1.5 bg-emerald-50 border border-emerald-300 text-emerald-800 text-[11px] font-black px-2 py-1 rounded-full shadow-2xs whitespace-nowrap" title="Database chính (Sheet ID: 17iXM0zc...) - Chạy API Thật">
         <span class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
         <i class="fa-solid fa-database text-emerald-600"></i>
         <span>CƠ SỞ DỮ LIỆU: TRỰC TUYẾN</span>
       </div>
 
       <!-- 2. GG Sheet Đăng ký -->
-      <div id="statusFormSheet" class="flex items-center gap-1.5 bg-emerald-50 border border-emerald-300 text-emerald-800 text-[11px] font-black px-2.5 py-1 rounded-full shadow-2xs" title="Google Sheet đăng ký Form (Sheet ID: 1rcqEKra...) - Đồng bộ CSV Realtime">
+      <div id="statusFormSheet" class="flex flex-shrink-0 items-center gap-1.5 bg-emerald-50 border border-emerald-300 text-emerald-800 text-[11px] font-black px-2 py-1 rounded-full shadow-2xs whitespace-nowrap" title="Google Sheet đăng ký Form (Sheet ID: 1rcqEKra...) - Đồng bộ CSV Realtime">
         <span class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
         <i class="fa-solid fa-file-excel text-emerald-600"></i>
         <span>SHEET FORM: TRỰC TUYẾN</span>
       </div>
 
       <!-- 3. AI Scoring Engine -->
-      <div id="statusAI" class="flex items-center gap-1.5 bg-emerald-50 border border-emerald-300 text-emerald-800 text-[11px] font-black px-2.5 py-1 rounded-full shadow-2xs" title="AI Tự Động Chấm Điểm 14 Tiêu Chí">
+      <div id="statusAI" class="flex flex-shrink-0 items-center gap-1.5 bg-emerald-50 border border-emerald-300 text-emerald-800 text-[11px] font-black px-2 py-1 rounded-full shadow-2xs whitespace-nowrap" title="AI Tự Động Chấm Điểm 14 Tiêu Chí">
         <span class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
         <i class="fa-solid fa-brain text-emerald-600"></i>
         <span id="statusAiText">AI CHẤM: TRỰC TUYẾN (14 TIÊU CHÍ)</span>
       </div>
 
       <!-- 4. Google Meet -->
-      <div id="statusMeet" class="flex items-center gap-1.5 bg-emerald-50 border border-emerald-300 text-emerald-800 text-[11px] font-black px-2.5 py-1 rounded-full shadow-2xs" title="Tự động tạo Link Google Meet Phỏng Vấn & Khóa Lịch 30 phút">
+      <div id="statusMeet" class="flex flex-shrink-0 items-center gap-1.5 bg-emerald-50 border border-emerald-300 text-emerald-800 text-[11px] font-black px-2 py-1 rounded-full shadow-2xs whitespace-nowrap" title="Tự động tạo Link Google Meet Phỏng Vấn & Khóa Lịch 30 phút">
         <span class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
         <i class="fa-solid fa-video text-emerald-600"></i>
         <span>LỊCH MEET: TRỰC TUYẾN</span>
       </div>
 
       <!-- 5. Zalo Bot -->
-      <div id="statusZalo" class="flex items-center gap-1.5 bg-emerald-50 border border-emerald-300 text-emerald-800 text-[11px] font-black px-2.5 py-1 rounded-full shadow-2xs" title="Cổng gửi tin nhắn Zalo Bot / Zalo OA Tự Động">
+      <div id="statusZalo" class="flex flex-shrink-0 items-center gap-1.5 bg-emerald-50 border border-emerald-300 text-emerald-800 text-[11px] font-black px-2 py-1 rounded-full shadow-2xs whitespace-nowrap" title="Cổng gửi tin nhắn Zalo Bot / Zalo OA Tự Động">
         <span id="statusZaloDot" class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
         <i class="fa-solid fa-paper-plane text-emerald-600"></i>
         <span id="statusZaloText">BOT ZALO: TRỰC TUYẾN</span>
       </div>
 
       <!-- 6. Online Socket -->
-      <div id="statusOnline" class="flex items-center gap-1.5 bg-emerald-500 text-white text-[11px] font-black px-2.5 py-1 rounded-full shadow-xs" title="Trạng thái kết nối Realtime Socket.IO">
+      <div id="statusOnline" class="flex flex-shrink-0 items-center gap-1.5 bg-emerald-500 text-white text-[11px] font-black px-2 py-1 rounded-full shadow-xs whitespace-nowrap" title="Trạng thái kết nối Realtime Socket.IO">
         <span class="w-2 h-2 bg-white rounded-full animate-ping"></span>
         <i class="fa-solid fa-wifi"></i>
         <span id="statusOnlineText">TRỰC TUYẾN</span>
