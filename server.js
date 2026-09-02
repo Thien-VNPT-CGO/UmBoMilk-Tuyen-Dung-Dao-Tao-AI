@@ -3652,6 +3652,220 @@ app.post('/api/schedules/auto-official', authMiddleware, roleCheck(['Admin','HR'
   });
 });
 
+// ============ WORKFLOW: OFF -> AI DRAFT TUẦN SAU -> HR DUYỆT -> GỬI NV ============
+function getNextMonday(d=new Date()){
+  const curMon = getMonday(d);
+  const next = new Date(curMon); next.setDate(curMon.getDate()+7);
+  return next;
+}
+function getNextWeekStartStr(){
+  const nextMon = getNextMonday();
+  const y=nextMon.getFullYear(); const m=String(nextMon.getMonth()+1).padStart(2,'0'); const d=String(nextMon.getDate()).padStart(2,'0');
+  return `${y}-${m}-${d}`;
+}
+// Generate draft tuần sau (AI) - tôn trọng OFF đã đăng ký, không trùng cùng CN cùng ca, min 12 realtime
+async function generateNextWeekDraft(triggerBy='SYSTEM'){
+  const nextWeekStart = getNextWeekStartStr();
+  const nextMon = getNextMonday();
+  const officials = db.employees.filter(e=> e.status==='OFFICIAL' || e.type==='OFFICIAL');
+  if(officials.length===0) return { error:'Không có NV chính thức' };
+  // Kiểm tra đã có draft tuần sau chưa
+  const existingDrafts = db.schedules.filter(s=> s.weekStart===nextWeekStart && s.approvalStatus==='PENDING_APPROVAL');
+  if(existingDrafts.length>0) return { alreadyExists:true, weekStart: nextWeekStart, count: existingDrafts.length };
+
+  // Lấy OFF đã duyệt cho tuần sau
+  const nextWeekDates = []; for(let i=0;i<7;i++){ const cur=new Date(nextMon); cur.setDate(nextMon.getDate()+i); const y=cur.getFullYear(); const m=String(cur.getMonth()+1).padStart(2,'0'); const d=String(cur.getDate()).padStart(2,'0'); nextWeekDates.push(`${y}-${m}-${d}`); }
+  const offMap = {}; // employeeId -> Set of OFF dates
+  db.offRequests.filter(r=> r.status==='APPROVED').forEach(r=>{
+    r.dates.forEach(date=>{
+      if(nextWeekDates.includes(date)){
+        if(!offMap[r.employeeId]) offMap[r.employeeId]=new Set();
+        offMap[r.employeeId].add(date);
+      }
+    });
+  });
+
+  // Group cùng CN cùng ca
+  const groupMap={}; officials.forEach(emp=>{ const k=`${emp.branchId}_${emp.shift}`; if(!groupMap[k]) groupMap[k]=[]; groupMap[k].push(emp); });
+  const empDayStatus={}; officials.forEach(emp=> empDayStatus[emp.employeeId]={});
+
+  // Round-robin cho nhóm >1, tôn trọng OFF
+  for(const key in groupMap){
+    const group = groupMap[key];
+    if(group.length<=1) continue;
+    const workCount={}; group.forEach(e=> workCount[e.employeeId]=0);
+    for(const dateStr of nextWeekDates){
+      // Những NV đã OFF theo đăng ký thì không xét
+      const available = group.filter(emp=> !(offMap[emp.employeeId] && offMap[emp.employeeId].has(dateStr)));
+      if(available.length===0){
+        // Tất cả đều OFF -> tất cả OFF
+        group.forEach(emp=> empDayStatus[emp.employeeId][dateStr]='OFF');
+        continue;
+      }
+      if(available.length===1){
+        const sole = available[0];
+        group.forEach(emp=> empDayStatus[emp.employeeId][dateStr] = (emp.employeeId===sole.employeeId) ? 'WORKING' : 'OFF');
+        workCount[sole.employeeId]++;
+        continue;
+      }
+      // Chọn NV ít ngày nhất trong available
+      let chosen=available[0]; let min=workCount[chosen.employeeId];
+      for(const emp of available){ if(workCount[emp.employeeId] < min){ min=workCount[emp.employeeId]; chosen=emp; } }
+      group.forEach(emp=>{
+        if(offMap[emp.employeeId] && offMap[emp.employeeId].has(dateStr)){
+          empDayStatus[emp.employeeId][dateStr]='OFF';
+        } else {
+          empDayStatus[emp.employeeId][dateStr] = (emp.employeeId===chosen.employeeId) ? 'WORKING' : 'OFF';
+        }
+      });
+      workCount[chosen.employeeId]++;
+    }
+  }
+  // Nhóm size 1: tôn trọng OFF, còn lại WORKING (trừ CN nếu không OFF thì WORKING)
+  officials.forEach(emp=>{
+    const k=`${emp.branchId}_${emp.shift}`;
+    if(groupMap[k].length>1) return;
+    for(const dateStr of nextWeekDates){
+      if(offMap[emp.employeeId] && offMap[emp.employeeId].has(dateStr)){
+        empDayStatus[emp.employeeId][dateStr]='OFF';
+      } else {
+        // Mặc định WORKING, trừ CN nếu muốn nghỉ nhưng vẫn đảm bảo min12 nên cho WORKING
+        empDayStatus[emp.employeeId][dateStr]='WORKING';
+      }
+    }
+  });
+
+  // Realtime validate min 12 cho tháng chứa tuần sau
+  const targetMonth = nextWeekStart.slice(0,7);
+  const violations=[];
+  officials.forEach(emp=>{
+    const stats = getOfficialMonthlyStats(emp.employeeId, targetMonth);
+    // Tính thêm draft tuần sau
+    const draftWorkingInMonth = nextWeekDates.filter(d=> d.startsWith(targetMonth) && empDayStatus[emp.employeeId][d]==='WORKING').length;
+    const totalWorking = (stats.scheduledWorking||0) + draftWorkingInMonth;
+    // Nếu đã có schedule cho tuần sau cũ thì trừ ra? Đơn giản: kiểm tra tổng sau khi thêm
+    // Đếm lại tổng từ schedules hiện tại + draft
+    let currentScheduledInMonth = 0;
+    db.schedules.filter(s=> s.employeeId===emp.employeeId).forEach(s=>{
+      s.days.forEach(day=>{
+        if(day.date.startsWith(targetMonth) && day.status==='WORKING') currentScheduledInMonth++;
+      });
+    });
+    // Nếu draft thay thế tuần sau thì không double count tuần cũ, nên tính lại
+    const existingNextWeek = db.schedules.find(s=> s.employeeId===emp.employeeId && s.weekStart===nextWeekStart);
+    let existingNextWeekWorking = 0;
+    if(existingNextWeek) existingNextWeekWorking = existingNextWeek.days.filter(d=> d.date.startsWith(targetMonth) && d.status==='WORKING').length;
+    const projected = currentScheduledInMonth - existingNextWeekWorking + draftWorkingInMonth;
+    if(projected <12) violations.push({ employeeId: emp.employeeId, name: emp.name, projected, need: 12-projected });
+  });
+
+  // Tạo schedules draft PENDING_APPROVAL
+  for(const emp of officials){
+    const days=[];
+    for(let i=0;i<7;i++){
+      const cur=new Date(nextMon); cur.setDate(nextMon.getDate()+i);
+      const y=cur.getFullYear(); const m=String(cur.getMonth()+1).padStart(2,'0'); const d=String(cur.getDate()).padStart(2,'0');
+      const dateStr=`${y}-${m}-${d}`;
+      const status = empDayStatus[emp.employeeId][dateStr] || 'WORKING';
+      days.push({ date: dateStr, dayName: ['T2','T3','T4','T5','T6','T7','CN'][i], shift: emp.shift, status, substituteFor: null });
+    }
+    db.schedules.push({ id: uuidv4(), employeeId: emp.employeeId, weekStart: nextWeekStart, days, version:1, updated_at: new Date().toISOString(), approvalStatus:'PENDING_APPROVAL', generatedBy: triggerBy, generatedAt: new Date().toISOString() });
+  }
+  saveDB();
+  io.emit('schedules:update', db.schedules);
+  io.emit('schedules:draftReady', { weekStart: nextWeekStart, count: officials.length });
+  audit(triggerBy,'GENERATE_DRAFT_NEXT_WEEK','SCHEDULE', { weekStart: nextWeekStart }, { officials: officials.length, violations }, 'SYSTEM');
+  return { success:true, weekStart: nextWeekStart, count: officials.length, violations, nextWeekDates };
+}
+
+// API: HR/Admin xem draft tuần sau + OFF đăng ký + AI validate
+app.get('/api/schedules/next-week', authMiddleware, (req,res)=>{
+  const nextWeekStart = getNextWeekStartStr();
+  const drafts = db.schedules.filter(s=> s.weekStart===nextWeekStart && s.approvalStatus==='PENDING_APPROVAL');
+  const nextMon = getNextMonday();
+  const nextWeekDates=[]; for(let i=0;i<7;i++){ const cur=new Date(nextMon); cur.setDate(nextMon.getDate()+i); const y=cur.getFullYear(); const m=String(cur.getMonth()+1).padStart(2,'0'); const d=String(cur.getDate()).padStart(2,'0'); nextWeekDates.push(`${y}-${m}-${d}`); }
+  const offForNextWeek = db.offRequests.filter(r=> r.dates && r.dates.some(d=> nextWeekDates.includes(d)));
+  // Realtime check
+  const officials = db.employees.filter(e=> e.status==='OFFICIAL' || e.type==='OFFICIAL');
+  const checks = officials.map(emp=>{
+    const stats = getOfficialMonthlyStats(emp.employeeId, nextWeekStart.slice(0,7));
+    const draft = drafts.find(d=> d.employeeId===emp.employeeId);
+    const draftWorking = draft ? draft.days.filter(d=> d.status==='WORKING').length : 0;
+    return { employeeId: emp.employeeId, name: emp.name, branchId: emp.branchId, shift: emp.shift, draftWorking, scheduledWorking: stats.scheduledWorking, min12Compliant: (stats.scheduledWorking + draftWorking) >=12 };
+  });
+  res.json({ weekStart: nextWeekStart, nextWeekDates, drafts, offRequests: offForNextWeek, checks, needApproval: drafts.length>0 });
+});
+
+// API: HR/Admin bấm duyệt lịch tuần sau -> cập nhật chính thức và gửi đến NV
+app.post('/api/schedules/approve-next-week', authMiddleware, roleCheck(['Admin','HR']), (req,res)=>{
+  const nextWeekStart = getNextWeekStartStr();
+  const drafts = db.schedules.filter(s=> s.weekStart===nextWeekStart && s.approvalStatus==='PENDING_APPROVAL');
+  if(drafts.length===0) return res.status(400).json({ error:'Không có lịch draft tuần sau để duyệt. Hãy đợi AI tự động tạo sau khung OFF (T7 15:00) hoặc gọi /generate-next-week-draft' });
+  // Kiểm tra lại ràng buộc realtime
+  const officials = db.employees.filter(e=> e.status==='OFFICIAL' || e.type==='OFFICIAL');
+  const violations=[];
+  drafts.forEach(d=>{
+    const emp = officials.find(e=> e.employeeId===d.employeeId);
+    const stats = getOfficialMonthlyStats(emp.employeeId, nextWeekStart.slice(0,7));
+    const draftWorking = d.days.filter(day=> day.status==='WORKING').length;
+    if(stats.scheduledWorking + draftWorking <12) violations.push({ employeeId: emp.employeeId, name: emp.name, need: 12 - (stats.scheduledWorking + draftWorking) });
+  });
+  // Realtime check - cảnh báo nhưng vẫn cho duyệt (HR quyết định), chỉ chặn nếu force=false và violations nghiêm trọng
+  let warning = null;
+  if(violations.length>0){
+    warning = `Cảnh báo: ${violations.length} NV chưa đạt min 12 ngày/tháng (cần thêm ${violations.map(v=> v.need).join(', ')} ngày) - vẫn cho duyệt, HR cần theo dõi`;
+    console.warn(`[APPROVE] Min12 warning:`, violations);
+    // Nếu HR không force và muốn chặn thì có thể return 400, nhưng hiện cho phép duyệt với warning để linh hoạt tuần đầu tháng
+    // if(!req.body.force) return res.status(400).json({ error:'Chưa đạt min 12', violations, hint:'Dùng force:true để duyệt' });
+  }
+  // Duyệt: chuyển PENDING -> APPROVED, xóa draft cũ nếu có, gửi thông báo
+  drafts.forEach(d=>{
+    d.approvalStatus='APPROVED';
+    d.approvedBy = req.user.username;
+    d.approvedAt = new Date().toISOString();
+    d.version = (d.version||1)+1;
+    // Tạo notification cho NV
+    const notif = { id: uuidv4(), to: d.employeeId, type:'SCHEDULE_APPROVED', title: `Lịch tuần sau ${nextWeekStart} đã được duyệt`, content: `Lịch làm việc tuần ${nextWeekStart} của bạn đã được HR duyệt. Vui lòng kiểm tra Web App Nhân viên.`, createdAt: new Date().toISOString(), read:false };
+    db.notifications.push(notif);
+    // Zalo record
+    const emp = db.employees.find(e=> e.employeeId===d.employeeId);
+    if(emp){
+      const zr = { id: uuidv4(), sent_at: new Date().toISOString(), receiver: emp.phone, type:'SCHEDULE_APPROVED', content: `[ỤM BÒ MILK] Lịch tuần ${nextWeekStart} của ${emp.name} đã duyệt: ${d.days.filter(day=> day.status==='WORKING').map(day=> day.dayName).join(', ')}`, status:'SENT', error:'' };
+      db.zaloRecords.unshift(zr);
+    }
+  });
+  saveDB();
+  io.emit('schedules:update', db.schedules);
+  io.emit('schedules:approved', { weekStart: nextWeekStart, count: drafts.length });
+  io.emit('notifications:update', db.notifications);
+  audit(req.user.username,'APPROVE_NEXT_WEEK_SCHEDULE','SCHEDULE', { weekStart: nextWeekStart, drafts: drafts.length }, { approved: drafts.length, warning }, req.ip);
+  res.json({ success:true, weekStart: nextWeekStart, approved: drafts.length, warning, violations, message:`Đã duyệt lịch tuần sau ${nextWeekStart} cho ${drafts.length} NV và gửi đến Web App Nhân viên${warning ? ' - ' + warning : ''}` });
+});
+
+// API: Trigger thủ công tạo draft (để test hoặc khi OFF xong sớm)
+app.post('/api/schedules/generate-next-week-draft', authMiddleware, roleCheck(['Admin','HR']), async (req,res)=>{
+  const result = await generateNextWeekDraft(req.user.username);
+  if(result.error) return res.status(400).json(result);
+  if(result.alreadyExists) return res.json({ success:true, message:`Draft tuần ${result.weekStart} đã tồn tại (${result.count} NV)`, ...result });
+  res.json(result);
+});
+
+// Auto-trigger sau khung OFF (T7 15:00) - poll mỗi phút
+setInterval(async ()=>{
+  const now = new Date();
+  const day = now.getDay(); // 6 = Thứ 7
+  const hour = now.getHours() + now.getMinutes()/60;
+  // Chỉ chạy đúng 15:00-15:01 Thứ 7
+  if(day===6 && hour>=15 && hour<15.02){
+    const nextWeekStart = getNextWeekStartStr();
+    const hasDraft = db.schedules.some(s=> s.weekStart===nextWeekStart && s.approvalStatus==='PENDING_APPROVAL');
+    if(!hasDraft){
+      console.log(`[AUTO-SCHEDULE] Tới khung OFF xong (T7 15:00), tự động tạo draft tuần sau ${nextWeekStart}`);
+      await generateNextWeekDraft('AUTO_T7_15:00');
+    }
+  }
+}, 60*1000);
+
 // ============ OFF WEEKLY AUTO APPROVE ============
 app.get('/api/off-requests', (req,res)=>{
   const { employeeId, status } = req.query;
