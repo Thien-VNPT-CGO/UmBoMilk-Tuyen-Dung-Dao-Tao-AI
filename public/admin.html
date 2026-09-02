@@ -70,7 +70,7 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
       <img src="/images/logo.png" alt="Ụm Bò Milk" class="w-9 h-9 rounded-xl object-contain bg-white p-1 shadow">
       <div class="hidden sm:block">
         <div class="font-black text-pink-900 leading-none text-sm">ỤM BÒ MILK • HR ADMIN</div>
-        <div class="text-[11px] font-semibold text-pink-600 flex items-center gap-2"><span class="w-2 h-2 bg-pink-500 rounded-full animate-pulse inline-block"></span>Realtime • <span id="headerBranch">CN2 - 261 Tô Hiến Thành</span></div>
+        <div class="text-[11px] font-semibold text-pink-600 flex items-center gap-2"><span class="w-2 h-2 bg-pink-500 rounded-full animate-pulse inline-block"></span>Realtime • <span id="headerBranch">Số 10 Đặng Thai Mai, P. Phú Nhuận, TP.Hồ Chí Minh</span></div>
       </div>
     </div>
     <!-- Realtime Live System Status Indicators (6 Services) - HIỂN THỊ ĐẦY ĐỦ -->
@@ -275,7 +275,7 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
               <select id="filterInterviewBranch" class="px-3 py-2 rounded-xl border border-pink-200 text-xs font-bold" onchange="renderInterviewsTable()">
                 <option value="">Tất cả Chi nhánh</option>
                 <option value="CN1">CN1 - 130 Vạn kiếp</option>
-                <option value="CN2">CN2 - 261 Tô Hiến Thành</option>
+                <option value="CN2">CN2 - Số 10 Đặng Thai Mai</option>
                 <option value="CN3">CN3 - 120 Hoàng Diệu 2</option>
                 <option value="CN4">CN4 - 111 Tôn Đản</option>
               </select>
@@ -320,7 +320,7 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
             <select id="empBranchFilter" class="px-3.5 py-2.5 rounded-2xl bg-white/20 hover:bg-white/25 border border-white/35 text-white font-bold text-xs backdrop-blur-md focus:bg-rose-950 focus:outline-none transition shadow-xs" onchange="pagination.employees.page=1; renderEmployeesStore()">
               <option value="" class="bg-rose-950 text-white">Tất cả Chi nhánh</option>
               <option value="CN1" class="bg-rose-950 text-white">CN1 - 130 Vạn kiếp</option>
-              <option value="CN2" class="bg-rose-950 text-white">CN2 - 261 Tô Hiến Thành</option>
+              <option value="CN2" class="bg-rose-950 text-white">CN2 - Số 10 Đặng Thai Mai</option>
               <option value="CN3" class="bg-rose-950 text-white">CN3 - 120 Hoàng Diệu 2</option>
               <option value="CN4" class="bg-rose-950 text-white">CN4 - 111 Tôn Đản</option>
             </select>
@@ -424,7 +424,7 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
         <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
           <h2 class="text-xl font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-calendar-days text-pink-500"></i> Lịch làm việc <span class="text-xs font-bold bg-pink-100 text-pink-700 px-2 py-1 rounded-full border border-pink-200">T2 → CN • 5 nhóm</span></h2>
           <div class="flex gap-2 items-center">
-            <select id="scheduleBranch" class="px-3 py-2 rounded-xl border border-pink-200 text-xs font-bold focus:border-pink-400 focus:ring-2 focus:ring-pink-100 outline-none" onchange="loadSchedules()"><option value="">Tất cả CN</option><option value="CN1">CN1 - 130 Vạn kiếp</option><option value="CN2">CN2 - 261 Tô Hiến Thành</option><option value="CN3">CN3 - 120 Hoàng Diệu 2</option><option value="CN4">CN4 - 111 Tôn Đản</option></select>
+            <select id="scheduleBranch" class="px-3 py-2 rounded-xl border border-pink-200 text-xs font-bold focus:border-pink-400 focus:ring-2 focus:ring-pink-100 outline-none" onchange="loadSchedules()"><option value="">Tất cả CN</option><option value="CN1">CN1 - 130 Vạn kiếp</option><option value="CN2">CN2 - Số 10 Đặng Thai Mai</option><option value="CN3">CN3 - 120 Hoàng Diệu 2</option><option value="CN4">CN4 - 111 Tôn Đản</option></select>
             <button onclick="changeScheduleWeek(-7)" class="px-3 py-2 rounded-xl bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white text-xs font-bold transition flex items-center gap-1 shadow-2xs cursor-pointer" title="Xem lịch tuần trước">
               <i class="fa-solid fa-chevron-left"></i> Tuần trước
             </button>
@@ -478,7 +478,7 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
           <h2 class="text-xl font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-camera text-pink-500"></i> Record điểm danh</h2>
           <div class="flex gap-2">
             <input id="attDate" type="date" class="px-3 py-2 rounded-xl border border-pink-200 text-xs">
-            <select id="attBranch" class="px-3 py-2 rounded-xl border border-pink-200 text-xs font-bold"><option value="">Tất cả CN</option><option value="CN1">CN1 - 130 Vạn kiếp</option><option value="CN2">CN2 - 261 Tô Hiến Thành</option><option value="CN3">CN3 - 120 Hoàng Diệu 2</option><option value="CN4">CN4 - 111 Tôn Đản</option></select>
+            <select id="attBranch" class="px-3 py-2 rounded-xl border border-pink-200 text-xs font-bold"><option value="">Tất cả CN</option><option value="CN1">CN1 - 130 Vạn kiếp</option><option value="CN2">CN2 - Số 10 Đặng Thai Mai</option><option value="CN3">CN3 - 120 Hoàng Diệu 2</option><option value="CN4">CN4 - 111 Tôn Đản</option></select>
             <button onclick="renderAttendances()" class="px-4 py-2 rounded-xl bg-gradient-to-r from-pink-500 to-rose-500 text-white text-xs font-bold shadow">Lọc</button>
           </div>
         </div>
@@ -507,7 +507,7 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
           <h2 class="text-xl font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-file-invoice text-pink-500"></i> Báo cáo chấm công <span class="text-xs font-bold bg-white border border-pink-200 px-2 py-1 rounded-full text-pink-600">Kế toán • HR • Dữ liệu tính lương</span></h2>
           <div class="flex gap-2 items-center">
             <input id="reportMonth" type="month" class="px-3 py-2 rounded-xl border border-pink-200 text-xs font-bold">
-            <select id="reportBranch" class="px-3 py-2 rounded-xl border border-pink-200 text-xs font-bold"><option value="">Tất cả CN</option><option value="CN1">CN1 - 130 Vạn kiếp</option><option value="CN2">CN2 - 261 Tô Hiến Thành</option><option value="CN3">CN3 - 120 Hoàng Diệu 2</option><option value="CN4">CN4 - 111 Tôn Đản</option></select>
+            <select id="reportBranch" class="px-3 py-2 rounded-xl border border-pink-200 text-xs font-bold"><option value="">Tất cả CN</option><option value="CN1">CN1 - 130 Vạn kiếp</option><option value="CN2">CN2 - Số 10 Đặng Thai Mai</option><option value="CN3">CN3 - 120 Hoàng Diệu 2</option><option value="CN4">CN4 - 111 Tôn Đản</option></select>
             <button onclick="loadReportAll()" class="px-4 py-2 rounded-xl bg-gradient-to-r from-pink-500 to-rose-500 text-white text-xs font-black shadow">Xem báo cáo</button>
             <button id="reportResetAllBtn" onclick="resetReportAll()" class="hidden px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-black shadow flex items-center gap-1.5" title="Chỉ Admin - Xoá toàn bộ dữ liệu báo cáo (chấm công) về 0"><i class="fa-solid fa-trash-can"></i> Xoá tất cả</button>
           </div>

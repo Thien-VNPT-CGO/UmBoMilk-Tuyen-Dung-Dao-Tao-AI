@@ -53,7 +53,7 @@ app.use((req,res,next)=>{ req.requestId = uuidv4().slice(0,8); next(); });
 // ============ DEFAULT DATA ============
 const DEFAULT_BRANCHES = [
   { id: 'CN1', address: '130 Vạn kiếp, Phường 3, Quận Bình Thạnh', prefix: 'CN130', name: 'CN1 - 130 Vạn kiếp' },
-  { id: 'CN2', address: '261 Tô Hiến Thành, Phường 12, Quận 10', prefix: 'CN261', name: 'CN2 - 261 Tô Hiến Thành' },
+  { id: 'CN2', address: 'Số 10 Đặng Thai Mai, P. Phú Nhuận, TP.Hồ Chí Minh', prefix: 'CN261', name: 'CN2 - Số 10 Đặng Thai Mai' },
   { id: 'CN3', address: '120 Hoàng Diệu 2, Phường Linh Trung, TP. Thủ Đức', prefix: 'CN120', name: 'CN3 - 120 Hoàng Diệu 2' },
   { id: 'CN4', address: '111 Tôn Đản, Phường 15, Quận 4', prefix: 'CN111', name: 'CN4 - 111 Tôn Đản' }
 ];
