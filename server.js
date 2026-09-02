@@ -72,6 +72,7 @@ const DEFAULT_SETTINGS = {
   googleSheet: {
     spreadsheetId: '1rcqEKraSRhr-Tn9qwlhADlkQUei8j65bXeHF_Tmkd38',
     formResponsesSheetId: '1rcqEKraSRhr-Tn9qwlhADlkQUei8j65bXeHF_Tmkd38',
+    formSheetName: 'FROM_NHAN_VIEN',
     targetDatabaseSpreadsheetId: '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w',
     targetWebhookUrl: 'https://script.google.com/macros/s/AKfycbz_umbomilk_apps_script/exec',
     secret: 'umbomilk_secret_2026',
@@ -2184,10 +2185,11 @@ function parseCSV(text) {
   return lines;
 }
 
-function syncLiveGoogleSheetCSV(spreadsheetId) {
+function syncLiveGoogleSheetCSV(spreadsheetId, sheetName) {
   return new Promise((resolve) => {
-    const sid = spreadsheetId || db.settings.googleSheet.spreadsheetId || '1rcqEKraSRhr-Tn9qwlhADlkQUei8j65bXeHF_Tmkd38';
-    const csvUrl = `https://docs.google.com/spreadsheets/d/${sid}/gviz/tq?tqx=out:csv`;
+    const sid = spreadsheetId || db.settings.googleSheet.formResponsesSheetId || db.settings.googleSheet.spreadsheetId || '1rcqEKraSRhr-Tn9qwlhADlkQUei8j65bXeHF_Tmkd38';
+    const sName = sheetName || db.settings.googleSheet.formSheetName || 'FROM_NHAN_VIEN';
+    const csvUrl = `https://docs.google.com/spreadsheets/d/${sid}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sName)}`;
     https.get(csvUrl, (res) => {
       let raw = '';
       res.on('data', chunk => raw += chunk);
@@ -2290,6 +2292,57 @@ app.post('/api/recruitment/sync-form', authMiddleware, async (req,res)=>{
   io.emit('applicants:update', db.applicants);
   io.emit('sync:update', db.syncQueue);
   res.json({ added, addedForm:0, total: db.applicants.length, source:'SHEET_FORM_LIVE', spreadsheetId: formSid, targetDatabaseSpreadsheetId: targetDbId, note: 'Form Sheet (1rcq) là nguồn vào, HR mock lên web, sau đó xuất 20 cột ra Database Sheet (17iXM) qua webhook' });
+});
+
+// Ràng buộc: Xóa tất cả sheet còn lại trong file Form (1rcq), chỉ giữ FROM_NHAN_VIEN
+app.post('/api/sheets/cleanup-form', authMiddleware, roleCheck(['Admin']), async (req,res)=>{
+  const formSid = db.settings.googleSheet.formResponsesSheetId || db.settings.googleSheet.spreadsheetId;
+  const keepSheet = db.settings.googleSheet.formSheetName || 'FROM_NHAN_VIEN';
+  const token = await getGoogleAccessToken();
+  if(!token) return res.status(400).json({ error: 'Chưa cấu hình Service Account (privateKey/serviceAccountEmail) - không thể gọi Google Sheets API. Hãy dán Private Key qua UI hoặc set GOOGLE_PRIVATE_KEY trên Render.' });
+  try{
+    const metaRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${formSid}`, { headers:{ Authorization:`Bearer ${token}` }});
+    const meta = await metaRes.json();
+    if(!meta.sheets) return res.status(502).json({ error: 'Không lấy được danh sách sheets', raw: meta });
+    const allSheets = meta.sheets.map(s=>({ title: s.properties.title, sheetId: s.properties.sheetId }));
+    const toDelete = allSheets.filter(s=> s.title !== keepSheet);
+    if(toDelete.length===0) return res.json({ success:true, message:`Chỉ còn sheet duy nhất ${keepSheet}, không cần xóa`, keepSheet, allSheets });
+    const requests = toDelete.map(s=>({ deleteSheet:{ sheetId: s.sheetId }}));
+    const delRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${formSid}:batchUpdate`, {
+      method:'POST', headers:{ Authorization:`Bearer ${token}`, 'Content-Type':'application/json'},
+      body: JSON.stringify({ requests })
+    });
+    const delData = await delRes.json();
+    if(delData.error) return res.status(502).json({ error: delData.error.message, toDelete });
+    audit(req.user.username,'CLEANUP_FORM_SHEETS','SHEET', { before: allSheets.map(s=>s.title) }, { after: [keepSheet] }, req.ip);
+    res.json({ success:true, deleted: toDelete.map(s=>s.title), keepSheet, deletedCount: toDelete.length });
+  }catch(e){
+    res.status(500).json({ error: e.message });
+  }
+});
+app.get('/api/sheets/form-info', authMiddleware, async (req,res)=>{
+  const formSid = db.settings.googleSheet.formResponsesSheetId || db.settings.googleSheet.spreadsheetId;
+  const keepSheet = db.settings.googleSheet.formSheetName || 'FROM_NHAN_VIEN';
+  // Thử lấy qua CSV để biết sheet có tồn tại không (không cần auth)
+  const csvUrl = `https://docs.google.com/spreadsheets/d/${formSid}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(keepSheet)}`;
+  let csvOk = false, rowCount = 0;
+  try{
+    const r = await fetch(csvUrl);
+    const txt = await r.text();
+    csvOk = r.ok && txt.includes('Tên Bạn là');
+    if(csvOk) rowCount = txt.split('\n').length -1;
+  }catch(e){}
+  // Nếu có token thì lấy danh sách sheets chi tiết
+  let sheets = [];
+  const token = await getGoogleAccessToken();
+  if(token){
+    try{
+      const metaRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${formSid}`, { headers:{ Authorization:`Bearer ${token}` }});
+      const meta = await metaRes.json();
+      sheets = (meta.sheets||[]).map(s=> s.properties.title);
+    }catch(e){}
+  }
+  res.json({ formSid, keepSheet, csvOk, rowCount, sheets, note: 'Sheet nộp Form (1rcq) - HR chỉ đọc FROM_NHAN_VIEN, các sheet khác sẽ bị xóa khi gọi /cleanup-form' });
 });
 
 // ============ KEYS ============
