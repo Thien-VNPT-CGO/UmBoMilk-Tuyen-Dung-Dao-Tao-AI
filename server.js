@@ -1235,6 +1235,7 @@ function computeDataHash(applicant) {
 }
 
 async function syncOutboundToMasterDatabaseSheet(applicant) {
+  // RÀNG BUỘC: Chỉ ghi vào Sheet Database chính (17iXM) 20 cột, không ghi vào Sheet nộp Form (1rcq)
   if (!applicant) return;
   const targetId = (db.settings && db.settings.googleSheet && db.settings.googleSheet.targetDatabaseSpreadsheetId) ? db.settings.googleSheet.targetDatabaseSpreadsheetId : '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w';
   const cfg = (db.settings && db.settings.googleSheet) ? db.settings.googleSheet : {};
@@ -2269,30 +2270,26 @@ function syncLiveGoogleSheetCSV(spreadsheetId) {
   });
 }
 
-// Background auto-polling Google Sheet every 15 seconds - realtime 1:1 cho cả DB + Form responses
+// Background auto-polling: CHỈ ĐỌC Sheet nộp Form (1rcq - nguồn vào), KHÔNG đọc Database (17iXM - nguồn xuất 20 cột)
+// Luồng: Form (1rcq) --CSV--> HR Web App (mock) --AI scoring--> Database (17iXM) 20 cột
 setInterval(async () => {
-  await syncLiveGoogleSheetCSV();
-  const formSid = db.settings.googleSheet.formResponsesSheetId;
-  if(formSid && formSid !== db.settings.googleSheet.spreadsheetId) {
-    await syncLiveGoogleSheetCSV(formSid);
-  }
+  const formSid = db.settings.googleSheet.formResponsesSheetId || db.settings.googleSheet.spreadsheetId;
+  if(formSid) await syncLiveGoogleSheetCSV(formSid);
+  // Không poll targetDatabaseSpreadsheetId - đây là sheet xuất, chỉ ghi qua outbound webhook
 }, 15000);
 
 app.post('/api/recruitment/sync-form', authMiddleware, async (req,res)=>{
   const cfg = db.settings.googleSheet;
-  const sid = cfg.spreadsheetId || '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w';
-  const added = await syncLiveGoogleSheetCSV(sid);
-  // Also sync form responses sheet if configured (để Vercel thấy data từ Form)
-  let addedForm = 0;
-  if(cfg.formResponsesSheetId && cfg.formResponsesSheetId !== sid){
-    addedForm = await syncLiveGoogleSheetCSV(cfg.formResponsesSheetId);
-  }
-  const q = { id: uuidv4(), entity:'APPLICANT', operation:'SYNC_SHEET_REAL', payload:{added, addedForm, spreadsheetId: sid, formResponsesSheetId: cfg.formResponsesSheetId}, version:1, updated_at: new Date().toISOString(), updated_by:req.user.username, source:'SHEET', sync_status:'SYNCED' };
+  // RÀNG BUỘC: Chỉ đọc Sheet nộp Form (1rcq), không đọc Database (17iXM)
+  const formSid = cfg.formResponsesSheetId || cfg.spreadsheetId || '1rcqEKraSRhr-Tn9qwlhADlkQUei8j65bXeHF_Tmkd38';
+  const targetDbId = cfg.targetDatabaseSpreadsheetId || '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w';
+  const added = await syncLiveGoogleSheetCSV(formSid);
+  const q = { id: uuidv4(), entity:'APPLICANT', operation:'SYNC_SHEET_REAL', payload:{added, addedForm:0, spreadsheetId: formSid, targetDatabaseSpreadsheetId: targetDbId}, version:1, updated_at: new Date().toISOString(), updated_by:req.user.username, source:'SHEET_FORM', sync_status:'SYNCED' };
   db.syncQueue.unshift(q);
   saveDB();
   io.emit('applicants:update', db.applicants);
   io.emit('sync:update', db.syncQueue);
-  res.json({ added, addedForm, total: db.applicants.length, source:'SHEET_LIVE_REAL', spreadsheetId: sid, formResponsesSheetId: cfg.formResponsesSheetId });
+  res.json({ added, addedForm:0, total: db.applicants.length, source:'SHEET_FORM_LIVE', spreadsheetId: formSid, targetDatabaseSpreadsheetId: targetDbId, note: 'Form Sheet (1rcq) là nguồn vào, HR mock lên web, sau đó xuất 20 cột ra Database Sheet (17iXM) qua webhook' });
 });
 
 // ============ KEYS ============
