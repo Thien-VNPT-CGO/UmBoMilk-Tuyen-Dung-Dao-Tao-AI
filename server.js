@@ -388,6 +388,37 @@ function getMonday(d){
   date.setHours(0,0,0,0);
   return date;
 }
+function getDaysInMonth(year, month){
+  return new Date(year, month, 0).getDate();
+}
+// Global helper cho lịch 7 ngày (dùng cho cả TRAINING và OFFICIAL)
+function buildFull7DaysForWeek(wStartStr, activeDaysMap, empShift, isTraining = false, startDStr = null){
+  const parts = wStartStr.split('T')[0].split('-').map(Number);
+  const wDate = new Date(parts[0], parts[1] - 1, parts[2]);
+  const dayNames = ['T2','T3','T4','T5','T6','T7','CN'];
+  const days = [];
+  let trialEnd = null;
+  if(isTraining && startDStr){
+    const sp = startDStr.split('T')[0].split('-').map(Number);
+    const trialStart = new Date(sp[0], sp[1] - 1, sp[2]);
+    trialEnd = new Date(trialStart); trialEnd.setDate(trialStart.getDate()+11);
+  }
+  for(let i=0;i<7;i++){
+    const curr = new Date(wDate); curr.setDate(wDate.getDate()+i);
+    const y = curr.getFullYear(); const m = String(curr.getMonth()+1).padStart(2,'0'); const d = String(curr.getDate()).padStart(2,'0');
+    const dateStr = `${y}-${m}-${d}`;
+    if(isTraining && trialEnd && curr > trialEnd){
+      days.push({ date: dateStr, dayName: dayNames[i], shift: '-', status: 'WAITING_OFFICIAL', substituteFor: null });
+      continue;
+    }
+    if(activeDaysMap[dateStr]){
+      days.push({ date: dateStr, dayName: dayNames[i], shift: empShift || 'CA_TRUA', status: 'WORKING', substituteFor: null });
+    } else {
+      days.push({ date: dateStr, dayName: dayNames[i], shift: 'OFF', status: 'OFF', substituteFor: null });
+    }
+  }
+  return days;
+}
 
 loadDB();
 // Override từ Render ENV nếu có (ưu tiên ENV > DB > DEFAULT) - phục vụ deploy Render
@@ -3414,6 +3445,159 @@ app.post('/api/schedules', authMiddleware, (req,res)=>{
   saveDB();
   io.emit('schedules:update', db.schedules);
   res.json(sched);
+});
+
+// ============ AI AUTO SCHEDULE FOR OFFICIAL (Spec: cùng CN cùng ca không trùng + min 12 ngày/tháng) ============
+app.post('/api/schedules/auto-official', authMiddleware, roleCheck(['Admin','HR','Manager']), (req,res)=>{
+  const { month, preview } = req.body; // month: "2026-09" hoặc "2026-09-01", preview=true thì không lưu
+  const targetMonth = month ? month.slice(0,7) : new Date().toISOString().slice(0,7);
+  const [y,m] = targetMonth.split('-').map(Number);
+  const daysInMonth = getDaysInMonth(y,m);
+  const officials = db.employees.filter(e=> e.status==='OFFICIAL' || e.type==='OFFICIAL');
+  if(officials.length===0) return res.status(400).json({ error:'Không có nhân viên chính thức để sắp lịch' });
+
+  // Group cùng chi nhánh cùng ca
+  const groupMap = {}; // key = branchId_shift
+  officials.forEach(emp=>{ const k=`${emp.branchId}_${emp.shift}`; if(!groupMap[k]) groupMap[k]=[]; groupMap[k].push(emp); });
+
+  // Chuẩn bị map ngày -> status cho từng NV
+  const empDayStatus = {}; // employeeId -> { '2026-09-01': 'WORKING'/'OFF' }
+  officials.forEach(emp=> empDayStatus[emp.employeeId]={});
+
+  // 1) Cùng CN cùng ca + >1 NV: không trùng ngày (mỗi ngày chỉ 1 NV WORKING, còn lại OFF)
+  for(const key in groupMap){
+    const group = groupMap[key];
+    if(group.length <=1) continue; // để xử lý ở bước 2
+    // Round-robin theo số ngày đã làm (least-worked first)
+    const workCount = {}; group.forEach(emp=> workCount[emp.employeeId]=0);
+    for(let d=1; d<=daysInMonth; d++){
+      const dateStr = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      // Chọn NV có workCount nhỏ nhất
+      let chosen = group[0];
+      let min = workCount[chosen.employeeId];
+      for(const emp of group){ if(workCount[emp.employeeId] < min){ min=workCount[emp.employeeId]; chosen=emp; } }
+      // Gán
+      group.forEach(emp=>{
+        empDayStatus[emp.employeeId][dateStr] = (emp.employeeId===chosen.employeeId) ? 'WORKING' : 'OFF';
+      });
+      workCount[chosen.employeeId]++;
+    }
+  }
+
+  // 2) Cùng CN khác ca hoặc khác CN khác ca (và các nhóm size 1): đảm bảo min 12 ngày
+  // Những NV chưa được gán ở bước 1 (nhóm size 1) hoặc nhóm đã gán nhưng cần đảm bảo min 12
+  const remaining = officials.filter(emp=>{
+    const k=`${emp.branchId}_${emp.shift}`;
+    return groupMap[k].length===1;
+  });
+  // Với nhóm size 1: cho làm 6 ngày/tuần, nghỉ CN để đủ 12+ (khoảng 26 ngày/tháng)
+  remaining.forEach(emp=>{
+    for(let d=1; d<=daysInMonth; d++){
+      const dateStr = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const dayOfWeek = new Date(y, m-1, d).getDay(); // 0 CN, 6 T7
+      // Nghỉ CN hàng tuần để có OFF, còn lại WORKING
+      empDayStatus[emp.employeeId][dateStr] = (dayOfWeek===0) ? 'OFF' : 'WORKING';
+    }
+  });
+  // Kiểm tra lại nhóm >1 đã đủ 12 chưa (với 30 ngày và 2 NV, mỗi NV ~15 ngày là đủ)
+  // Nếu nhóm >2 mà có NV <12 thì điều chỉnh: bù thêm ngày cho NV thiếu bằng cách đổi OFF->WORKING ở ngày ít quan trọng
+  for(const key in groupMap){
+    const group = groupMap[key];
+    if(group.length<=1) continue;
+    group.forEach(emp=>{
+      const workingDays = Object.values(empDayStatus[emp.employeeId]).filter(s=>s==='WORKING').length;
+      if(workingDays <12){
+        // Cần bù
+        let need = 12 - workingDays;
+        for(let d=1; d<=daysInMonth && need>0; d++){
+          const dateStr = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+          if(empDayStatus[emp.employeeId][dateStr]==='OFF'){
+            // Tìm ngày mà NV đang WORKING hiện tại có thể nhường (chọn ngày mà NV đó đã làm nhiều)
+            // Đơn giản: đổi OFF->WORKING, và cho 1 NV khác đang WORKING ngày đó thành OFF (giữ 1 WORKING/ngày)
+            const otherWorking = group.find(o=> o.employeeId!==emp.employeeId && empDayStatus[o.employeeId][dateStr]==='WORKING');
+            if(otherWorking){
+              const otherCount = Object.values(empDayStatus[otherWorking.employeeId]).filter(s=>s==='WORKING').length;
+              if(otherCount >12){
+                empDayStatus[emp.employeeId][dateStr]='WORKING';
+                empDayStatus[otherWorking.employeeId][dateStr]='OFF';
+                need--;
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+
+  // Realtime validate: mỗi NV phải >=12 ngày
+  const violations = [];
+  officials.forEach(emp=>{
+    const workingDays = Object.values(empDayStatus[emp.employeeId]).filter(s=>s==='WORKING').length;
+    if(workingDays <12) violations.push({ employeeId: emp.employeeId, name: emp.name, branchId: emp.branchId, shift: emp.shift, workingDays, need: 12-workingDays });
+  });
+  if(violations.length>0 && !preview){
+    // Nếu preview thì trả về violations để HR xem, không chặn
+    console.warn(`[AUTO-SCHEDULE] Violations min 12:`, violations);
+  }
+
+  // Chuyển empDayStatus thành weekly schedules (weekStart Mon -> 7 days)
+  if(!preview){
+    // Xóa lịch cũ của tháng đó cho các NV chính thức (để tránh trùng)
+    const monthPrefix = targetMonth;
+    db.schedules = db.schedules.filter(s=>{
+      const isOfficial = officials.some(e=> e.employeeId===s.employeeId);
+      if(!isOfficial) return true;
+      // Giữ lại schedule không thuộc tháng target
+      return !s.days.some(d=> d.date.startsWith(monthPrefix));
+    });
+    // Tạo weekly schedules
+    const weekMapByEmp = {}; // employeeId -> { weekStart: { dateStr: status } }
+    officials.forEach(emp=>{
+      for(let d=1; d<=daysInMonth; d++){
+        const dateStr = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+        const status = empDayStatus[emp.employeeId][dateStr];
+        const monday = getMonday(new Date(y, m-1, d));
+        const wy = monday.getFullYear(); const wm = String(monday.getMonth()+1).padStart(2,'0'); const wd = String(monday.getDate()).padStart(2,'0');
+        const weekStart = `${wy}-${wm}-${wd}`;
+        if(!weekMapByEmp[emp.employeeId]) weekMapByEmp[emp.employeeId]={};
+        if(!weekMapByEmp[emp.employeeId][weekStart]) weekMapByEmp[emp.employeeId][weekStart]={};
+        weekMapByEmp[emp.employeeId][weekStart][dateStr]=status;
+      }
+    });
+    for(const empId in weekMapByEmp){
+      const emp = officials.find(e=> e.employeeId===empId);
+      for(const weekStart in weekMapByEmp[empId]){
+        const activeMap = weekMapByEmp[empId][weekStart];
+        const days = buildFull7DaysForWeek(weekStart, activeMap, emp.shift);
+        // Ghi đè status từ empDayStatus (buildFull7DaysForWeek mặc định OFF nếu không có trong activeMap)
+        days.forEach(day=>{
+          if(empDayStatus[empId][day.date]){
+            day.status = empDayStatus[empId][day.date];
+          } else if(!day.date.startsWith(monthPrefix)){
+            // Ngày ngoài tháng target (đầu/cuối tuần lấn sang tháng khác) -> giữ OFF hoặc WORKING theo logic cũ
+            // Để tránh ảnh hưởng tháng khác, set OFF cho ngày ngoài tháng
+            if(!day.date.startsWith(targetMonth)) day.status='OFF';
+          }
+        });
+        db.schedules.push({ id: uuidv4(), employeeId: empId, weekStart, days, version:1, updated_at: new Date().toISOString() });
+      }
+    }
+    saveDB();
+    io.emit('schedules:update', db.schedules);
+    audit(req.user.username,'AUTO_SCHEDULE_OFFICIAL','SCHEDULE', { month: targetMonth, officials: officials.length }, { generated: Object.keys(weekMapByEmp).length, violations }, req.ip);
+  }
+
+  res.json({
+    success: true,
+    month: targetMonth,
+    daysInMonth,
+    officials: officials.length,
+    groups: Object.keys(groupMap).map(k=>({ key:k, count: groupMap[k].length, members: groupMap[k].map(e=>({ name:e.name, branch:e.branchId, shift:e.shift })) })),
+    preview: !!preview,
+    violations,
+    empDayStatus: preview ? empDayStatus : undefined,
+    message: preview ? `Preview ${officials.length} NV - kiểm tra ràng buộc` : `Đã auto sắp lịch ${officials.length} NV chính thức cho tháng ${targetMonth} - cùng CN cùng ca không trùng ngày, min 12 ngày/tháng`
+  });
 });
 
 // ============ OFF WEEKLY AUTO APPROVE ============
