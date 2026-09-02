@@ -3265,7 +3265,7 @@ app.get('/api/schedules', (req,res)=>{
     return `${y}-${m}-${d}`;
   };
 
-  // Auto-generate missing schedules for TRAINING employees
+  // Auto-generate missing schedules cho TRAINING và OFFICIAL (fix: OFFICIAL không hiển thị lịch)
   let updated = false;
   db.employees.filter(e => e.status === 'TRAINING' || e.type === 'TRAINING').forEach(emp => {
     const hasSched = db.schedules.some(s => s.employeeId === emp.employeeId);
@@ -3301,6 +3301,26 @@ app.get('/api/schedules', (req,res)=>{
         });
       }
       updated = true;
+    }
+  });
+  // FIX: OFFICIAL chưa có lịch → tạo lịch tuần hiện tại (T2-CN) WORKING
+  const currentMonday = getMonday(new Date());
+  const cy = currentMonday.getFullYear(); const cm = String(currentMonday.getMonth()+1).padStart(2,'0'); const cd = String(currentMonday.getDate()).padStart(2,'0');
+  const currentWeekStart = `${cy}-${cm}-${cd}`;
+  db.employees.filter(e => e.status === 'OFFICIAL' || e.type === 'OFFICIAL').forEach(emp => {
+    const hasCurrentWeek = db.schedules.some(s => s.employeeId === emp.employeeId && s.weekStart === currentWeekStart);
+    if (!hasCurrentWeek) {
+      // Nếu chưa có lịch tuần hiện tại thì tạo, dù đã có lịch tuần khác
+      const days = [];
+      for(let i=0;i<7;i++){
+        const cur = new Date(currentMonday); cur.setDate(currentMonday.getDate()+i);
+        const yy = cur.getFullYear(); const mm = String(cur.getMonth()+1).padStart(2,'0'); const dd = String(cur.getDate()).padStart(2,'0');
+        const dateStr = `${yy}-${mm}-${dd}`;
+        days.push({ date: dateStr, dayName: ['T2','T3','T4','T5','T6','T7','CN'][i], shift: emp.shift, status: 'WORKING', substituteFor: null });
+      }
+      db.schedules.push({ id: uuidv4(), employeeId: emp.employeeId, weekStart: currentWeekStart, days, version:1, updated_at: new Date().toISOString() });
+      updated = true;
+      console.log(`[SCHEDULE] Auto-generated OFFICIAL schedule for ${emp.name} ${emp.employeeId} week ${currentWeekStart}`);
     }
   });
   if (updated) saveDB();
