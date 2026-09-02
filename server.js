@@ -3486,6 +3486,70 @@ app.post('/api/schedules', authMiddleware, (req,res)=>{
     existing.updated_at = new Date().toISOString();
     audit(req.user.username,'UPDATE_SCHEDULE','SCHEDULE',before,existing, req.ip);
     addSyncQueue('SCHEDULE','UPDATE',existing, req.user.username, 'WEB_HR');
+    // TRAINING linh hoạt: HR đổi ca -> auto cập nhật + tự điểm danh (cập nhật)
+    const empForUpdate = db.employees.find(e=> e.employeeId===employeeId);
+    if(empForUpdate && (empForUpdate.type==='TRAINING' || empForUpdate.status==='TRAINING')){
+      const todayStrUp = new Date().toISOString().split('T')[0];
+      days.forEach(day=>{
+        if(day.status==='WORKING'){
+          let att = db.attendances.find(a=> a.employeeId===employeeId && a.date===day.date);
+          const shiftInfo = db.settings.payroll.shifts[day.shift] || DEFAULT_SHIFTS[day.shift] || DEFAULT_SHIFTS['CA_SANG'];
+          if(!att){
+            att = { id: uuidv4(), employeeId, date: day.date, shift: day.shift, branchId: empForUpdate.branchId, checkIn: null, checkOut: null, status: 'NOT_STARTED', violations:[], version:1, updated_at: new Date().toISOString(), sync_status:'PENDING' };
+            if(day.date <= todayStrUp){
+              const now=new Date();
+              att.checkIn={ time: shiftInfo.start, gps: '10.762622,106.660172', address: db.branches.find(b=>b.id===empForUpdate.branchId)?.address || 'Training Auto', image:'', timestamp: now.toISOString(), content:'Điểm danh Vào ca UBM (Training Auto)', drivePath: generateDrivePath({...empForUpdate, shift: day.shift}, day.date, 'CHECK_IN') };
+              att.checkOut={ time: shiftInfo.end, gps: '10.762622,106.660172', address: db.branches.find(b=>b.id===empForUpdate.branchId)?.address || 'Training Auto', image:'', timestamp: now.toISOString(), content:'Điểm danh Ra ca UBM (Training Auto)', drivePath: generateDrivePath({...empForUpdate, shift: day.shift}, day.date, 'CHECK_OUT') };
+              att.status='COMPLETED';
+              addDriveFile(employeeId, day.date, 'CHECK_IN', `Anh_chup_cua_hang.jpg`, { gps: att.checkIn.gps, time: att.checkIn.time });
+              addDriveFile(employeeId, day.date, 'CHECK_IN', `Diem_danh.txt`, { content: `Điểm danh Vào ca UBM (Training Auto) - ${empForUpdate.name} - ${day.date} ${att.checkIn.time}` });
+              addDriveFile(employeeId, day.date, 'CHECK_OUT', `Anh_chup_cua_hang.jpg`, { gps: att.checkOut.gps, time: att.checkOut.time });
+              addDriveFile(employeeId, day.date, 'CHECK_OUT', `Diem_danh.txt`, { content: `Điểm danh Ra ca UBM (Training Auto) - ${empForUpdate.name} - ${day.date} ${att.checkOut.time}` });
+            }
+            att.shift=day.shift;
+            db.attendances.push(att);
+            addSyncQueue('ATTENDANCE','CREATE',att, req.user.username, 'WEB_HR');
+          } else {
+            if(att.shift !== day.shift){
+              const beforeAtt={...att};
+              const newShiftInfo = db.settings.payroll.shifts[day.shift] || DEFAULT_SHIFTS[day.shift] || DEFAULT_SHIFTS['CA_SANG'];
+              att.shift=day.shift;
+              // Cập nhật giờ + drivePath theo ca mới cho Training linh hoạt
+              if(att.checkIn){
+                att.checkIn.time = newShiftInfo.start;
+                att.checkIn.drivePath = generateDrivePath({...empForUpdate, shift: day.shift}, day.date, 'CHECK_IN');
+                att.checkIn.content = `Điểm danh Vào ca UBM (Training Auto - đổi ca ${day.shift})`;
+              }
+              if(att.checkOut){
+                att.checkOut.time = newShiftInfo.end;
+                att.checkOut.drivePath = generateDrivePath({...empForUpdate, shift: day.shift}, day.date, 'CHECK_OUT');
+                att.checkOut.content = `Điểm danh Ra ca UBM (Training Auto - đổi ca ${day.shift})`;
+              }
+              att.version=(att.version||1)+1; att.updated_at=new Date().toISOString();
+              audit(req.user.username,'UPDATE_ATTENDANCE_SHIFT_TRAINING','ATTENDANCE',beforeAtt,att,req.ip);
+              addSyncQueue('ATTENDANCE','UPDATE',att,req.user.username,'WEB_HR');
+              // Cập nhật Drive files cho ca mới
+              addDriveFile(employeeId, day.date, 'CHECK_IN', `Anh_chup_cua_hang.jpg`, { gps: att.checkIn?.gps || '10.762622,106.660172', time: newShiftInfo.start });
+              addDriveFile(employeeId, day.date, 'CHECK_OUT', `Anh_chup_cua_hang.jpg`, { gps: att.checkOut?.gps || '10.762622,106.660172', time: newShiftInfo.end });
+            }
+            if(day.date <= todayStrUp && att.status!=='COMPLETED' && day.status==='WORKING'){
+              const shiftInfo2 = db.settings.payroll.shifts[day.shift] || DEFAULT_SHIFTS[day.shift] || DEFAULT_SHIFTS['CA_SANG'];
+              const now2=new Date();
+              att.checkIn = att.checkIn || { time: shiftInfo2.start, gps: '10.762622,106.660172', address: db.branches.find(b=>b.id===empForUpdate.branchId)?.address || 'Training Auto', image:'', timestamp: now2.toISOString(), content:'Điểm danh Vào ca UBM (Training Auto)', drivePath: generateDrivePath(empForUpdate, day.date, 'CHECK_IN') };
+              att.checkOut = att.checkOut || { time: shiftInfo2.end, gps: '10.762622,106.660172', address: db.branches.find(b=>b.id===empForUpdate.branchId)?.address || 'Training Auto', image:'', timestamp: now2.toISOString(), content:'Điểm danh Ra ca UBM (Training Auto)', drivePath: generateDrivePath(empForUpdate, day.date, 'CHECK_OUT') };
+              att.status='COMPLETED'; addSyncQueue('ATTENDANCE','UPDATE',att,req.user.username,'WEB_HR');
+            }
+            if(day.status==='OFF' && att.status!=='OFF'){ att.status='OFF'; att.checkIn=null; att.checkOut=null; addSyncQueue('ATTENDANCE','UPDATE',att,req.user.username,'WEB_HR'); }
+          }
+        } else if(day.status==='OFF'){
+          const attOff=db.attendances.find(a=> a.employeeId===employeeId && a.date===day.date);
+          if(attOff && attOff.status==='COMPLETED'){ attOff.status='OFF'; attOff.checkIn=null; attOff.checkOut=null; addSyncQueue('ATTENDANCE','UPDATE',attOff,req.user.username,'WEB_HR'); }
+        }
+      });
+      saveDB();
+      io.emit('attendances:update', db.attendances);
+      io.emit('drive:update', db.driveFiles.slice(0,20));
+    }
     saveDB();
     io.emit('schedules:update', db.schedules);
     return res.json(existing);
@@ -3494,6 +3558,80 @@ app.post('/api/schedules', authMiddleware, (req,res)=>{
   db.schedules.push(sched);
   audit(req.user.username,'CREATE_SCHEDULE','SCHEDULE',null,sched, req.ip);
   addSyncQueue('SCHEDULE','CREATE',sched, req.user.username, 'WEB_HR');
+  // TRAINING linh hoạt: HR đổi ca trên lịch -> auto cập nhật + tự điểm danh realtime
+  const empForSched = db.employees.find(e=> e.employeeId===employeeId);
+  if(empForSched && (empForSched.type==='TRAINING' || empForSched.status==='TRAINING')){
+    // Đồng bộ ca linh hoạt: nếu HR set ca khác nhau mỗi ngày thì giữ nguyên, không ghi đè emp.shift cố định
+    // Tự động điểm danh cho TRAINING: với mỗi ngày WORKING đã qua hoặc hôm nay, tạo attendance COMPLETED
+    const todayStr = new Date().toISOString().split('T')[0];
+    days.forEach(day=>{
+      if(day.status==='WORKING'){
+        let att = db.attendances.find(a=> a.employeeId===employeeId && a.date===day.date);
+        const shiftInfo = db.settings.payroll.shifts[day.shift] || DEFAULT_SHIFTS[day.shift] || DEFAULT_SHIFTS['CA_SANG'];
+        if(!att){
+          // Tạo mới
+          att = {
+            id: uuidv4(), employeeId, date: day.date, shift: day.shift, branchId: empForSched.branchId,
+            checkIn: null, checkOut: null, status: 'NOT_STARTED', violations:[], version:1, updated_at: new Date().toISOString(), sync_status:'PENDING'
+          };
+          // Nếu ngày đã qua hoặc hôm nay -> tự động điểm danh COMPLETED (AI auto) - dùng ca linh hoạt per day
+          if(day.date <= todayStr){
+            const now = new Date();
+            att.checkIn = { time: shiftInfo.start, gps: '10.762622,106.660172', address: db.branches.find(b=>b.id===empForSched.branchId)?.address || 'Training Auto', image: '', timestamp: now.toISOString(), content: 'Điểm danh Vào ca UBM (Training Auto)', drivePath: generateDrivePath({...empForSched, shift: day.shift}, day.date, 'CHECK_IN') };
+            att.checkOut = { time: shiftInfo.end, gps: '10.762622,106.660172', address: db.branches.find(b=>b.id===empForSched.branchId)?.address || 'Training Auto', image: '', timestamp: now.toISOString(), content: 'Điểm danh Ra ca UBM (Training Auto)', drivePath: generateDrivePath({...empForSched, shift: day.shift}, day.date, 'CHECK_OUT') };
+            att.status='COMPLETED';
+            // Tạo Drive files cho auto
+            addDriveFile(employeeId, day.date, 'CHECK_IN', `Anh_chup_cua_hang.jpg`, { gps: att.checkIn.gps, time: att.checkIn.time });
+            addDriveFile(employeeId, day.date, 'CHECK_IN', `Diem_danh.txt`, { content: `Điểm danh Vào ca UBM (Training Auto) - ${empForSched.name} - ${day.date} ${att.checkIn.time}` });
+            addDriveFile(employeeId, day.date, 'CHECK_OUT', `Anh_chup_cua_hang.jpg`, { gps: att.checkOut.gps, time: att.checkOut.time });
+            addDriveFile(employeeId, day.date, 'CHECK_OUT', `Diem_danh.txt`, { content: `Điểm danh Ra ca UBM (Training Auto) - ${empForSched.name} - ${day.date} ${att.checkOut.time}` });
+          } else {
+            // Ngày tương lai -> chưa điểm danh, nhưng đã gán ca
+            att.status='NOT_STARTED';
+          }
+          att.shift = day.shift; // linh hoạt ca
+          db.attendances.push(att);
+          addSyncQueue('ATTENDANCE','CREATE',att, req.user.username, 'WEB_HR');
+        } else {
+          // Đã có attendance -> cập nhật ca nếu HR đổi
+          if(att.shift !== day.shift){
+            const before = {...att};
+            att.shift = day.shift;
+            att.version = (att.version||1)+1;
+            att.updated_at = new Date().toISOString();
+            audit(req.user.username,'UPDATE_ATTENDANCE_SHIFT_TRAINING','ATTENDANCE', before, att, req.ip);
+            addSyncQueue('ATTENDANCE','UPDATE', att, req.user.username, 'WEB_HR');
+          }
+          // Nếu ngày đã qua mà chưa COMPLETED thì auto COMPLETED
+          if(day.date <= todayStr && att.status!=='COMPLETED' && day.status==='WORKING'){
+            const shiftInfo2 = db.settings.payroll.shifts[day.shift] || DEFAULT_SHIFTS[day.shift] || DEFAULT_SHIFTS['CA_SANG'];
+            const now2 = new Date();
+            att.checkIn = att.checkIn || { time: shiftInfo2.start, gps: '10.762622,106.660172', address: db.branches.find(b=>b.id===empForSched.branchId)?.address || 'Training Auto', image: '', timestamp: now2.toISOString(), content: 'Điểm danh Vào ca UBM (Training Auto)', drivePath: generateDrivePath(empForSched, day.date, 'CHECK_IN') };
+            att.checkOut = att.checkOut || { time: shiftInfo2.end, gps: '10.762622,106.660172', address: db.branches.find(b=>b.id===empForSched.branchId)?.address || 'Training Auto', image: '', timestamp: now2.toISOString(), content: 'Điểm danh Ra ca UBM (Training Auto)', drivePath: generateDrivePath(empForSched, day.date, 'CHECK_OUT') };
+            att.status='COMPLETED';
+            addSyncQueue('ATTENDANCE','UPDATE', att, req.user.username, 'WEB_HR');
+          }
+          if(day.status==='OFF' && att.status!=='OFF'){
+            // Nếu HR đổi thành OFF thì xóa hoặc đánh dấu OFF
+            att.status='OFF';
+            att.checkIn=null; att.checkOut=null;
+            addSyncQueue('ATTENDANCE','UPDATE', att, req.user.username, 'WEB_HR');
+          }
+        }
+      } else if(day.status==='OFF'){
+        // Đảm bảo không có attendance WORKING cho ngày OFF
+        const attOff = db.attendances.find(a=> a.employeeId===employeeId && a.date===day.date);
+        if(attOff && attOff.status==='COMPLETED'){
+          // Nếu đã auto điểm danh mà HR đổi thành OFF thì chuyển thành OFF
+          attOff.status='OFF'; attOff.checkIn=null; attOff.checkOut=null;
+          addSyncQueue('ATTENDANCE','UPDATE', attOff, req.user.username, 'WEB_HR');
+        }
+      }
+    });
+    saveDB();
+    io.emit('attendances:update', db.attendances);
+    io.emit('drive:update', db.driveFiles.slice(0,20));
+  }
   saveDB();
   io.emit('schedules:update', db.schedules);
   res.json(sched);
@@ -3650,6 +3788,103 @@ app.post('/api/schedules/auto-official', authMiddleware, roleCheck(['Admin','HR'
     empDayStatus: preview ? empDayStatus : undefined,
     message: preview ? `Preview ${officials.length} NV - kiểm tra ràng buộc` : `Đã auto sắp lịch ${officials.length} NV chính thức cho tháng ${targetMonth} - cùng CN cùng ca không trùng ngày, min 12 ngày/tháng`
   });
+});
+
+// AI AUTO SCHEDULE FOR TRAINING - linh hoạt ca, HR tuỳ chỉnh, tự động điểm danh
+app.post('/api/schedules/auto-training', authMiddleware, roleCheck(['Admin','HR','Manager']), (req,res)=>{
+  const { preview, shifts } = req.body; // shifts: optional { employeeId: ['CA_SANG','CA_CHIEU',...] } linh hoạt
+  const trainings = db.employees.filter(e=> e.status==='TRAINING' || e.type==='TRAINING');
+  if(trainings.length===0) return res.status(400).json({ error:'Không có nhân viên Training' });
+  const today = new Date(); today.setHours(0,0,0,0);
+  const todayStr = today.toISOString().split('T')[0];
+  // Tạo lịch 12 ngày trial (7 WORKING + 5 OFF) linh hoạt ca
+  const empDayStatus={}; const empDayShift={};
+  trainings.forEach(emp=>{
+    empDayStatus[emp.employeeId]={}; empDayShift[emp.employeeId]={};
+    const startStr = emp.startDate || todayStr;
+    const start = new Date(startStr); start.setHours(0,0,0,0);
+    // 12 ngày
+    const shiftOptions = shifts && shifts[emp.employeeId] ? shifts[emp.employeeId] : [emp.shift || 'CA_SANG', 'CA_CHIEU', 'CA_TOI'];
+    let workingCount=0;
+    for(let i=0;i<12;i++){
+      const cur = new Date(start); cur.setDate(start.getDate()+i);
+      const y=cur.getFullYear(); const m=String(cur.getMonth()+1).padStart(2,'0'); const d=String(cur.getDate()).padStart(2,'0');
+      const dateStr=`${y}-${m}-${d}`;
+      // 7 ngày đầu WORKING, 5 ngày sau OFF xen kẽ linh hoạt
+      const isWorking = i <7; // 7 ngày đầu làm, 5 ngày sau nghỉ (có thể HR tuỳ chỉnh sau)
+      empDayStatus[emp.employeeId][dateStr]= isWorking ? 'WORKING' : 'OFF';
+      // Linh hoạt ca: xoay vòng shiftOptions
+      empDayShift[emp.employeeId][dateStr]= isWorking ? shiftOptions[i % shiftOptions.length] : 'OFF';
+    }
+  });
+
+  if(!preview){
+    // Xóa lịch training cũ cho các NV này (trong 12 ngày) để tránh trùng
+    const allDates = new Set(); trainings.forEach(emp=> Object.keys(empDayStatus[emp.employeeId]).forEach(d=> allDates.add(d)));
+    db.schedules = db.schedules.filter(s=>{
+      const isTraining = trainings.some(e=> e.employeeId===s.employeeId);
+      if(!isTraining) return true;
+      return !s.days.some(day=> allDates.has(day.date));
+    });
+    // Tạo weekly schedules
+    const weekMapByEmp={};
+    trainings.forEach(emp=>{
+      Object.keys(empDayStatus[emp.employeeId]).forEach(dateStr=>{
+        const status = empDayStatus[emp.employeeId][dateStr];
+        const shift = empDayShift[emp.employeeId][dateStr];
+        const monday = getMonday(new Date(dateStr));
+        const wy=monday.getFullYear(); const wm=String(monday.getMonth()+1).padStart(2,'0'); const wd=String(monday.getDate()).padStart(2,'0');
+        const weekStart=`${wy}-${wm}-${wd}`;
+        if(!weekMapByEmp[emp.employeeId]) weekMapByEmp[emp.employeeId]={};
+        if(!weekMapByEmp[emp.employeeId][weekStart]) weekMapByEmp[emp.employeeId][weekStart]={};
+        weekMapByEmp[emp.employeeId][weekStart][dateStr]={ status, shift };
+      });
+    });
+    for(const empId in weekMapByEmp){
+      const emp = trainings.find(e=> e.employeeId===empId);
+      for(const weekStart in weekMapByEmp[empId]){
+        const activeMap={}; const shiftMap={};
+        Object.keys(weekMapByEmp[empId][weekStart]).forEach(dateStr=>{
+          const { status, shift } = weekMapByEmp[empId][weekStart][dateStr];
+          if(status==='WORKING'){ activeMap[dateStr]=true; shiftMap[dateStr]=shift; }
+        });
+        // Dùng helper nhưng cần linh hoạt ca per day
+        const days = buildFull7DaysForWeek(weekStart, activeMap, emp.shift);
+        // Ghi đè shift linh hoạt per day
+        days.forEach(day=>{
+          if(shiftMap[day.date]) day.shift = shiftMap[day.date];
+          if(empDayStatus[empId][day.date]) day.status = empDayStatus[empId][day.date];
+          else if(!weekMapByEmp[empId][weekStart][day.date]) day.status='OFF';
+        });
+        db.schedules.push({ id: uuidv4(), employeeId: empId, weekStart, days, version:1, updated_at: new Date().toISOString(), isTrainingAuto:true });
+      }
+    }
+    // Tự động điểm danh realtime cho Training (ngày đã qua -> COMPLETED)
+    const todayStr2 = new Date().toISOString().split('T')[0];
+    trainings.forEach(emp=>{
+      Object.keys(empDayStatus[emp.employeeId]).forEach(dateStr=>{
+        const status = empDayStatus[emp.employeeId][dateStr];
+        const shift = empDayShift[emp.employeeId][dateStr];
+        if(status==='WORKING' && dateStr <= todayStr2){
+          let att = db.attendances.find(a=> a.employeeId===emp.employeeId && a.date===dateStr);
+          if(!att){
+            const shiftInfo = db.settings.payroll.shifts[shift] || DEFAULT_SHIFTS[shift] || DEFAULT_SHIFTS['CA_SANG'];
+            const now=new Date();
+            att={ id: uuidv4(), employeeId: emp.employeeId, date: dateStr, shift, branchId: emp.branchId, checkIn:{ time: shiftInfo.start, gps:'10.762622,106.660172', address: db.branches.find(b=>b.id===emp.branchId)?.address || 'Training Auto', image:'', timestamp: now.toISOString(), content:'Điểm danh Vào ca UBM (Training Auto)', drivePath: generateDrivePath({...emp, shift}, dateStr, 'CHECK_IN') }, checkOut:{ time: shiftInfo.end, gps:'10.762622,106.660172', address: db.branches.find(b=>b.id===emp.branchId)?.address || 'Training Auto', image:'', timestamp: now.toISOString(), content:'Điểm danh Ra ca UBM (Training Auto)', drivePath: generateDrivePath({...emp, shift}, dateStr, 'CHECK_OUT') }, status:'COMPLETED', violations:[], version:1, updated_at: now.toISOString(), sync_status:'PENDING' };
+            db.attendances.push(att);
+            addDriveFile(emp.employeeId, dateStr, 'CHECK_IN', `Anh_chup_cua_hang.jpg`, { gps: att.checkIn.gps, time: att.checkIn.time });
+            addDriveFile(emp.employeeId, dateStr, 'CHECK_OUT', `Anh_chup_cua_hang.jpg`, { gps: att.checkOut.gps, time: att.checkOut.time });
+            addSyncQueue('ATTENDANCE','CREATE',att, req.user.username, 'WEB_HR');
+          }
+        }
+      });
+    });
+    saveDB();
+    io.emit('schedules:update', db.schedules);
+    io.emit('attendances:update', db.attendances);
+    audit(req.user.username,'AUTO_SCHEDULE_TRAINING','SCHEDULE', { trainings: trainings.length }, { generated: Object.keys(weekMapByEmp).length }, req.ip);
+  }
+  res.json({ success:true, trainings: trainings.length, preview: !!preview, empDayStatus: preview ? empDayStatus : undefined, empDayShift: preview ? empDayShift : undefined, message: preview ? `Preview ${trainings.length} NV Training linh hoạt` : `Đã AI tự sắp lịch Training linh hoạt cho ${trainings.length} NV (12 ngày, 7 WORKING) + tự điểm danh realtime` });
 });
 
 // ============ WORKFLOW: OFF -> AI DRAFT TUẦN SAU -> HR DUYỆT -> GỬI NV ============
