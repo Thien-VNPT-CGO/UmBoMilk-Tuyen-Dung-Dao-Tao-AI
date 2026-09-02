@@ -3384,26 +3384,78 @@ app.get('/api/schedules', (req,res)=>{
       updated = true;
     }
   });
-  // FIX: OFFICIAL chưa có lịch → tạo lịch tuần hiện tại (T2-CN) WORKING
+  // FIX: OFFICIAL chưa có lịch → tạo lịch tuần hiện tại (T2-CN) với ràng buộc AI: cùng CN cùng ca không trùng ngày
   const currentMonday = getMonday(new Date());
   const cy = currentMonday.getFullYear(); const cm = String(currentMonday.getMonth()+1).padStart(2,'0'); const cd = String(currentMonday.getDate()).padStart(2,'0');
   const currentWeekStart = `${cy}-${cm}-${cd}`;
-  db.employees.filter(e => e.status === 'OFFICIAL' || e.type === 'OFFICIAL').forEach(emp => {
-    const hasCurrentWeek = db.schedules.some(s => s.employeeId === emp.employeeId && s.weekStart === currentWeekStart);
-    if (!hasCurrentWeek) {
-      // Nếu chưa có lịch tuần hiện tại thì tạo, dù đã có lịch tuần khác
-      const days = [];
+  const officialsNeedingWeek = db.employees.filter(e => (e.status === 'OFFICIAL' || e.type === 'OFFICIAL') && !db.schedules.some(s => s.employeeId === e.employeeId && s.weekStart === currentWeekStart));
+  if(officialsNeedingWeek.length>0){
+    // Group cùng CN cùng ca để không trùng
+    const groupMapWeek = {};
+    officialsNeedingWeek.forEach(emp=>{ const k=`${emp.branchId}_${emp.shift}`; if(!groupMapWeek[k]) groupMapWeek[k]=[]; groupMapWeek[k].push(emp); });
+    // Track ngày đã gán WORKING cho nhóm cùng CN cùng ca
+    const weekDayStatus = {}; // dateStr -> Set of groupKey đã có WORKING
+    // Đầu tiên xử lý nhóm >1 (cùng CN cùng ca) round-robin 7 ngày
+    for(const key in groupMapWeek){
+      const group = groupMapWeek[key];
+      if(group.length>1){
+        const workCount={}; group.forEach(e=> workCount[e.employeeId]=0);
+        for(let i=0;i<7;i++){
+          const cur = new Date(currentMonday); cur.setDate(currentMonday.getDate()+i);
+          const yy = cur.getFullYear(); const mm = String(cur.getMonth()+1).padStart(2,'0'); const dd = String(cur.getDate()).padStart(2,'0');
+          const dateStr = `${yy}-${mm}-${dd}`;
+          // Chọn NV ít ngày nhất
+          let chosen=group[0]; let min=workCount[chosen.employeeId];
+          for(const emp of group){ if(workCount[emp.employeeId] < min){ min=workCount[emp.employeeId]; chosen=emp; } }
+          if(!weekDayStatus[dateStr]) weekDayStatus[dateStr]=new Set();
+          weekDayStatus[dateStr].add(key);
+          // Tạm lưu để tạo days sau
+          if(!chosen._weekDays) chosen._weekDays=[];
+          chosen._weekDays.push({ date: dateStr, status:'WORKING' });
+          workCount[chosen.employeeId]++;
+          // Các NV còn lại trong nhóm OFF ngày này
+          group.forEach(emp=>{
+            if(emp.employeeId!==chosen.employeeId){
+              if(!emp._weekDays) emp._weekDays=[];
+              // Chỉ thêm nếu chưa có entry cho ngày này
+              if(!emp._weekDays.find(d=>d.date===dateStr)) emp._weekDays.push({ date: dateStr, status:'OFF' });
+            }
+          });
+        }
+      }
+    }
+    // Xử lý nhóm size 1 (cùng CN khác ca hoặc khác CN) - 6 ngày làm, nghỉ CN
+    officialsNeedingWeek.forEach(emp=>{
+      const k=`${emp.branchId}_${emp.shift}`;
+      if(groupMapWeek[k].length===1){
+        for(let i=0;i<7;i++){
+          const cur = new Date(currentMonday); cur.setDate(currentMonday.getDate()+i);
+          const yy = cur.getFullYear(); const mm = String(cur.getMonth()+1).padStart(2,'0'); const dd = String(cur.getDate()).padStart(2,'0');
+          const dateStr = `${yy}-${mm}-${dd}`;
+          const dayOfWeek = cur.getDay();
+          const status = (dayOfWeek===0) ? 'OFF' : 'WORKING'; // Nghỉ CN
+          if(!emp._weekDays) emp._weekDays=[];
+          if(!emp._weekDays.find(d=>d.date===dateStr)) emp._weekDays.push({ date: dateStr, status });
+        }
+      }
+    });
+    // Tạo weekly schedules từ _weekDays
+    officialsNeedingWeek.forEach(emp=>{
+      const days=[];
       for(let i=0;i<7;i++){
         const cur = new Date(currentMonday); cur.setDate(currentMonday.getDate()+i);
         const yy = cur.getFullYear(); const mm = String(cur.getMonth()+1).padStart(2,'0'); const dd = String(cur.getDate()).padStart(2,'0');
         const dateStr = `${yy}-${mm}-${dd}`;
-        days.push({ date: dateStr, dayName: ['T2','T3','T4','T5','T6','T7','CN'][i], shift: emp.shift, status: 'WORKING', substituteFor: null });
+        const found = emp._weekDays ? emp._weekDays.find(d=>d.date===dateStr) : null;
+        const status = found ? found.status : 'WORKING';
+        days.push({ date: dateStr, dayName: ['T2','T3','T4','T5','T6','T7','CN'][i], shift: emp.shift, status, substituteFor: null });
       }
       db.schedules.push({ id: uuidv4(), employeeId: emp.employeeId, weekStart: currentWeekStart, days, version:1, updated_at: new Date().toISOString() });
+      delete emp._weekDays;
       updated = true;
-      console.log(`[SCHEDULE] Auto-generated OFFICIAL schedule for ${emp.name} ${emp.employeeId} week ${currentWeekStart}`);
-    }
-  });
+      console.log(`[SCHEDULE] Auto-generated OFFICIAL (constrained) for ${emp.name} ${emp.employeeId} week ${currentWeekStart}`);
+    });
+  }
   if (updated) saveDB();
 
   const { employeeId, weekStart, branch } = req.query;
