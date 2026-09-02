@@ -562,7 +562,7 @@ function connectSocket(){
     if(window._lastSyncToastCount !== countKey){
       window._lastSyncToastCount = countKey;
       if(retrying>0) showToast(`Sync realtime: ${retrying} mục đang retry`, 'info');
-      else if(failed>0) showToast(`⚠️ Sync realtime: ${failed} mục chờ lượt retry`, 'warning');
+      // Bỏ cảnh báo "chờ lượt retry" theo yêu cầu
       else if(unconfigured>0) showToast(`ℹ️ Sync realtime: ${unconfigured} mục chưa cấu hình Google Sheet Webhook`, 'warning');
       if(dead>0) showToast(`⛔ Sync realtime: ${dead} mục dừng sau 5 lần lỗi. Kiểm tra webhook/secret.`, 'error');
     }
