@@ -53,7 +53,7 @@ app.use((req,res,next)=>{ req.requestId = uuidv4().slice(0,8); next(); });
 // ============ DEFAULT DATA ============
 const DEFAULT_BRANCHES = [
   { id: 'CN1', address: '130 Vạn kiếp, Phường 3, Quận Bình Thạnh', prefix: 'CN130', name: 'CN1 - 130 Vạn kiếp' },
-  { id: 'CN2', address: 'Số 10 Đặng Thai Mai, Phường Phú Nhuận, TP. Hồ Chí Minh', prefix: 'CN261', name: 'CN2 - Số 10 Đặng Thai Mai' },
+  { id: 'CN2', address: '261 Tô Hiến Thành, Phường 12, Quận 10', prefix: 'CN261', name: 'CN2 - 261 Tô Hiến Thành' },
   { id: 'CN3', address: '120 Hoàng Diệu 2, Phường Linh Trung, TP. Thủ Đức', prefix: 'CN120', name: 'CN3 - 120 Hoàng Diệu 2' },
   { id: 'CN4', address: '111 Tôn Đản, Phường 15, Quận 4', prefix: 'CN111', name: 'CN4 - 111 Tôn Đản' }
 ];
@@ -824,7 +824,7 @@ app.post('/api/employees/import-official', authMiddleware, roleCheck(['Admin','H
     // try contains
     const upper = raw.toUpperCase();
     if(upper.includes('CN1') || upper.includes('CN130') || upper.includes('130') ) return 'CN1';
-    if(upper.includes('CN2') || upper.includes('CN261') || upper.includes('261') || upper.includes('DANG THAI MAI') || upper.includes('THAI MAI')) return 'CN2';
+    if(upper.includes('CN2') || upper.includes('CN261') || upper.includes('261') ) return 'CN2';
     if(upper.includes('CN3') || upper.includes('CN120') || upper.includes('120') ) return 'CN3';
     if(upper.includes('CN4') || upper.includes('CN111') || upper.includes('111') ) return 'CN4';
     // fallback try mapBranchText if exists
@@ -942,7 +942,7 @@ app.post('/api/employees/import-training', authMiddleware, roleCheck(['Admin','H
     if(db.branches.find(b=>b.prefix===raw)) return db.branches.find(b=>b.prefix===raw).id;
     const upper = raw.toUpperCase();
     if(upper.includes('CN1') || upper.includes('CN130') || upper.includes('130') ) return 'CN1';
-    if(upper.includes('CN2') || upper.includes('CN261') || upper.includes('261') || upper.includes('DANG THAI MAI') || upper.includes('THAI MAI')) return 'CN2';
+    if(upper.includes('CN2') || upper.includes('CN261') || upper.includes('261') ) return 'CN2';
     if(upper.includes('CN3') || upper.includes('CN120') || upper.includes('120') ) return 'CN3';
     if(upper.includes('CN4') || upper.includes('CN111') || upper.includes('111') ) return 'CN4';
     try{ if(typeof mapBranchText==='function') return mapBranchText(raw); }catch(e){}
@@ -1263,7 +1263,6 @@ const BRANCH_MAP = {
   'CN3: 120 Hoàng Diệu 2, Phường Linh Trung, TP. Thủ Đức': 'CN3',
   'CN1: 130 Vạn kiếp, Phường 3, Quận Bình Thạnh': 'CN1',
   'CN2: 261 Tô Hiến Thành, Phường 12, Quận 10': 'CN2',
-  'CN2: Số 10 Đặng Thai Mai, Phường Phú Nhuận, TP. Hồ Chí Minh': 'CN2',
   'Có thể làm 2 chi nhánh trở lên': 'CN2'
 };
 const SHIFT_MAP = {
@@ -1276,9 +1275,9 @@ const SHIFT_MAP = {
 function mapBranchText(text){
   if(!text) return 'CN2';
   if(BRANCH_MAP[text]) return BRANCH_MAP[text];
-  // Fallback: contains check (hỗ trợ cả địa chỉ cũ 261 và mới Đặng Thai Mai)
+  // Fallback: contains check
   if(text.includes('CN1') || text.includes('130 Vạn kiếp')) return 'CN1';
-  if(text.includes('CN2') || text.includes('261 Tô Hiến Thành') || text.includes('Đặng Thai Mai') || text.includes('Thai Mai')) return 'CN2';
+  if(text.includes('CN2') || text.includes('261 Tô Hiến Thành')) return 'CN2';
   if(text.includes('CN3') || text.includes('120 Hoàng Diệu')) return 'CN3';
   if(text.includes('CN4') || text.includes('111 Tôn Đản')) return 'CN4';
   if(text.includes('2 chi nhánh')) return 'CN2';

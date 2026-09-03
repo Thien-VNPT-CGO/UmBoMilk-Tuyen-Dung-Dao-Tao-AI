@@ -65,13 +65,13 @@ function fmtDMYTime(iso){
 }
 
 function getBranchDisplay(id){
-  const fallback = {CN1:'CN1 - 130 Vạn kiếp', CN2:'CN2 - Số 10 Đặng Thai Mai', CN3:'CN3 - 120 Hoàng Diệu 2', CN4:'CN4 - 111 Tôn Đản'};
+  const fallback = {CN1:'CN1 - 130 Vạn kiếp', CN2:'CN2 - 261 Tô Hiến Thành', CN3:'CN3 - 120 Hoàng Diệu 2', CN4:'CN4 - 111 Tôn Đản'};
   const b = (branches && branches.length) ? branches.find(x=>x.id===id) : null;
   if(b) return b.name;
   return fallback[id] || id;
 }
 function getBranchFull(id){
-  const fallbackAddr = {CN1:'130 Vạn kiếp, Phường 3, Quận Bình Thạnh', CN2:'Số 10 Đặng Thai Mai, Phường Phú Nhuận, TP. Hồ Chí Minh', CN3:'120 Hoàng Diệu 2, Phường Linh Trung, TP. Thủ Đức', CN4:'111 Tôn Đản, Phường 15, Quận 4'};
+  const fallbackAddr = {CN1:'130 Vạn kiếp, Phường 3, Quận Bình Thạnh', CN2:'261 Tô Hiến Thành, Phường 12, Quận 10', CN3:'120 Hoàng Diệu 2, Phường Linh Trung, TP. Thủ Đức', CN4:'111 Tôn Đản, Phường 15, Quận 4'};
   const b = (branches && branches.length) ? branches.find(x=>x.id===id) : null;
   if(b) return `${b.id} - ${b.address}`;
   return id + (fallbackAddr[id] ? ' - ' + fallbackAddr[id] : '');
