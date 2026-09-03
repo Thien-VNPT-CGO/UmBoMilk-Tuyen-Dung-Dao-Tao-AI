@@ -943,17 +943,39 @@ app.put('/api/employees/:id', authMiddleware, roleCheck(['Admin','HR','Manager']
   addSyncQueue('EMPLOYEE','UPDATE',emp, req.user.username, 'WEB_HR');
   saveDB();
   io.emit('employees:update', db.employees);
+  // Ràng buộc realtime: nếu chuyển sang ARCHIVED/TERMINATED/RESIGNED thì force logout ngay
+  if(['ARCHIVED','TERMINATED','RESIGNED'].includes(emp.status) && !['ARCHIVED','TERMINATED','RESIGNED'].includes(before.status)){
+    emitForceLogout(emp.employeeId, `Tài khoản của bạn đã bị ${emp.status}. Vui lòng liên hệ HR.`);
+  }
+  // Nếu key bị vô hiệu hóa qua PUT (ví dụ đổi status) cũng force logout
+  if(req.body.keyStatus === 'INACTIVE' || req.body.status === 'INACTIVE'){
+    emitForceLogout(emp.employeeId, 'Key đã bị vô hiệu hóa - tài khoản sẽ thoát');
+  }
   res.json(emp);
 });
 app.delete('/api/employees/:id', authMiddleware, roleCheck(['Admin','HR']), (req,res)=>{
-  const idx = db.employees.findIndex(e=>e.id===req.params.id || e.employeeId===req.params.id);
+  // Hỗ trợ tìm bằng phone fallback (normalizePhone) để tương thích cascade route cũ
+  let idx = db.employees.findIndex(e=>e.id===req.params.id || e.employeeId===req.params.id);
+  if(idx===-1){
+    try{
+      const norm = typeof normalizePhone==='function'? normalizePhone(req.params.id): '';
+      if(norm) idx = db.employees.findIndex(e=> typeof normalizePhone==='function' && normalizePhone(e.phone)===norm);
+    }catch(e){}
+  }
   if(idx===-1) return res.status(404).json({error:'Not found'});
   const before = db.employees[idx];
   const isHard = req.query.hard === 'true';
   if(isHard){
     if(req.user.role!=='Admin') return res.status(403).json({error:'Chỉ Admin mới được xoá cứng dữ liệu import'});
     const empId = before.employeeId;
-    // Hard delete: remove employee and linked data (imported)
+    // Hard delete: cascade toàn bộ tabs (giữ logic cascadeDeletePerson để đồng bộ 1 nơi)
+    if(typeof cascadeDeletePerson==='function'){
+      // Dùng cascade để xóa toàn bộ (applicants, interviews, keys, schedules...)
+      // Nhưng cascade đã gọi saveDB + emit + forceLogout, tránh double; ta gọi trực tiếp
+      cascadeDeletePerson(before, req.user.username, req.ip);
+      return res.json({success:true, hard:true, cascade:true});
+    }
+    // Fallback nếu chưa có cascade
     db.employees.splice(idx,1);
     const beforeKeys = db.keys.filter(k=>k.employeeId===empId).length;
     db.keys = db.keys.filter(k=>k.employeeId!==empId);
@@ -974,7 +996,7 @@ app.delete('/api/employees/:id', authMiddleware, roleCheck(['Admin','HR']), (req
     emitForceLogout(empId, 'Tài khoản nhân viên đã bị xóa vĩnh viễn khỏi hệ thống');
     return res.json({success:true, hard:true, removedKeys: beforeKeys});
   }
-  // Default: soft delete -> ARCHIVED (giữ lịch sử)
+  // Default: soft delete -> ARCHIVED (giữ lịch sử) + forceLogout ngay
   before.status='ARCHIVED';
   before.sync_status='PENDING';
   before.version = (before.version||1)+1;
@@ -1975,7 +1997,8 @@ app.delete('/api/applicants/:id', authMiddleware, (req,res)=>{
   res.json({ success: true, deleted: applicant.id });
 });
 
-app.delete('/api/employees/:id', authMiddleware, (req, res) => {
+// Legacy cascade route - đã gộp vào DELETE /api/employees/:id?hard=true, giữ lại alias /purge để tránh duplicate route
+app.delete('/api/employees/:id/purge', authMiddleware, (req, res) => {
   const emp = db.employees.find(e => e.id === req.params.id || e.employeeId === req.params.id || normalizePhone(e.phone) === normalizePhone(req.params.id));
   if (!emp) return res.status(404).json({ error: 'Không tìm thấy nhân viên' });
   if (req.user.role === 'Umbomilk') return res.status(403).json({ error: 'Không có quyền xóa' });

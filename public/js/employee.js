@@ -333,13 +333,30 @@ function switchTab(id){
   if(id==='account') loadAccount();
 }
 
+function triggerForceLogoutUI(reason){
+  try{ showToast(reason || 'Tài khoản không tồn tại - đang thoát', 'error'); }catch(e){}
+  localStorage.removeItem('emp_token'); localStorage.removeItem('emp_data'); localStorage.removeItem('employee_token');
+  token=null; employee=null;
+  if(typeof socket!=='undefined' && socket) try{ socket.disconnect(); }catch(e){}
+  const appEl=document.getElementById('app'); if(appEl) appEl.classList.add('hidden');
+  const loginOverlay=document.getElementById('loginOverlay'); if(loginOverlay) loginOverlay.classList.remove('hidden');
+  const loginError=document.getElementById('loginError'); if(loginError){ loginError.textContent= reason || 'Tài khoản không tồn tại - vui lòng liên hệ HR'; loginError.classList.remove('hidden'); }
+  setTimeout(()=> location.reload(), 900);
+}
 async function api(path, opts={}){
   const headers={'Content-Type':'application/json'};
   if(token) headers['Authorization']='Bearer '+token;
   const url = path.startsWith('http') ? path : API_BASE + path;
   const res = await fetch(url, {...opts, headers:{...headers, ...(opts.headers||{})}});
   const data = await res.json().catch(()=>({}));
-  if(!res.ok) throw new Error(data.error||'Lỗi');
+  if(!res.ok){
+    // Ràng buộc realtime: mọi 401 forceLogout đều thoát ngay, không chờ poll/socket
+    if(res.status===401 && data.forceLogout){
+      setTimeout(()=> triggerForceLogoutUI(data.reason || data.error), 300);
+      throw new Error(data.reason || data.error || 'Tài khoản không tồn tại');
+    }
+    throw new Error(data.error||'Lỗi');
+  }
   return data;
 }
 
@@ -444,24 +461,32 @@ function connectSocket(){
     document.getElementById('syncBadge').textContent='LIVE UPDATE';
     setTimeout(()=>document.getElementById('syncBadge').textContent='SYNCED',1200);
     updateModeBadge();
-    // Khi có cập nhật employees, refresh data của nhân viên hiện tại + cập nhật nav
+    // Khi có cập nhật employees, refresh data của nhân viên hiện tại + cập nhật nav (dùng /api/employee/me để tránh branchScope filter)
     if(ev === 'employees:update' && employee){
       try{
-        const emps = await api('/api/employees');
-        const fresh = emps.find(e=>e.employeeId===employee.employeeId);
-        if(fresh){
+        const me = await api('/api/employee/me');
+        if(me && me.employee){
+          const fresh = me.employee;
           const wasUnlocked = isElearningUnlocked();
           employee = fresh;
           localStorage.setItem('emp_data', JSON.stringify(employee));
-          document.getElementById('userMeta').textContent=employee.employeeId+' • '+employee.status;
-          // Cập nhật nav và hiện thị e-learning nếu mới được mở
+          const metaEl = document.getElementById('userMeta'); if(metaEl) metaEl.textContent=employee.employeeId+' • '+employee.status;
           const nowUnlocked = isElearningUnlocked();
           refreshNavVisibility();
           if(!wasUnlocked && nowUnlocked){
             showToast('🎉 HR đã mở bài thi! Vào E-learning để thi ngay.', 'success');
           }
+          // Nếu status bị chuyển sang ARCHIVED/TERMINATED dù vẫn tồn tại -> api/me vẫn trả valid nhưng status đã đổi -> kiểm tra thêm
+          if(['ARCHIVED','TERMINATED','RESIGNED'].includes(fresh.status)){
+            triggerForceLogoutUI(`Tài khoản đã bị ${fresh.status} - liên hệ HR`);
+          }
         }
-      }catch(e){}
+      }catch(e){
+        // Nếu api/me ném lỗi forceLogout thì api() đã trigger reload; nếu lỗi khác thì poll sẽ bắt
+        if(e.message && (e.message.includes('không tồn tại') || e.message.includes('ARCHIVED') || e.message.includes('TERMINATED'))){
+          // đã handle trong api()
+        }
+      }
     }
     const active=document.querySelector('.tab-section:not(.hidden)')?.id;
     if(active==='tab-home') loadHome();
@@ -487,7 +512,7 @@ function connectSocket(){
       setTimeout(()=> location.reload(), 800);
     }, 1200);
   });
-  // Poll kiểm tra tài khoản còn tồn tại không (30s) - nếu 401 forceLogout thì thoát
+  // Poll kiểm tra tài khoản còn tồn tại không (10s) - realtime backup nếu socket mất, nếu 401 forceLogout thì thoát ngay
   if(window._empCheckInterval) clearInterval(window._empCheckInterval);
   window._empCheckInterval = setInterval(async ()=>{
     if(!employee || !token) return;
@@ -498,17 +523,17 @@ function connectSocket(){
       if(res.status===401){
         const data = await res.json().catch(()=>({}));
         if(data.forceLogout){
-          showToast(data.reason || data.error || 'Tài khoản không tồn tại', 'error');
-          setTimeout(()=>{ 
-            localStorage.removeItem('emp_token'); localStorage.removeItem('emp_data');
-            token=null; employee=null;
-            if(socket) socket.disconnect();
-            location.reload();
-          }, 1500);
+          triggerForceLogoutUI(data.reason || data.error || 'Tài khoản không tồn tại');
+        }
+      } else if(res.ok){
+        const data = await res.json().catch(()=>({}));
+        // Kiểm tra status ngay cả khi 200 nhưng đã bị ARCHIVED (fallback poll)
+        if(data.employee && ['ARCHIVED','TERMINATED','RESIGNED'].includes(data.employee.status)){
+          triggerForceLogoutUI(`Tài khoản đã bị ${data.employee.status} - liên hệ HR`);
         }
       }
     }catch(e){}
-  }, 30000);
+  }, 10000);
 }
 async function loadBranches(){
   branches = await api('/api/branches');
@@ -517,12 +542,22 @@ async function loadBranches(){
 // Home
 async function loadHome(){
   if(!employee) return;
-  // refresh employee
+  // refresh employee - dùng /api/employee/me để realtime và tránh branchScope empty
   try{
-    const emps = await api('/api/employees');
-    const fresh = emps.find(e=>e.employeeId===employee.employeeId);
-    if(fresh){ employee=fresh; localStorage.setItem('emp_data', JSON.stringify(employee)); document.getElementById('userMeta').textContent=employee.employeeId+' • '+employee.status; }
-  }catch(e){}
+    const me = await api('/api/employee/me');
+    if(me && me.employee){ 
+      const fresh = me.employee;
+      // Nếu status đã bị vô hiệu nhưng token vẫn còn hạn -> force logout ngay
+      if(['ARCHIVED','TERMINATED','RESIGNED'].includes(fresh.status)){
+        triggerForceLogoutUI(`Tài khoản đã bị ${fresh.status} - liên hệ HR`);
+        return;
+      }
+      employee=fresh; localStorage.setItem('emp_data', JSON.stringify(employee)); 
+      const metaEl=document.getElementById('userMeta'); if(metaEl) metaEl.textContent=employee.employeeId+' • '+employee.status; 
+    }
+  }catch(e){
+    // api() đã tự triggerForceLogoutUI nếu 401, không cần thêm
+  }
   document.getElementById('homeName').textContent=employee.name;
   document.getElementById('homeId').textContent=employee.employeeId+' • '+employee.phone;
   document.getElementById('homeType').textContent=employee.type==='OFFICIAL' ? 'CHÍNH THỨC' : 'TRAINING';
