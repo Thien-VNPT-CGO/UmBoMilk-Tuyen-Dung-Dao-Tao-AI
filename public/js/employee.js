@@ -65,13 +65,13 @@ function fmtDMYTime(iso){
 }
 
 function getBranchDisplay(id){
-  const fallback = {CN1:'CN1 - 130 Vạn kiếp', CN2:'CN2 - 261 Tô Hiến Thành', CN3:'CN3 - 120 Hoàng Diệu 2', CN4:'CN4 - 111 Tôn Đản'};
+  const fallback = {CN1:'CN1 - 130 Vạn kiếp', CN2:'CN2 - Số 10 Đặng Thai Mai', CN3:'CN3 - 120 Hoàng Diệu 2', CN4:'CN4 - 111 Tôn Đản'};
   const b = (branches && branches.length) ? branches.find(x=>x.id===id) : null;
   if(b) return b.name;
   return fallback[id] || id;
 }
 function getBranchFull(id){
-  const fallbackAddr = {CN1:'130 Vạn kiếp, Phường 3, Quận Bình Thạnh', CN2:'261 Tô Hiến Thành, Phường 12, Quận 10', CN3:'120 Hoàng Diệu 2, Phường Linh Trung, TP. Thủ Đức', CN4:'111 Tôn Đản, Phường 15, Quận 4'};
+  const fallbackAddr = {CN1:'130 Vạn kiếp, Phường 3, Quận Bình Thạnh', CN2:'Số 10 Đặng Thai Mai, Phường Phú Nhuận, TP. Hồ Chí Minh', CN3:'120 Hoàng Diệu 2, Phường Linh Trung, TP. Thủ Đức', CN4:'111 Tôn Đản, Phường 15, Quận 4'};
   const b = (branches && branches.length) ? branches.find(x=>x.id===id) : null;
   if(b) return `${b.id} - ${b.address}`;
   return id + (fallbackAddr[id] ? ' - ' + fallbackAddr[id] : '');
@@ -144,43 +144,58 @@ function isElearningUnlocked(){
 function getVisibleNav(){
   if(!employee) return NAV;
   const isOfficial = employee.status === 'OFFICIAL' || employee.type === 'OFFICIAL';
-  
+  // Yêu cầu #5,6: ẩn Thông báo khỏi nav, chỉ dùng chuông
+  const baseFilter = (n)=> n.id !== 'notifs';
   if(!isOfficial){
-    // Khi là Nhân viên Training:
-    // - Ẩn 2 chức năng: Nghỉ OFF & OFF đột xuất
-    // - E-learning: Mặc định ẩn, chỉ hiển thị khi HR chọn Thi trực tuyến trên Web App
+    // Training: ẩn OFF, emergency, notifs; elearning chỉ khi unlock
     return NAV.filter(n => {
+      if(!baseFilter(n)) return false;
       if(TRAINING_HIDDEN_TABS.includes(n.id)) return false;
       if(n.id === 'elearning') return isElearningUnlocked();
       return true;
     });
   } else {
-    // Khi là Nhân viên Chính thức:
-    // - Hiển thị Nghỉ OFF & OFF đột xuất
-    // - Tạm thời ẩn chức năng E-learning
-    return NAV.filter(n => n.id !== 'elearning');
+    // Official: ẩn elearning + notifs + OFF/emergency theo window realtime
+    const offOpen = isOffWindowOpen();
+    const hasNextWeek = (typeof mySchedules !== 'undefined' && mySchedules.length>0) ? (()=>{ try{ const nextMon = getMonday(new Date(Date.now()+7*24*60*60*1000)).toISOString().split('T')[0]; return mySchedules.some(s=>s.weekStart===nextMon); }catch(e){ return false; } })() : false;
+    return NAV.filter(n => {
+      if(!baseFilter(n)) return false;
+      if(n.id === 'elearning') return false;
+      if(n.id === 'off') return offOpen; // chỉ hiện trong T6 12:00 - T7 15:00
+      if(n.id === 'emergency') return hasNextWeek && !offOpen; // chỉ hiện khi có lịch tuần sau và đã qua window duyệt OFF
+      return true;
+    });
   }
 }
 
-// Cập nhật nav + section visibility sau khi employee data thay đổi
+// Cập nhật nav + section visibility sau khi employee data thay đổi (realtime #5,6)
 function refreshNavVisibility(){
   if(!employee) return;
   const isOfficial = employee.status === 'OFFICIAL' || employee.type === 'OFFICIAL';
   const unlocked = isElearningUnlocked();
-
-  // Render lại nav buttons
   initNav();
-
-  // Ẩn/hiện section 'off' và 'emergency' (Ẩn với Training, Hiện khi lên Chính thức)
+  // Training: ẩn off/emergency
   TRAINING_HIDDEN_TABS.forEach(tabId => {
     const sec = document.getElementById('tab-' + tabId);
     if(sec){
       if(!isOfficial) sec.classList.add('hidden', 'training-locked');
-      else sec.classList.remove('hidden', 'training-locked');
+      else {
+        // Official: off chỉ hiện khi window mở, emergency chỉ khi có lịch tuần sau
+        if(tabId==='off'){
+          if(isOffWindowOpen()) sec.classList.remove('hidden','training-locked');
+          else { sec.classList.add('hidden','training-locked'); if(document.querySelector('.tab-section:not(.hidden)')?.id==='tab-off') switchTab('home'); }
+        } else if(tabId==='emergency'){
+          const nextMon = getMonday(new Date(Date.now()+7*24*60*60*1000)).toISOString().split('T')[0];
+          const hasNextWeek = (typeof mySchedules!=='undefined' && mySchedules.some(s=>s.weekStart===nextMon));
+          if(hasNextWeek && !isOffWindowOpen()) sec.classList.remove('hidden','training-locked');
+          else { sec.classList.add('hidden','training-locked'); if(document.querySelector('.tab-section:not(.hidden)')?.id==='tab-emergency') switchTab('home'); }
+        }
+      }
     }
   });
-
-  // E-learning section: Toggle dựa theo isElearningUnlocked()
+  // Ẩn notifs tab khỏi nav nhưng vẫn cho phép mở qua chuông
+  const notifSec = document.getElementById('tab-notifs');
+  if(notifSec) { /* giữ nguyên, chỉ ẩn khỏi nav, không ẩn section khi mở qua chuông */ }
   const elSec = document.getElementById('tab-elearning');
   if(elSec){
     if(!unlocked){
@@ -193,6 +208,8 @@ function refreshNavVisibility(){
     }
   }
 }
+// Tự động refresh nav mỗi phút để cập nhật window OFF realtime
+setInterval(()=>{ if(employee) refreshNavVisibility(); }, 60000);
 
 function initNav(){
   const el=document.getElementById('navMenu');
@@ -605,19 +622,16 @@ async function loadHome(){
 function renderTrainingOffPicker() {
   const box = document.getElementById('trainingOffBox');
   if (!box || !employee) return;
-
-  const isTraining = employee.type === 'TRAINING' || employee.status === 'TRAINING';
+  // Ràng buộc realtime: Training type mới hiện, nhưng cũng hiện khi status TRAINING/WAITING_TEST/RETEST
+  const isTraining = employee.type === 'TRAINING' || ['TRAINING','WAITING_TEST','RETEST','PASSED_TEST'].includes(employee.status);
   if (!isTraining) {
     box.classList.add('hidden');
     return;
   }
-
   box.classList.remove('hidden');
-
   const startDateStr = employee.startDate || new Date().toISOString().split('T')[0];
   const parts = startDateStr.split('T')[0].split('-').map(Number);
   const startD = (parts.length === 3 && !isNaN(parts[0])) ? new Date(parts[0], parts[1] - 1, parts[2]) : new Date();
-
   const trialDates = [];
   const dayNames = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
   for (let i = 0; i < 12; i++) {
@@ -630,11 +644,14 @@ function renderTrainingOffPicker() {
     const dayName = dayNames[curr.getDay()];
     trialDates.push({ date: dateStr, dayName });
   }
-
   const existingOff = employee.registeredOffDates || [];
   const isAlreadyRegistered = existingOff.length === 5;
-
+  // Draft lưu realtime để không mất khi reload/socket re-render (fix bug chọn 2-3 ngày bị reload mất)
+  const draftKey = 'trainingOffDraft_' + employee.employeeId;
+  let draft = [];
+  try{ draft = JSON.parse(localStorage.getItem(draftKey) || '[]'); }catch(e){ draft=[]; }
   if (isAlreadyRegistered) {
+    try{ localStorage.removeItem(draftKey); }catch(e){}
     box.innerHTML = `
       <div class="flex items-center justify-between mb-2">
         <div class="font-black text-sm text-pink-900 flex items-center gap-2">
@@ -643,15 +660,15 @@ function renderTrainingOffPicker() {
         <span class="text-xs font-bold bg-pink-500 text-white px-2.5 py-0.5 rounded-full">12 NGÀY THỬ VIỆC</span>
       </div>
       <div class="text-xs text-pink-700 font-medium mb-3">
-        Phạm vi 12 ngày: <b>${fmtDMY(trialDates[0].date)} → ${fmtDMY(trialDates[11].date)}</b> (7 ngày làm việc + 5 ngày OFF).
+        Phạm vi 12 ngày: <b>${fmtDMY(trialDates[0].date)} → ${fmtDMY(trialDates[11].date)}</b> (7 ngày làm việc + 5 ngày OFF). <span class="text-emerald-700 font-bold">Đã lưu realtime</span>
       </div>
       <div class="flex flex-wrap gap-2">
         ${existingOff.map(d => `<span class="text-xs font-bold bg-pink-100 text-pink-700 border border-pink-200 px-3 py-1 rounded-full"><i class="fa-solid fa-bed text-pink-500"></i> OFF: ${fmtDMY(d)}</span>`).join('')}
       </div>
+      <div class="mt-2 text-[11px] text-slate-500">Lịch làm việc đã được AI tự xếp 7 ngày WORKING còn lại. Xem ở tab Lịch.</div>
     `;
     return;
   }
-
   box.innerHTML = `
     <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
       <div class="font-black text-sm text-pink-900 flex items-center gap-2">
@@ -665,21 +682,25 @@ function renderTrainingOffPicker() {
       Vui lòng chọn đúng <b>5 ngày OFF</b> trong 12 ngày thử việc bên dưới (7 ngày còn lại hệ thống tự xếp ca <b>WORKING</b>):
     </div>
     <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2" id="trainingOffCheckboxes">
-      ${trialDates.map(t => `
-        <label class="flex flex-col items-center justify-center p-2 bg-white border border-pink-200 rounded-xl cursor-pointer hover:bg-pink-50 text-center transition">
-          <input type="checkbox" value="${t.date}" onchange="updateTrainingOffSelection()" class="w-4 h-4 text-pink-600 rounded focus:ring-pink-500">
+      ${trialDates.map(t => {
+        const isChecked = draft.includes(t.date) ? 'checked' : '';
+        return `
+        <label class="flex flex-col items-center justify-center p-2 bg-white border border-pink-200 rounded-xl cursor-pointer hover:bg-pink-50 text-center transition ${isChecked ? 'bg-pink-50 border-pink-400' : ''}">
+          <input type="checkbox" value="${t.date}" ${isChecked} onchange="updateTrainingOffSelection()" class="w-4 h-4 text-pink-600 rounded focus:ring-pink-500">
           <span class="text-[11px] font-black text-pink-900 mt-1">${t.dayName}</span>
           <span class="text-[10px] font-mono text-slate-500">${fmtDMYShort(t.date)}</span>
         </label>
-      `).join('')}
+      `}).join('')}
     </div>
     <div class="mt-3 flex items-center justify-between">
-      <span id="trainingOffCountText" class="text-xs font-bold text-pink-800">Đã chọn: 0 / 5 ngày</span>
-      <button id="btnSubmitTrainingOff" onclick="submitTrainingOffRegistration()" disabled class="text-xs font-black bg-slate-300 text-slate-500 px-4 py-2 rounded-xl transition cursor-not-allowed">
+      <span id="trainingOffCountText" class="text-xs font-bold text-pink-800">Đã chọn: ${draft.length} / 5 ngày</span>
+      <button id="btnSubmitTrainingOff" onclick="submitTrainingOffRegistration()" ${draft.length===5?'':'disabled'} class="text-xs font-black ${draft.length===5?'bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white shadow cursor-pointer':'bg-slate-300 text-slate-500 cursor-not-allowed'} px-4 py-2 rounded-xl transition">
         Xác nhận & Gửi 5 ngày OFF
       </button>
     </div>
   `;
+  // Cập nhật trạng thái nút ngay sau render
+  setTimeout(()=> updateTrainingOffSelection(), 0);
 }
 
 function updateTrainingOffSelection() {
@@ -687,7 +708,18 @@ function updateTrainingOffSelection() {
   const countText = document.getElementById('trainingOffCountText');
   const btn = document.getElementById('btnSubmitTrainingOff');
   if (countText) countText.textContent = `Đã chọn: ${checked.length} / 5 ngày`;
-
+  // Lưu draft realtime để không mất khi socket reload (fix bug 2-3 ngày)
+  try{
+    if(employee && employee.employeeId){
+      localStorage.setItem('trainingOffDraft_' + employee.employeeId, JSON.stringify(checked));
+    }
+  }catch(e){}
+  // Highlight label đã chọn
+  document.querySelectorAll('#trainingOffCheckboxes label').forEach(lab=>{
+    const inp = lab.querySelector('input');
+    if(inp && inp.checked) lab.classList.add('bg-pink-50','border-pink-400');
+    else lab.classList.remove('bg-pink-50','border-pink-400');
+  });
   if (checked.length === 5) {
     if (btn) {
       btn.disabled = false;
@@ -704,7 +736,6 @@ function updateTrainingOffSelection() {
 async function submitTrainingOffRegistration() {
   const checked = Array.from(document.querySelectorAll('#trainingOffCheckboxes input:checked')).map(c => c.value);
   if (checked.length !== 5) return showToast('Vui lòng chọn đúng 5 ngày OFF', 'error');
-
   try {
     const res = await api('/api/employee/register-off', {
       method: 'POST',
@@ -712,7 +743,8 @@ async function submitTrainingOffRegistration() {
     });
     employee.registeredOffDates = res.registeredOffDates || checked;
     localStorage.setItem('emp_data', JSON.stringify(employee));
-    showToast('Đã đăng ký 5 ngày OFF thử việc thành công!', 'success');
+    try{ localStorage.removeItem('trainingOffDraft_' + employee.employeeId); }catch(e){}
+    showToast('Đã đăng ký 5 ngày OFF thử việc thành công! Lịch đã được AI cập nhật realtime', 'success');
     renderTrainingOffPicker();
     await loadSchedule();
   } catch (e) {
@@ -752,11 +784,25 @@ function isOffWindowOpen(){
 let streamCheckin=null, streamCheckout=null;
 let capturedCheckin=null, capturedCheckout=null;
 async function startCamera(type){
+  // Yêu cầu #5,6: Camera sau (environment) - ràng buộc realtime
   try{
-    const stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'user'}, audio:false});
+    let stream = null;
+    try{
+      stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{exact:'environment'}}, audio:false});
+    }catch(e){
+      // Fallback nếu không có camera sau (một số device chỉ có front)
+      stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}, audio:false});
+    }
     if(type==='checkin'){ streamCheckin=stream; const v=document.getElementById('videoCheckin'); v.srcObject=stream; v.classList.remove('hidden'); document.getElementById('videoPlaceholder').classList.add('hidden'); document.getElementById('previewCheckin').classList.add('hidden'); }
-    else { streamCheckout=stream; const v=document.getElementById('videoCheckout'); v.srcObject=stream; v.classList.remove('hidden'); document.getElementById('videoPlaceholder2').classList.add('hidden'); document.getElementById('previewCheckout').classList.add('hidden'); }
-  }catch(e){ alert('Không thể mở camera: '+e.message); }
+    else { streamCheckout=stream; const v=document.getElementById('videoCheckout'); v.srcObject=stream; v.classList.remove('hidden'); document.getElementById('videoPlaceholder2')?.classList.add('hidden'); document.getElementById('previewCheckout').classList.add('hidden'); }
+  }catch(e){ 
+    // Thử fallback camera trước nếu sau thất bại
+    try{
+      const fallback = await navigator.mediaDevices.getUserMedia({video:{facingMode:'user'}, audio:false});
+      if(type==='checkin'){ streamCheckin=fallback; const v=document.getElementById('videoCheckin'); v.srcObject=fallback; v.classList.remove('hidden'); document.getElementById('videoPlaceholder').classList.add('hidden'); document.getElementById('previewCheckin').classList.add('hidden'); showToast('Camera sau không khả dụng - đang dùng camera trước', 'info'); }
+      else { streamCheckout=fallback; const v=document.getElementById('videoCheckout'); v.srcObject=fallback; v.classList.remove('hidden'); document.getElementById('videoPlaceholder2')?.classList.add('hidden'); document.getElementById('previewCheckout').classList.add('hidden'); showToast('Camera sau không khả dụng - đang dùng camera trước', 'info'); }
+    }catch(e2){ alert('Không thể mở camera: '+e2.message+' - Vui lòng cấp quyền camera'); }
+  }
 }
 function capture(type){
   const video = document.getElementById(type==='checkin'?'videoCheckin':'videoCheckout');
@@ -775,21 +821,41 @@ function capture(type){
 function getGPS(type){
   const gpsEl=document.getElementById(type==='checkin'?'gpsCheckin':'gpsCheckout');
   const addrEl=document.getElementById(type==='checkin'?'addrCheckin':'addrCheckout');
-  gpsEl.textContent='Đang lấy...';
-  if(!navigator.geolocation){ gpsEl.textContent='Trình duyệt không hỗ trợ GPS'; addrEl.textContent=branches.find(b=>b.id===employee.branchId)?.address||''; return; }
+  gpsEl.textContent='Đang lấy GPS thật...';
+  gpsEl.dataset.valid='false';
+  if(!navigator.geolocation){ gpsEl.textContent='❌ Trình duyệt không hỗ trợ GPS - Vui lòng dùng Chrome/Safari'; gpsEl.dataset.valid='false'; addrEl.textContent='⚠️ BẮT BUỘC bật GPS để điểm danh'; return; }
   navigator.geolocation.getCurrentPosition(pos=>{
-    const {latitude, longitude}=pos.coords;
+    const {latitude, longitude, accuracy}=pos.coords;
+    // Yêu cầu GPS thật: accuracy phải < 100m và không phải mock
+    if(accuracy && accuracy > 200){
+      gpsEl.textContent=`⚠️ GPS kém chính xác (${Math.round(accuracy)}m) - Vui lòng ra ngoài trời`;
+      gpsEl.dataset.valid='false';
+      showToast('GPS kém chính xác - vui lòng bật GPS chính xác cao', 'error');
+      return;
+    }
     gpsEl.textContent=latitude.toFixed(6)+', '+longitude.toFixed(6);
+    gpsEl.dataset.valid='true';
+    gpsEl.dataset.accuracy=String(accuracy||0);
     addrEl.textContent=branches.find(b=>b.id===employee.branchId)?.address|| `${latitude},${longitude}`;
   }, err=>{
-    gpsEl.textContent='10.762622, 106.660172 (mock)';
-    addrEl.textContent=branches.find(b=>b.id===employee.branchId)?.address||'Mock location';
-  }, {enableHighAccuracy:true, timeout:5000});
+    let msg = '❌ LỖI GPS - BẮT BUỘC bật GPS';
+    if(err.code===1) msg='❌ BẠN ĐÃ TỪ CHỐI GPS - Vui lòng bật GPS trong cài đặt trình duyệt';
+    else if(err.code===2) msg='❌ Không lấy được GPS - Vui lòng bật định vị';
+    else if(err.code===3) msg='❌ Hết thời gian lấy GPS - Vui lòng thử lại';
+    gpsEl.textContent=msg;
+    gpsEl.dataset.valid='false';
+    addrEl.textContent='⚠️ Không có GPS - KHÔNG thể điểm danh. Vui lòng bật GPS và bấm ↻';
+    showToast(msg, 'error');
+  }, {enableHighAccuracy:true, timeout:10000, maximumAge:0});
 }
 async function submitCheckin(){
-  if(!capturedCheckin) return showToast('Chưa chụp ảnh Check-in','error');
-  const gps=document.getElementById('gpsCheckin').textContent;
+  if(!capturedCheckin) return showToast('Chưa chụp ảnh Check-in bằng camera sau','error');
+  const gpsEl=document.getElementById('gpsCheckin');
+  const gps=gpsEl.textContent;
   const addr=document.getElementById('addrCheckin').textContent;
+  // Ràng buộc GPS thật
+  if(!gpsEl.dataset.valid || gpsEl.dataset.valid!=='true') return showToast('❌ GPS chưa sẵn sàng - Vui lòng bấm ↻ để lấy GPS thật (bắt buộc bật GPS)', 'error');
+  if(!gps || gps.includes('Đang lấy') || gps.includes('LỖI') || gps.includes('mock') || !gps.includes(',')) return showToast('GPS không hợp lệ - Vui lòng bật GPS và thử lại', 'error');
   try{
     const res = await api('/api/attendance/checkin', {method:'POST', body:JSON.stringify({employeeId:employee.employeeId, gps, address:addr, image:capturedCheckin, shift:employee.shift, isCameraCapture:true})});
     document.getElementById('checkinResult').className='mt-2 text-xs font-bold rounded-xl px-3 py-2 bg-pink-100 text-pink-700 border border-pink-200';
@@ -805,9 +871,12 @@ async function submitCheckin(){
   }
 }
 async function submitCheckout(){
-  if(!capturedCheckout) return showToast('Chưa chụp ảnh Check-out','error');
-  const gps=document.getElementById('gpsCheckout').textContent;
+  if(!capturedCheckout) return showToast('Chưa chụp ảnh Check-out bằng camera sau','error');
+  const gpsEl=document.getElementById('gpsCheckout');
+  const gps=gpsEl.textContent;
   const addr=document.getElementById('addrCheckout').textContent;
+  if(!gpsEl.dataset.valid || gpsEl.dataset.valid!=='true') return showToast('❌ GPS chưa sẵn sàng - Vui lòng bấm ↻ để lấy GPS thật (bắt buộc)', 'error');
+  if(!gps || gps.includes('Đang lấy') || gps.includes('LỖI') || gps.includes('mock') || !gps.includes(',')) return showToast('GPS không hợp lệ - Vui lòng bật GPS', 'error');
   try{
     const res = await api('/api/attendance/checkout', {method:'POST', body:JSON.stringify({employeeId:employee.employeeId, gps, address:addr, image:capturedCheckout, isCameraCapture:true})});
     document.getElementById('checkoutResult').className='mt-2 text-xs font-bold rounded-xl px-3 py-2 bg-pink-100 text-pink-700 border border-pink-200';
@@ -933,16 +1002,22 @@ async function loadSchedule(){
       const isCurrentWeek = isDateInCurrentWeek(new Date(s.weekStart));
       const workingDays = s.days.filter(d => d.status === 'WORKING' || d.status === 'SUBSTITUTE').length;
       
+      const isTraining = employee.type==='TRAINING' || employee.status==='TRAINING' || employee.status==='WAITING_TEST';
       return `
       <div class="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm">
-        <div class="px-5 py-3 bg-gradient-to-r from-indigo-50 to-blue-50 border-b flex justify-between items-center">
-          <div>
+        <div class="px-4 py-3 bg-gradient-to-r from-indigo-50 to-blue-50 border-b flex flex-wrap justify-between items-center gap-2">
+          <div class="flex items-center gap-2">
             <span class="font-black text-sm text-indigo-900">Tuần ${fmtDMY(s.weekStart)}</span>
-            ${isCurrentWeek ? '<span class="ml-2 text-[10px] font-black bg-indigo-600 text-white px-2 py-0.5 rounded-full">TUẦN NÀY</span>' : '<span class="ml-2 text-[10px] font-black bg-slate-400 text-white px-2 py-0.5 rounded-full">TUẦN TỚI</span>'}
+            ${isCurrentWeek ? '<span class="text-[10px] font-black bg-indigo-600 text-white px-2 py-0.5 rounded-full">TUẦN NÀY</span>' : '<span class="text-[10px] font-black bg-slate-400 text-white px-2 py-0.5 rounded-full">TUẦN TỚI</span>'}
+            <span class="text-[10px] font-bold bg-white border border-indigo-100 px-2 py-0.5 rounded-full">${workingDays} ngày làm</span>
+            <span class="hidden sm:inline-flex text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full" title="AI tự động xếp lịch T2→CN dựa trên 5 ngày OFF và quy định ≥12 ngày/tháng"><i class="fa-solid fa-robot mr-1"></i>AI Auto</span>
           </div>
-          <span class="text-[11px] font-bold text-indigo-700 bg-white border border-indigo-100 px-3 py-1 rounded-full">${workingDays} ngày làm việc</span>
+          <div class="flex items-center gap-1">
+            ${isTraining ? `<button onclick="openTrainingShiftModal('${s.weekStart}')" class="text-[11px] font-black bg-gradient-to-r from-pink-500 to-rose-500 text-white px-3 py-1.5 rounded-xl shadow hover:from-pink-600 hover:to-rose-600 flex items-center gap-1"><i class="fa-solid fa-rotate"></i> Đổi ca</button><button onclick="openTrainingAddShiftModal('${s.weekStart}')" class="text-[11px] font-black bg-white border border-pink-200 text-pink-700 px-2 py-1.5 rounded-xl hover:bg-pink-50"><i class="fa-solid fa-plus"></i> Thêm ca</button>` : ''}
+            <span class="text-[11px] font-bold text-slate-500 hidden md:inline">${getBranchDisplay(employee.branchId)}</span>
+          </div>
         </div>
-        <div class="grid grid-cols-7 gap-1 p-2 bg-slate-50/50">
+        <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2 p-2 bg-slate-50/50">
           ${s.days.map(d=>{
             const isToday = d.date === today;
             let bgColor = 'bg-white';
@@ -994,6 +1069,62 @@ async function loadSchedule(){
       `;
     }).join('');
   }catch(e){ console.error('loadSchedule error', e); }
+}
+// Training: Đổi ca / Thêm ca (yêu cầu #5) – HR 15p auto duyệt, 1 ngày 2 ca để rút ngắn 7→6 ngày
+function openTrainingShiftModal(weekStart){
+  if(!employee) return;
+  const dates = mySchedules.find(s=>s.weekStart===weekStart)?.days || [];
+  if(dates.length===0) return showToast('Không có lịch tuần này','error');
+  const options = dates.map(d=> `<option value="${d.date}">${fmtDMY(d.date)} (${d.dayName}) - ${d.shift} [${d.status}]</option>`).join('');
+  const modalHtml = `
+    <div id="trainingShiftModal" class="fixed inset-0 z-[100] bg-black/50 flex items-center justify-center p-4">
+      <div class="bg-white rounded-2xl w-full max-w-md p-5 shadow-xl">
+        <div class="font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-rotate text-pink-600"></i> Đổi ca Training (12h trước)</div>
+        <div class="text-xs text-slate-500 mt-1">Chọn ngày và ca mới. HR có 15 phút duyệt, quá hạn tự động duyệt. 1 ngày 2 ca giúp rút ngắn 7→6 ngày.</div>
+        <div class="mt-3 space-y-3">
+          <div><label class="text-xs font-bold">Ngày</label><select id="shiftDate" class="w-full mt-1 px-3 py-2 rounded-xl border text-sm">${options}</select></div>
+          <div><label class="text-xs font-bold">Ca mới</label><select id="shiftTo" class="w-full mt-1 px-3 py-2 rounded-xl border text-sm"><option value="CA_SANG">Ca Sáng (07:00-12:00)</option><option value="CA_CHIEU">Ca Chiều (12:00-18:00)</option><option value="CA_TOI">Ca Tối (18:00-23:00)</option></select></div>
+          <div><label class="text-xs font-bold">Lý do</label><input id="shiftReason" class="w-full mt-1 px-3 py-2 rounded-xl border text-sm" placeholder="Lý do đổi ca (không bắt buộc)"></div>
+        </div>
+        <div class="mt-4 flex gap-2"><button onclick="submitTrainingShift(false)" class="flex-1 bg-gradient-to-r from-pink-500 to-rose-500 text-white font-black py-2.5 rounded-xl">Gửi yêu cầu</button><button onclick="document.getElementById('trainingShiftModal').remove()" class="px-4 bg-slate-100 font-bold py-2.5 rounded-xl">Hủy</button></div>
+      </div>
+    </div>`;
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+}
+function openTrainingAddShiftModal(weekStart){
+  if(!employee) return;
+  const dates = mySchedules.find(s=>s.weekStart===weekStart)?.days.filter(d=>d.status==='WORKING') || [];
+  if(dates.length===0) return showToast('Không có ngày WORKING để thêm ca','error');
+  const options = dates.map(d=> `<option value="${d.date}">${fmtDMY(d.date)} (${d.dayName}) - ${d.shift}</option>`).join('');
+  const modalHtml = `
+    <div id="trainingShiftModal" class="fixed inset-0 z-[100] bg-black/50 flex items-center justify-center p-4">
+      <div class="bg-white rounded-2xl w-full max-w-md p-5 shadow-xl">
+        <div class="font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-plus text-pink-600"></i> Thêm ca (1 ngày 2 ca)</div>
+        <div class="text-xs text-slate-500 mt-1">Chọn ngày đã có ca và ca muốn THÊM (ví dụ: đã CA_SANG thêm CA_CHIEU). Giúp rút ngắn 7→6 ngày.</div>
+        <div class="mt-3 space-y-3">
+          <div><label class="text-xs font-bold">Ngày (đã có ca)</label><select id="shiftDate" class="w-full mt-1 px-3 py-2 rounded-xl border text-sm">${options}</select></div>
+          <div><label class="text-xs font-bold">Ca THÊM</label><select id="shiftTo" class="w-full mt-1 px-3 py-2 rounded-xl border text-sm"><option value="CA_CHIEU">Ca Chiều (12:00-18:00)</option><option value="CA_SANG">Ca Sáng (07:00-12:00)</option><option value="CA_TOI">Ca Tối (18:00-23:00)</option></select></div>
+          <div><label class="text-xs font-bold">Lý do</label><input id="shiftReason" class="w-full mt-1 px-3 py-2 rounded-xl border text-sm" placeholder="Lý do thêm ca"></div>
+        </div>
+        <div class="mt-4 flex gap-2"><button onclick="submitTrainingShift(true)" class="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-black py-2.5 rounded-xl">Gửi thêm ca</button><button onclick="document.getElementById('trainingShiftModal').remove()" class="px-4 bg-slate-100 font-bold py-2.5 rounded-xl">Hủy</button></div>
+      </div>
+    </div>`;
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+}
+async function submitTrainingShift(isAdd){
+  const date = document.getElementById('shiftDate')?.value;
+  const toShift = document.getElementById('shiftTo')?.value;
+  const reason = document.getElementById('shiftReason')?.value || (isAdd ? 'Thêm ca 1 ngày 2 ca' : '');
+  if(!date || !toShift) return showToast('Thiếu ngày/ca','error');
+  try{
+    const endpoint = isAdd ? '/api/training/shift-change' : '/api/training/shift-change';
+    // Thêm ca gửi cùng endpoint với reason prefix để server phân biệt (hiện server chưa có endpoint riêng, dùng chung và thêm tag)
+    const bodyReason = isAdd ? `[THÊM CA] ${reason}` : reason;
+    const res = await api(endpoint, {method:'POST', body:JSON.stringify({employeeId:employee.employeeId, date, toShift, reason: bodyReason})});
+    showToast(res.message || (isAdd ? 'Đã gửi yêu cầu thêm ca - chờ HR 15p' : 'Đã gửi yêu cầu đổi ca - chờ HR 15p'), 'success');
+    document.getElementById('trainingShiftModal')?.remove();
+    // Thông báo realtime sẽ đến qua socket, không cần reload ngay
+  }catch(e){ showToast(e.message,'error'); }
 }
 
 function isDateInCurrentWeek(date) {
@@ -1494,19 +1625,22 @@ async function loadSalaryTab() {
           </div>
         </div>
 
-        <!-- Summary Stat Cards -->
-        <div class="grid grid-cols-3 gap-3">
-          <div class="bg-white border border-emerald-100 rounded-2xl p-3.5 shadow-sm text-center">
+        <!-- Summary Stat Cards - Responsive -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div class="bg-white border border-emerald-100 rounded-2xl p-4 shadow-sm text-center">
             <div class="text-[10px] font-black text-emerald-500 uppercase tracking-wide">Tổng thu nhập</div>
-            <div class="font-black text-base text-emerald-700 mt-1">${totalSalary.toLocaleString('vi-VN')}đ</div>
+            <div class="font-black text-lg sm:text-base text-emerald-700 mt-1">${totalSalary.toLocaleString('vi-VN')}đ</div>
+            <div class="text-[10px] text-emerald-600 mt-1">AI tính tự động theo ca</div>
           </div>
-          <div class="bg-white border border-blue-100 rounded-2xl p-3.5 shadow-sm text-center">
+          <div class="bg-white border border-blue-100 rounded-2xl p-4 shadow-sm text-center">
             <div class="text-[10px] font-black text-blue-500 uppercase tracking-wide">Số ca làm</div>
-            <div class="font-black text-base text-blue-700 mt-1">${totalShifts} Ca</div>
+            <div class="font-black text-lg sm:text-base text-blue-700 mt-1">${totalShifts} Ca</div>
+            <div class="text-[10px] text-blue-600 mt-1">Đã điểm danh</div>
           </div>
-          <div class="bg-white border border-purple-100 rounded-2xl p-3.5 shadow-sm text-center">
+          <div class="bg-white border border-purple-100 rounded-2xl p-4 shadow-sm text-center">
             <div class="text-[10px] font-black text-purple-500 uppercase tracking-wide">Tổng số giờ</div>
-            <div class="font-black text-base text-purple-700 mt-1">${totalHours} Giờ</div>
+            <div class="font-black text-lg sm:text-base text-purple-700 mt-1">${totalHours} Giờ</div>
+            <div class="text-[10px] text-purple-600 mt-1">Tích lũy</div>
           </div>
         </div>
 

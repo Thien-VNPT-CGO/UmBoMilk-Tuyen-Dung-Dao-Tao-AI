@@ -91,13 +91,13 @@ function fmtDMYTime(iso){
 }
 
 function getBranchDisplay(id){
-  const fallback = {CN1:'CN1 - 130 Vạn kiếp', CN2:'CN2 - 261 Tô Hiến Thành', CN3:'CN3 - 120 Hoàng Diệu 2', CN4:'CN4 - 111 Tôn Đản'};
+  const fallback = {CN1:'CN1 - 130 Vạn kiếp', CN2:'CN2 - Số 10 Đặng Thai Mai', CN3:'CN3 - 120 Hoàng Diệu 2', CN4:'CN4 - 111 Tôn Đản'};
   const b = (branches && branches.length) ? branches.find(x=>x.id===id) : null;
   if(b) return b.name;
   return fallback[id] || id;
 }
 function getBranchFull(id){
-  const fallbackAddr = {CN1:'130 Vạn kiếp, Phường 3, Quận Bình Thạnh', CN2:'261 Tô Hiến Thành, Phường 12, Quận 10', CN3:'120 Hoàng Diệu 2, Phường Linh Trung, TP. Thủ Đức', CN4:'111 Tôn Đản, Phường 15, Quận 4'};
+  const fallbackAddr = {CN1:'130 Vạn kiếp, Phường 3, Quận Bình Thạnh', CN2:'Số 10 Đặng Thai Mai, Phường Phú Nhuận, TP. Hồ Chí Minh', CN3:'120 Hoàng Diệu 2, Phường Linh Trung, TP. Thủ Đức', CN4:'111 Tôn Đản, Phường 15, Quận 4'};
   const b = (branches && branches.length) ? branches.find(x=>x.id===id) : null;
   if(b) return `${b.id} - ${b.address}`;
   return id + (fallbackAddr[id] ? ' - ' + fallbackAddr[id] : '');
@@ -740,9 +740,54 @@ async function clearAllSyncQueue(){
 async function retryAllSyncQueue(){
   try {
     const res = await api('/api/sync-queue/retry-all', { method: 'POST', headers: { Authorization: 'Bearer ' + token } });
-    showToast(`Đã gửi yêu cầu thử lại ${res.retriedCount || 0} mục Sync`, 'info');
+    showToast(`Đã gửi yêu cầu thử lại ${res.retriedCount || 0} mục Sync`, 'success');
   } catch(e) {
     showToast(e.message || 'Lỗi khi thử lại Sync Queue', 'error');
+  }
+}
+// Yêu cầu #1: Admin đồng bộ lại 1 NV bị xóa từ Google Sheet 17iXM theo mã NV (1 chiều, Sheet giữ lại)
+function openSyncFromSheetModal(){
+  if(currentUser?.role !== 'Admin'){
+    showToast('Chỉ Admin mới được đồng bộ từ Google Sheet', 'error');
+    return;
+  }
+  openModal('Đồng bộ từ Google Sheet (Admin)', `
+    <div class="space-y-4">
+      <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800">
+        <div class="font-black flex items-center gap-2"><i class="fa-solid fa-circle-info text-amber-600"></i> 1 chiều: HR xóa → Sheet 17iXM vẫn giữ. Nút này chỉ khôi phục DUY NHẤT 1 mã NV bị xóa trước đó.</div>
+        <div class="mt-1">Nhập chính xác Mã NV (vd: CN130_UBM..._NV1234) có trên Sheet <a href="https://docs.google.com/spreadsheets/d/17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w" target="_blank" class="underline font-bold">17iXM0zc...</a> để khôi phục. Hệ thống sẽ KHÔNG tạo dòng mới trên Sheet (vì đã tồn tại).</div>
+      </div>
+      <div>
+        <label class="text-xs font-bold text-slate-700">Mã nhân viên (employeeId)</label>
+        <input id="syncEmployeeId" class="w-full mt-1 px-3 py-2.5 rounded-xl border border-slate-200 focus:border-pink-400 focus:ring-2 focus:ring-pink-100 outline-none font-mono text-sm" placeholder="CN261_UBM..._NV...">
+      </div>
+      <div class="flex justify-end gap-2">
+        <button onclick="closeModal()" class="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm">Hủy</button>
+        <button onclick="syncFromSheet()" class="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-black text-sm flex items-center gap-2"><i class="fa-solid fa-cloud-arrow-down"></i> Đồng bộ ngay</button>
+      </div>
+      <div id="syncFromSheetResult" class="hidden text-xs font-bold rounded-xl p-3"></div>
+    </div>
+  `);
+}
+async function syncFromSheet(){
+  const input = document.getElementById('syncEmployeeId');
+  const resEl = document.getElementById('syncFromSheetResult');
+  const employeeId = input?.value.trim();
+  if(!employeeId){ showToast('Vui lòng nhập Mã NV', 'error'); return; }
+  try{
+    resEl.classList.remove('hidden');
+    resEl.className='text-xs font-bold rounded-xl p-3 bg-blue-50 text-blue-700 border border-blue-200';
+    resEl.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Đang đọc Google Sheet 17iXM...';
+    const res = await api('/api/admin/sync-from-sheet', { method:'POST', headers:{ Authorization:'Bearer '+token }, body: JSON.stringify({ employeeId }) });
+    resEl.className='text-xs font-bold rounded-xl p-3 bg-emerald-50 text-emerald-700 border border-emerald-200';
+    resEl.innerHTML=`<i class="fa-solid fa-circle-check"></i> Đã khôi phục <b>${res.employee.name}</b> (${res.employee.employeeId}) từ Sheet <b>${res.fromSheet}</b> • Key: <span class="font-mono">${res.key.key}</span>`;
+    showToast(`Đã đồng bộ lại ${res.employee.name} (${res.employee.employeeId}) từ Sheet`, 'success');
+    loadEmployees();
+    setTimeout(()=>{ closeModal(); }, 1200);
+  }catch(e){
+    resEl.className='text-xs font-bold rounded-xl p-3 bg-red-50 text-red-700 border border-red-200';
+    resEl.innerHTML='<i class="fa-solid fa-triangle-exclamation"></i> '+ (e.message||'Lỗi đồng bộ');
+    showToast(e.message||'Lỗi đồng bộ từ Sheet', 'error');
   }
 }
 function renderDashAudit(){
@@ -2168,11 +2213,16 @@ function switchEmpStoreTab(tab){
     if(filterEl) filterEl.innerHTML = `<option value="">Tất cả trạng thái Chính thức</option><option value="OFFICIAL">Chính thức</option><option value="ARCHIVED">ARCHIVED</option>`;
   }
   if(filterEl) filterEl.value = '';
-  // Toggle import controls visibility
+  // Toggle import controls visibility (yêu cầu #3: Training import)
   const importCtrl = document.getElementById('importOfficialControls');
+  const importTrainingCtrl = document.getElementById('importTrainingControls');
   if(importCtrl){
     if(tab==='OFFICIAL') importCtrl.classList.remove('hidden');
     else importCtrl.classList.add('hidden');
+  }
+  if(importTrainingCtrl){
+    if(tab==='TRAINING') importTrainingCtrl.classList.remove('hidden');
+    else importTrainingCtrl.classList.add('hidden');
   }
   // Update table headers per tab
   const thProgress = document.getElementById('thProgress');
@@ -2338,6 +2388,102 @@ async function handleOfficialImport(event){
           `);
         }
       }catch(e){ showToast('Import lỗi: '+e.message,'error'); }
+    };
+  }catch(e){ showToast('Lỗi đọc file: '+e.message,'error'); console.error(e); }
+}
+function downloadTrainingTemplate(){
+  const header = ['Họ tên','SĐT','Chi nhánh','Ca','Ngày bắt đầu','Mã NV (để trống tự sinh)','Trạng thái','Ghi chú'];
+  const sample = [
+    ['Nguyễn Văn Training','0901112222','CN2','CA_SANG','2024-01-15','','TRAINING',''],
+    ['Trần Thị Train','0903334444','CN1 - 130 Vạn kiếp','Ca Chiều','15/01/2024','CN130_UBM15012024_NV0001','TRAINING',''],
+  ];
+  const csvHeader = header.join(',') + '\n';
+  const csvRows = sample.map(r=> r.map(v=>{
+    const s = String(v).replace(/"/g,'""');
+    return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s}"` : s;
+  }).join(',')).join('\n');
+  const csv = '\uFEFF' + csvHeader + csvRows;
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download='mau_import_nhan_vien_training.csv'; a.click(); URL.revokeObjectURL(url);
+  showToast('Đã tải file mẫu Training CSV','success');
+}
+async function handleTrainingImport(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  event.target.value='';
+  const isXlsx = file.name.toLowerCase().endsWith('.xlsx') || file.name.toLowerCase().endsWith('.xls');
+  let rows=[];
+  try{
+    if(isXlsx){
+      if(typeof XLSX==='undefined'){ showToast('Thiếu thư viện XLSX - chuyển sang CSV','error'); return; }
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, {type:'array'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const json = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+      if(json.length<2){ showToast('File rỗng','error'); return; }
+      const headers = json[0].map(h=>String(h).trim());
+      const idxName = headers.findIndex(h=> /Họ tên|Ho ten|Name/i.test(h));
+      const idxPhone = headers.findIndex(h=> /SĐT|SDT|Phone/i.test(h));
+      const idxBranch = headers.findIndex(h=> /Chi nhánh|Chi nhanh|Branch|CN/i.test(h));
+      const idxShift = headers.findIndex(h=> /^Ca$|Ca làm|Shift/i.test(h));
+      const idxDate = headers.findIndex(h=> /Ngày|Ngay|Date/i.test(h));
+      const idxId = headers.findIndex(h=> /Mã NV|Ma NV|EmployeeId/i.test(h));
+      for(let i=1;i<json.length;i++){
+        const cols = json[i];
+        if(!cols || cols.every(v=> String(v).trim()==='')) continue;
+        rows.push({
+          name: String(cols[idxName>=0?idxName:0]||'').trim(),
+          phone: String(cols[idxPhone>=0?idxPhone:1]||'').trim(),
+          branchId: String(cols[idxBranch>=0?idxBranch:2]||'').trim(),
+          shift: String(cols[idxShift>=0?idxShift:3]||'').trim(),
+          startDate: String(cols[idxDate>=0?idxDate:4]||'').trim(),
+          employeeId: String(cols[idxId>=0?idxId:5]||'').trim(),
+        });
+      }
+    } else {
+      const text = await file.text();
+      rows = parseCSVText(text);
+    }
+    if(rows.length===0){ showToast('Không đọc được dữ liệu','error'); return; }
+    const previewRows = rows.slice(0,20);
+    openModal(`Xác nhận Import/Cập nhật ${rows.length} NV Training`, `
+      <div class="space-y-3 max-h-[65vh] overflow-auto">
+        <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs">
+          <div class="font-black text-blue-800">Lưu ý Training:</div>
+          <div class="text-blue-700 mt-1">• SĐT/Mã NV đã tồn tại sẽ được <b>CẬP NHẬT</b> (không bỏ qua) • Mới sẽ <b>tự sinh Mã NV & Key</b></div>
+          <div class="text-blue-700">• Trạng thái mặc định <b>TRAINING</b> • 12 ngày thử việc (có thể 1 ngày 2 ca)</div>
+        </div>
+        <div class="overflow-auto max-h-[32vh] border rounded-xl">
+          <table class="w-full text-xs">
+            <thead class="bg-slate-900 text-white sticky top-0"><tr><th class="px-2 py-1 text-left">#</th><th class="px-2 py-1 text-left">Họ tên</th><th class="px-2 py-1">SĐT</th><th class="px-2 py-1">CN</th><th class="px-2 py-1">Ca</th><th class="px-2 py-1">Ngày vào</th></tr></thead>
+            <tbody class="divide-y">${previewRows.map((r,i)=>`<tr class="hover:bg-blue-50"><td class="px-2 py-1">${i+1}</td><td class="px-2 py-1 font-bold">${r.name||'<span class=text-red-500>Thiếu</span>'}</td><td class="px-2 py-1 font-mono">${r.phone}</td><td class="px-2 py-1">${r.branchId}</td><td class="px-2 py-1">${r.shift}</td><td class="px-2 py-1">${r.startDate}</td></tr>`).join('')}</tbody>
+          </table>
+          ${rows.length>20?`<div class="text-center text-xs text-slate-500 py-2">... và ${rows.length-20} dòng nữa</div>`:''}
+        </div>
+        <div class="flex gap-2">
+          <button id="confirmTrainingImportBtn" class="flex-1 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-black py-3 rounded-xl">✅ Xác nhận ${rows.length} NV Training</button>
+          <button onclick="closeModal()" class="px-6 bg-white border font-bold py-3 rounded-xl">Hủy</button>
+        </div>
+      </div>
+    `);
+    document.getElementById('confirmTrainingImportBtn').onclick = async ()=>{
+      closeModal(); showToast('Đang import Training...','success');
+      try{
+        const res = await api('/api/employees/import-training', {method:'POST', body:JSON.stringify({employees: rows}), headers:{Authorization:'Bearer '+token}});
+        showToast(`✅ Training: ${res.imported} mới, ${res.updated} cập nhật, ${res.skipped.length} bỏ qua`, 'success');
+        loadEmployees();
+        if(res.skipped.length||res.errors.length){
+          openModal('Kết quả Import Training', `
+            <div class="space-y-2 text-sm">
+              <div class="bg-blue-50 border border-blue-200 rounded-xl p-3"><span class="font-black text-blue-700">${res.imported} mới • ${res.updated} cập nhật</span></div>
+              ${res.skipped.length?'<div class="bg-amber-50 border border-amber-200 rounded-xl p-2 max-h-[120px] overflow-auto"><div class="font-bold text-amber-800 text-xs">Bỏ qua ('+res.skipped.length+')</div>'+res.skipped.slice(0,10).map(s=>'<div class=text-xs>'+s.reason+'</div>').join('')+'</div>':''}
+              ${res.errors.length?'<div class="bg-red-50 border border-red-200 rounded-xl p-2 max-h-[120px] overflow-auto"><div class="font-bold text-red-800 text-xs">Lỗi ('+res.errors.length+')</div>'+res.errors.slice(0,10).map(e=>'<div class=text-xs>'+e.reason+'</div>').join('')+'</div>':''}
+              <button onclick="closeModal()" class="w-full bg-slate-900 text-white font-bold py-2 rounded-xl">Đóng</button>
+            </div>
+          `);
+        }
+      }catch(e){ showToast('Import Training lỗi: '+e.message,'error'); }
     };
   }catch(e){ showToast('Lỗi đọc file: '+e.message,'error'); console.error(e); }
 }
@@ -4410,11 +4556,26 @@ function closeModal(){
   document.getElementById('modal').classList.add('hidden');
 }
 function showToast(msg, type='success'){
+  const colors = {
+    success: 'bg-gradient-to-r from-pink-500 to-rose-500 text-white border-pink-600',
+    error: 'bg-red-600 text-white border-red-700',
+    info: 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white border-blue-600',
+    warning: 'bg-amber-500 text-white border-amber-600'
+  };
+  const icons = { success:'fa-circle-check', error:'fa-circle-exclamation', info:'fa-circle-info', warning:'fa-triangle-exclamation' };
   const t=document.createElement('div');
-  t.className=`fixed bottom-4 right-4 z-[200] px-4 py-3 rounded-xl shadow-xl text-sm font-bold flex items-center gap-2 ${type==='success'?'bg-pink-500 text-white':'bg-red-600 text-white'}`;
-  t.innerHTML=`<i class="fa-solid ${type==='success'?'fa-circle-check':'fa-circle-exclamation'}"></i> ${msg}`;
+  t.className=`fixed bottom-4 right-4 z-[200] px-4 py-3 rounded-xl shadow-2xl text-sm font-bold flex items-center gap-2 border ${colors[type]||colors.success} animate-[slideIn_0.3s_ease]`;
+  t.style.animation='slideIn 0.3s ease';
+  t.innerHTML=`<i class="fa-solid ${icons[type]||icons.success} text-base"></i> <span>${msg}</span>`;
   document.body.appendChild(t);
-  setTimeout(()=>t.remove(),3000);
+  // Hiệu ứng thông báo HR: thêm rung nhẹ cho success
+  if(type==='success'){ t.animate([{transform:'translateX(0)'},{transform:'translateX(-4px)'},{transform:'translateX(4px)'},{transform:'translateX(0)'}],{duration:300}); }
+  setTimeout(()=>{ t.style.opacity='0'; t.style.transform='translateY(10px)'; setTimeout(()=>t.remove(),300); }, type==='error'?4000:3000);
+  // Thêm style keyframes nếu chưa có
+  if(!document.getElementById('toastStyle')){
+    const s=document.createElement('style'); s.id='toastStyle'; s.textContent='@keyframes slideIn{from{opacity:0;transform:translateY(20px) scale(0.95)} to{opacity:1;transform:translateY(0) scale(1)}}';
+    document.head.appendChild(s);
+  }
 }
 
 // Init

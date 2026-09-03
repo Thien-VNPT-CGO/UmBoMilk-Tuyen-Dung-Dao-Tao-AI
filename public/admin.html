@@ -32,8 +32,10 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
 .nav-item:hover .nav-icon{background:white;border-color:#fce7f3;color:#ec4899;box-shadow:0 2px 8px rgba(236,72,153,.12)}
 .nav-badge{font-size:10px;font-weight:800;padding:2px 7px;border-radius:99px;background:#fdf2f8;color:#be185d;border:1px solid #fce7f3;white-space:nowrap}
 .nav-desc{font-size:11px;font-weight:500;color:#94a3b8;line-height:1}
-@media (max-width: 768px){ body{font-size:15px; background:#fdf2f8} header{height:56px; padding:0 12px; backdrop-filter:blur(16px); background:rgba(255,255,255,0.96); border-bottom:1px solid #fce7f3} header .w-9{width:36px;height:36px} #kpiGrid{grid-template-columns: repeat(2, minmax(0,1fr)); gap:10px} #kpiGrid .bg-white{padding:14px; border-radius:18px; box-shadow:0 2px 8px rgba(236,72,153,0.06); border:1px solid #fce7f3} #kpiGrid .w-10{width:42px;height:42px; border-radius:14px; font-size:16px} .overflow-auto{-webkit-overflow-scrolling: touch; scroll-behavior:smooth} table{font-size:13px} table thead th{padding:10px 8px; font-size:11px} table tbody td{padding:10px 8px} #sidebar{top:56px; width:280px; max-width:85vw; height:calc(100vh - 56px); padding:10px 10px 16px 10px; background:#ffffff; border-right:1px solid #f1f5f9; box-shadow:4px 0 24px rgba(0,0,0,.04); overflow-y:auto; overflow-x:hidden} #sidebar::-webkit-scrollbar{width:4px} #sidebar::-webkit-scrollbar-thumb{background:#f1f5f9} #mobileNavAdmin{height:64px; background:rgba(255,255,255,.98); border-top:1px solid #fce7f3; box-shadow:0 -2px 16px rgba(236,72,153,0.08); padding:4px 4px max(8px, env(safe-area-inset-bottom)) 4px; gap:2px; backdrop-filter:blur(12px)} #mobileNavAdmin button{flex:1; min-height:52px; border-radius:14px; margin:0 1px; transition:all 0.2s; padding:6px 2px; gap:3px; font-weight:700} #mobileNavAdmin button.active{color:#ec4899; background:#fdf2f8}
+@media (max-width: 768px){ body{font-size:15px; background:#fdf2f8; word-break:break-word} header{height:56px; padding:0 12px; backdrop-filter:blur(16px); background:rgba(255,255,255,0.96); border-bottom:1px solid #fce7f3} header .w-9{width:36px;height:36px} #kpiGrid{grid-template-columns: repeat(2, minmax(0,1fr)); gap:10px} #kpiGrid .bg-white{padding:14px; border-radius:18px; box-shadow:0 2px 8px rgba(236,72,153,0.06); border:1px solid #fce7f3} #kpiGrid .w-10{width:42px;height:42px; border-radius:14px; font-size:16px} .overflow-auto{-webkit-overflow-scrolling: touch; scroll-behavior:smooth} table{font-size:13px; min-width:600px} table thead th{padding:10px 8px; font-size:11px; white-space:nowrap} table tbody td{padding:10px 8px; white-space:nowrap; word-break:keep-all} #scheduleGrid{grid-template-columns:1fr !important} #scheduleGrid .grid-cols-7{grid-template-columns:repeat(2, minmax(0,1fr)) !important; gap:6px !important} #employeesTable{font-size:12px} #sidebar{top:56px; width:280px; max-width:85vw; height:calc(100vh - 56px); padding:10px 10px 16px 10px; background:#ffffff; border-right:1px solid #f1f5f9; box-shadow:4px 0 24px rgba(0,0,0,.04); overflow-y:auto; overflow-x:hidden} #sidebar::-webkit-scrollbar{width:4px} #sidebar::-webkit-scrollbar-thumb{background:#f1f5f9} #mobileNavAdmin{height:64px; background:rgba(255,255,255,.98); border-top:1px solid #fce7f3; box-shadow:0 -2px 16px rgba(236,72,153,0.08); padding:4px 4px max(8px, env(safe-area-inset-bottom)) 4px; gap:2px; backdrop-filter:blur(12px)} #mobileNavAdmin button{flex:1; min-height:52px; border-radius:14px; margin:0 1px; transition:all 0.2s; padding:6px 2px; gap:3px; font-weight:700} #mobileNavAdmin button.active{color:#ec4899; background:#fdf2f8} .card{padding:14px !important; border-radius:18px !important} .text-xl{font-size:18px !important} .text-sm{font-size:13px !important}
 }
+@media (max-width: 640px){ #scheduleGrid .grid-cols-7{grid-template-columns:1fr !important} #kpiGrid{grid-template-columns:1fr !important} table{min-width:500px} }
+@media (min-width: 768px) and (max-width: 1024px){ #sidebar{width:260px} #kpiGrid{grid-template-columns:repeat(3, minmax(0,1fr))} #scheduleGrid{grid-template-columns:repeat(2, minmax(0,1fr))} }
 </style>
 </head>
 <body class="bg-[#faf5f8] h-screen overflow-hidden flex flex-col">
@@ -70,7 +72,8 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
       <img src="/images/logo.png" alt="Ụm Bò Milk" class="w-9 h-9 rounded-xl object-contain bg-white p-1 shadow">
       <div class="hidden sm:block">
         <div class="font-black text-pink-900 leading-none text-sm">ỤM BÒ MILK • HR ADMIN</div>
-        <div class="text-[11px] font-semibold text-pink-600 flex items-center gap-2"><span class="w-2 h-2 bg-pink-500 rounded-full animate-pulse inline-block"></span>Realtime • <span id="headerBranch">CN2 - 261 Tô Hiến Thành</span></div>
+        <div class="text-[9px] font-bold text-pink-500 leading-none mt-0.5">Số 10 Đặng Thai Mai, Phường Phú Nhuận, TP. Hồ Chí Minh</div>
+        <div class="text-[11px] font-semibold text-pink-600 flex items-center gap-2"><span class="w-2 h-2 bg-pink-500 rounded-full animate-pulse inline-block"></span>Realtime • <span id="headerBranch">CN2 - Số 10 Đặng Thai Mai</span></div>
       </div>
     </div>
     <!-- Realtime Live System Status Indicators (6 Services) - 1 HÀNG RỘNG, KHÔNG KÉO -->
@@ -215,6 +218,7 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
               <div class="flex items-center gap-1">
                 <button onclick="retryAllSyncQueue()" class="text-[11px] font-bold bg-pink-500 text-white px-2 py-0.5 rounded-lg hover:bg-pink-600 shadow-xs"><i class="fa-solid fa-rotate-right"></i> Thử lại</button>
                 <button onclick="clearFailedSyncQueue()" class="text-[11px] font-bold bg-rose-500 text-white px-2 py-0.5 rounded-lg hover:bg-rose-600 shadow-xs"><i class="fa-solid fa-trash-can"></i> Xóa lỗi</button>
+                <button onclick="openSyncFromSheetModal()" class="text-[11px] font-bold bg-emerald-500 text-white px-2 py-0.5 rounded-lg hover:bg-emerald-600 shadow-xs border border-emerald-600" title="Chỉ Admin - Đồng bộ lại 1 NV bị xóa từ Google Sheet 17iXM theo Mã NV (1 chiều, không xóa Sheet)"><i class="fa-solid fa-cloud-arrow-down"></i> Đồng bộ từ Sheet</button>
               </div>
             </div>
             <div id="dashSync" class="mt-3 space-y-2 max-h-[220px] overflow-auto scrollbar-thin"></div>
@@ -276,7 +280,7 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
               <select id="filterInterviewBranch" class="px-3 py-2 rounded-xl border border-pink-200 text-xs font-bold" onchange="renderInterviewsTable()">
                 <option value="">Tất cả Chi nhánh</option>
                 <option value="CN1">CN1 - 130 Vạn kiếp</option>
-                <option value="CN2">CN2 - 261 Tô Hiến Thành</option>
+                <option value="CN2">CN2 - Số 10 Đặng Thai Mai</option>
                 <option value="CN3">CN3 - 120 Hoàng Diệu 2</option>
                 <option value="CN4">CN4 - 111 Tôn Đản</option>
               </select>
@@ -321,7 +325,7 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
             <select id="empBranchFilter" class="px-3.5 py-2.5 rounded-2xl bg-white/20 hover:bg-white/25 border border-white/35 text-white font-bold text-xs backdrop-blur-md focus:bg-rose-950 focus:outline-none transition shadow-xs" onchange="pagination.employees.page=1; renderEmployeesStore()">
               <option value="" class="bg-rose-950 text-white">Tất cả Chi nhánh</option>
               <option value="CN1" class="bg-rose-950 text-white">CN1 - 130 Vạn kiếp</option>
-              <option value="CN2" class="bg-rose-950 text-white">CN2 - 261 Tô Hiến Thành</option>
+              <option value="CN2" class="bg-rose-950 text-white">CN2 - Số 10 Đặng Thai Mai</option>
               <option value="CN3" class="bg-rose-950 text-white">CN3 - 120 Hoàng Diệu 2</option>
               <option value="CN4" class="bg-rose-950 text-white">CN4 - 111 Tôn Đản</option>
             </select>
@@ -336,6 +340,21 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
           <button onclick="switchEmpStoreTab('OFFICIAL')" id="empSubTab-OFFICIAL" class="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold transition bg-white border border-pink-200 text-pink-700 hover:bg-pink-50">
             <i class="fa-solid fa-user-check"></i> Nhân viên Chính thức <span id="countEmpOfficialTab" class="bg-pink-100 text-pink-700 px-2 py-0.5 rounded-full text-xs">0</span>
           </button>
+        </div>
+        <!-- Import Training Controls - visible on TRAINING tab (yêu cầu #3) -->
+        <div id="importTrainingControls" class="hidden bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-3 mb-4 flex flex-wrap items-center justify-between gap-3 shadow-sm">
+          <div class="flex items-center gap-2">
+            <span class="w-8 h-8 rounded-xl bg-blue-500 text-white flex items-center justify-center"><i class="fa-solid fa-user-graduate"></i></span>
+            <div>
+              <div class="text-sm font-black text-blue-900">Import / Cập nhật nhân viên Training</div>
+              <div class="text-xs text-blue-700">Hỗ trợ CSV/XLSX • Tự sinh Mã NV & Key • Cập nhật nếu SĐT/Mã NV đã tồn tại</div>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <button onclick="downloadTrainingTemplate()" class="px-4 py-2 rounded-xl bg-white border border-blue-200 text-blue-700 font-bold text-xs hover:bg-blue-50 flex items-center gap-1.5 shadow-2xs"><i class="fa-solid fa-download"></i> File mẫu</button>
+            <button onclick="document.getElementById('importTrainingFile').click()" class="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-black text-xs shadow flex items-center gap-1.5"><i class="fa-solid fa-upload"></i> Import Training</button>
+            <input type="file" id="importTrainingFile" accept=".csv,.xlsx,.xls" class="hidden" onchange="handleTrainingImport(event)">
+          </div>
         </div>
         <!-- Import Official Controls - only visible on OFFICIAL tab -->
         <div id="importOfficialControls" class="hidden bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl p-3 mb-4 flex flex-wrap items-center justify-between gap-3 shadow-sm">
@@ -425,7 +444,7 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
         <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
           <h2 class="text-xl font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-calendar-days text-pink-500"></i> Lịch làm việc <span class="text-xs font-bold bg-pink-100 text-pink-700 px-2 py-1 rounded-full border border-pink-200">T2 → CN • 5 nhóm</span></h2>
           <div class="flex gap-2 items-center">
-            <select id="scheduleBranch" class="px-3 py-2 rounded-xl border border-pink-200 text-xs font-bold focus:border-pink-400 focus:ring-2 focus:ring-pink-100 outline-none" onchange="loadSchedules()"><option value="">Tất cả CN</option><option value="CN1">CN1 - 130 Vạn kiếp</option><option value="CN2">CN2 - 261 Tô Hiến Thành</option><option value="CN3">CN3 - 120 Hoàng Diệu 2</option><option value="CN4">CN4 - 111 Tôn Đản</option></select>
+            <select id="scheduleBranch" class="px-3 py-2 rounded-xl border border-pink-200 text-xs font-bold focus:border-pink-400 focus:ring-2 focus:ring-pink-100 outline-none" onchange="loadSchedules()"><option value="">Tất cả CN</option><option value="CN1">CN1 - 130 Vạn kiếp</option><option value="CN2">CN2 - Số 10 Đặng Thai Mai</option><option value="CN3">CN3 - 120 Hoàng Diệu 2</option><option value="CN4">CN4 - 111 Tôn Đản</option></select>
             <button onclick="changeScheduleWeek(-7)" class="px-3 py-2 rounded-xl bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white text-xs font-bold transition flex items-center gap-1 shadow-2xs cursor-pointer" title="Xem lịch tuần trước">
               <i class="fa-solid fa-chevron-left"></i> Tuần trước
             </button>
@@ -479,7 +498,7 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
           <h2 class="text-xl font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-camera text-pink-500"></i> Record điểm danh</h2>
           <div class="flex gap-2">
             <input id="attDate" type="date" class="px-3 py-2 rounded-xl border border-pink-200 text-xs">
-            <select id="attBranch" class="px-3 py-2 rounded-xl border border-pink-200 text-xs font-bold"><option value="">Tất cả CN</option><option value="CN1">CN1 - 130 Vạn kiếp</option><option value="CN2">CN2 - 261 Tô Hiến Thành</option><option value="CN3">CN3 - 120 Hoàng Diệu 2</option><option value="CN4">CN4 - 111 Tôn Đản</option></select>
+            <select id="attBranch" class="px-3 py-2 rounded-xl border border-pink-200 text-xs font-bold"><option value="">Tất cả CN</option><option value="CN1">CN1 - 130 Vạn kiếp</option><option value="CN2">CN2 - Số 10 Đặng Thai Mai</option><option value="CN3">CN3 - 120 Hoàng Diệu 2</option><option value="CN4">CN4 - 111 Tôn Đản</option></select>
             <button onclick="renderAttendances()" class="px-4 py-2 rounded-xl bg-gradient-to-r from-pink-500 to-rose-500 text-white text-xs font-bold shadow">Lọc</button>
           </div>
         </div>
@@ -508,7 +527,7 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
           <h2 class="text-xl font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-file-invoice text-pink-500"></i> Báo cáo chấm công <span class="text-xs font-bold bg-white border border-pink-200 px-2 py-1 rounded-full text-pink-600">Kế toán • HR • Dữ liệu tính lương</span></h2>
           <div class="flex gap-2 items-center">
             <input id="reportMonth" type="month" class="px-3 py-2 rounded-xl border border-pink-200 text-xs font-bold">
-            <select id="reportBranch" class="px-3 py-2 rounded-xl border border-pink-200 text-xs font-bold"><option value="">Tất cả CN</option><option value="CN1">CN1 - 130 Vạn kiếp</option><option value="CN2">CN2 - 261 Tô Hiến Thành</option><option value="CN3">CN3 - 120 Hoàng Diệu 2</option><option value="CN4">CN4 - 111 Tôn Đản</option></select>
+            <select id="reportBranch" class="px-3 py-2 rounded-xl border border-pink-200 text-xs font-bold"><option value="">Tất cả CN</option><option value="CN1">CN1 - 130 Vạn kiếp</option><option value="CN2">CN2 - Số 10 Đặng Thai Mai</option><option value="CN3">CN3 - 120 Hoàng Diệu 2</option><option value="CN4">CN4 - 111 Tôn Đản</option></select>
             <button onclick="loadReportAll()" class="px-4 py-2 rounded-xl bg-gradient-to-r from-pink-500 to-rose-500 text-white text-xs font-black shadow">Xem báo cáo</button>
             <button id="reportResetAllBtn" onclick="resetReportAll()" class="hidden px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-black shadow flex items-center gap-1.5" title="Chỉ Admin - Xoá toàn bộ dữ liệu báo cáo (chấm công) về 0"><i class="fa-solid fa-trash-can"></i> Xoá tất cả</button>
           </div>

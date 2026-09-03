@@ -53,7 +53,7 @@ app.use((req,res,next)=>{ req.requestId = uuidv4().slice(0,8); next(); });
 // ============ DEFAULT DATA ============
 const DEFAULT_BRANCHES = [
   { id: 'CN1', address: '130 Vạn kiếp, Phường 3, Quận Bình Thạnh', prefix: 'CN130', name: 'CN1 - 130 Vạn kiếp' },
-  { id: 'CN2', address: '261 Tô Hiến Thành, Phường 12, Quận 10', prefix: 'CN261', name: 'CN2 - 261 Tô Hiến Thành' },
+  { id: 'CN2', address: 'Số 10 Đặng Thai Mai, Phường Phú Nhuận, TP. Hồ Chí Minh', prefix: 'CN261', name: 'CN2 - Số 10 Đặng Thai Mai' },
   { id: 'CN3', address: '120 Hoàng Diệu 2, Phường Linh Trung, TP. Thủ Đức', prefix: 'CN120', name: 'CN3 - 120 Hoàng Diệu 2' },
   { id: 'CN4', address: '111 Tôn Đản, Phường 15, Quận 4', prefix: 'CN111', name: 'CN4 - 111 Tôn Đản' }
 ];
@@ -99,9 +99,9 @@ const DEFAULT_SETTINGS = {
 const SHEET_DEFINITIONS = {
   // Tab Nhân viên mới - từ Form đăng ký
   NHAN_VIEN_MOI: { sheetName: 'NHAN_VIEN_MOI', headers: ['ID','Ngày ĐK','Họ tên','Giới tính','Năm sinh','Trình độ','Quê quán','SĐT','Ca đăng ký','Chi nhánh ĐK','Kinh nghiệm','Xử lý đột xuất','Facebook','Nguồn biết tin','Điểm AI','Kết quả','Trạng thái','Source ID','Version','Updated At'] },
-  // Nhân viên cửa hàng
-  NHAN_VIEN_TRAINING: { sheetName: 'NHAN_VIEN_TRAINING', headers: ['ID','Mã NV','Họ tên','SĐT','Chi nhánh','Ca','Ngày bắt đầu','Ngày kết thúc','Số ngày Training','Trạng thái','Điểm TEST','Kết quả TEST','Loại','Category','Version','Updated At','Sync'] },
-  NHAN_VIEN_CHINH_THUC: { sheetName: 'NHAN_VIEN_CHINH_THUC', headers: ['ID','Mã NV','Họ tên','SĐT','Chi nhánh','Ca','Ngày bắt đầu','Trạng thái','Điểm TEST','Loại','Ngày chính thức','Version','Updated At','Sync'] },
+  // Nhân viên cửa hàng - thêm cột Key (yêu cầu #9) – Key đi theo NV đến khi nghỉ
+  NHAN_VIEN_TRAINING: { sheetName: 'NHAN_VIEN_TRAINING', headers: ['ID','Mã NV','Họ tên','SĐT','Key','Chi nhánh','Ca','Ngày bắt đầu','Ngày kết thúc','Số ngày Training','Trạng thái','Điểm TEST','Kết quả TEST','Loại','Category','Version','Updated At','Sync'] },
+  NHAN_VIEN_CHINH_THUC: { sheetName: 'NHAN_VIEN_CHINH_THUC', headers: ['ID','Mã NV','Họ tên','SĐT','Key','Chi nhánh','Ca','Ngày bắt đầu','Trạng thái','Điểm TEST','Loại','Ngày chính thức','Version','Updated At','Sync'] },
   NHAN_VIEN_XUONG: { sheetName: 'NHAN_VIEN_XUONG', headers: ['ID','Mã NV','Họ tên','SĐT','Branch','Status','Sync'] },
   NHAN_VIEN_VAN_PHONG: { sheetName: 'NHAN_VIEN_VAN_PHONG', headers: ['ID','Mã NV','Họ tên','SĐT','Branch','Status','Sync'] },
   NHAN_VIEN_SALE: { sheetName: 'NHAN_VIEN_SALE', headers: ['ID','Mã NV','Họ tên','SĐT','Branch','Status','Sync'] },
@@ -824,7 +824,7 @@ app.post('/api/employees/import-official', authMiddleware, roleCheck(['Admin','H
     // try contains
     const upper = raw.toUpperCase();
     if(upper.includes('CN1') || upper.includes('CN130') || upper.includes('130') ) return 'CN1';
-    if(upper.includes('CN2') || upper.includes('CN261') || upper.includes('261') ) return 'CN2';
+    if(upper.includes('CN2') || upper.includes('CN261') || upper.includes('261') || upper.includes('DANG THAI MAI') || upper.includes('THAI MAI')) return 'CN2';
     if(upper.includes('CN3') || upper.includes('CN120') || upper.includes('120') ) return 'CN3';
     if(upper.includes('CN4') || upper.includes('CN111') || upper.includes('111') ) return 'CN4';
     // fallback try mapBranchText if exists
@@ -930,6 +930,129 @@ app.post('/api/employees/import-official', authMiddleware, roleCheck(['Admin','H
   io.emit('keys:update', db.keys);
   res.json(results);
 });
+// Import Training - cập nhật dữ liệu training hiện tại (yêu cầu #3) - cho phép upsert theo SĐT/Mã NV
+app.post('/api/employees/import-training', authMiddleware, roleCheck(['Admin','HR']), (req,res)=>{
+  const rows = req.body.employees || req.body.rows || req.body.data || [];
+  if(!Array.isArray(rows) || rows.length===0) return res.status(400).json({error:'Không có dữ liệu import (cần mảng employees)'});
+  if(rows.length>500) return res.status(400).json({error:'Tối đa 500 nhân viên/lần import'});
+  function normBranch(input){
+    if(!input) return null;
+    const raw = String(input).trim();
+    if(db.branches.find(b=>b.id===raw)) return raw;
+    if(db.branches.find(b=>b.prefix===raw)) return db.branches.find(b=>b.prefix===raw).id;
+    const upper = raw.toUpperCase();
+    if(upper.includes('CN1') || upper.includes('CN130') || upper.includes('130') ) return 'CN1';
+    if(upper.includes('CN2') || upper.includes('CN261') || upper.includes('261') || upper.includes('DANG THAI MAI') || upper.includes('THAI MAI')) return 'CN2';
+    if(upper.includes('CN3') || upper.includes('CN120') || upper.includes('120') ) return 'CN3';
+    if(upper.includes('CN4') || upper.includes('CN111') || upper.includes('111') ) return 'CN4';
+    try{ if(typeof mapBranchText==='function') return mapBranchText(raw); }catch(e){}
+    return null;
+  }
+  function normShift(input){
+    if(!input) return 'CA_SANG';
+    const raw = String(input).trim().toUpperCase();
+    if(['CA_SANG','CA_CHIEU','CA_TOI','CA_TRUA'].includes(raw)) return raw==='CA_TRUA' ? 'CA_CHIEU' : raw;
+    const low = String(input).toLowerCase();
+    if(low.includes('sáng') || low.includes('sang') || low.includes('7g') || low.includes('07:00')) return 'CA_SANG';
+    if(low.includes('chiều') || low.includes('chieu') || low.includes('trưa') || low.includes('trua') || low.includes('12g') || low.includes('12:00')) return 'CA_CHIEU';
+    if(low.includes('tối') || low.includes('toi') || low.includes('18g') || low.includes('18:00') || low.includes('23:00')) return 'CA_TOI';
+    return 'CA_SANG';
+  }
+  function parseDate(input){
+    if(!input) return new Date().toISOString().split('T')[0];
+    const s = String(input).trim();
+    if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    if(s.includes('/')){
+      const p = s.split('/');
+      if(p.length===3){
+        const dd = p[0].padStart(2,'0');
+        const mm = p[1].padStart(2,'0');
+        let yyyy = p[2];
+        if(yyyy.length===2) yyyy='20'+yyyy;
+        return `${yyyy}-${mm}-${dd}`;
+      }
+    }
+    if(s.includes('-') && s.split('-')[0].length===2){
+      const p=s.split('-');
+      if(p.length===3) return `${p[2]}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`;
+    }
+    const d = new Date(s);
+    if(!isNaN(d)) return d.toISOString().split('T')[0];
+    return new Date().toISOString().split('T')[0];
+  }
+  const results = { imported:0, updated:0, skipped:[], errors:[], employees:[], keys:[] };
+  rows.forEach((row, idx)=>{
+    try{
+      const name = (row.name || row['Họ tên'] || row['Ho ten'] || row['ten'] || row['Name'] || '').toString().trim();
+      const phone = (row.phone || row['SĐT'] || row['SDT'] || row['sdt'] || row['Phone'] || row['phone'] || '').toString().trim();
+      let branchId = normBranch(row.branchId || row['Chi nhánh'] || row['Chi nhanh'] || row['CN'] || row['branch'] || 'CN2');
+      let shift = normShift(row.shift || row['Ca'] || row['Ca làm'] || row['Ca lam'] || 'CA_SANG');
+      const startDate = parseDate(row.startDate || row['Ngày bắt đầu'] || row['Ngay bat dau'] || row['startDate'] || row['Ngày vào'] || '');
+      const endDateInput = row.endDate || row['Ngày kết thúc'] || row['Ngay ket thuc'] || '';
+      const statusIn = (row.status|| 'TRAINING').toString().toUpperCase();
+      const category = (row.category||'STORE').toString().toUpperCase();
+      const employeeIdInput = (row.employeeId || row['Mã NV'] || row['Ma NV'] || row['ID'] || '').toString().trim();
+      if(!name) { results.skipped.push({idx, reason:'Thiếu Họ tên', row}); return; }
+      if(!phone) { results.skipped.push({idx, reason:'Thiếu SĐT', row}); return; }
+      if(!branchId) { results.errors.push({idx, reason:'Chi nhánh không hợp lệ', row}); return; }
+      // Kiểm tra tồn tại theo SĐT hoặc Mã NV → UPDATE thay vì skip (yêu cầu #3)
+      let existing = null;
+      if(employeeIdInput) existing = db.employees.find(e=>e.employeeId===employeeIdInput);
+      if(!existing) existing = db.employees.find(e=>e.phone===phone);
+      if(existing){
+        const before = {...existing};
+        existing.name = name;
+        existing.branchId = branchId;
+        existing.shift = shift;
+        existing.startDate = startDate;
+        if(endDateInput) existing.endDate = parseDate(endDateInput);
+        existing.status = statusIn.includes('OFFICIAL') ? 'OFFICIAL' : (statusIn || existing.status);
+        existing.category = category;
+        existing.version = (existing.version||1)+1;
+        existing.updated_at = new Date().toISOString();
+        existing.updated_by = req.user.username;
+        existing.sync_status='PENDING';
+        results.updated++;
+        results.employees.push(existing);
+        audit(req.user.username,'UPDATE_TRAINING_IMPORT','EMPLOYEE',before,existing, req.ip);
+        addSyncQueue('EMPLOYEE','UPDATE',existing, req.user.username, 'IMPORT_TRAINING');
+      } else {
+        let employeeId = employeeIdInput;
+        if(employeeId && db.employees.find(e=>e.employeeId===employeeId)){
+          results.skipped.push({idx, reason:'Trùng Mã NV '+employeeId, row}); return;
+        }
+        if(!employeeId){
+          try{ employeeId = generateEmployeeId(branchId); }catch(e){ results.errors.push({idx, reason:'Không sinh được Mã NV', row}); return; }
+        }
+        const now = new Date().toISOString();
+        const emp = {
+          id: uuidv4(), employeeId, name, phone, branchId, shift,
+          startDate,
+          endDate: endDateInput ? parseDate(endDateInput) : (()=>{ const d=new Date(startDate); d.setDate(d.getDate()+11); return d.toISOString().split('T')[0]; })(),
+          trainingDays: 12,
+          status: 'TRAINING',
+          testScore: null, testResult: null,
+          type: 'TRAINING', category, avatar:'', checkHistory:[],
+          version:1, updated_at: now, updated_by: req.user.username, source:'IMPORT_TRAINING', sync_status:'PENDING'
+        };
+        db.employees.push(emp);
+        results.employees.push(emp);
+        const key = { id: uuidv4(), employeeId, key: 'KEY-'+Math.random().toString(36).substring(2,10).toUpperCase(), deviceId:null, boundAt:null, status:'ACTIVE', version:1, updated_at: now, sync_status:'PENDING' };
+        db.keys.push(key);
+        results.keys.push(key);
+        results.imported++;
+        audit(req.user.username,'IMPORT_TRAINING','EMPLOYEE',null,emp, req.ip);
+        addSyncQueue('EMPLOYEE','CREATE',emp, req.user.username, 'IMPORT_TRAINING');
+      }
+    }catch(e){
+      results.errors.push({idx, reason:e.message, row});
+    }
+  });
+  saveDB();
+  io.emit('employees:update', db.employees);
+  io.emit('keys:update', db.keys);
+  res.json(results);
+});
 app.put('/api/employees/:id', authMiddleware, roleCheck(['Admin','HR','Manager']), (req,res)=>{
   const emp = db.employees.find(e=>e.id===req.params.id || e.employeeId===req.params.id);
   if(!emp) return res.status(404).json({error:'Not found'});
@@ -996,16 +1119,16 @@ app.delete('/api/employees/:id', authMiddleware, roleCheck(['Admin','HR']), (req
     emitForceLogout(empId, 'Tài khoản nhân viên đã bị xóa vĩnh viễn khỏi hệ thống');
     return res.json({success:true, hard:true, removedKeys: beforeKeys});
   }
-  // Default: soft delete -> ARCHIVED (giữ lịch sử) + forceLogout ngay
+  // Default: soft delete -> ARCHIVED (giữ lịch sử) + forceLogout ngay - KHÔNG xóa trên Google Sheet 17iXM (1 chiều, Sheet giữ lại để Admin có thể đồng bộ lại)
   before.status='ARCHIVED';
   before.sync_status='PENDING';
   before.version = (before.version||1)+1;
   audit(req.user.username,'DELETE','EMPLOYEE',before,null, req.ip);
-  addSyncQueue('EMPLOYEE','DELETE',before, req.user.username, 'WEB_HR');
+  // KHÔNG gọi addSyncQueue DELETE để giữ dữ liệu trên Sheet 17iXM (yêu cầu #1)
   saveDB();
   io.emit('employees:update', db.employees);
   emitForceLogout(before.employeeId, 'Tài khoản của bạn đã bị vô hiệu hóa (ARCHIVED). Vui lòng liên hệ HR.');
-  res.json({success:true});
+  res.json({success:true, keptOnSheet:true});
 });
 // FIX P0.4: merged transition (generic + official) - single source, realtime, branchScope check
 app.post('/api/employees/:id/transition', authMiddleware, roleCheck(['Admin','HR','Manager']), (req,res)=>{
@@ -1140,6 +1263,7 @@ const BRANCH_MAP = {
   'CN3: 120 Hoàng Diệu 2, Phường Linh Trung, TP. Thủ Đức': 'CN3',
   'CN1: 130 Vạn kiếp, Phường 3, Quận Bình Thạnh': 'CN1',
   'CN2: 261 Tô Hiến Thành, Phường 12, Quận 10': 'CN2',
+  'CN2: Số 10 Đặng Thai Mai, Phường Phú Nhuận, TP. Hồ Chí Minh': 'CN2',
   'Có thể làm 2 chi nhánh trở lên': 'CN2'
 };
 const SHIFT_MAP = {
@@ -1152,9 +1276,9 @@ const SHIFT_MAP = {
 function mapBranchText(text){
   if(!text) return 'CN2';
   if(BRANCH_MAP[text]) return BRANCH_MAP[text];
-  // Fallback: contains check
+  // Fallback: contains check (hỗ trợ cả địa chỉ cũ 261 và mới Đặng Thai Mai)
   if(text.includes('CN1') || text.includes('130 Vạn kiếp')) return 'CN1';
-  if(text.includes('CN2') || text.includes('261 Tô Hiến Thành')) return 'CN2';
+  if(text.includes('CN2') || text.includes('261 Tô Hiến Thành') || text.includes('Đặng Thai Mai') || text.includes('Thai Mai')) return 'CN2';
   if(text.includes('CN3') || text.includes('120 Hoàng Diệu')) return 'CN3';
   if(text.includes('CN4') || text.includes('111 Tôn Đản')) return 'CN4';
   if(text.includes('2 chi nhánh')) return 'CN2';
@@ -2091,15 +2215,123 @@ function cascadeDeletePerson(target, username, ip) {
   }
 
   audit(username || 'SYSTEM', 'CASCADE_DELETE', 'PERSON', target, null, ip || '127.0.0.1');
-  addSyncQueue('PERSON', 'DELETE', target, username || 'SYSTEM', 'WEB_HR');
+  // Yêu cầu #1: HR xóa local nhưng KHÔNG xóa trên Google Sheet 17iXM (1 chiều) – Sheet giữ lại để Admin đồng bộ lại
+  // Không gọi addSyncQueue DELETE và không gọi deleteOutboundFromMasterDatabaseSheet cho master
   saveDB();
   if(empId) emitForceLogout(empId, 'Tài khoản của bạn đã bị xóa khỏi hệ thống (CASCADE). Vui lòng đăng nhập lại.');
-
-  // Trigger Google Sheet Dual Deletion Sync in background
-  deleteOutboundFromMasterDatabaseSheet(target).catch(e => {
-    console.error('[CASCADE SHEET DELETE ERROR]', e.message);
-  });
+  console.log(`[CASCADE DELETE] Local only, kept on Sheet 17iXM (https://docs.google.com/spreadsheets/d/17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w) for admin sync`);
 }
+
+// ============ ADMIN SYNC FROM SHEET (1 chiều, yêu cầu #1 + #9) ============
+// Chỉ Admin được đồng bộ lại dữ liệu bị xóa từ Google Sheet 17iXM theo mã NV
+// Khi HR xóa, Sheet giữ lại (không xóa) → Admin dùng nút này để khôi phục duy nhất 1 NV theo mã
+// Khi khôi phục, KHÔNG push ngược lên Sheet (vì đã tồn tại) – chỉ tạo lại local db + key
+app.post('/api/admin/sync-from-sheet', authMiddleware, roleCheck(['Admin']), async (req,res)=>{
+  const { employeeId } = req.body;
+  if(!employeeId) return res.status(400).json({error:'Thiếu employeeId (Mã NV)'});
+  const cleanId = String(employeeId).trim();
+  // Nếu đã tồn tại local thì không cần sync
+  if(db.employees.find(e=>e.employeeId===cleanId)) return res.status(409).json({error:`Mã NV ${cleanId} đã tồn tại trong Web App, không cần đồng bộ`});
+  const targetId = db.settings?.googleSheet?.targetDatabaseSpreadsheetId || '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w';
+  const token = await getGoogleAccessToken();
+  if(!token) return res.status(500).json({error:'Chưa cấu hình ServiceAccount (privateKey) để đọc Sheet. Cấu hình trong Settings > Google Sheet'});
+  try{
+    // Đọc cả 2 sheet Training và Chính thức
+    const sheetsToCheck = ['NHAN_VIEN_TRAINING','NHAN_VIEN_CHINH_THUC'];
+    let foundRow = null, foundSheet = null, headers = null;
+    for(const sheetName of sheetsToCheck){
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${targetId}/values/${encodeURIComponent(sheetName)}!A1:Z1000`;
+      const resp = await fetch(url, { headers:{ Authorization:`Bearer ${token}` }});
+      if(!resp.ok) continue;
+      const j = await resp.json();
+      const values = j.values || [];
+      if(values.length<2) continue;
+      headers = values[0];
+      const idxMaNV = headers.findIndex(h=> h.includes('Mã NV'));
+      if(idxMaNV===-1) continue;
+      for(let i=1;i<values.length;i++){
+        const row = values[i];
+        if(row[idxMaNV] && String(row[idxMaNV]).trim()===cleanId){
+          foundRow = row; foundSheet = sheetName; break;
+        }
+      }
+      if(foundRow) break;
+    }
+    if(!foundRow) return res.status(404).json({error:`Không tìm thấy Mã NV ${cleanId} trên Google Sheet 17iXM (cả TRAINING và CHINH_THUC)`});
+    // Map row -> employee object dựa trên headers
+    const mapByHeader = (h)=> headers.findIndex(x=> x===h);
+    const get = (headerName, fallbackIdx)=> {
+      const idx = mapByHeader(headerName);
+      if(idx!==-1) return foundRow[idx] || '';
+      return fallbackIdx!==undefined ? (foundRow[fallbackIdx]||'') : '';
+    };
+    // Xác định Key từ Sheet (nếu có cột Key) – nếu không có thì giữ nguyên hoặc sinh mới
+    const keyFromSheet = get('Key','') || get('key','');
+    const idFromSheet = get('ID','') || uuidv4();
+    const name = get('Họ tên','') || get('Họ tên',2) || 'Không tên';
+    const phone = get('SĐT','') || '';
+    const branchId = get('Chi nhánh','') || 'CN2';
+    const shift = get('Ca','') || 'CA_SANG';
+    const startDate = get('Ngày bắt đầu','') || new Date().toISOString().split('T')[0];
+    const endDate = get('Ngày kết thúc','') || null;
+    const trainingDays = parseInt(get('Số ngày Training','')) || 7;
+    const status = get('Trạng thái','') || (foundSheet==='NHAN_VIEN_CHINH_THUC' ? 'OFFICIAL' : 'TRAINING');
+    const testScore = get('Điểm TEST','') ? Number(get('Điểm TEST','')) : null;
+    const testResult = get('Kết quả TEST','') || null;
+    const type = get('Loại','') || (foundSheet==='NHAN_VIEN_CHINH_THUC' ? 'OFFICIAL' : 'TRAINING');
+    const category = get('Category','') || 'STORE';
+    const version = parseInt(get('Version','')) || 1;
+    // Tạo employee
+    const emp = {
+      id: idFromSheet,
+      employeeId: cleanId,
+      name: String(name).trim(),
+      phone: String(phone).trim(),
+      branchId: db.branches.find(b=>b.id===branchId) ? branchId : (db.branches.find(b=>b.name.includes(branchId))?.id || branchId || 'CN2'),
+      shift: ['CA_SANG','CA_CHIEU','CA_TOI'].includes(shift) ? shift : 'CA_SANG',
+      startDate,
+      endDate: type==='TRAINING' ? endDate : null,
+      trainingDays: type==='TRAINING' ? trainingDays : null,
+      status,
+      testScore: isNaN(testScore)? null : testScore,
+      testResult,
+      type,
+      category,
+      avatar:'',
+      checkHistory:[],
+      version,
+      updated_at: new Date().toISOString(),
+      updated_by: req.user.username,
+      source:'SYNC_FROM_SHEET',
+      sync_status:'SYNCED'
+    };
+    // BranchId fallback nếu là tên
+    if(!db.branches.find(b=>b.id===emp.branchId)){
+      const mapped = mapBranchText(emp.branchId);
+      if(mapped) emp.branchId = mapped;
+    }
+    db.employees.push(emp);
+    // Tạo/giữ Key – không push lại Sheet
+    let keyRec = db.keys.find(k=>k.employeeId===cleanId);
+    const finalKey = keyFromSheet && keyFromSheet.length>=6 ? keyFromSheet : (keyRec?.key || 'KEY-'+Math.random().toString(36).substring(2,10).toUpperCase());
+    if(!keyRec){
+      keyRec = { id: uuidv4(), employeeId: cleanId, key: finalKey, deviceId:null, boundAt:null, status:'ACTIVE', version:1, updated_at: new Date().toISOString(), sync_status:'SYNCED' };
+      db.keys.push(keyRec);
+    } else {
+      keyRec.key = finalKey;
+      keyRec.status='ACTIVE';
+      keyRec.updated_at = new Date().toISOString();
+    }
+    saveDB();
+    io.emit('employees:update', db.employees);
+    io.emit('keys:update', db.keys);
+    audit(req.user.username,'SYNC_FROM_SHEET','EMPLOYEE',null,emp, req.ip);
+    res.json({success:true, employee: emp, key: keyRec, fromSheet: foundSheet, keptOnSheet:true});
+  }catch(e){
+    console.error('SYNC_FROM_SHEET error', e);
+    res.status(500).json({error:e.message});
+  }
+});
 
 function normalizePhone(phone) {
   if (!phone) return '';
@@ -2942,28 +3174,58 @@ function addDriveFile(employeeId, dateStr, type, fileName, meta){
   db.driveFiles.unshift(file);
   if(db.driveFiles.length>500) db.driveFiles.pop();
   io.emit('drive:update', db.driveFiles.slice(0,20));
-  // Realtime 1:1 - background sync to real Drive if credentials configured
+  // Realtime 1:1 - background sync to real Drive if credentials configured (yêu cầu #8: thực lưu ảnh/txt)
   (async()=>{
     try{
       const folderId = await ensureDriveFolderCake(emp, dateStr, type);
-      if(folderId && meta && meta.content){
-        // Upload txt content
+      const hasContent = meta && (meta.content || meta.image);
+      if(folderId && hasContent){
         const token = await getGoogleAccessToken();
         if(token){
-          const boundary = '-------314159265358979323846';
-          const body = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({name: fileName, parents:[folderId]})}\r\n--${boundary}\r\nContent-Type: text/plain\r\n\r\n${meta.content}\r\n--${boundary}--`;
-          const upRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
-            method:'POST', headers:{ Authorization:`Bearer ${token}`, 'Content-Type':`multipart/related; boundary=${boundary}`}, body
-          });
-          const upData = await upRes.json();
-          if(upData.id){ file.url = `https://drive.google.com/file/d/${upData.id}/view`; file.sync_status='SYNCED'; file.driveFileId = upData.id; io.emit('drive:update', db.driveFiles.slice(0,20)); saveDB(); }
+          const isImage = fileName.toLowerCase().endsWith('.jpg') || fileName.toLowerCase().endsWith('.jpeg') || fileName.toLowerCase().endsWith('.png');
+          const rawContent = meta.content || meta.image || '';
+          const isBase64Image = typeof rawContent==='string' && rawContent.startsWith('data:image');
+          let mimeType = 'text/plain';
+          let bodyContent = rawContent;
+          let parents = [folderId];
+          if(isImage && isBase64Image){
+            mimeType = 'image/jpeg';
+            // Tách base64 sau dấu phẩy
+            const base64 = rawContent.split(',')[1] || '';
+            // Tạo buffer và dùng multipart với binary – dùng base64 trực tiếp trong body với encoding base64
+            const boundary = '-------314159265358979323846';
+            const metadata = JSON.stringify({name: fileName, parents});
+            // Với ảnh, gửi binary qua multipart: dùng Buffer
+            const binary = Buffer.from(base64, 'base64');
+            // Xây multipart bằng Buffer
+            const part1 = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n`;
+            const part2Header = `--${boundary}\r\nContent-Type: ${mimeType}\r\n\r\n`;
+            const end = `\r\n--${boundary}--`;
+            const bodyBuffer = Buffer.concat([Buffer.from(part1), Buffer.from(part2Header), binary, Buffer.from(end)]);
+            const upRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+              method:'POST', headers:{ Authorization:`Bearer ${token}`, 'Content-Type':`multipart/related; boundary=${boundary}`}, body: bodyBuffer
+            });
+            const upData = await upRes.json();
+            if(upData.id){ file.url = `https://drive.google.com/file/d/${upData.id}/view`; file.sync_status='SYNCED'; file.driveFileId = upData.id; file.mimeType=mimeType; io.emit('drive:update', db.driveFiles.slice(0,20)); saveDB(); return; }
+          } else {
+            // Text file (Diem_danh.txt) – giữ logic cũ
+            const boundary = '-------314159265358979323846';
+            const body = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({name: fileName, parents:[folderId]})}\r\n--${boundary}\r\nContent-Type: ${mimeType}\r\n\r\n${bodyContent}\r\n--${boundary}--`;
+            const upRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+              method:'POST', headers:{ Authorization:`Bearer ${token}`, 'Content-Type':`multipart/related; boundary=${boundary}`}, body
+            });
+            const upData = await upRes.json();
+            if(upData.id){ file.url = `https://drive.google.com/file/d/${upData.id}/view`; file.sync_status='SYNCED'; file.driveFileId = upData.id; io.emit('drive:update', db.driveFiles.slice(0,20)); saveDB(); return; }
+          }
         }
-      } else if(folderId){
+      }
+      if(folderId){
         file.sync_status='SYNCED';
         file.driveFolderId = folderId;
         io.emit('drive:update', db.driveFiles.slice(0,20));
+        saveDB();
       }
-    }catch(e){ console.error('Drive sync error', e.message); file.sync_status='FAILED'; }
+    }catch(e){ console.error('Drive sync error', e.message); file.sync_status='FAILED'; saveDB(); }
   })();
   return file;
 }
@@ -2991,17 +3253,24 @@ async function ensureSheetsExist(){
       });
       console.log(`[SHEET] Auto-created ${requests.length} sheets per HR tabs`);
     }
-    // Ensure headers for each sheet
+    // Ensure headers for each sheet – cập nhật nếu thiếu cột Key (yêu cầu #9)
     for(const key in SHEET_DEFINITIONS){
       const def = SHEET_DEFINITIONS[key];
       const headerRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(def.sheetName)}!A1:Z1`, { headers:{ Authorization:`Bearer ${token}` }});
       const headerData = await headerRes.json();
-      const hasHeader = headerData.values && headerData.values[0] && headerData.values[0][0]===def.headers[0];
-      if(!hasHeader){
+      const existingHeader = headerData.values?.[0] || [];
+      const hasHeader = existingHeader[0]===def.headers[0] && existingHeader.length===def.headers.length && def.headers.every((h,i)=> existingHeader[i]===h);
+      const missingKey = def.headers.includes('Key') && !existingHeader.includes('Key');
+      if(!hasHeader || missingKey){
+        // Clear header row and rewrite để thêm cột Key
+        await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(def.sheetName)}!A1:Z1:clear`, {
+          method:'POST', headers:{ Authorization:`Bearer ${token}` }
+        });
         await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(def.sheetName)}!A1:append?valueInputOption=RAW`, {
           method:'POST', headers:{ Authorization:`Bearer ${token}`, 'Content-Type':'application/json'},
           body: JSON.stringify({ values:[def.headers] })
         });
+        console.log(`[SHEET] Updated header for ${def.sheetName} (added Key)`);
       }
     }
     return true;
@@ -3020,10 +3289,16 @@ async function syncSheetTab(sheetKey){
         rows = db.applicants.map(a=>[a.id, a.createdAt, a.name, a.gender, a.birthYear, a.education, a.hometown, a.phone, a.shiftText, a.branchText, a.experience, a.handling, a.facebook, a.source, a.aiScore, a.isDisqualified?'LOAI':'DAT', a.status, a.source_id, a.version, a.updated_at]);
         break;
       case 'NHAN_VIEN_TRAINING':
-        rows = db.employees.filter(e=>e.type==='TRAINING').map(e=>[e.id, e.employeeId, e.name, e.phone, e.branchId, e.shift, e.startDate, e.endDate, e.trainingDays, e.status, e.testScore, e.testResult, e.type, e.category, e.version, e.updated_at, e.sync_status]);
+        rows = db.employees.filter(e=>e.type==='TRAINING').map(e=>{
+          const k = db.keys.find(k=>k.employeeId===e.employeeId)?.key || '';
+          return [e.id, e.employeeId, e.name, e.phone, k, e.branchId, e.shift, e.startDate, e.endDate, e.trainingDays, e.status, e.testScore, e.testResult, e.type, e.category, e.version, e.updated_at, e.sync_status];
+        });
         break;
       case 'NHAN_VIEN_CHINH_THUC':
-        rows = db.employees.filter(e=>e.type==='OFFICIAL').map(e=>[e.id, e.employeeId, e.name, e.phone, e.branchId, e.shift, e.startDate, e.status, e.testScore, e.type, e.officialStartDate||'', e.version, e.updated_at, e.sync_status]);
+        rows = db.employees.filter(e=>e.type==='OFFICIAL').map(e=>{
+          const k = db.keys.find(k=>k.employeeId===e.employeeId)?.key || '';
+          return [e.id, e.employeeId, e.name, e.phone, k, e.branchId, e.shift, e.startDate, e.status, e.testScore, e.type, e.officialStartDate||'', e.version, e.updated_at, e.sync_status];
+        });
         break;
       case 'LICH_LAM_VIEC':
         rows = db.schedules.flatMap(s=> s.days.map(d=>[s.id, s.employeeId, db.employees.find(e=>e.employeeId===s.employeeId)?.name||'', db.employees.find(e=>e.employeeId===s.employeeId)?.branchId||'', s.weekStart, d.date, d.dayName, d.shift, d.status, d.substituteFor||'', s.version]));
@@ -3378,9 +3653,9 @@ app.post('/api/attendance/checkin', (req,res)=>{
     checkOut: null, status: violations.length ? violations[0] : 'CHECKED_IN', violations, penalty: penaltyObj, version:1, updated_at: now.toISOString(), sync_status:'PENDING'
   };
   db.attendances.push(newRec);
-  // Drive realtime: tạo file ảnh + txt điểm danh
-  addDriveFile(employeeId, today, 'CHECK_IN', `Anh_chup_cua_hang.jpg`, { gps: newRec.checkIn.gps, time: newRec.checkIn.time });
-  addDriveFile(employeeId, today, 'CHECK_IN', `Diem_danh.txt`, { content: `Điểm danh Vào ca UBM - ${emp.name} - ${today} ${newRec.checkIn.time} - GPS:${newRec.checkIn.gps}` });
+  // Drive realtime: tạo file ảnh + txt điểm danh (yêu cầu #8: thực lưu)
+  addDriveFile(employeeId, today, 'CHECK_IN', `Anh_chup_cua_hang.jpg`, { content: image, gps: newRec.checkIn.gps, time: newRec.checkIn.time });
+  addDriveFile(employeeId, today, 'CHECK_IN', `Diem_danh.txt`, { content: `Điểm danh Vào ca UBM - ${emp.name} - ${today} ${newRec.checkIn.time} - GPS:${newRec.checkIn.gps} - Địa chỉ:${newRec.checkIn.address} - SĐT:${emp.phone} - Ca:${newRec.shift}` });
   audit(employeeId,'CHECKIN','ATTENDANCE',null,newRec, req.ip);
   addSyncQueue('ATTENDANCE','CREATE',newRec, employeeId, 'WEB_EMPLOYEE');
   saveDB();
@@ -3435,8 +3710,8 @@ app.post('/api/attendance/checkout', (req,res)=>{
   record.status = 'COMPLETED';
   record.updated_at = now.toISOString();
   record.sync_status = 'PENDING';
-  addDriveFile(employeeId, today, 'CHECK_OUT', `Anh_chup_cua_hang.jpg`, { gps: record.checkOut.gps, time: record.checkOut.time });
-  addDriveFile(employeeId, today, 'CHECK_OUT', `Diem_danh.txt`, { content: `Điểm danh Ra ca UBM - ${emp.name} - ${today} ${record.checkOut.time}` });
+  addDriveFile(employeeId, today, 'CHECK_OUT', `Anh_chup_cua_hang.jpg`, { content: image, gps: record.checkOut.gps, time: record.checkOut.time });
+  addDriveFile(employeeId, today, 'CHECK_OUT', `Diem_danh.txt`, { content: `Điểm danh Ra ca UBM - ${emp.name} - ${today} ${record.checkOut.time} - GPS:${record.checkOut.gps} - Địa chỉ:${record.checkOut.address}` });
   addSyncQueue('ATTENDANCE','UPDATE',record, employeeId, 'WEB_EMPLOYEE');
   saveDB();
   io.emit('attendances:update', db.attendances);
