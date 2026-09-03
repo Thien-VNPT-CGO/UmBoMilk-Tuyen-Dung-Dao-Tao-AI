@@ -76,8 +76,8 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
         <div class="hidden text-[11px] font-semibold text-pink-600 flex items-center gap-2"><span class="w-2 h-2 bg-pink-500 rounded-full animate-pulse inline-block"></span>Realtime • <span id="headerBranch">CN2 - 261 Tô Hiến Thành</span></div>
       </div>
     </div>
-    <!-- Realtime Live System Status Indicators (6 Services) - 1 HÀNG RỘNG, KHÔNG KÉO -->
-    <div class="flex flex-nowrap items-center gap-1 py-1 flex-1 min-w-0 justify-start overflow-visible whitespace-nowrap pr-1">
+    <!-- Realtime Live System Status Indicators (6 Services) - Ẩn trên mobile để không vỡ layout, chỉ hiện lg+ -->
+    <div class="hidden lg:flex flex-nowrap items-center gap-1 py-1 flex-1 min-w-0 justify-start overflow-visible whitespace-nowrap pr-1">
       <!-- 1. Database chính -->
       <div id="statusDbMaster" class="flex flex-shrink-0 items-center gap-1.5 bg-emerald-50 border border-emerald-300 text-emerald-800 text-[11px] font-black px-2 py-1 rounded-full shadow-2xs whitespace-nowrap" title="Database chính (Sheet ID: 17iXM0zc...) - Chạy API Thật">
         <span class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
