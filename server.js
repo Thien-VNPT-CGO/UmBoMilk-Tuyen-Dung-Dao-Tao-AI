@@ -446,6 +446,13 @@ function audit(actor, action, entity, before, after, ip='127.0.0.1'){
   saveDB();
   io.emit('audit:new', log);
 }
+function emitForceLogout(employeeId, reason='Tài khoản không tồn tại'){
+  const payload = { employeeId, reason, timestamp: new Date().toISOString() };
+  // Gửi tới room riêng + broadcast để web app nhân viên dù chưa join room vẫn nhận
+  try{ io.to(`employee:${employeeId}`).emit('employee:forceLogout', payload); }catch(e){}
+  io.emit('employee:forceLogout', payload);
+  console.log(`[FORCE_LOGOUT] ${employeeId} reason: ${reason}`);
+}
 
 async function syncToGoogleSheet(item){
   const webhookUrl = db.settings?.googleSheet?.targetWebhookUrl;
@@ -685,6 +692,23 @@ app.post('/api/auth/employee-login', authLimiter, (req,res)=>{
   const token = jwt.sign({ employeeId, name: emp.name, type: emp.type, status: emp.status, branchId: emp.branchId }, JWT_SECRET, {expiresIn:'12h'});
   // update last login notification?
   res.json({ token, employee: emp, key: keyRec });
+});
+// Ràng buộc: Kiểm tra tài khoản nhân viên còn tồn tại không (realtime logout)
+app.get('/api/employee/me', (req,res)=>{
+  const token = req.headers.authorization?.replace('Bearer ','');
+  if(!token) return res.status(401).json({ error:'No token', forceLogout:true });
+  try{
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const emp = db.employees.find(e=> e.employeeId===decoded.employeeId);
+    if(!emp) return res.status(401).json({ error:'Tài khoản nhân viên không tồn tại', forceLogout:true, reason:'Tài khoản đã bị xóa khỏi hệ thống' });
+    if(['ARCHIVED','TERMINATED','RESIGNED'].includes(emp.status)) return res.status(401).json({ error:`Tài khoản đã bị ${emp.status}`, forceLogout:true, reason:`Trạng thái ${emp.status} - liên hệ HR` });
+    // Kiểm tra key còn active không
+    const keyRec = db.keys.find(k=> k.employeeId===emp.employeeId);
+    if(keyRec && keyRec.status!=='ACTIVE') return res.status(401).json({ error:'Key đã bị vô hiệu hóa', forceLogout:true, reason:'Key không còn hiệu lực' });
+    res.json({ employee: emp, valid:true });
+  }catch(e){
+    return res.status(401).json({ error:'Token không hợp lệ', forceLogout:true });
+  }
 });
 app.post('/api/auth/device-request', (req,res)=>{
   const { employeeId, reason, deviceId } = req.body;
@@ -947,6 +971,7 @@ app.delete('/api/employees/:id', authMiddleware, roleCheck(['Admin','HR']), (req
     io.emit('attendances:update', db.attendances);
     io.emit('offRequests:update', db.offRequests);
     io.emit('emergencyRequests:update', db.emergencyRequests);
+    emitForceLogout(empId, 'Tài khoản nhân viên đã bị xóa vĩnh viễn khỏi hệ thống');
     return res.json({success:true, hard:true, removedKeys: beforeKeys});
   }
   // Default: soft delete -> ARCHIVED (giữ lịch sử)
@@ -957,6 +982,7 @@ app.delete('/api/employees/:id', authMiddleware, roleCheck(['Admin','HR']), (req
   addSyncQueue('EMPLOYEE','DELETE',before, req.user.username, 'WEB_HR');
   saveDB();
   io.emit('employees:update', db.employees);
+  emitForceLogout(before.employeeId, 'Tài khoản của bạn đã bị vô hiệu hóa (ARCHIVED). Vui lòng liên hệ HR.');
   res.json({success:true});
 });
 // FIX P0.4: merged transition (generic + official) - single source, realtime, branchScope check
@@ -2044,6 +2070,7 @@ function cascadeDeletePerson(target, username, ip) {
   audit(username || 'SYSTEM', 'CASCADE_DELETE', 'PERSON', target, null, ip || '127.0.0.1');
   addSyncQueue('PERSON', 'DELETE', target, username || 'SYSTEM', 'WEB_HR');
   saveDB();
+  if(empId) emitForceLogout(empId, 'Tài khoản của bạn đã bị xóa khỏi hệ thống (CASCADE). Vui lòng đăng nhập lại.');
 
   // Trigger Google Sheet Dual Deletion Sync in background
   deleteOutboundFromMasterDatabaseSheet(target).catch(e => {
@@ -5554,9 +5581,10 @@ io.on('connection', (socket)=>{
   console.log('Socket connected', socket.id, socket.user ? `user:${socket.user.username||socket.user.employeeId}` : 'anonymous');
   socket.emit('db:init', { employees: db.employees.length, applicants: db.applicants.length, timestamp: new Date().toISOString(), heartbeat: true });
   socket.emit('automation:heartbeat', { now: new Date().toISOString(), realtime: true });
-  // Realtime room per branch for targeted updates
+  // Realtime room per branch + per employee (để force logout khi xóa tài khoản)
   if(socket.user?.branchScope) socket.user.branchScope.forEach(b=> socket.join(`branch:${b}`));
   if(socket.user?.branchId) socket.join(`branch:${socket.user.branchId}`);
+  if(socket.user?.employeeId) socket.join(`employee:${socket.user.employeeId}`);
   socket.on('disconnect', ()=> console.log('disconnected', socket.id));
   socket.on('ping:heartbeat', ()=> socket.emit('pong:heartbeat', { now: new Date().toISOString() }));
 });

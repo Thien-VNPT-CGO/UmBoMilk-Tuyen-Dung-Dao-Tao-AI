@@ -471,6 +471,44 @@ function connectSocket(){
     if(active==='tab-emergency') loadEmergency();
     if(active==='tab-notifs') loadNotifications();
   }));
+  // Ràng buộc: Nếu tài khoản không tồn tại thì force logout về đăng nhập
+  socket.on('employee:forceLogout', (data)=>{
+    if(!employee) return;
+    if(data.employeeId && data.employeeId !== employee.employeeId) return;
+    showToast(data.reason || 'Tài khoản của bạn đã bị xóa khỏi hệ thống. Đang thoát...', 'error');
+    setTimeout(()=>{
+      localStorage.removeItem('emp_token'); localStorage.removeItem('emp_data'); localStorage.removeItem('employee_token');
+      token=null; employee=null;
+      if(socket) socket.disconnect();
+      const appEl=document.getElementById('app'); if(appEl) appEl.classList.add('hidden');
+      const loginOverlay=document.getElementById('loginOverlay'); if(loginOverlay) loginOverlay.classList.remove('hidden');
+      const loginError=document.getElementById('loginError'); if(loginError){ loginError.textContent=data.reason || 'Tài khoản không tồn tại - vui lòng liên hệ HR'; loginError.classList.remove('hidden'); }
+      // Fallback reload để đảm bảo về màn hình đăng nhập
+      setTimeout(()=> location.reload(), 800);
+    }, 1200);
+  });
+  // Poll kiểm tra tài khoản còn tồn tại không (30s) - nếu 401 forceLogout thì thoát
+  if(window._empCheckInterval) clearInterval(window._empCheckInterval);
+  window._empCheckInterval = setInterval(async ()=>{
+    if(!employee || !token) return;
+    const empToken = localStorage.getItem('employee_token') || localStorage.getItem('emp_token') || token;
+    if(!empToken) return;
+    try{
+      const res = await fetch((API_BASE||'') + '/api/employee/me', { headers:{ Authorization: 'Bearer ' + empToken }});
+      if(res.status===401){
+        const data = await res.json().catch(()=>({}));
+        if(data.forceLogout){
+          showToast(data.reason || data.error || 'Tài khoản không tồn tại', 'error');
+          setTimeout(()=>{ 
+            localStorage.removeItem('emp_token'); localStorage.removeItem('emp_data');
+            token=null; employee=null;
+            if(socket) socket.disconnect();
+            location.reload();
+          }, 1500);
+        }
+      }
+    }catch(e){}
+  }, 30000);
 }
 async function loadBranches(){
   branches = await api('/api/branches');
