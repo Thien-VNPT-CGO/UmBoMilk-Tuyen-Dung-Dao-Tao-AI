@@ -4433,7 +4433,11 @@ async function loadSettings(){
       'googleSheet.serviceAccountEmail': 'setSheetEmail',
       'googleSheet.privateKey': 'setSheetKey',
       'googleSheet.formResponsesSheetId': 'setFormId',
-      'googleSheet.secret': 'setSheetSecret'
+      'googleSheet.secret': 'setSheetSecret',
+      'googleDrive.rootFolderId': 'setDriveId',
+      'calendar.clientId': 'setCalId',
+      'calendar.clientSecret': 'setCalSecret',
+      'calendar.calendarId': 'setCalCalId'
     };
     let lockedCount = 0;
     Object.entries(lockMap).forEach(([path, id])=>{
@@ -4470,7 +4474,7 @@ async function loadSettings(){
         banner = document.createElement('div');
         banner.id = 'envLockBanner';
         banner.className = 'mb-3 bg-amber-50 border border-amber-300 text-amber-800 rounded-xl px-3 py-2 text-xs flex items-start gap-2';
-        banner.innerHTML = `<span class="text-sm">🔒</span><div><b>${lockedCount} field Google Sheet đang bị khóa bởi ENV Render</b><br>Đổi trên Render Dashboard → Environment → Save → Deploy. Sửa trên UI sẽ bị bỏ qua.<br><span class="text-amber-600">Chi tiết: ${Object.keys(envLocked).join(', ')}</span></div>`;
+        banner.innerHTML = `<span class="text-sm">🔒</span><div><b>${lockedCount} field đang bị khóa bởi ENV Render (Google Sheet / Drive / Calendar)</b><br>Đổi trên Render Dashboard → Environment → Save → Deploy. Sửa trên UI sẽ bị bỏ qua.<br><span class="text-amber-600">Chi tiết: ${Object.keys(envLocked).join(', ')}</span></div>`;
         const firstInput = document.getElementById('setSheetId');
         if(firstInput && firstInput.parentElement && firstInput.parentElement.parentElement) firstInput.parentElement.parentElement.prepend(banner);
       }

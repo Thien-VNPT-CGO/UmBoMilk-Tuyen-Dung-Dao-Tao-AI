@@ -5611,6 +5611,11 @@ function getEnvLocked(){
   if(process.env.GOOGLE_SHEET_WEBHOOK_SECRET) locked['googleSheet.secret']=true;
   if(process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL) locked['googleSheet.serviceAccountEmail']=true;
   if(process.env.GOOGLE_PRIVATE_KEY) locked['googleSheet.privateKey']=true;
+  if(process.env.GOOGLE_OAUTH_CLIENT_ID) locked['calendar.clientId']=true;
+  if(process.env.GOOGLE_OAUTH_CLIENT_SECRET) locked['calendar.clientSecret']=true;
+  if(process.env.GOOGLE_CALENDAR_ID) locked['calendar.calendarId']=true;
+  if(process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID) locked['googleDrive.rootFolderId']=true;
+  if(process.env.GOOGLE_DRIVE_BACKUP_FOLDER_ID) locked['googleDrive.backupFolderId']=true;
   return locked;
 }
 // ============ SETTINGS ============
