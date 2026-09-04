@@ -85,7 +85,7 @@ const DEFAULT_SETTINGS = {
   googleForm: { formUrl: 'https://docs.google.com/forms/d/e/1FAIpQLSd9rRG4QLvmLclPseVVmpgPdizij1XYwiSTCgc6x2BPMfA_AA/viewform', mapping: {} },
   ai: { provider: 'openai', baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o', temperature: 0.7 },
   zalo: { oaId: '', accessToken: '', template: '', reminderEnabled: true },
-  calendar: { clientId: '', clientSecret: '', calendarId: '', duration: 30, reminderOnce: true },
+  calendar: { clientId: '', clientSecret: '', calendarId: 'primary', duration: 30, reminderOnce: true },
   scoring: { criteria: [{ name: 'Kinh nghiệm', weight: 30 }, { name: 'Giao tiếp', weight: 25 }, { name: 'Thái độ', weight: 25 }, { name: 'Sẵn sàng ca', weight: 20 }], passThreshold: 70 },
   attendance: { checkInOpenBefore: 30, checkInCloseAfter: 60, lateThreshold: 15, earlyLeaveThreshold: 15, penaltyLate: 30000, penaltyAbsent: 100000, penaltyNoCheckout: 50000 },
   payroll: { trainingRate: 21000, officialRate: 25500, shifts: DEFAULT_SHIFTS },
@@ -437,8 +437,14 @@ if(process.env.GOOGLE_PRIVATE_KEY) {
   const pk = process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n');
   if(pk.includes('BEGIN PRIVATE KEY')) db.settings.googleSheet.privateKey = pk;
 }
+if(process.env.GOOGLE_OAUTH_CLIENT_ID) db.settings.calendar.clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
+if(process.env.GOOGLE_OAUTH_CLIENT_SECRET) db.settings.calendar.clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
+if(process.env.GOOGLE_CALENDAR_ID) db.settings.calendar.calendarId = process.env.GOOGLE_CALENDAR_ID;
+if(process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID) db.settings.googleDrive.rootFolderId = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
+if(process.env.GOOGLE_DRIVE_BACKUP_FOLDER_ID) db.settings.googleDrive.backupFolderId = process.env.GOOGLE_DRIVE_BACKUP_FOLDER_ID;
 // Log ràng buộc đã áp dụng
 console.log(`[CONFIG] Google Sheet Hub: Form=${db.settings.googleSheet.formResponsesSheetId.slice(0,8)}... DB=${db.settings.googleSheet.targetDatabaseSpreadsheetId.slice(0,8)}... Webhook=${db.settings.googleSheet.targetWebhookUrl ? 'SET' : 'EMPTY'}`);
+console.log(`[CONFIG] Calendar: ${db.settings.calendar.clientId ? 'OAuth SET' : 'EMPTY'} • Drive: ${db.settings.googleDrive.rootFolderId ? db.settings.googleDrive.rootFolderId.slice(0,8)+'...' : 'EMPTY'}`);
 // Cleanup old syncQueue DEAD do placeholder/KEY (fix 23 DEAD - triệt để)
 (function cleanupOldSyncQueue(){
   try{
@@ -1874,7 +1880,16 @@ app.post('/api/applicants/:id/schedule-interview', authMiddleware, async (req, r
     });
   }
 
-  const generatedMeet = meetLink || `https://meet.google.com/umb-pv-${uuidv4().substring(0,8)}`;
+  let generatedMeet = meetLink;
+  if(!generatedMeet){
+    // Thử tạo Meet thật qua Calendar API (dùng ServiceAccount với calendar scope)
+    try{
+      const tempInterview = { id: uuidv4(), interviewDate, timeSlot, branchPreference: applicant.branchPreference };
+      const realMeet = await createCalendarMeetEvent(tempInterview, applicant);
+      if(realMeet) generatedMeet = realMeet;
+    }catch(e){ console.error('Tạo Meet thật lỗi, dùng giả:', e.message); }
+    if(!generatedMeet) generatedMeet = `https://meet.google.com/umb-pv-${uuidv4().substring(0,8)}`;
+  }
   const branchObj = db.branches.find(b => b.id === applicant.branchPreference);
   const branchName = branchObj ? branchObj.name + ' - ' + branchObj.address : 'Chi nhánh Ụm Bò Milk';
 
@@ -3311,7 +3326,7 @@ async function getGoogleAccessToken(){
   if(!cfg || !cfg.serviceAccountEmail || !cfg.privateKey) return null;
   try{
     const now = Math.floor(Date.now()/1000);
-    const payload = { iss: cfg.serviceAccountEmail, scope: 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive', aud: 'https://oauth2.googleapis.com/token', exp: now+3600, iat: now };
+    const payload = { iss: cfg.serviceAccountEmail, scope: 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/calendar', aud: 'https://oauth2.googleapis.com/token', exp: now+3600, iat: now };
     const privateKey = cfg.privateKey.replace(/\\n/g,'\n');
     const token = jwt.sign(payload, privateKey, { algorithm:'RS256' });
     const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
@@ -3321,6 +3336,59 @@ async function getGoogleAccessToken(){
     const data = await tokenRes.json();
     return data.access_token||null;
   }catch(e){ console.error('getGoogleAccessToken error', e.message); return null; }
+}
+// Tạo Google Meet link thật qua Calendar API (dùng ServiceAccount với calendar scope)
+async function createCalendarMeetEvent(interview, applicant){
+  try{
+    const token = await getGoogleAccessToken();
+    if(!token) {
+      console.log('[CALENDAR] Không có ServiceAccount token - dùng Meet giả');
+      return null;
+    }
+    const calendarId = db.settings?.calendar?.calendarId || 'primary';
+    // Parse timeSlot "09:00 - 09:30" và interviewDate "2026-08-30"
+    const [startStr, endStr] = (interview.timeSlot||'09:00 - 09:30').split('-').map(s=>s.trim());
+    const [sh, sm] = startStr.split(':').map(Number);
+    const [eh, em] = (endStr||'09:30').split(':').map(Number);
+    const startDate = new Date(interview.interviewDate);
+    startDate.setHours(sh||9, sm||0, 0, 0);
+    const endDate = new Date(interview.interviewDate);
+    endDate.setHours(eh||9, (em||30), 0, 0);
+    // Convert to RFC3339 with Vietnam timezone (UTC+7)
+    const toRFC3339 = (d)=>{
+      const pad = (n)=>String(n).padStart(2,'0');
+      const yyyy=d.getFullYear(), mm=pad(d.getMonth()+1), dd=pad(d.getDate()), hh=pad(d.getHours()), mi=pad(d.getMinutes()), ss=pad(d.getSeconds());
+      // Sử dụng Asia/Ho_Chi_Minh offset +07:00
+      return `${yyyy}-${mm}-${dd}T${hh}:${mi}:${ss}+07:00`;
+    };
+    const event = {
+      summary: `Phỏng vấn - ${applicant.name} (${applicant.phone}) - ${interview.branchPreference||''}`,
+      description: `Phỏng vấn nhân viên mới Ụm Bò Milk\nỨng viên: ${applicant.name} - ${applicant.phone}\nChi nhánh: ${interview.branchPreference}\nGhi chú: ${interview.notes||''}\n\nTự động tạo từ HR Web App`,
+      start: { dateTime: toRFC3339(startDate), timeZone: 'Asia/Ho_Chi_Minh' },
+      end: { dateTime: toRFC3339(endDate), timeZone: 'Asia/Ho_Chi_Minh' },
+      attendees: [{ email: applicant.email || 'candidate@example.com' }],
+      conferenceData: {
+        createRequest: { requestId: `umb-${interview.id}-${Date.now()}`, conferenceSolutionKey: { type: 'hangoutsMeet' } }
+      },
+      reminders: { useDefault: false, overrides: [{ method: 'popup', minutes: 30 }] }
+    };
+    const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?conferenceDataVersion=1&sendUpdates=all`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(event)
+    });
+    const data = await res.json();
+    if(!res.ok){
+      console.error('[CALENDAR] Tạo Meet thất bại:', data);
+      return null;
+    }
+    const meetLink = data.hangoutLink || data.conferenceData?.entryPoints?.find(p=>p.entryPointType==='video')?.uri || data.htmlLink;
+    console.log(`[CALENDAR] Đã tạo Meet thật: ${meetLink} cho ${applicant.name}`);
+    return meetLink;
+  }catch(e){
+    console.error('[CALENDAR] Lỗi tạo Meet:', e.message);
+    return null;
+  }
 }
 function addDriveFile(employeeId, dateStr, type, fileName, meta){
   const emp = db.employees.find(e=>e.employeeId===employeeId);

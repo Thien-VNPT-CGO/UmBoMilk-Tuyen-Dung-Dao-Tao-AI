@@ -33,6 +33,14 @@ services:
       # Ví dụ: -----BEGIN PRIVATE KEY-----\nMIIEv...==\n-----END PRIVATE KEY-----\n
       - key: GOOGLE_PRIVATE_KEY
         sync: false
+      - key: GOOGLE_OAUTH_CLIENT_ID
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_DRIVE_ROOT_FOLDER_ID
+        value: 1-Wy-Di6KvfeGCKoTV7TSuFQpY_yKNy-1
+      - key: GOOGLE_CALENDAR_ID
+        value: primary
 
 # Postgres free 90 ngày (tùy chọn, nếu cần 24/7 DB thay db.json)
 # databases:
