@@ -1935,6 +1935,16 @@ async function confirmConvertApplicant(id) {
         <i class="fa-solid fa-copy"></i> Copy Thông Tin Đăng Nhập (Gửi cho NV)
       </button>
 
+      <!-- Thư mời Training (mẫu chuẩn) -->
+      <div class="bg-gradient-to-br from-amber-50 to-orange-50 border-2 border-amber-300 rounded-2xl p-4">
+        <div class="font-black text-amber-900 flex items-center justify-between gap-2">
+          <span class="flex items-center gap-2"><i class="fa-solid fa-envelope-open-text text-amber-600"></i> Thư mời Training (mẫu chuẩn)</span>
+          <button onclick="copyTrainingInvite('${emp.employeeId}')" class="text-xs font-black bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-xl shadow flex items-center gap-1.5"><i class="fa-solid fa-copy"></i> Copy thư mời</button>
+        </div>
+        <div id="trainingInviteText-${emp.employeeId}" class="mt-3 bg-white border border-amber-200 rounded-xl p-3 text-xs leading-relaxed whitespace-pre-wrap font-medium text-slate-800 max-h-[260px] overflow-auto">${generateTrainingInviteText(emp, key)}</div>
+        <div class="text-[11px] text-amber-700 mt-2 flex items-center gap-1.5"><i class="fa-solid fa-lightbulb text-amber-500"></i> HR bấm <b>Copy thư mời</b> rồi gửi qua Zalo/SMS cho nhân viên</div>
+      </div>
+
       <!-- Instructions -->
       <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-800 space-y-1">
         <div class="font-black flex items-center gap-1"><i class="fa-solid fa-circle-info text-blue-600"></i> Hướng dẫn nhân viên đăng nhập:</div>
@@ -1969,6 +1979,55 @@ function copyAllCredentials(employeeId, key, name) {
   }).catch(() => {
     alert(text);
   });
+}
+function generateTrainingInviteText(emp, key){
+  const branchFull = getBranchFull(emp.branchId);
+  const shiftMap = { 'CA_SANG':'Ca sáng: 07h00 - 12h00', 'CA_CHIEU':'Ca chiều: 12h00 - 18h00', 'CA_TOI':'Ca tối: 18h00 - 23h00' };
+  const shiftText = shiftMap[emp.shift] || emp.shift || 'Ca chiều: 12h00 - 18h00';
+  const startDate = fmtDMY(emp.startDate) || '25/08/2026';
+  const nameUpper = (emp.name || '').toUpperCase();
+  return `🐮 [UMBO MILK] – THÔNG BÁO LỊCH TRAINING & NHẬN VIỆC 🎉\n\nChào ${nameUpper} ❤️\nChúc mừng bạn đã trúng tuyển! UMBO MILK xin thông báo lịch nhận việc và đào tạo (Training) của bạn như sau:\n\n📌 THÔNG TIN NHẬN VIỆC & ĐÀO TẠO CHÍNH THỨC:\n• 🏢 Chi nhánh làm việc chính thức: ${branchFull}\n• ⏱️ Ca làm việc chính thức: ${shiftText}\n• 📅 Ngày bắt đầu đi làm / training: ${startDate}\n\n📌 GIẤY TỜ HỒ SƠ CẦN CHUẨN BỊ KHI ĐI NHẬN CA:\n1. Mang theo form training 7 ngày học việc\n2. Giấy khám sức khỏe kèm bill thanh toán (khám theo thông tư 25 để đi làm, giá từ 120.000đ tới 160.000đ Công Ty chỉ hoàn trả trong mức giá trên)\n\n👉 Vui lòng có mặt đúng giờ và giữ liên lạc với Quản lý chi nhánh nhé!\n❗ỨNG VIÊN VUI LÒNG GỬI THỜI GIAN ĐẾN KÝ HỢP ĐỒNG THỬ VIỆC TẠI CÔNG TY: 10 ĐẶNG THAI MAI. PHƯỜNG CẦU KIỆU. HCM\n\n---\n📛 Mã NV: ${emp.employeeId}\n🔑 Key: ${key.key || key}\n🌐 Link: ${window.location.origin}/employee`;
+}
+function copyTrainingInvite(employeeId){
+  // Tìm emp và key từ dữ liệu hiện tại hoặc từ DOM
+  const emp = employees.find(e=>e.employeeId===employeeId) || db?.employees?.find(e=>e.employeeId===employeeId);
+  const keyObj = (typeof dbKeysFind==='function' ? dbKeysFind(employeeId) : null) || (employees.find(e=>e.employeeId===employeeId)?.key) || {key: document.getElementById('credKey')?.textContent?.trim() || ''};
+  const textEl = document.getElementById('trainingInviteText-'+employeeId);
+  let text = textEl ? textEl.textContent : '';
+  if(!text && emp){
+    // fallback generate
+    const branchFull = getBranchFull(emp.branchId);
+    const shiftMap = { 'CA_SANG':'Ca sáng: 07h00 - 12h00', 'CA_CHIEU':'Ca chiều: 12h00 - 18h00', 'CA_TOI':'Ca tối: 18h00 - 23h00' };
+    text = generateTrainingInviteText(emp, keyObj);
+  }
+  if(!text) return showToast('Không tìm thấy thư mời','error');
+  navigator.clipboard.writeText(text).then(()=>{
+    showToast('✅ Đã copy thư mời Training - sẵn sàng gửi cho nhân viên','success');
+  }).catch(()=>{
+    // Fallback: tạo textarea tạm
+    const ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+    showToast('✅ Đã copy thư mời (fallback)','success');
+  });
+}
+function showTrainingInvite(employeeId){
+  const emp = employees.find(e=>e.employeeId===employeeId);
+  if(!emp) return showToast('Không tìm thấy nhân viên','error');
+  const keyObj = (typeof dbKeysFind==='function' ? dbKeysFind(employeeId) : null) || {key: 'KEY-UNKNOWN'};
+  const inviteText = generateTrainingInviteText(emp, keyObj);
+  openModal('📨 Thư mời Training - ' + emp.name, `
+    <div class="space-y-4">
+      <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800">
+        <div class="font-black flex items-center gap-2"><i class="fa-solid fa-circle-info text-amber-600"></i> HR bấm nút Training xong, copy thư mời này gửi cho nhân viên</div>
+      </div>
+      <div class="bg-white border-2 border-amber-300 rounded-2xl p-4 max-h-[400px] overflow-auto">
+        <pre class="whitespace-pre-wrap text-xs leading-relaxed font-medium text-slate-800" id="modalInviteText">${inviteText}</pre>
+      </div>
+      <div class="flex gap-2">
+        <button onclick="copyTrainingInvite('${employeeId}')" class="flex-1 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-black py-3 rounded-xl shadow flex items-center justify-center gap-2"><i class="fa-solid fa-copy"></i> Copy thư mời</button>
+        <button onclick="closeModal()" class="px-6 bg-white border border-slate-200 font-bold py-3 rounded-xl">Đóng</button>
+      </div>
+    </div>
+  `);
 }
 
 async function deleteApplicant(id){
@@ -2729,6 +2788,7 @@ function renderEmployeesStore(){
               })()}
 
               ${currentEmpStoreTab==='TRAINING' && (currentUser && (currentUser.role === 'Admin' || currentUser.username === 'admin') && e.status !== 'OFFICIAL') ? `<button onclick="simulate7DaysTraining('${e.employeeId}')" class="text-xs font-black bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl shadow-xs transition" title="Giả lập hoàn thành 7 ngày điểm danh cho Admin Test">⚡ 7/7 Training</button>` : ''}
+              <button onclick="showTrainingInvite('${e.employeeId}')" class="text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-xl shadow-xs flex items-center gap-1" title="Xem và copy thư mời Training cho NV này"><i class="fa-solid fa-envelope"></i> Thư mời</button>
               
               <!-- OFFICIAL BUTTON - Admin: luôn bấm được | HR: chỉ khi Mở TEST đã hiển thị (completed >= 7) -->
               ${currentEmpStoreTab==='TRAINING' && e.status !== 'OFFICIAL' ? (() => {
