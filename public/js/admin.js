@@ -1881,9 +1881,12 @@ async function confirmConvertApplicant(id) {
     const emp = res.employee;
     const key = res.key;
 
-    loadApplicants();
-    loadEmployees();
-    if (typeof loadSchedules === 'function') loadSchedules();
+    // Đợi load xong để không mất dữ liệu khi reload realtime
+    await Promise.all([
+      loadApplicants().catch(()=>{}),
+      loadEmployees().catch(()=>{}),
+      (typeof loadSchedules === 'function' ? loadSchedules().catch(()=>{}) : Promise.resolve())
+    ]);
 
     // Show credential & schedule confirmation modal
     openModal('🎉 Khởi Tạo Lịch & Nhân Viên Training Thành Công!', `
