@@ -1624,7 +1624,7 @@ function renderInterviewsTable() {
     // PASS button logic based on user role and time window
     let passBtn = '';
     if (isPassed) {
-      passBtn = `<span class="text-[11px] font-black bg-green-100 text-green-700 border border-green-300 px-2.5 py-1.5 rounded-lg flex items-center gap-1"><i class="fa-solid fa-check-double"></i> ĐÃ PASS</span>`;
+      passBtn = `<span class="text-[11px] font-black bg-green-100 text-green-700 border border-green-300 px-2.5 py-1.5 rounded-lg flex items-center gap-1"><i class="fa-solid fa-check-double"></i> ĐÃ PV</span>`;
     } else if (timeState === 'during') {
       passBtn = `
         <button onclick="updateApplicantStatus('${inv.applicantId}','PASS'); loadInterviews();" 
@@ -1687,10 +1687,10 @@ function renderInterviewsTable() {
         <td class="px-3 py-3 text-right">
           <div class="flex items-center justify-end gap-1.5">
             ${isPassed ? `
-              <button disabled class="text-xs font-bold bg-slate-100 text-slate-400 border border-slate-200 px-2.5 py-1.5 rounded-lg flex items-center gap-1 cursor-not-allowed shadow-none" title="Đã PASS phỏng vấn — Khóa nút Thư Mời">
+              <button disabled class="text-xs font-bold bg-slate-100 text-slate-400 border border-slate-200 px-2.5 py-1.5 rounded-lg flex items-center gap-1 cursor-not-allowed shadow-none" title="Đã PV phỏng vấn — Khóa nút Thư Mời">
                 <i class="fa-solid fa-copy"></i> Thư Mời
               </button>
-              <button disabled class="text-xs font-bold bg-slate-100 text-slate-400 border border-slate-200 px-2.5 py-1.5 rounded-lg flex items-center gap-1 cursor-not-allowed shadow-none" title="Đã PASS phỏng vấn — Khóa nút Zalo UV">
+              <button disabled class="text-xs font-bold bg-slate-100 text-slate-400 border border-slate-200 px-2.5 py-1.5 rounded-lg flex items-center gap-1 cursor-not-allowed shadow-none" title="Đã PV phỏng vấn — Khóa nút Zalo UV">
                 <i class="fa-solid fa-comment-dots"></i> Zalo UV
               </button>
             ` : `
