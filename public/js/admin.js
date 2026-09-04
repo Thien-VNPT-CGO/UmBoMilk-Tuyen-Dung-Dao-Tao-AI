@@ -894,6 +894,7 @@ function renderApplicants(){
       </td>
       <td class="px-3 py-2">
         <div class="flex flex-wrap gap-1 justify-end">
+          <button onclick="openZaloChat('${a.phone}', '${a.name}')" class="text-[11px] font-bold bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded-lg shadow-sm flex items-center gap-1" title="Mở khung chat Zalo với ${a.name} (${a.phone})"><i class="fa-brands fa-viber"></i> Zalo UV</button>
           <button onclick="viewApplicant('${a.id}')" class="text-[11px] font-bold bg-white border border-pink-200 text-pink-700 px-2 py-1 rounded-lg hover:bg-pink-50"><i class="fa-solid fa-eye"></i> Xem</button>
           ${(a.status==='PASS' || a.status==='CONVERTED') && !a.isDisqualified ? `
             ${a.evaluationResult ? `
@@ -926,6 +927,17 @@ function renderApplicants(){
 }
 
 function goApplicantsPage(p){ pagination.applicants.page=p; renderApplicants(); const m=document.querySelector('main'); if(m) m.scrollTop=0; }
+function openZaloChat(phone, name){
+  if(!phone) return showToast('Không có SĐT Zalo','error');
+  const cleanPhone = String(phone).replace(/\D/g,'');
+  const zaloPhone = cleanPhone.startsWith('84') ? cleanPhone : (cleanPhone.startsWith('0') ? cleanPhone : '0'+cleanPhone);
+  // Mở Zalo chat qua zalo.me (hoạt động trên cả mobile và desktop)
+  const zaloUrl = `https://zalo.me/${zaloPhone}`;
+  window.open(zaloUrl, '_blank');
+  showToast(`Đang mở Zalo chat với ${name||zaloPhone}...`, 'success');
+  // Ghi log vào audit nếu cần
+  try{ audit('HR_ZALO_OPEN','ZALO', phone, null, {phone, name}, 'web'); }catch(e){}
+}
 function viewApplicant(id){
   const a = applicants.find(x=>x.id===id);
   if(!a) return;
