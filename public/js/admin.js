@@ -2788,7 +2788,7 @@ function renderEmployeesStore(){
               })()}
 
               ${currentEmpStoreTab==='TRAINING' && (currentUser && (currentUser.role === 'Admin' || currentUser.username === 'admin') && e.status !== 'OFFICIAL') ? `<button onclick="simulate7DaysTraining('${e.employeeId}')" class="text-xs font-black bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl shadow-xs transition" title="Giả lập hoàn thành 7 ngày điểm danh cho Admin Test">⚡ 7/7 Training</button>` : ''}
-              <button onclick="showTrainingInvite('${e.employeeId}')" class="text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-xl shadow-xs flex items-center gap-1" title="Xem và copy thư mời Training cho NV này"><i class="fa-solid fa-envelope"></i> Thư mời</button>
+              ${currentEmpStoreTab==='TRAINING' ? `<button onclick="showTrainingInvite('${e.employeeId}')" class="text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-xl shadow-xs flex items-center gap-1" title="Xem và copy thư mời Training cho NV này"><i class="fa-solid fa-envelope"></i> Thư mời</button>` : ''}
               
               <!-- OFFICIAL BUTTON - Admin: luôn bấm được | HR: chỉ khi Mở TEST đã hiển thị (completed >= 7) -->
               ${currentEmpStoreTab==='TRAINING' && e.status !== 'OFFICIAL' ? (() => {
