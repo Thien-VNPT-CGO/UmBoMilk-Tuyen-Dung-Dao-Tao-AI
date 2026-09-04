@@ -701,6 +701,7 @@ function roleCheck(allowed){
 // Realtime branchScope filter - ensures Manager chỉ thấy chi nhánh được cấp
 function branchScopeFilter(req){
   if(!req.user || req.user.role==='Admin' || req.user.role==='Umbomilk') return null; // null = all
+  if(req.user.employeeId) return null; // nhân viên chỉ xem dữ liệu của mình (đã filter theo employeeId)
   return req.user.branchScope || [];
 }
 function filterByBranchScope(list, req, branchField='branchId'){
@@ -2724,7 +2725,15 @@ app.get('/api/sheets/form-info', authMiddleware, async (req,res)=>{
 });
 
 // ============ KEYS ============
-app.get('/api/keys', authMiddleware, (req,res)=> res.json(db.keys));
+app.get('/api/keys', authMiddleware, (req,res)=>{
+  let list = [...db.keys];
+  const scope = branchScopeFilter(req);
+  if(scope){
+    const allowedIds = db.employees.filter(e=>scope.includes(e.branchId)).map(e=>e.employeeId);
+    list = list.filter(k=>allowedIds.includes(k.employeeId));
+  }
+  res.json(list);
+});
 app.post('/api/keys/generate', authMiddleware, (req,res)=>{
   const { employeeId } = req.body;
   const emp = db.employees.find(e=>e.employeeId===employeeId);
@@ -2765,7 +2774,15 @@ app.post('/api/keys/:id/revoke', authMiddleware, (req,res)=>{
 });
 
 // ============ DEVICE REQUESTS ============
-app.get('/api/device-requests', authMiddleware, (req,res)=> res.json(db.deviceRequests));
+app.get('/api/device-requests', authMiddleware, (req,res)=>{
+  let list = [...db.deviceRequests];
+  const scope = branchScopeFilter(req);
+  if(scope){
+    const allowedIds = db.employees.filter(e=>scope.includes(e.branchId)).map(e=>e.employeeId);
+    list = list.filter(r=>allowedIds.includes(r.employeeId));
+  }
+  res.json(list);
+});
 app.post('/api/device-requests/:id/approve', authMiddleware, (req,res)=>{
   const dr = db.deviceRequests.find(d=>d.id===req.params.id);
   if(!dr) return res.status(404).json({error:'Not found'});
@@ -2799,9 +2816,14 @@ app.post('/api/device-requests/:id/reject', authMiddleware, (req,res)=>{
 });
 
 // ============ ATTENDANCE ============
-app.get('/api/attendances', (req,res)=>{
+app.get('/api/attendances', authMiddleware, (req,res)=>{
   const { employeeId, date, branch, status } = req.query;
   let list = [...db.attendances];
+  const scope = branchScopeFilter(req);
+  if(scope) list = list.filter(a=>{
+    const emp = db.employees.find(e=>e.employeeId===a.employeeId);
+    return emp && scope.includes(emp.branchId);
+  });
   if(employeeId) list = list.filter(a=>a.employeeId===employeeId);
   if(date) list = list.filter(a=>a.date===date);
   if(branch) list = list.filter(a=>a.branchId===branch);
@@ -3803,7 +3825,7 @@ app.post('/api/attendance/checkout', (req,res)=>{
 });
 
 // ============ SCHEDULES ============
-app.get('/api/schedules', (req,res)=>{
+app.get('/api/schedules', authMiddleware, (req,res)=>{
   const getMondayStr = (dStr) => {
     if (!dStr) return new Date().toISOString().split('T')[0];
     const parts = dStr.split('T')[0].split('-').map(Number);
@@ -3936,6 +3958,11 @@ app.get('/api/schedules', (req,res)=>{
 
   const { employeeId, weekStart, branch } = req.query;
   let list = [...db.schedules];
+  const scopeSched = branchScopeFilter(req);
+  if(scopeSched){
+    const allowedIds = db.employees.filter(e=>scopeSched.includes(e.branchId)).map(e=>e.employeeId);
+    list = list.filter(s=>allowedIds.includes(s.employeeId));
+  }
   if(employeeId) list = list.filter(s=>s.employeeId===employeeId);
   if(weekStart) {
     const mondayStr = getMondayStr(weekStart);
@@ -4729,9 +4756,14 @@ setInterval(async ()=>{
 }, 60*1000);
 
 // ============ OFF WEEKLY AUTO APPROVE ============
-app.get('/api/off-requests', (req,res)=>{
+app.get('/api/off-requests', authMiddleware, (req,res)=>{
   const { employeeId, status } = req.query;
   let list = [...db.offRequests];
+  const scope = branchScopeFilter(req);
+  if(scope){
+    const allowedIds = db.employees.filter(e=>scope.includes(e.branchId)).map(e=>e.employeeId);
+    list = list.filter(r=>allowedIds.includes(r.employeeId));
+  }
   if(employeeId) list = list.filter(r=>r.employeeId===employeeId);
   if(status) list = list.filter(r=>r.status===status);
   res.json(list);
@@ -4882,7 +4914,15 @@ setInterval(()=>{
 }, 60*1000);
 
 // ============ EMERGENCY OFF ============
-app.get('/api/emergency-requests', (req,res)=> res.json(db.emergencyRequests));
+app.get('/api/emergency-requests', authMiddleware, (req,res)=>{
+  let list = [...db.emergencyRequests];
+  const scope = branchScopeFilter(req);
+  if(scope){
+    const allowedIds = db.employees.filter(e=>scope.includes(e.branchId)).map(e=>e.employeeId);
+    list = list.filter(r=>allowedIds.includes(r.employeeId));
+  }
+  res.json(list);
+});
 app.post('/api/emergency-requests', (req,res)=>{
   const { employeeId, date, reason } = req.body;
   const emp = db.employees.find(e=>e.employeeId===employeeId);
