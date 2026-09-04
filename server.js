@@ -608,14 +608,15 @@ function generateEmployeeId(branchId){
   throw new Error('Cannot generate unique ID');
 }
 function isOffWindowOpen(){
-  const now = new Date();
-  const day = now.getDay(); //0 Sun, 5 Fri, 6 Sat
-  const hour = now.getHours() + now.getMinutes()/60;
-  // Rule: 12:00 Friday (5) to 15:00 Saturday (6)
+  // Dùng giờ Việt Nam (Asia/Ho_Chi_Minh, UTC+7) để realtime đúng với client VN
+  const nowUtc = new Date();
+  const vietnamTime = new Date(nowUtc.toLocaleString('en-US', {timeZone: 'Asia/Ho_Chi_Minh'}));
+  const day = vietnamTime.getDay(); //0 Sun, 5 Fri, 6 Sat
+  const hour = vietnamTime.getHours() + vietnamTime.getMinutes()/60;
+  // Rule: 12:00 Friday (5) to 15:00 Saturday (6) - giờ VN
   if(day===5 && hour>=12) return true;
   if(day===6 && hour<15) return true;
   return false;
-  // For demo, allow always but show status; we will enforce but also allow override via settings for testing
 }
 function checkOffConflict(branchId, shift, date){
   // Check if same branch+shift+date already has OFF approved
@@ -5050,12 +5051,13 @@ app.post('/api/schedules/generate-next-week-draft', authMiddleware, roleCheck(['
   res.json(result);
 });
 
-// Auto-trigger sau khung OFF (T7 15:00) - poll mỗi phút
+// Auto-trigger sau khung OFF (T7 15:00) - poll mỗi phút (dùng giờ VN)
 setInterval(async ()=>{
-  const now = new Date();
+  const nowUtc = new Date();
+  const now = new Date(nowUtc.toLocaleString('en-US', {timeZone: 'Asia/Ho_Chi_Minh'}));
   const day = now.getDay(); // 6 = Thứ 7
   const hour = now.getHours() + now.getMinutes()/60;
-  // Chỉ chạy đúng 15:00-15:01 Thứ 7
+  // Chỉ chạy đúng 15:00-15:01 Thứ 7 giờ VN
   if(day===6 && hour>=15 && hour<15.02){
     const nextWeekStart = getNextWeekStartStr();
     const hasDraft = db.schedules.some(s=> s.weekStart===nextWeekStart && s.approvalStatus==='PENDING_APPROVAL');
@@ -5174,9 +5176,10 @@ function isSameWeek(date1, date2){
 app.get('/api/off-window', (req,res)=>{
   const isOpen = isOffWindowOpen();
   const now = new Date();
-  // Tính next open/close AI cho Official
+  // Tính next open/close AI cho Official (dùng giờ VN)
   function getNextWindow(){
-    const cur = new Date();
+    const curUtc = new Date();
+    const cur = new Date(curUtc.toLocaleString('en-US', {timeZone: 'Asia/Ho_Chi_Minh'}));
     const day = cur.getDay();
     const hour = cur.getHours() + cur.getMinutes()/60;
     let nextOpen = new Date(cur);
