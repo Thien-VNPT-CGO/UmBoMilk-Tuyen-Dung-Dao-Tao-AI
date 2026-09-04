@@ -994,6 +994,33 @@ async function loadAttendanceTab(){
     } else if(monthlyEl){
       monthlyEl.innerHTML='';
     }
+    // Chú thích chi tiết hệ thống chấm công (hiển thị cho cả Training và Official)
+    let sysNoteEl = document.getElementById('attendanceSystemNote');
+    if(!sysNoteEl){
+      const hist2 = document.getElementById('attendanceHistory');
+      if(hist2 && hist2.parentElement){
+        sysNoteEl = document.createElement('div');
+        sysNoteEl.id='attendanceSystemNote';
+        sysNoteEl.className='mt-3';
+        hist2.parentElement.appendChild(sysNoteEl);
+      }
+    }
+    if(sysNoteEl){
+      sysNoteEl.innerHTML = `
+        <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+          <div class="font-black text-sm text-slate-800 flex items-center gap-2 mb-3"><i class="fa-solid fa-circle-info text-blue-500"></i> Chú thích hệ thống chấm công</div>
+          <div class="space-y-2 text-xs leading-relaxed">
+            <div class="flex gap-2"><span class="font-black text-pink-600 min-w-[90px]">Bật camera:</span><span class="text-slate-600">Dùng camera <b>sau</b> (environment), tự động fallback camera trước nếu không có. Bắt buộc cấp quyền camera.</span></div>
+            <div class="flex gap-2"><span class="font-black text-pink-600 min-w-[90px]">Chụp ảnh:</span><span class="text-slate-600">Chụp trực tiếp, không cho upload Gallery. Ảnh nén 0.7 và lưu base64, đồng thời upload lên Google Drive.</span></div>
+            <div class="flex gap-2"><span class="font-black text-emerald-600 min-w-[90px]">GPS:</span><span class="text-slate-600">Bắt buộc bật GPS chính xác cao (<200m). Nếu tắt hoặc kém chính xác sẽ báo lỗi và không cho Check-in/out.</span></div>
+            <div class="flex gap-2"><span class="font-black text-blue-600 min-w-[90px]">CHECK-IN:</span><span class="text-slate-600">Mở trước ca 30 phút, đóng sau 60 phút. Ghi GPS, địa chỉ, ảnh, timestamp, lưu Drive <code>CHECK_IN</code>.</span></div>
+            <div class="flex gap-2"><span class="font-black text-rose-600 min-w-[90px]">CHECK-OUT:</span><span class="text-slate-600">Sau khi CHECK-IN mới hiện, ghi GPS/ảnh ra ca, chuyển trạng thái <b>COMPLETED</b>.</span></div>
+            <div class="flex gap-2"><span class="font-black text-purple-600 min-w-[90px]">Trạng thái:</span><span class="text-slate-600"><b>CHECKED_IN</b> (đã vào), <b>COMPLETED</b> (đủ vào/ra), <b>LATE</b> (trễ), <b>VAO_TRE_*</b> (trừ lương Official).</span></div>
+            <div class="flex gap-2"><span class="font-black text-amber-600 min-w-[90px]">Lịch sử:</span><span class="text-slate-600">Hiển thị 20 bản ghi gần nhất, đồng bộ realtime qua <code>attendances:update</code>.</span></div>
+            <div class="flex gap-2"><span class="font-black text-slate-600 min-w-[90px]">Drive:</span><span class="text-slate-600">Mỗi ca tạo 2 file: <code>Anh_chup_cua_hang.jpg</code> + <code>Diem_danh.txt</code> lưu theo cấu trúc <code>NHAN_VIEN_.../CN.../CA_.../Tên - SĐT - Mã NV/DD-MM-YYYY/CHECK_IN</code>.</span></div>
+          </div>
+        </div>`;
+    }
   }catch(e){ console.error('official monthly stats error',e); }
 }
 
@@ -1080,7 +1107,6 @@ async function loadSchedule(){
             <div class="mt-1">• <b>WORKING:</b> Ngày làm việc theo ca đã gán (CA_SANG/CHIEU/TOI)</div>
             <div>• <b>OFF:</b> Ngày nghỉ (đã đăng ký OFF 2 ngày/tuần hoặc Chủ Nhật)</div>
             <div>• <b>SUBSTITUTE:</b> Ngày thay ca cho NV khác</div>
-            <div>• Cùng chi nhánh cùng ca: AI chia đều, không trùng ngày (mỗi ngày chỉ 1 NV WORKING)</div>
             <div>• Lịch tuần sau AI tạo sau khi HR duyệt OFF (T7 15:00) và gửi đến NV</div>
           </div>`;
           return '';
