@@ -700,9 +700,9 @@ function roleCheck(allowed){
 }
 // Realtime branchScope filter - ensures Manager chỉ thấy chi nhánh được cấp
 function branchScopeFilter(req){
-  if(!req.user || req.user.role==='Admin' || req.user.role==='Umbomilk') return null; // null = all
+  if(!req.user || req.user.role==='Admin' || req.user.role==='HR' || req.user.role==='Umbomilk') return null; // HR và Admin đều xem full dữ liệu (chỉ khác chức năng)
   if(req.user.employeeId) return null; // nhân viên chỉ xem dữ liệu của mình (đã filter theo employeeId)
-  return req.user.branchScope || [];
+  return req.user.branchScope || []; // Manager mới lọc theo CN được phân quyền
 }
 function filterByBranchScope(list, req, branchField='branchId'){
   const scope = branchScopeFilter(req);
