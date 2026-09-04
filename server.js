@@ -6279,7 +6279,7 @@ app.post('/api/system/reset', authMiddleware, roleCheck(['Admin']), (req,res)=>{
   const { scope } = req.body; // ALL = reset mọi dữ liệu vận hành, giữ settings
   if(scope==='ALL'){
     const keepSettings = db.settings;
-    db.employees=[]; db.applicants=[]; db.attendances=[]; db.schedules=[]; db.offRequests=[]; db.emergencyRequests=[]; db.deviceRequests=[]; db.testResults=[]; db.keys=[]; db.zaloRecords=[]; db.notifications=[]; db.syncQueue=[]; db.auditLogs=[];
+    db.employees=[]; db.applicants=[]; db.interviews=[]; db.attendances=[]; db.schedules=[]; db.offRequests=[]; db.emergencyRequests=[]; db.deviceRequests=[]; db.trainingShiftRequests=[]; db.shiftSwapRequests=[]; db.testResults=[]; db.keys=[]; db.zaloRecords=[]; db.notifications=[]; db.syncQueue=[]; db.auditLogs=[];
     db.driveFiles=[]; db.payrollSnapshots=[]; db.overtimeRequests=[]; db.leaveRequests=[]; db.payrollPeriods=[]; db.attendanceAdjustments=[]; db.penalties=[];
     db.settings = keepSettings || DEFAULT_SETTINGS;
   } else if(scope==='EMPLOYEES'){
@@ -6288,7 +6288,38 @@ app.post('/api/system/reset', authMiddleware, roleCheck(['Admin']), (req,res)=>{
   audit(req.user.username,'SYSTEM_RESET','SYSTEM', {scope, before: 'snapshot'}, {scope}, req.ip);
   saveDB();
   io.emit('system:reset', {scope});
+  // Đảm bảo interviews cũng được xóa khi reset ALL (fix lỗi 1 NV vướng)
+  if(scope==='ALL'){
+    // additional cleanup đã làm ở trên, nhưng đảm bảo emit
+    io.emit('interviews:update', db.interviews);
+    io.emit('applicants:update', db.applicants);
+    io.emit('employees:update', db.employees);
+  }
   res.json({success:true});
+});
+// Fix triệt để 1 NV vướng lịch phỏng vấn sau reset - Admin có thể gọi riêng
+app.post('/api/interviews/clear-all', authMiddleware, roleCheck(['Admin']), (req,res)=>{
+  const beforeInterviews = (db.interviews||[]).length;
+  const beforeApplicants = db.applicants.filter(a=>a.status==='INTERVIEW').length;
+  // Xóa toàn bộ interviews
+  db.interviews = [];
+  // Reset applicants đang ở trạng thái INTERVIEW về NEW_APPLICANT để không vướng
+  let resetCount=0;
+  db.applicants.forEach(a=>{
+    if(a.status==='INTERVIEW'){
+      a.status='NEW_APPLICANT';
+      delete a.interview;
+      a.version=(a.version||1)+1;
+      a.updated_at=new Date().toISOString();
+      resetCount++;
+    }
+  });
+  // Xóa luôn applicants bị vướng nếu có interviewId không tồn tại
+  saveDB();
+  io.emit('interviews:update', db.interviews);
+  io.emit('applicants:update', db.applicants);
+  audit(req.user.username,'CLEAR_ALL_INTERVIEWS','INTERVIEW',{beforeInterviews, beforeApplicants},{afterInterviews:0, resetApplicants:resetCount}, req.ip);
+  res.json({success:true, clearedInterviews:beforeInterviews, resetApplicants:resetCount, message:`Đã xóa ${beforeInterviews} lịch phỏng vấn và reset ${resetCount} ứng viên INTERVIEW về NEW_APPLICANT`});
 });
 // ponytail: giữ nguyên settings để không làm gãy webhook/secret; nếu cần reset riêng cấu hình thì thêm scope SETTINGS sau.
 

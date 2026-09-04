@@ -1508,6 +1508,15 @@ async function loadInterviews() {
     console.error('renderInterviewsTable UI error:', e);
   }
 }
+async function clearAllInterviews(){
+  if(!confirm('Admin: Xóa toàn bộ lịch phỏng vấn?\n\n• Sẽ xóa toàn bộ lịch đã đặt\n• Reset 1 NV đang vướng ở trạng thái INTERVIEW về NEW_APPLICANT\n• Không thể khôi phục!')) return;
+  try{
+    const res = await api('/api/interviews/clear-all', {method:'POST', headers:{Authorization:'Bearer '+token}});
+    showToast(`Đã xóa ${res.clearedInterviews} lịch và reset ${res.resetApplicants} NV vướng`, 'success');
+    loadInterviews();
+    loadApplicants();
+  }catch(e){ showToast(e.message,'error'); }
+}
 
 function renderInterviewsTable() {
   const tbody = document.getElementById('interviewsTbody');
