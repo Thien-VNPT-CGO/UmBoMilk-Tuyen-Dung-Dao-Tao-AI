@@ -3242,9 +3242,10 @@ async function syncDownDeletionsFromMasterSheet(){
     }
     if(sheetIds.size===0) return; // Sheet rỗng hoặc lỗi fetch thì không xóa gì (an toàn)
     const toDelete = db.employees.filter(e=>{
-      // Chỉ xóa nếu NV đã tồn tại >2 phút (tránh xóa NV vừa tạo chưa kịp sync lên Sheet)
+      // Chỉ xóa nếu NV đã tồn tại >5 phút và đã SYNCED (tránh xóa NV vừa tạo chưa kịp sync lên Sheet 60s)
       const ageMs = Date.now() - new Date(e.updated_at || e.startDate || Date.now()).getTime();
-      if(ageMs < 120000) return false;
+      if(ageMs < 300000) return false;
+      if(e.sync_status === 'PENDING') return false;
       return !sheetIds.has(e.employeeId);
     });
     if(toDelete.length>0){
