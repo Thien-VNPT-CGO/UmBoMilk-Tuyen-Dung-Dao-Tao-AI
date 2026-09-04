@@ -3188,6 +3188,69 @@ function realtimeAutomationPoller(){
 setInterval(realtimeAutomationPoller, 20*1000);
 setTimeout(realtimeAutomationPoller, 10000);
 
+// === GOOGLE SHEET 17iXM - SYNC DOWN DELETIONS (yêu cầu: Sheet là nơi duy nhất xóa, Web App mất vĩnh viễn) ===
+async function syncDownDeletionsFromMasterSheet(){
+  try{
+    const targetId = db.settings?.googleSheet?.targetDatabaseSpreadsheetId || '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w';
+    const token = await getGoogleAccessToken();
+    if(!token || !targetId) return;
+    // Chỉ chạy khi Sheet đã có ServiceAccount
+    const sheetsToCheck = ['NHAN_VIEN_TRAINING','NHAN_VIEN_CHINH_THUC'];
+    const sheetIds = new Set();
+    for(const sheetName of sheetsToCheck){
+      try{
+        const url = `https://sheets.googleapis.com/v4/spreadsheets/${targetId}/values/${encodeURIComponent(sheetName)}!A2:Z1000`;
+        const resp = await fetch(url, { headers:{ Authorization:`Bearer ${token}` }});
+        if(!resp.ok) continue;
+        const j = await resp.json();
+        const values = j.values || [];
+        if(values.length===0) continue;
+        // Tìm cột Mã NV (header row đã có, nhưng values từ A2 nên cột 1 là Mã NV)
+        // Với sheets đã thêm Key, Mã NV vẫn là cột B (index 1)
+        for(const row of values){
+          const maNV = row[1] ? String(row[1]).trim() : '';
+          if(maNV) sheetIds.add(maNV);
+        }
+      }catch(e){ console.error(`[SYNC DOWN] Sheet ${sheetName} error`, e.message); }
+    }
+    if(sheetIds.size===0) return; // Sheet rỗng hoặc lỗi fetch thì không xóa gì (an toàn)
+    const toDelete = db.employees.filter(e=>{
+      // Chỉ xóa nếu NV đã tồn tại >2 phút (tránh xóa NV vừa tạo chưa kịp sync lên Sheet)
+      const ageMs = Date.now() - new Date(e.updated_at || e.startDate || Date.now()).getTime();
+      if(ageMs < 120000) return false;
+      return !sheetIds.has(e.employeeId);
+    });
+    if(toDelete.length>0){
+      console.log(`[SYNC DOWN] Phát hiện ${toDelete.length} NV bị xóa trên Sheet 17iXM -> xóa vĩnh viễn trên Web App:`, toDelete.map(e=>e.employeeId).join(', '));
+      for(const emp of toDelete){
+        // Xóa vĩnh viễn local (không xóa lại Sheet vì đã xóa)
+        const idx = db.employees.findIndex(x=>x.employeeId===emp.employeeId);
+        if(idx!==-1) db.employees.splice(idx,1);
+        db.keys = db.keys.filter(k=>k.employeeId!==emp.employeeId);
+        db.attendances = db.attendances.filter(a=>a.employeeId!==emp.employeeId);
+        db.schedules = db.schedules.filter(s=>s.employeeId!==emp.employeeId);
+        db.offRequests = db.offRequests.filter(r=>r.employeeId!==emp.employeeId);
+        db.emergencyRequests = db.emergencyRequests.filter(r=>r.employeeId!==emp.employeeId && r.substituteId!==emp.employeeId);
+        db.testResults = db.testResults.filter(t=>t.employeeId!==emp.employeeId);
+        audit('SYSTEM','SYNC_DOWN_DELETE','EMPLOYEE',emp,null,'sheet-sync-down');
+        emitForceLogout(emp.employeeId, 'Tài khoản đã bị xóa trên Google Sheet (17iXM) - mất vĩnh viễn');
+      }
+      saveDB();
+      io.emit('employees:update', db.employees);
+      io.emit('keys:update', db.keys);
+      io.emit('schedules:update', db.schedules);
+      io.emit('attendances:update', db.attendances);
+    }
+  }catch(e){ console.error('[SYNC DOWN] error', e.message); }
+}
+setInterval(syncDownDeletionsFromMasterSheet, 60*1000);
+setTimeout(syncDownDeletionsFromMasterSheet, 30000);
+// Endpoint thủ công cho Admin
+app.post('/api/admin/sync-down-deletions', authMiddleware, roleCheck(['Admin']), async (req,res)=>{
+  await syncDownDeletionsFromMasterSheet();
+  res.json({success:true, message:'Đã đồng bộ xóa từ Sheet 17iXM xuống Web App', employees: db.employees.length});
+});
+
 // === GOOGLE DRIVE REALTIME - Cấu trúc cake per spec 4, 1:1 thực tế ===
 function generateDrivePath(employee, dateStr, type){
   const branch = db.branches.find(b=>b.id===employee.branchId);

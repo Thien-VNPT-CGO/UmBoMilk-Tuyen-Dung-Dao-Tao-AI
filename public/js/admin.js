@@ -790,6 +790,23 @@ async function syncFromSheet(){
     showToast(e.message||'Lỗi đồng bộ từ Sheet', 'error');
   }
 }
+async function syncDownDeletions(){
+  if(currentUser?.role !== 'Admin'){
+    showToast('Chỉ Admin mới được đồng bộ xóa', 'error');
+    return;
+  }
+  if(!confirm('Bạn có chắc muốn đồng bộ XÓA từ Google Sheet 17iXM xuống Web App?\n\nWeb App sẽ XÓA VĨNH VIỄN những NV không còn trên Sheet (đã bị xóa trên Sheet). Hành động này sẽ force logout NV đó ngay.')){
+    return;
+  }
+  try{
+    showToast('Đang đồng bộ xóa từ Sheet 17iXM...', 'info');
+    const res = await api('/api/admin/sync-down-deletions', { method:'POST', headers:{ Authorization:'Bearer '+token } });
+    showToast(res.message || `Đã đồng bộ xóa: còn ${res.employees} NV`, 'success');
+    loadEmployees();
+  }catch(e){
+    showToast(e.message||'Lỗi đồng bộ xóa', 'error');
+  }
+}
 function renderDashAudit(){
   const el=document.getElementById('dashAudit');
   if(!el) return;
