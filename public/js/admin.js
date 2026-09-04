@@ -4669,19 +4669,26 @@ async function loadShiftSwapAdmin(){
     }).join('');
   }catch(e){ console.error('loadShiftSwapAdmin',e); }
 }
+let hrShiftSwapSending=false;
 async function hrCreateShiftSwap(){
+  if(hrShiftSwapSending) return showToast('Đang gửi, vui lòng đợi...','info');
   const requesterId=document.getElementById('hrSwapRequester')?.value;
   const date=document.getElementById('hrSwapDate')?.value;
   const fromShift=document.getElementById('hrSwapFrom')?.value;
   const toShift=document.getElementById('hrSwapTo')?.value;
   const reason=document.getElementById('hrSwapReason')?.value.trim();
   if(!requesterId||!date||!fromShift||!toShift||!reason) return showToast('Điền đủ NV, ngày, ca, lý do (bắt buộc)','error');
+  hrShiftSwapSending=true;
+  const btn=document.querySelector('button[onclick=\"hrCreateShiftSwap()\"]');
+  const oldText=btn?btn.innerHTML:'';
+  if(btn){ btn.disabled=true; btn.innerHTML='<i class=\"fa-solid fa-spinner fa-spin\"></i> Đang gửi...'; }
   try{
     const res=await api('/api/shift-swap/hr-broadcast', {method:'POST', headers:{Authorization:'Bearer '+token}, body:JSON.stringify({requesterId, date, fromShift, toShift, reason})});
     showToast(res.message||'HR đã gửi yêu cầu <24h tới toàn chi nhánh','success');
     document.getElementById('hrSwapReason').value='';
     loadShiftSwapAdmin();
   }catch(e){ showToast(e.message,'error'); }
+  finally{ hrShiftSwapSending=false; if(btn){ btn.disabled=false; btn.innerHTML=oldText; } }
 }
 
 // Modals

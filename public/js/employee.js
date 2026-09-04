@@ -1417,13 +1417,16 @@ async function loadShiftSwap(){
     }).join('') || '<div class="text-xs text-slate-400 text-center py-2">Không có lời mời đổi ca</div>';
   }catch(e){ console.error('loadShiftSwap',e); }
 }
+let shiftSwapSending=false;
 async function submitShiftSwap(){
+  if(shiftSwapSending) return showToast('Đang gửi, vui lòng đợi...','info');
   const date=document.getElementById('swapDate')?.value;
   const fromShift=document.getElementById('swapFromShift')?.value || employee.shift;
   const targetId=document.getElementById('swapTarget')?.value || '';
   const reason=document.getElementById('swapReason')?.value.trim()||'';
   if(!date) return showToast('Chọn ngày muốn đổi','error');
   if(!reason) return showToast('Vui lòng nhập lý do (bắt buộc)','error');
+  shiftSwapSending=true;
   // Tìm toShift: nếu TH1 thì lấy ca của target, nếu TH2 thì cần chọn ca muốn đổi? Đơn giản: đổi ca hiện tại sang ca khác (chọn trong target's shift)
   // Ở đây ta cho phép chọn ca đích là ca của target hoặc nếu TH2 thì mặc định đổi sang ca khác (ví dụ: nếu đang CA_SANG thì đổi sang CA_CHIEU)
   let toShift = employee.shift;
@@ -1446,6 +1449,7 @@ async function submitShiftSwap(){
     showToast(res.message||'Đã gửi yêu cầu đổi ca','success');
     loadShiftSwap();
   }catch(e){ showToast(e.message,'error'); }
+  finally{ shiftSwapSending=false; }
 }
 async function respondShiftSwap(requestId, action){
   try{
