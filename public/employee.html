@@ -553,14 +553,13 @@ button { min-height:44px; }
           <div class="space-y-3">
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div><label class="text-xs font-bold text-slate-700">Ngày muốn đổi</label><input id="swapDate" type="date" class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm focus:border-pink-400 outline-none"></div>
-              <div><label class="text-xs font-bold text-slate-700">Ca hiện tại của bạn</label><input id="swapFromShift" readonly class="w-full mt-1 px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-sm font-bold"></div>
+              <div><label class="text-xs font-bold text-slate-700">Ca hiện tại của bạn</label><select id="swapFromShift" class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm focus:border-pink-400 outline-none bg-white"><option value="CA_SANG">CA_SANG - Ca Sáng (07:00-12:00)</option><option value="CA_CHIEU">CA_CHIEU - Ca Chiều (12:00-18:00)</option><option value="CA_TOI">CA_TOI - Ca Tối (18:00-23:00)</option></select></div>
             </div>
             <div>
-              <label class="text-xs font-bold text-slate-700">Tìm người thay thế (TH1)</label>
+              <label class="text-xs font-bold text-slate-700">Tìm người thay thế</label>
               <select id="swapTarget" class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm focus:border-pink-400 outline-none">
-                <option value="">-- Không chọn (chuyển thẳng TH2: gửi toàn chi nhánh) --</option>
+                <option value="">-- Không chọn (gửi toàn bộ chi nhánh) --</option>
               </select>
-              <div class="text-[11px] text-slate-500 mt-1">Chọn 1 NV cùng chi nhánh để gửi trực tiếp (TH1). Bỏ trống để gửi toàn chi nhánh (TH2).</div>
             </div>
             <div><label class="text-xs font-bold text-slate-700">Lý do <span class="text-red-500">*</span> (bắt buộc)</label><textarea id="swapReason" rows="2" placeholder="Nhập lý do đổi ca (bắt buộc)..." required class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm outline-none focus:border-pink-400"></textarea></div>
             <button onclick="submitShiftSwap()" class="w-full text-white font-black py-3.5 rounded-2xl shadow text-sm" style="background:linear-gradient(135deg,#06b6d4,#3b82f6)"><i class="fa-solid fa-paper-plane mr-2"></i>Gửi yêu cầu đổi ca</button>

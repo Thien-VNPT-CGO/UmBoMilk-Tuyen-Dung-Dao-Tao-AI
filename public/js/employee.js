@@ -986,11 +986,10 @@ async function loadAttendanceTab(){
           <div class="font-black text-sm text-emerald-900 flex items-center gap-2"><i class="fa-solid fa-calendar-check text-emerald-600"></i> Chấm công Chính thức - Tháng ${fmtMonthYear(month)} (T1→Cuối tháng)</div>
           <div class="grid grid-cols-3 gap-2 mt-2 text-xs">
             <div class="bg-white border border-emerald-100 rounded-xl p-2 text-center"><div class="font-bold text-slate-500">Tổng ngày</div><div class="font-black text-lg text-slate-800">${stats.daysInMonth}</div></div>
-            <div class="bg-white border border-emerald-100 rounded-xl p-2 text-center"><div class="font-bold text-slate-500">OFF (tuần+đột xuất)</div><div class="font-black text-lg text-amber-600">${stats.totalOff}</div><div class="text-[11px]">Tuần:${stats.offWeekly} ĐX:${stats.offEmergency}</div></div>
+            <div class="bg-white border border-emerald-100 rounded-xl p-2 text-center"><div class="font-bold text-slate-500">OFF (2 ngày/tuần)</div><div class="font-black text-lg text-amber-600">${stats.offWeekly}</div><div class="text-[11px]">Đã đăng ký</div></div>
             <div class="bg-white border border-emerald-100 rounded-xl p-2 text-center"><div class="font-bold text-slate-500">Làm việc</div><div class="font-black text-lg text-emerald-600">${stats.workingScheduled}</div><div class="text-[11px] ${stats.min12Compliant?'text-emerald-600':'text-red-600 font-bold'}">${stats.min12Compliant?'✓ ≥12 ngày':'✗ &lt;12 ngày'}</div></div>
           </div>
           <div class="mt-2 text-xs flex justify-between"><span>Lịch WORKING trong tháng: <b>${stats.scheduledWorking}</b> ngày</span><span>Đã điểm danh: <b>${stats.completedAttendances}</b></span></div>
-          <div class="text-[11px] text-emerald-700 mt-1">Khác Training 7 ngày - Official tính trọn tháng, AI đảm bảo ≥12 ngày làm (TH1/TH2)</div>
         </div>`;
     } else if(monthlyEl){
       monthlyEl.innerHTML='';
@@ -1074,6 +1073,18 @@ async function loadSchedule(){
            <span><i class="fa-solid fa-building-user mr-1"></i> ${getBranchDisplay(employee.branchId)}</span>
            <span class="italic">Cập nhật bởi AI lúc ${new Date().toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit'})}</span>
         </div>
+        ${(() => {
+          const isOff = employee.type==='OFFICIAL' || employee.status==='OFFICIAL';
+          if(isOff) return `<div class="px-4 py-3 bg-blue-50 border-t border-blue-100 text-[11px] text-blue-700 leading-relaxed">
+            <div class="font-black flex items-center gap-2"><i class="fa-solid fa-circle-info text-blue-600"></i> Chú thích hệ thống gán ca tự động:</div>
+            <div class="mt-1">• <b>WORKING:</b> Ngày làm việc theo ca đã gán (CA_SANG/CHIEU/TOI)</div>
+            <div>• <b>OFF:</b> Ngày nghỉ (đã đăng ký OFF 2 ngày/tuần hoặc Chủ Nhật)</div>
+            <div>• <b>SUBSTITUTE:</b> Ngày thay ca cho NV khác</div>
+            <div>• Cùng chi nhánh cùng ca: AI chia đều, không trùng ngày (mỗi ngày chỉ 1 NV WORKING)</div>
+            <div>• Lịch tuần sau AI tạo sau khi HR duyệt OFF (T7 15:00) và gửi đến NV</div>
+          </div>`;
+          return '';
+        })()}
       </div>
       `;
     }).join('');
@@ -1346,18 +1357,18 @@ async function respondEmergency(requestId, action){
     loadEmergency();
   }catch(e){ showToast(e.message,'error'); }
 }
-// Đổi ca (Official) - TH1/TH2 24h
+// Đổi ca (Official) - 24h AI tự duyệt
 let shiftSwapRequests=[];
 async function loadShiftSwap(){
   try{
-    // Load all employees cùng chi nhánh để chọn TH1
+    // Load all employees cùng chi nhánh để chọn người thay thế
     const branchEmps = await api('/api/employees?branch='+employee.branchId).catch(()=>[]);
     const emps = Array.isArray(branchEmps) ? branchEmps : (branchEmps.data||[]);
     const opts = emps.filter(e=>e.employeeId!==employee.employeeId && e.status==='OFFICIAL').map(e=>`<option value="${e.employeeId}">${e.name} - ${e.employeeId} - ${e.shift}</option>`).join('');
     const sel=document.getElementById('swapTarget');
     if(sel){
       const cur = sel.value;
-      sel.innerHTML = `<option value="">-- Không chọn (TH2: gửi toàn chi nhánh) --</option>` + opts;
+      sel.innerHTML = `<option value="">-- Không chọn (gửi toàn bộ chi nhánh) --</option>` + opts;
       if(cur) sel.value=cur;
     }
     const fromEl=document.getElementById('swapFromShift');
@@ -1368,13 +1379,13 @@ async function loadShiftSwap(){
     const mine = shiftSwapRequests;
     document.getElementById('myShiftSwapList').innerHTML = mine.map(r=>{
       const statusColor = r.status==='PENDING_TARGET' ? 'bg-amber-500 text-white' : r.status==='PENDING_BROADCAST' ? 'bg-blue-500 text-white' : r.status==='APPROVED' ? 'bg-emerald-500 text-white' : r.status==='REJECTED' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600';
-      const thText = r.targetEmployeeId ? `TH1: Gửi tới ${r.targetEmployeeName||r.targetEmployeeId}` : 'TH2: Gửi toàn chi nhánh';
+      const thText = r.targetEmployeeId ? `Gửi tới ${r.targetEmployeeName||r.targetEmployeeId}` : 'Gửi toàn chi nhánh';
       return `<div class="border rounded-xl p-3 ${r.status.includes('PENDING')?'bg-amber-50 border-amber-200':'bg-white'}">
         <div class="flex justify-between items-start"><span class="font-bold text-sm">${fmtDMY(r.date)} • ${r.fromShift} → ${r.toShift}</span><span class="text-[11px] font-black px-2 py-1 rounded-full ${statusColor}">${r.status}</span></div>
         <div class="text-xs text-slate-600 mt-1">${thText} • ${getBranchDisplay(r.branchId)}</div>
         <div class="text-xs text-slate-500 mt-1">Lý do: ${r.reason||'—'}</div>
         <div class="text-[11px] text-slate-400 mt-1">Tạo: ${fmtDMYTime(r.createdAt)} • Hết hạn: ${fmtDMYTime(r.expiresAt)}</div>
-        ${r.status==='PENDING_TARGET' || r.status==='PENDING_BROADCAST' ? '<div class="text-[11px] text-amber-700 mt-1">AI sẽ tự duyệt sau 24h nếu có người chấp nhận (TH2) hoặc ngay khi TH1 chấp nhận</div>' : ''}
+        ${r.status==='PENDING_TARGET' || r.status==='PENDING_BROADCAST' ? '<div class="text-[11px] text-amber-700 mt-1">AI sẽ tự duyệt sau 24h nếu có người chấp nhận hoặc ngay khi người được mời chấp nhận</div>' : ''}
       </div>`;
     }).join('') || '<div class="text-xs text-slate-400 text-center py-2">Chưa có yêu cầu đổi ca</div>';
     // Invites: where you are target or broadcast and not requester
@@ -1384,7 +1395,7 @@ async function loadShiftSwap(){
     document.getElementById('shiftSwapInviteList').innerHTML = allInvites.map(r=>{
       const isDirect = r.targetEmployeeId===employee.employeeId;
       return `<div class="border ${isDirect?'border-blue-200 bg-blue-50':'border-emerald-200 bg-emerald-50'} rounded-xl p-3">
-        <div class="font-bold text-sm">${r.requesterName} muốn đổi ca <span class="text-[11px] bg-slate-900 text-white px-2 py-0.5 rounded-full">${isDirect?'TH1: Gửi riêng bạn':'TH2: Toàn chi nhánh'}</span></div>
+        <div class="font-bold text-sm">${r.requesterName} muốn đổi ca <span class="text-[11px] bg-slate-900 text-white px-2 py-0.5 rounded-full">${isDirect?'Gửi riêng bạn':'Toàn chi nhánh'}</span></div>
         <div class="text-xs text-slate-600">Ngày ${fmtDMY(r.date)} • ${r.fromShift} → ${r.toShift} • ${getBranchDisplay(r.branchId)} • Lý do: ${r.reason||'—'}</div>
         <div class="text-[11px] text-slate-500 mt-1">Hết hạn: ${fmtDMYTime(r.expiresAt)}</div>
         <div class="mt-2 flex gap-2"><button onclick="respondShiftSwap('${r.id}','ACCEPT')" class="flex-1 bg-emerald-600 text-white text-xs font-bold py-1.5 rounded-lg">✅ Chấp nhận</button><button onclick="respondShiftSwap('${r.id}','REJECT')" class="flex-1 bg-white border text-xs font-bold py-1.5 rounded-lg">Từ chối</button></div>
