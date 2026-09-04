@@ -1093,6 +1093,9 @@ async function loadSchedule(){
               <div>• <b>SUBSTITUTE:</b> Ngày thay ca cho NV khác (đổi ca)</div>
               <div>• <b>Tuần này/Tuần tới:</b> Nhãn phân biệt tuần hiện tại và tuần sau</div>
               <div>• Lịch tuần sau AI tạo sau khi HR duyệt OFF (T7 15:00) và gửi đến NV qua thông báo</div>
+              <div>• <b>Đổi ca:</b></div>
+              <div class="ml-3">+ Xin phép đổi ca &gt; 24 tiếng trước lịch làm: thực hiện theo quy trình đổi ca trong app</div>
+              <div class="ml-3">+ Xin phép đổi ca &lt; 24 tiếng trước lịch làm: Vui lòng liên hệ trực tiếp HR</div>
             </div>`;
           }
         })()}
