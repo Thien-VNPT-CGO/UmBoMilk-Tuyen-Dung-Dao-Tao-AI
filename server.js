@@ -4463,6 +4463,7 @@ app.post('/api/training/shift-change', (req,res)=>{
   if(!emp) return res.status(404).json({ error:'Không tìm thấy nhân viên' });
   if(emp.type!=='TRAINING' && emp.status!=='TRAINING') return res.status(403).json({ error:'Chỉ nhân viên Training mới được đổi ca linh hoạt' });
   if(!date || !toShift) return res.status(400).json({ error:'Thiếu ngày hoặc ca mới' });
+  if(!reason || !String(reason).trim()) return res.status(400).json({ error:'Lý do là bắt buộc - vui lòng nhập lý do đổi ca' });
   if(!['CA_SANG','CA_CHIEU','CA_TOI'].includes(toShift)) return res.status(400).json({ error:'Ca mới không hợp lệ (CA_SANG/CHIEU/TOI)' });
   // Tìm ca hiện tại trên lịch
   const sched = db.schedules.find(s=> s.employeeId===employeeId && s.days.some(d=> d.date===date));
@@ -4616,6 +4617,7 @@ app.post('/api/shift-swap', (req,res)=>{
   if(!emp) return res.status(404).json({error:'Không tìm thấy nhân viên yêu cầu'});
   if(emp.type!=='OFFICIAL' && emp.status!=='OFFICIAL') return res.status(403).json({error:'Chỉ nhân viên Chính thức mới được đổi ca'});
   if(!date) return res.status(400).json({error:'Thiếu ngày'});
+  if(!reason || !String(reason).trim()) return res.status(400).json({error:'Lý do là bắt buộc - vui lòng nhập lý do đổi ca'});
   // Tìm ca hiện tại nếu không truyền
   let curShift = fromShift;
   if(!curShift){

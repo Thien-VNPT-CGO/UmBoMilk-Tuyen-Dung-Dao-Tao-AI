@@ -1093,7 +1093,7 @@ function openTrainingShiftModal(weekStart){
         <div class="mt-3 space-y-3">
           <div><label class="text-xs font-bold">Ngày</label><select id="shiftDate" class="w-full mt-1 px-3 py-2 rounded-xl border text-sm">${options}</select></div>
           <div><label class="text-xs font-bold">Ca mới</label><select id="shiftTo" class="w-full mt-1 px-3 py-2 rounded-xl border text-sm"><option value="CA_SANG">Ca Sáng (07:00-12:00)</option><option value="CA_CHIEU">Ca Chiều (12:00-18:00)</option><option value="CA_TOI">Ca Tối (18:00-23:00)</option></select></div>
-          <div><label class="text-xs font-bold">Lý do</label><input id="shiftReason" class="w-full mt-1 px-3 py-2 rounded-xl border text-sm" placeholder="Lý do đổi ca (không bắt buộc)"></div>
+          <div><label class="text-xs font-bold">Lý do <span class="text-red-500">*</span> (bắt buộc)</label><input id="shiftReason" class="w-full mt-1 px-3 py-2 rounded-xl border text-sm focus:border-pink-400" placeholder="Nhập lý do (bắt buộc)..."></div>
         </div>
         <div class="mt-4 flex gap-2"><button onclick="submitTrainingShift(false)" class="flex-1 bg-gradient-to-r from-pink-500 to-rose-500 text-white font-black py-2.5 rounded-xl">Gửi yêu cầu</button><button onclick="document.getElementById('trainingShiftModal').remove()" class="px-4 bg-slate-100 font-bold py-2.5 rounded-xl">Hủy</button></div>
       </div>
@@ -1113,7 +1113,7 @@ function openTrainingAddShiftModal(weekStart){
         <div class="mt-3 space-y-3">
           <div><label class="text-xs font-bold">Ngày (đã có ca)</label><select id="shiftDate" class="w-full mt-1 px-3 py-2 rounded-xl border text-sm">${options}</select></div>
           <div><label class="text-xs font-bold">Ca THÊM</label><select id="shiftTo" class="w-full mt-1 px-3 py-2 rounded-xl border text-sm"><option value="CA_CHIEU">Ca Chiều (12:00-18:00)</option><option value="CA_SANG">Ca Sáng (07:00-12:00)</option><option value="CA_TOI">Ca Tối (18:00-23:00)</option></select></div>
-          <div><label class="text-xs font-bold">Lý do</label><input id="shiftReason" class="w-full mt-1 px-3 py-2 rounded-xl border text-sm" placeholder="Lý do thêm ca"></div>
+          <div><label class="text-xs font-bold">Lý do <span class="text-red-500">*</span> (bắt buộc)</label><input id="shiftReason" class="w-full mt-1 px-3 py-2 rounded-xl border text-sm focus:border-pink-400" placeholder="Nhập lý do (bắt buộc)..."></div>
         </div>
         <div class="mt-4 flex gap-2"><button onclick="submitTrainingShift(true)" class="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-black py-2.5 rounded-xl">Gửi thêm ca</button><button onclick="document.getElementById('trainingShiftModal').remove()" class="px-4 bg-slate-100 font-bold py-2.5 rounded-xl">Hủy</button></div>
       </div>
@@ -1123,8 +1123,9 @@ function openTrainingAddShiftModal(weekStart){
 async function submitTrainingShift(isAdd){
   const date = document.getElementById('shiftDate')?.value;
   const toShift = document.getElementById('shiftTo')?.value;
-  const reason = document.getElementById('shiftReason')?.value || (isAdd ? 'Thêm ca 1 ngày 2 ca' : '');
+  const reason = document.getElementById('shiftReason')?.value.trim() || '';
   if(!date || !toShift) return showToast('Thiếu ngày/ca','error');
+  if(!reason) return showToast('Vui lòng nhập lý do (bắt buộc)','error');
   try{
     const endpoint = isAdd ? '/api/training/shift-change' : '/api/training/shift-change';
     // Thêm ca gửi cùng endpoint với reason prefix để server phân biệt (hiện server chưa có endpoint riêng, dùng chung và thêm tag)
@@ -1397,6 +1398,7 @@ async function submitShiftSwap(){
   const targetId=document.getElementById('swapTarget')?.value || '';
   const reason=document.getElementById('swapReason')?.value.trim()||'';
   if(!date) return showToast('Chọn ngày muốn đổi','error');
+  if(!reason) return showToast('Vui lòng nhập lý do (bắt buộc)','error');
   // Tìm toShift: nếu TH1 thì lấy ca của target, nếu TH2 thì cần chọn ca muốn đổi? Đơn giản: đổi ca hiện tại sang ca khác (chọn trong target's shift)
   // Ở đây ta cho phép chọn ca đích là ca của target hoặc nếu TH2 thì mặc định đổi sang ca khác (ví dụ: nếu đang CA_SANG thì đổi sang CA_CHIEU)
   let toShift = employee.shift;
