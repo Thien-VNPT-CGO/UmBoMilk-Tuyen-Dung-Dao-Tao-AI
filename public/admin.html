@@ -471,6 +471,31 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
         <div id="scheduleGrid" class="grid gap-3"></div>
       </section>
 
+      <!-- Đổi ca (Official 24h) -->
+      <section id="tab-shiftSwap" class="tab-section hidden">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <h2 class="text-xl font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-people-arrows text-blue-500"></i> Đổi ca <span class="text-xs font-bold bg-blue-100 text-blue-700 px-2 py-1 rounded-full border border-blue-200">24h AI</span></h2>
+          <button onclick="loadShiftSwapAdmin()" class="text-xs font-bold bg-white border border-pink-200 text-pink-700 px-3 py-1.5 rounded-xl hover:bg-pink-50"><i class="fa-solid fa-rotate"></i> Tải lại</button>
+        </div>
+        <!-- HR tạo yêu cầu <24h -->
+        <div class="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-4">
+          <div class="font-black text-sm text-amber-900 flex items-center gap-2"><i class="fa-solid fa-triangle-exclamation text-amber-600"></i> HR gửi yêu cầu đổi ca &lt;24h (NV liên hệ trực tiếp)</div>
+          <div class="text-xs text-amber-700 mt-1">Khi NV xin đổi ca <b>&lt;24 tiếng</b> (phải liên hệ trực tiếp HR), HR dùng form này để gửi tới <b>toàn chi nhánh</b>. Nội dung HR gửi sẽ <b>khác hoàn toàn</b> với NV gửi (ghi rõ <code>[HR - KHẨN &lt;24h]</code>).</div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+            <div><label class="text-xs font-bold text-slate-700">Nhân viên xin đổi (requester)</label><select id="hrSwapRequester" class="w-full mt-1 px-3 py-2 rounded-xl border border-amber-200 text-sm bg-white"></select></div>
+            <div><label class="text-xs font-bold text-slate-700">Ngày</label><input id="hrSwapDate" type="date" class="w-full mt-1 px-3 py-2 rounded-xl border border-amber-200 text-sm"></div>
+            <div><label class="text-xs font-bold text-slate-700">Ca hiện tại</label><select id="hrSwapFrom" class="w-full mt-1 px-3 py-2 rounded-xl border text-sm"><option value="CA_SANG">CA_SANG (07:00-12:00)</option><option value="CA_CHIEU">CA_CHIEU (12:00-18:00)</option><option value="CA_TOI">CA_TOI (18:00-23:00)</option></select></div>
+            <div><label class="text-xs font-bold text-slate-700">Ca muốn đổi</label><select id="hrSwapTo" class="w-full mt-1 px-3 py-2 rounded-xl border text-sm"><option value="CA_CHIEU">CA_CHIEU (12:00-18:00)</option><option value="CA_SANG">CA_SANG (07:00-12:00)</option><option value="CA_TOI">CA_TOI (18:00-23:00)</option></select></div>
+            <div class="md:col-span-2"><label class="text-xs font-bold text-slate-700">Lý do <span class="text-red-500">*</span></label><textarea id="hrSwapReason" rows="2" placeholder="Lý do HR gửi thay (bắt buộc)..." class="w-full mt-1 px-3 py-2 rounded-xl border border-amber-200 text-sm"></textarea></div>
+          </div>
+          <button onclick="hrCreateShiftSwap()" class="mt-3 w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-black py-3 rounded-xl shadow flex items-center justify-center gap-2"><i class="fa-solid fa-paper-plane"></i> HR gửi đến toàn chi nhánh (&lt;24h)</button>
+        </div>
+        <div class="bg-white rounded-2xl border border-pink-200 overflow-hidden shadow-sm">
+          <div class="p-3 border-b border-pink-100 flex justify-between items-center"><span class="font-bold text-sm text-pink-900">Danh sách đổi ca (24h)</span><span id="shiftSwapCount" class="text-xs bg-pink-100 text-pink-700 px-2 py-1 rounded-full">0 yêu cầu</span></div>
+          <div id="shiftSwapAdminList" class="divide-y divide-pink-100 max-h-[60vh] overflow-auto"></div>
+        </div>
+      </section>
+
       <!-- Duyệt phiếu -->
       <section id="tab-requests" class="tab-section hidden">
         <div class="flex items-center justify-between mb-4">

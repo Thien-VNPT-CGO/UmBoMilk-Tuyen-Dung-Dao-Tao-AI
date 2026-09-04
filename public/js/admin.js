@@ -45,6 +45,7 @@ const NAV = [
   {id:'beta-office', icon:'fa-building', label:'NV Văn phòng', badge:'Beta', group:'Nhân sự'},
   {id:'beta-sale', icon:'fa-bullhorn', label:'NV Sale', badge:'Beta', group:'Nhân sự'},
   {id:'schedule', icon:'fa-calendar-days', label:'Lịch làm việc', desc:'T2→CN', group:'Vận hành'},
+  {id:'shiftSwap', icon:'fa-people-arrows', label:'Đổi ca', desc:'24h AI', group:'Vận hành'},
   {id:'requests', icon:'fa-clipboard-check', label:'Duyệt phiếu', badge:'OFF/Reset', group:'Vận hành'},
   {id:'attendance', icon:'fa-camera', label:'Record điểm danh', desc:'GPS/Ảnh', group:'Vận hành'},
   {id:'zalo', icon:'fa-brands fa-viber', label:'Record Zalo', desc:'SENT/FAILED', group:'Vận hành'},
@@ -195,8 +196,8 @@ setInterval(()=>{
 
 function getDefaultTabsForRole(role) {
   if (role === 'Admin') return NAV.map(n => n.id);
-  if (role === 'HR') return ['dashboard', 'applicants', 'interviews', 'employees-store', 'schedule', 'requests'];
-  if (role === 'Manager') return ['dashboard', 'employees-store', 'schedule', 'requests', 'attendance'];
+  if (role === 'HR') return ['dashboard', 'applicants', 'interviews', 'employees-store', 'schedule', 'shiftSwap', 'requests'];
+  if (role === 'Manager') return ['dashboard', 'employees-store', 'schedule', 'shiftSwap', 'requests', 'attendance'];
   if (role === 'Umbomilk') return ['dashboard', 'applicants', 'employees-store', 'attendance'];
   return ['dashboard', 'applicants', 'employees-store'];
 }
@@ -331,6 +332,7 @@ function switchTab(id){
   if(id==='employees-store') loadEmployees();
   if(id==='beta-workshop') renderBeta();
   if(id==='schedule') loadSchedules();
+  if(id==='shiftSwap') loadShiftSwapAdmin();
   if(id==='requests') loadRequests();
   if(id==='attendance') loadAttendances();
   if(id==='zalo') loadZalo();
@@ -4561,6 +4563,49 @@ async function loadAudit(){
       <td class="px-3 py-2 text-xs max-w-[320px] truncate">${JSON.stringify(l.after||l.before||'').slice(0,120)}</td>
     </tr>
   `).join('');
+}
+
+// ShiftSwap HR (<24h)
+async function loadShiftSwapAdmin(){
+  try{
+    const list = await api('/api/shift-swap', {headers:{Authorization:'Bearer '+token}});
+    const sel = document.getElementById('hrSwapRequester');
+    if(sel && employees.length===0) await loadEmployees();
+    if(sel){
+      const opts = employees.filter(e=>e.status==='OFFICIAL').map(e=>`<option value="${e.employeeId}">${e.name} - ${e.employeeId} - ${e.branchId} - ${e.shift}</option>`).join('');
+      sel.innerHTML = `<option value="">-- Chọn NV xin đổi --</option>` + opts;
+    }
+    const el = document.getElementById('shiftSwapAdminList');
+    if(!el) return;
+    if(list.length===0) return el.innerHTML='<div class="p-8 text-center text-sm text-slate-400">Chưa có yêu cầu đổi ca nào</div>';
+    document.getElementById('shiftSwapCount').textContent = list.length + ' yêu cầu';
+    el.innerHTML = list.map(r=>{
+      const color = r.status==='PENDING_TARGET' ? 'bg-amber-100 text-amber-700 border-amber-200' : r.status==='PENDING_BROADCAST' ? 'bg-blue-100 text-blue-700 border-blue-200' : r.status==='PENDING_BROADCAST_ACCEPTED' ? 'bg-purple-100 text-purple-700' : r.status.includes('APPROVED') ? 'bg-emerald-100 text-emerald-700' : r.status==='EXPIRED' ? 'bg-slate-100 text-slate-500' : 'bg-red-100 text-red-700';
+      const urgent = r.isHrCreated ? '<span class="bg-red-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded">HR &lt;24h</span>' : '';
+      return `<div class="p-3 flex justify-between gap-3">
+        <div class="min-w-0 flex-1">
+          <div class="font-bold text-sm flex items-center gap-2">${r.requesterName} <span class="font-mono text-xs">${r.requesterId}</span> ${urgent} <span class="text-[11px] font-black px-2 py-0.5 rounded-full border ${color}">${r.status}</span></div>
+          <div class="text-xs text-slate-600 mt-1">${r.branchId} • ${r.date} • ${r.fromShift} → ${r.toShift} ${r.targetEmployeeId ? '→ '+r.targetEmployeeName : '(toàn CN)'} • Lý do: ${r.reason}</div>
+          <div class="text-[11px] text-slate-400 mt-1">Tạo: ${fmtDMYTime(r.createdAt)} • Hết hạn: ${fmtDMYTime(r.expiresAt)} ${r.acceptedBy ? '• Người nhận: '+r.acceptedBy : ''}</div>
+        </div>
+        <div class="text-xs text-slate-400">${r.isHrCreated ? 'HR tạo' : 'NV tạo'}</div>
+      </div>`;
+    }).join('');
+  }catch(e){ console.error('loadShiftSwapAdmin',e); }
+}
+async function hrCreateShiftSwap(){
+  const requesterId=document.getElementById('hrSwapRequester')?.value;
+  const date=document.getElementById('hrSwapDate')?.value;
+  const fromShift=document.getElementById('hrSwapFrom')?.value;
+  const toShift=document.getElementById('hrSwapTo')?.value;
+  const reason=document.getElementById('hrSwapReason')?.value.trim();
+  if(!requesterId||!date||!fromShift||!toShift||!reason) return showToast('Điền đủ NV, ngày, ca, lý do (bắt buộc)','error');
+  try{
+    const res=await api('/api/shift-swap/hr-broadcast', {method:'POST', headers:{Authorization:'Bearer '+token}, body:JSON.stringify({requesterId, date, fromShift, toShift, reason})});
+    showToast(res.message||'HR đã gửi yêu cầu <24h tới toàn chi nhánh','success');
+    document.getElementById('hrSwapReason').value='';
+    loadShiftSwapAdmin();
+  }catch(e){ showToast(e.message,'error'); }
 }
 
 // Modals

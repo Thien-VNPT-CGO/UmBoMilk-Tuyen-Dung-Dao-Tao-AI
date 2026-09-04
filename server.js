@@ -4761,6 +4761,54 @@ app.post('/api/shift-swap/:id/respond', (req,res)=>{
   }
   return res.status(400).json({error:'Action không hợp lệ'});
 });
+// HR tạo yêu cầu đổi ca <24h (NV liên hệ trực tiếp HR, HR gửi tới toàn chi nhánh - nội dung khác)
+app.post('/api/shift-swap/hr-broadcast', authMiddleware, roleCheck(['Admin','HR','Manager']), (req,res)=>{
+  const { requesterId, date, fromShift, toShift, reason } = req.body;
+  const emp = db.employees.find(e=>e.employeeId===requesterId);
+  if(!emp) return res.status(404).json({error:'Không tìm thấy NV yêu cầu'});
+  if(emp.branchId && req.user.role==='Manager' && !req.user.branchScope.includes(emp.branchId)) return res.status(403).json({error:'Manager chỉ xử lý CN được phân quyền'});
+  if(!date) return res.status(400).json({error:'Thiếu ngày'});
+  if(!reason || !String(reason).trim()) return res.status(400).json({error:'Lý do bắt buộc'});
+  let curShift = fromShift;
+  if(!curShift){
+    const sched = db.schedules.find(s=>s.employeeId===requesterId && s.days.some(d=>d.date===date));
+    const day = sched ? sched.days.find(d=>d.date===date) : null;
+    curShift = day ? day.shift : emp.shift;
+  }
+  const finalToShift = toShift || (curShift==='CA_SANG'?'CA_CHIEU': curShift==='CA_CHIEU'?'CA_TOI':'CA_SANG');
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + 24*60*60*1000).toISOString();
+  const reqId = uuidv4();
+  const newReq = {
+    id: reqId,
+    requesterId, requesterName: emp.name, branchId: emp.branchId,
+    date, fromShift: curShift, toShift: finalToShift,
+    targetEmployeeId: null, targetEmployeeName: null,
+    reason, isHrCreated: true, isUrgent: true, urgency: '<24h',
+    status: 'PENDING_BROADCAST',
+    createdAt: now.toISOString(), expiresAt, version:1,
+    createdByHr: req.user.username
+  };
+  db.shiftSwapRequests.unshift(newReq);
+  audit(req.user.username,'HR_CREATE_SHIFT_SWAP_URGENT','SHIFT_SWAP',null,newReq, req.ip);
+  addSyncQueue('SHIFT_SWAP','CREATE',newReq, req.user.username, 'WEB_HR');
+  saveDB();
+  io.emit('shiftSwap:update', db.shiftSwapRequests);
+  // Gửi tới toàn chi nhánh với nội dung KHÁC (HR gửi)
+  const branchEmps = db.employees.filter(e=>e.branchId===emp.branchId && e.employeeId!==requesterId && e.status==='OFFICIAL');
+  branchEmps.forEach(e=>{
+    const notif = { id: uuidv4(), to: e.employeeId, type:'SHIFT_SWAP_HR_URGENT', title:`[HR] Cần đổi ca gấp ${date} - ${emp.branchId}`, content:`[HR - KHẨN <24h] ${emp.name} (${requesterId}) cần hoán đổi ca ${curShift}→${finalToShift} ngày ${date}. Lý do: ${reason}. Đây là yêu cầu do HR gửi thay (NV liên hệ trực tiếp HR). Vui lòng hỗ trợ!`, createdAt: now.toISOString(), read:false, requestId: reqId };
+    db.notifications.push(notif);
+    const zr = { id: uuidv4(), sent_at: now.toISOString(), receiver: e.phone, type:'SHIFT_SWAP_HR_URGENT', content:`[HR KHẨN] ${emp.name} cần đổi ${curShift}→${finalToShift} ${date} (<24h). HR nhờ bạn hỗ trợ.`, status:'SENT', error:'' };
+    db.zaloRecords.unshift(zr);
+  });
+  // Thông báo cho người yêu cầu
+  const notifReq = { id: uuidv4(), to: requesterId, type:'SHIFT_SWAP_HR_CREATED', title:`HR đã gửi yêu cầu đổi ca <24h`, content:`HR đã gửi yêu cầu hoán đổi ${curShift}→${finalToShift} ngày ${date} tới toàn chi nhánh ${emp.branchId}. Nội dung HR khác với NV gửi.`, createdAt: now.toISOString(), read:false };
+  db.notifications.push(notifReq);
+  io.emit('notifications:update', db.notifications);
+  io.emit('zalo:update', db.zaloRecords);
+  res.json({success:true, request:newReq, message:`HR đã gửi yêu cầu <24h tới ${branchEmps.length} NV cùng CN ${emp.branchId} với nội dung khác`});
+});
 // Poller 24h cho TH2
 function checkShiftSwap24h(){
   const now=Date.now();
