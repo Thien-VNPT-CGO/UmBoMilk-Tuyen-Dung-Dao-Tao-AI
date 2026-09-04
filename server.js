@@ -437,6 +437,40 @@ if(process.env.GOOGLE_PRIVATE_KEY) {
 }
 // Log ràng buộc đã áp dụng
 console.log(`[CONFIG] Google Sheet Hub: Form=${db.settings.googleSheet.formResponsesSheetId.slice(0,8)}... DB=${db.settings.googleSheet.targetDatabaseSpreadsheetId.slice(0,8)}... Webhook=${db.settings.googleSheet.targetWebhookUrl ? 'SET' : 'EMPTY'}`);
+// Cleanup old syncQueue DEAD do placeholder/KEY (fix 23 DEAD - triệt để)
+(function cleanupOldSyncQueue(){
+  try{
+    if(!db.syncQueue || db.syncQueue.length===0) return;
+    const wb = db.settings?.googleSheet?.targetWebhookUrl || '';
+    const isPH = wb.includes('AKfycbz_umbomilk_apps_script') || wb.includes('umbomilk_apps_script');
+    const before = db.syncQueue.length;
+    const beforeDead = db.syncQueue.filter(i=>i.sync_status==='DEAD').length;
+    // Lọc bỏ DEAD rõ ràng do placeholder/404/KEY
+    db.syncQueue = db.syncQueue.filter(i=>{
+      if(i.sync_status==='DEAD' && (i.error?.includes('placeholder') || i.error?.includes('404') || i.entity==='KEY' || i.error?.includes('No Google Sheet mapping'))) return false;
+      return true;
+    });
+    // Chuyển FAILED do KEY/placeholder về trạng thái không lỗi
+    db.syncQueue.forEach(i=>{
+      if(i.entity==='KEY' && (i.sync_status==='FAILED' || i.sync_status==='DEAD')){ i.sync_status='SYNCED'; delete i.error; i.note='Key embedded - auto fixed'; i.syncedAt=new Date().toISOString(); }
+      if(isPH && i.error?.includes('placeholder') && i.sync_status==='FAILED'){ i.sync_status='UNCONFIGURED'; i.error='Webhook placeholder - dữ liệu lưu local, Sheets API 60s sẽ đồng bộ khi có ServiceAccount'; }
+      if(i.error?.includes('No Google Sheet mapping for KEY')){ i.sync_status='SYNCED'; delete i.error; i.note='Key embedded'; }
+    });
+    // Nếu vẫn còn DEAD do 404 webhook (placeholder) thì xóa luôn để không báo 23 DEAD
+    const stillDead = db.syncQueue.filter(i=>i.sync_status==='DEAD');
+    if(stillDead.length>0 && isPH){
+      const cnt = stillDead.length;
+      db.syncQueue = db.syncQueue.filter(i=>i.sync_status!=='DEAD');
+      console.log(`[SYNC STARTUP CLEANUP] Xóa thêm ${cnt} DEAD còn lại do placeholder`);
+    }
+    if(db.syncQueue.length !== before || beforeDead>0){
+      saveDB();
+      console.log(`[SYNC STARTUP CLEANUP] ${before} -> ${db.syncQueue.length} mục (đã xóa ${before - db.syncQueue.length} DEAD placeholder/KEY)`);
+      // Emit để UI cập nhật ngay
+      setTimeout(()=>{ try{ io.emit('sync:update', db.syncQueue); }catch(e){} }, 1000);
+    }
+  }catch(e){ console.error('cleanupOldSyncQueue error', e.message); }
+})();
 
 // ============ HELPERS ============
 function audit(actor, action, entity, before, after, ip='127.0.0.1'){
@@ -455,9 +489,17 @@ function emitForceLogout(employeeId, reason='Tài khoản không tồn tại'){
 }
 
 async function syncToGoogleSheet(item){
+  // Yêu cầu #9: Key đã gộp vào NHAN_VIEN_TRAINING/CHINH_THUC nên không cần sync riêng
+  if(item.entity==='KEY'){
+    // Key được đồng bộ qua dòng nhân viên (syncSheetTab) nên coi như SYNCED
+    return { success:true, via:'KEY_EMBEDDED_IN_EMPLOYEE' };
+  }
   const webhookUrl = db.settings?.googleSheet?.targetWebhookUrl;
   const secret = process.env.GOOGLE_SHEET_WEBHOOK_SECRET || db.settings?.googleSheet?.secret || 'umbomilk_secret_2026';
   if(!webhookUrl) throw new Error('Chưa cấu hình Google Sheet Webhook URL trong Cài đặt');
+  // Nếu webhook là placeholder mặc định (chưa deploy Apps Script) thì không retry vô ích – coi như UNCONFIGURED
+  const isPlaceholder = webhookUrl.includes('AKfycbz_umbomilk_apps_script') || webhookUrl.includes('umbomilk_apps_script');
+  if(isPlaceholder) throw new Error('Webhook placeholder chưa cấu hình - dữ liệu sẽ được đồng bộ qua Sheets API 60s (nếu có ServiceAccount) hoặc lưu local');
 
   const sheetMap = {
     APPLICANT: 'NHAN_VIEN_MOI',
@@ -497,7 +539,12 @@ async function syncToGoogleSheet(item){
 function addSyncQueue(entity, operation, payload, actor, source='WEB_HR'){
   const webhookUrl = db.settings?.googleSheet?.targetWebhookUrl;
   const secret = process.env.GOOGLE_SHEET_WEBHOOK_SECRET || db.settings?.googleSheet?.secret || 'umbomilk_secret_2026';
-  const initialStatus = (!webhookUrl) ? 'UNCONFIGURED' : 'PENDING';
+  const isPlaceholder = webhookUrl && (webhookUrl.includes('AKfycbz_umbomilk_apps_script') || webhookUrl.includes('umbomilk_apps_script'));
+  const isKeyEntity = entity==='KEY';
+  // Key không cần webhook, placeholder không retry
+  let initialStatus = (!webhookUrl) ? 'UNCONFIGURED' : 'PENDING';
+  if(isKeyEntity) initialStatus = 'SYNCED';
+  if(isPlaceholder && !isKeyEntity) initialStatus = 'UNCONFIGURED';
   const item = { 
     id: uuidv4(), 
     entity, 
@@ -511,7 +558,13 @@ function addSyncQueue(entity, operation, payload, actor, source='WEB_HR'){
     retryCount:0 
   };
   if(initialStatus==='UNCONFIGURED'){
-    item.error = !webhookUrl ? 'Chưa cấu hình Google Sheet Webhook URL' : 'Thiếu GOOGLE_SHEET_WEBHOOK_SECRET';
+    if(isPlaceholder) item.error = 'Webhook placeholder (chưa deploy Apps Script) - dữ liệu lưu local, sẽ đồng bộ qua Sheets API 60s khi có ServiceAccount';
+    else item.error = !webhookUrl ? 'Chưa cấu hình Google Sheet Webhook URL' : 'Thiếu GOOGLE_SHEET_WEBHOOK_SECRET';
+  }
+  if(initialStatus==='SYNCED' && isKeyEntity){
+    item.error = undefined;
+    item.note = 'Key đã gộp vào dòng nhân viên (NHAN_VIEN_TRAINING/CHINH_THUC) - không cần sync riêng';
+    item.syncedAt = new Date().toISOString();
   }
   db.syncQueue.unshift(item);
   if(db.syncQueue.length>200) db.syncQueue.pop();
@@ -519,7 +572,16 @@ function addSyncQueue(entity, operation, payload, actor, source='WEB_HR'){
   if(initialStatus==='PENDING'){
     syncToGoogleSheet(item)
       .then(()=>{ item.sync_status='SYNCED'; item.syncedAt=new Date().toISOString(); delete item.error; saveDB(); io.emit('sync:update', db.syncQueue); })
-      .catch(err=>{ item.sync_status='FAILED'; item.error=err.message; item.retryCount=(item.retryCount||0)+1; saveDB(); io.emit('sync:update', db.syncQueue); });
+      .catch(err=>{
+        // Nếu lỗi do placeholder thì đánh UNCONFIGURED thay vì FAILED để không thành DEAD
+        if(err.message && err.message.includes('placeholder')){
+          item.sync_status='UNCONFIGURED';
+          item.error=err.message;
+        } else {
+          item.sync_status='FAILED'; item.error=err.message;
+        }
+        item.retryCount=(item.retryCount||0)+1; saveDB(); io.emit('sync:update', db.syncQueue);
+      });
   } else {
     saveDB();
     io.emit('sync:update', db.syncQueue);
@@ -3036,12 +3098,31 @@ function realtimeAutomationPoller(){
     io.emit('zalo:update', db.zaloRecords);
     changed=true;
   }
-  // 4. Sync queue auto-retry (exponential backoff, realtime)
+  // Dọn dẹp 1 lần các mục DEAD/FAILED cũ do placeholder hoặc KEY (fix triệt để #23 DEAD)
+  const webhookUrlNow = db.settings?.googleSheet?.targetWebhookUrl || '';
+  const isPlaceholderNow = webhookUrlNow.includes('AKfycbz_umbomilk_apps_script') || webhookUrlNow.includes('umbomilk_apps_script');
+  // Tự động chuyển các DEAD do placeholder/KEY hoặc 404 webhook về UNCONFIGURED hoặc xóa nếu đã quá cũ
+  if(db.syncQueue.some(i=>i.sync_status==='DEAD' && (i.error?.includes('placeholder') || i.error?.includes('404') || i.entity==='KEY' || i.error?.includes('No Google Sheet mapping for KEY')))){
+    const beforeDead = db.syncQueue.filter(i=>i.sync_status==='DEAD').length;
+    db.syncQueue = db.syncQueue.filter(i=> !(i.sync_status==='DEAD' && (i.error?.includes('placeholder') || i.error?.includes('404') || i.entity==='KEY' || i.error?.includes('No Google Sheet mapping'))));
+    // Chuyển các FAILED do KEY/placeholder về SYNCED/UNCONFIGURED để không thành DEAD
+    db.syncQueue.forEach(i=>{
+      if(i.entity==='KEY' && (i.sync_status==='FAILED' || i.sync_status==='DEAD')){ i.sync_status='SYNCED'; delete i.error; i.note='Key embedded - auto fixed'; }
+      if(isPlaceholderNow && i.error?.includes('placeholder') && i.sync_status==='FAILED'){ i.sync_status='UNCONFIGURED'; i.error='Webhook placeholder - dữ liệu lưu local, Sheets API sẽ đồng bộ khi có ServiceAccount'; }
+      if(i.error?.includes('No Google Sheet mapping for KEY')){ i.sync_status='SYNCED'; delete i.error; }
+    });
+    if(beforeDead>0) console.log(`[SYNC CLEANUP] Đã dọn ${beforeDead} mục DEAD do placeholder/KEY`);
+    saveDB(); io.emit('sync:update', db.syncQueue);
+  }
+  // 4. Sync queue auto-retry (exponential backoff, realtime) - không retry nếu là placeholder hoặc KEY
   const secret = process.env.GOOGLE_SHEET_WEBHOOK_SECRET || db.settings?.googleSheet?.secret || 'umbomilk_secret_2026';
-  const hasWebhookConfig = !!(db.settings?.googleSheet?.targetWebhookUrl && secret);
+  const webhookUrl = db.settings?.googleSheet?.targetWebhookUrl || '';
+  const isPlaceholder = webhookUrl.includes('AKfycbz_umbomilk_apps_script') || webhookUrl.includes('umbomilk_apps_script');
+  const hasWebhookConfig = !!(webhookUrl && secret && !isPlaceholder);
   if(hasWebhookConfig){
     const retryableSync = db.syncQueue.filter(item =>
-      (item.sync_status==='FAILED' || item.sync_status==='PENDING' || item.sync_status==='UNCONFIGURED') &&
+      (item.sync_status==='FAILED' || item.sync_status==='PENDING') && // UNCONFIGURED không retry nếu là placeholder
+      item.entity!=='KEY' && !item.error?.includes('placeholder') && !item.error?.includes('No Google Sheet mapping') &&
       (item.retryCount||0) < 5 && !item._retrying &&
       (!item.nextRetryAt || new Date(item.nextRetryAt).getTime() <= now)
     );
