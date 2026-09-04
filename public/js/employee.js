@@ -24,6 +24,7 @@ const NAV = [
   {id:'schedule', icon:'fa-calendar-days', label:'Lịch'},
   {id:'salary', icon:'fa-sack-dollar', label:'Lương AI'},
   {id:'off', icon:'fa-umbrella-beach', label:'Nghỉ OFF'},
+  {id:'shiftSwap', icon:'fa-people-arrows', label:'Đổi ca'},
   {id:'emergency', icon:'fa-triangle-exclamation', label:'OFF đột xuất'},
   {id:'elearning', icon:'fa-graduation-cap', label:'E-learning'},
   {id:'notifs', icon:'fa-bell', label:'Thông báo'},
@@ -123,8 +124,8 @@ function updateModeBadge(){
 }
 
 
-// Các tab bị ẩn mặc định với tài khoản TRAINING (off, emergency luôn ẩn)
-const TRAINING_HIDDEN_TABS = ['off', 'emergency'];
+// Các tab bị ẩn mặc định với tài khoản TRAINING (off, emergency, đổi ca luôn ẩn)
+const TRAINING_HIDDEN_TABS = ['off', 'emergency', 'shiftSwap'];
 
 // E-learning chỉ mở cho NV Training khi HR bấm chọn "Thi Trực Tuyến Trên Web App" (Option 1).
 // Khi lên Nhân viên Chính thức (OFFICIAL) thì E-learning tạm thời ẩn đi.
@@ -155,14 +156,14 @@ function getVisibleNav(){
       return true;
     });
   } else {
-    // Official: ẩn elearning + notifs + OFF/emergency theo window realtime
+    // Official: ẩn elearning + notifs + OFF đột xuất (đã bỏ), chỉ hiện đổi ca + OFF theo window
     const offOpen = isOffWindowOpen();
-    const hasNextWeek = (typeof mySchedules !== 'undefined' && mySchedules.length>0) ? (()=>{ try{ const nextMon = getMonday(new Date(Date.now()+7*24*60*60*1000)).toISOString().split('T')[0]; return mySchedules.some(s=>s.weekStart===nextMon); }catch(e){ return false; } })() : false;
     return NAV.filter(n => {
       if(!baseFilter(n)) return false;
       if(n.id === 'elearning') return false;
+      if(n.id === 'emergency') return false; // Bỏ OFF đột xuất cho chính thức
       if(n.id === 'off') return offOpen; // chỉ hiện trong T6 12:00 - T7 15:00
-      if(n.id === 'emergency') return hasNextWeek && !offOpen; // chỉ hiện khi có lịch tuần sau và đã qua window duyệt OFF
+      if(n.id === 'shiftSwap') return true; // Đổi ca luôn hiện cho chính thức
       return true;
     });
   }
@@ -174,25 +175,32 @@ function refreshNavVisibility(){
   const isOfficial = employee.status === 'OFFICIAL' || employee.type === 'OFFICIAL';
   const unlocked = isElearningUnlocked();
   initNav();
-  // Training: ẩn off/emergency
+  // Training: ẩn off/emergency/shiftSwap
   TRAINING_HIDDEN_TABS.forEach(tabId => {
     const sec = document.getElementById('tab-' + tabId);
     if(sec){
       if(!isOfficial) sec.classList.add('hidden', 'training-locked');
       else {
-        // Official: off chỉ hiện khi window mở, emergency chỉ khi có lịch tuần sau
         if(tabId==='off'){
           if(isOffWindowOpen()) sec.classList.remove('hidden','training-locked');
           else { sec.classList.add('hidden','training-locked'); if(document.querySelector('.tab-section:not(.hidden)')?.id==='tab-off') switchTab('home'); }
         } else if(tabId==='emergency'){
-          const nextMon = getMonday(new Date(Date.now()+7*24*60*60*1000)).toISOString().split('T')[0];
-          const hasNextWeek = (typeof mySchedules!=='undefined' && mySchedules.some(s=>s.weekStart===nextMon));
-          if(hasNextWeek && !isOffWindowOpen()) sec.classList.remove('hidden','training-locked');
-          else { sec.classList.add('hidden','training-locked'); if(document.querySelector('.tab-section:not(.hidden)')?.id==='tab-emergency') switchTab('home'); }
+          // Bỏ OFF đột xuất cho chính thức - luôn ẩn
+          sec.classList.add('hidden','training-locked');
+          if(document.querySelector('.tab-section:not(.hidden)')?.id==='tab-emergency') switchTab('home');
+        } else if(tabId==='shiftSwap'){
+          // Đổi ca luôn hiện cho chính thức
+          sec.classList.remove('hidden','training-locked');
         }
       }
     }
   });
+  // Đảm bảo shiftSwap ẩn với training, hiện với official (dù không trong TRAINING_HIDDEN_TABS cho official)
+  const shiftSwapSec = document.getElementById('tab-shiftSwap');
+  if(shiftSwapSec){
+    if(!isOfficial) shiftSwapSec.classList.add('hidden','training-locked');
+    else shiftSwapSec.classList.remove('hidden','training-locked');
+  }
   // Ẩn notifs tab khỏi nav nhưng vẫn cho phép mở qua chuông
   const notifSec = document.getElementById('tab-notifs');
   if(notifSec) { /* giữ nguyên, chỉ ẩn khỏi nav, không ẩn section khi mở qua chuông */ }
@@ -345,6 +353,7 @@ function switchTab(id){
   if(id==='salary') loadSalaryTab();
   if(id==='off') loadOff();
   if(id==='emergency') loadEmergency();
+  if(id==='shiftSwap') loadShiftSwap();
   if(id==='elearning') loadElearning();
   if(id==='notifs') loadNotifications();
   if(id==='account') loadAccount();
@@ -1334,6 +1343,88 @@ async function respondEmergency(requestId, action){
     await api('/api/emergency-requests/'+requestId+'/respond', {method:'POST', body:JSON.stringify({substituteId, action})});
     showToast(action==='APPROVE'?'Đã nhận thay ca':'Đã từ chối','success');
     loadEmergency();
+  }catch(e){ showToast(e.message,'error'); }
+}
+// Đổi ca (Official) - TH1/TH2 24h
+let shiftSwapRequests=[];
+async function loadShiftSwap(){
+  try{
+    // Load all employees cùng chi nhánh để chọn TH1
+    const branchEmps = await api('/api/employees?branch='+employee.branchId).catch(()=>[]);
+    const emps = Array.isArray(branchEmps) ? branchEmps : (branchEmps.data||[]);
+    const opts = emps.filter(e=>e.employeeId!==employee.employeeId && e.status==='OFFICIAL').map(e=>`<option value="${e.employeeId}">${e.name} - ${e.employeeId} - ${e.shift}</option>`).join('');
+    const sel=document.getElementById('swapTarget');
+    if(sel){
+      const cur = sel.value;
+      sel.innerHTML = `<option value="">-- Không chọn (TH2: gửi toàn chi nhánh) --</option>` + opts;
+      if(cur) sel.value=cur;
+    }
+    const fromEl=document.getElementById('swapFromShift');
+    if(fromEl) fromEl.value=employee.shift;
+    // Load requests
+    shiftSwapRequests = await api('/api/shift-swap?employeeId='+employee.employeeId).catch(()=>[]);
+    const allRequests = await api('/api/shift-swap?branch='+employee.branchId).catch(()=>[]);
+    const mine = shiftSwapRequests;
+    document.getElementById('myShiftSwapList').innerHTML = mine.map(r=>{
+      const statusColor = r.status==='PENDING_TARGET' ? 'bg-amber-500 text-white' : r.status==='PENDING_BROADCAST' ? 'bg-blue-500 text-white' : r.status==='APPROVED' ? 'bg-emerald-500 text-white' : r.status==='REJECTED' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600';
+      const thText = r.targetEmployeeId ? `TH1: Gửi tới ${r.targetEmployeeName||r.targetEmployeeId}` : 'TH2: Gửi toàn chi nhánh';
+      return `<div class="border rounded-xl p-3 ${r.status.includes('PENDING')?'bg-amber-50 border-amber-200':'bg-white'}">
+        <div class="flex justify-between items-start"><span class="font-bold text-sm">${fmtDMY(r.date)} • ${r.fromShift} → ${r.toShift}</span><span class="text-[11px] font-black px-2 py-1 rounded-full ${statusColor}">${r.status}</span></div>
+        <div class="text-xs text-slate-600 mt-1">${thText} • ${getBranchDisplay(r.branchId)}</div>
+        <div class="text-xs text-slate-500 mt-1">Lý do: ${r.reason||'—'}</div>
+        <div class="text-[11px] text-slate-400 mt-1">Tạo: ${fmtDMYTime(r.createdAt)} • Hết hạn: ${fmtDMYTime(r.expiresAt)}</div>
+        ${r.status==='PENDING_TARGET' || r.status==='PENDING_BROADCAST' ? '<div class="text-[11px] text-amber-700 mt-1">AI sẽ tự duyệt sau 24h nếu có người chấp nhận (TH2) hoặc ngay khi TH1 chấp nhận</div>' : ''}
+      </div>`;
+    }).join('') || '<div class="text-xs text-slate-400 text-center py-2">Chưa có yêu cầu đổi ca</div>';
+    // Invites: where you are target or broadcast and not requester
+    const invites = allRequests.filter(r=> r.status==='PENDING_TARGET' && r.targetEmployeeId===employee.employeeId);
+    const broadcastInvites = allRequests.filter(r=> r.status==='PENDING_BROADCAST' && r.branchId===employee.branchId && r.requesterId!==employee.employeeId && !r.acceptedBy);
+    const allInvites = [...invites, ...broadcastInvites].slice(0,5);
+    document.getElementById('shiftSwapInviteList').innerHTML = allInvites.map(r=>{
+      const isDirect = r.targetEmployeeId===employee.employeeId;
+      return `<div class="border ${isDirect?'border-blue-200 bg-blue-50':'border-emerald-200 bg-emerald-50'} rounded-xl p-3">
+        <div class="font-bold text-sm">${r.requesterName} muốn đổi ca <span class="text-[11px] bg-slate-900 text-white px-2 py-0.5 rounded-full">${isDirect?'TH1: Gửi riêng bạn':'TH2: Toàn chi nhánh'}</span></div>
+        <div class="text-xs text-slate-600">Ngày ${fmtDMY(r.date)} • ${r.fromShift} → ${r.toShift} • ${getBranchDisplay(r.branchId)} • Lý do: ${r.reason||'—'}</div>
+        <div class="text-[11px] text-slate-500 mt-1">Hết hạn: ${fmtDMYTime(r.expiresAt)}</div>
+        <div class="mt-2 flex gap-2"><button onclick="respondShiftSwap('${r.id}','ACCEPT')" class="flex-1 bg-emerald-600 text-white text-xs font-bold py-1.5 rounded-lg">✅ Chấp nhận</button><button onclick="respondShiftSwap('${r.id}','REJECT')" class="flex-1 bg-white border text-xs font-bold py-1.5 rounded-lg">Từ chối</button></div>
+      </div>`;
+    }).join('') || '<div class="text-xs text-slate-400 text-center py-2">Không có lời mời đổi ca</div>';
+  }catch(e){ console.error('loadShiftSwap',e); }
+}
+async function submitShiftSwap(){
+  const date=document.getElementById('swapDate')?.value;
+  const fromShift=document.getElementById('swapFromShift')?.value || employee.shift;
+  const targetId=document.getElementById('swapTarget')?.value || '';
+  const reason=document.getElementById('swapReason')?.value.trim()||'';
+  if(!date) return showToast('Chọn ngày muốn đổi','error');
+  // Tìm toShift: nếu TH1 thì lấy ca của target, nếu TH2 thì cần chọn ca muốn đổi? Đơn giản: đổi ca hiện tại sang ca khác (chọn trong target's shift)
+  // Ở đây ta cho phép chọn ca đích là ca của target hoặc nếu TH2 thì mặc định đổi sang ca khác (ví dụ: nếu đang CA_SANG thì đổi sang CA_CHIEU)
+  let toShift = employee.shift;
+  if(targetId){
+    try{
+      const emps=await api('/api/employees');
+      const target=emps.find(e=>e.employeeId===targetId);
+      if(target) toShift=target.shift;
+    }catch(e){}
+    if(toShift===fromShift){
+      // Nếu trùng thì tự đổi sang ca khác
+      toShift = fromShift==='CA_SANG' ? 'CA_CHIEU' : fromShift==='CA_CHIEU' ? 'CA_TOI' : 'CA_SANG';
+    }
+  } else {
+    // TH2: không chọn người, thì mặc định đổi sang ca khác
+    toShift = fromShift==='CA_SANG' ? 'CA_CHIEU' : fromShift==='CA_CHIEU' ? 'CA_TOI' : 'CA_SANG';
+  }
+  try{
+    const res=await api('/api/shift-swap', {method:'POST', body:JSON.stringify({requesterId:employee.employeeId, date, fromShift, toShift, targetEmployeeId: targetId||null, reason})});
+    showToast(res.message||'Đã gửi yêu cầu đổi ca','success');
+    loadShiftSwap();
+  }catch(e){ showToast(e.message,'error'); }
+}
+async function respondShiftSwap(requestId, action){
+  try{
+    await api('/api/shift-swap/'+requestId+'/respond', {method:'POST', body:JSON.stringify({employeeId:employee.employeeId, action})});
+    showToast(action==='ACCEPT'?'Đã chấp nhận đổi ca':'Đã từ chối','success');
+    loadShiftSwap();
   }catch(e){ showToast(e.message,'error'); }
 }
 

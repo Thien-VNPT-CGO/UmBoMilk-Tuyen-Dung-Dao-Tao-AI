@@ -543,6 +543,39 @@ button { min-height:44px; }
         </div>
       </section>
 
+      <!-- ĐỔI CA (Chính thức) - TH1/TH2 24h -->
+      <section id="tab-shiftSwap" class="tab-section hidden">
+        <div class="section-title"><div class="title-icon" style="background:linear-gradient(135deg,#06b6d4,#3b82f6)"><i class="fa-solid fa-people-arrows"></i></div>Đổi ca làm việc</div>
+        <div class="card">
+          <div class="text-xs font-bold bg-blue-50 border border-blue-200 rounded-xl p-3 text-blue-700 mb-4">
+            <div class="font-black flex items-center gap-2"><i class="fa-solid fa-robot text-blue-600"></i> Đổi ca 24h - AI tự duyệt</div>
+            <div class="mt-1 leading-relaxed">
+              <b>TH1:</b> Chọn người thay thế → gửi đến đúng NV đó. Nếu họ <b>chấp nhận</b> → AI cập nhật lịch 2 NV ngay. Nếu <b>từ chối</b> → chuyển TH2.<br>
+              <b>TH2:</b> Không tìm được người → gửi đến <b>toàn bộ NV cùng chi nhánh</b>. Nếu có người chấp nhận → AI <b>tự duyệt sau 24h</b>.
+            </div>
+          </div>
+          <div class="space-y-3">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div><label class="text-xs font-bold text-slate-700">Ngày muốn đổi</label><input id="swapDate" type="date" class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm focus:border-pink-400 outline-none"></div>
+              <div><label class="text-xs font-bold text-slate-700">Ca hiện tại của bạn</label><input id="swapFromShift" readonly class="w-full mt-1 px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-sm font-bold"></div>
+            </div>
+            <div>
+              <label class="text-xs font-bold text-slate-700">Tìm người thay thế (TH1)</label>
+              <select id="swapTarget" class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm focus:border-pink-400 outline-none">
+                <option value="">-- Không chọn (chuyển thẳng TH2: gửi toàn chi nhánh) --</option>
+              </select>
+              <div class="text-[11px] text-slate-500 mt-1">Chọn 1 NV cùng chi nhánh để gửi trực tiếp (TH1). Bỏ trống để gửi toàn chi nhánh (TH2).</div>
+            </div>
+            <div><label class="text-xs font-bold text-slate-700">Lý do (không bắt buộc)</label><textarea id="swapReason" rows="2" placeholder="Lý do đổi ca..." class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm outline-none"></textarea></div>
+            <button onclick="submitShiftSwap()" class="w-full text-white font-black py-3.5 rounded-2xl shadow text-sm" style="background:linear-gradient(135deg,#06b6d4,#3b82f6)"><i class="fa-solid fa-paper-plane mr-2"></i>Gửi yêu cầu đổi ca</button>
+          </div>
+        </div>
+        <div class="grid lg:grid-cols-2 gap-3 mt-3">
+          <div class="card"><div class="font-black text-sm text-pink-900 mb-3">Yêu cầu của bạn</div><div id="myShiftSwapList" class="space-y-2"></div></div>
+          <div class="card"><div class="font-black text-sm text-pink-900 mb-3">Lời mời đổi ca (bạn được mời)</div><div id="shiftSwapInviteList" class="space-y-2"></div></div>
+        </div>
+      </section>
+
       <!-- E-LEARNING -->
       <section id="tab-elearning" class="tab-section hidden">
         <div class="flex items-center justify-between mb-1">
