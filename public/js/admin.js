@@ -3905,6 +3905,51 @@ function renderSchedules(){
       </div>
     `;
   }).join('');
+  // Hiển thị duyệt lịch tuần sau nếu có draft
+  setTimeout(loadNextWeekDrafts, 500);
+}
+async function loadNextWeekDrafts(){
+  try{
+    const res = await api('/api/schedules/next-week', {headers:{Authorization:'Bearer '+token}});
+    const card = document.getElementById('nextWeekApprovalCard');
+    const listEl = document.getElementById('nextWeekDraftList');
+    if(!card || !listEl) return;
+    if(!res.drafts || res.drafts.length===0){
+      card.classList.add('hidden');
+      return;
+    }
+    card.classList.remove('hidden');
+    listEl.innerHTML = res.drafts.map(d=>{
+      const emp = employees.find(e=>e.employeeId===d.employeeId) || {name:d.employeeId, branchId:'', shift:''};
+      const daysHtml = d.days.map(day=>{
+        const bg = day.status==='OFF' ? 'bg-red-100 text-red-700 border-red-200' : 'bg-emerald-100 text-emerald-700 border-emerald-200';
+        return `<span class="text-[11px] font-bold px-2 py-1 rounded-full border ${bg}">${day.dayName} ${fmtDMY(day.date).slice(0,5)} ${day.shift}</span>`;
+      }).join('');
+      return `<div class="border border-amber-200 rounded-xl p-3 bg-amber-50">
+        <div class="flex justify-between items-start"><span class="font-bold text-sm">${emp.name} - ${d.employeeId} - ${getBranchDisplay(emp.branchId)} - ${d.days.find(x=>x.status==='WORKING')?.shift||emp.shift}</span><span class="text-[11px] font-black bg-amber-500 text-white px-2 py-1 rounded-full">${d.days.filter(x=>x.status==='WORKING').length} ngày làm</span></div>
+        <div class="flex flex-wrap gap-1 mt-2">${daysHtml}</div>
+        <div class="text-[11px] text-amber-700 mt-2">AI tự động - HR có thể điều chỉnh thủ công trên lịch trước khi duyệt</div>
+      </div>`;
+    }).join('');
+  }catch(e){ console.error('loadNextWeekDrafts',e); }
+}
+async function generateNextWeekDraft(){
+  try{
+    showToast('Đang tạo draft tuần sau...','info');
+    const res = await api('/api/schedules/generate-next-week-draft', {method:'POST', headers:{Authorization:'Bearer '+token}});
+    showToast(res.message||'Đã tạo draft tuần sau','success');
+    loadNextWeekDrafts();
+    loadSchedules();
+  }catch(e){ showToast(e.message,'error'); }
+}
+async function approveNextWeek(){
+  if(!confirm('Duyệt lịch tuần sau cho tất cả NV chính thức? Lịch sẽ được đẩy sang Web App nhân viên ngay (realtime).')) return;
+  try{
+    const res = await api('/api/schedules/approve-next-week', {method:'POST', headers:{Authorization:'Bearer '+token}});
+    showToast(res.message||'Đã duyệt lịch tuần sau','success');
+    loadNextWeekDrafts();
+    loadSchedules();
+  }catch(e){ showToast(e.message,'error'); }
 }
 
 // Requests

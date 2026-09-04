@@ -1003,10 +1003,43 @@ async function loadSchedule(){
     mySchedules = await api('/api/schedules?employeeId='+employee.employeeId);
     const el=document.getElementById('scheduleList');
     if(mySchedules.length===0) return el.innerHTML='<div class="bg-white rounded-2xl border border-slate-200 p-8 text-center text-sm text-slate-400">Chưa có lịch - liên hệ HR</div>';
-    
+    // Ràng buộc realtime: Official chỉ hiện lịch tuần sau khi đã duyệt OFF 2 ngày và HR đã duyệt
+    const isOfficial = employee.type==='OFFICIAL' || employee.status==='OFFICIAL';
+    let displaySchedules = [...mySchedules];
+    if(isOfficial){
+      const nextMon = getMonday(new Date(Date.now()+7*24*60*60*1000)).toISOString().split('T')[0];
+      const nextWeekSched = mySchedules.find(s=>s.weekStart===nextMon);
+      const hasOffForNextWeek = (await api('/api/off-requests?employeeId='+employee.employeeId).catch(()=>[])).some(r=>r.status==='APPROVED' && r.dates && r.dates.some(d=> nextWeekSched && nextWeekSched.days.some(day=>day.date===d)));
+      // Nếu chưa đăng ký OFF 2 ngày cho tuần sau thì chỉ hiện lịch tuần hiện tại, không hiện tuần tới (dù có draft)
+      // Nếu đã đăng ký OFF nhưng tuần sau chưa được HR duyệt (approvalStatus !== 'APPROVED') thì hiện trạng thái chờ duyệt
+      displaySchedules = mySchedules.filter(s=>{
+        if(s.weekStart===nextMon){
+          // Chỉ hiện tuần sau nếu đã đăng ký OFF đủ 2 ngày và đã được duyệt (hoặc không có draft)
+          if(!hasOffForNextWeek) return false;
+          if(s.approvalStatus && s.approvalStatus!=='APPROVED') return false;
+        }
+        // Ẩn các tuần tới xa hơn (chỉ hiện hiện tại và tuần sau)
+        const weekDate = new Date(s.weekStart);
+        const curMon = getMonday(new Date());
+        const diffWeeks = Math.round((weekDate - curMon)/(7*24*60*60*1000));
+        if(diffWeeks>1) return false;
+        return true;
+      });
+      if(displaySchedules.length===0){
+        // Kiểm tra nếu đã đăng ký OFF nhưng chưa duyệt thì hiện thông báo chờ
+        const offPending = hasOffForNextWeek && nextWeekSched && nextWeekSched.approvalStatus==='PENDING_APPROVAL';
+        if(offPending){
+          return el.innerHTML=`<div class="bg-amber-50 border border-amber-200 rounded-2xl p-5 text-center">
+            <i class="fa-solid fa-clock text-amber-500 text-3xl mb-3 block"></i>
+            <div class="font-black text-amber-900">LỊCH TUẦN SAU ĐANG CHỜ HR DUYỆT</div>
+            <div class="text-xs text-amber-700 mt-2">Bạn đã đăng ký OFF 2 ngày/tuần cho tuần sau (${fmtDMY(nextMon)}). AI đã tự động sắp lịch, HR đang xem xét và sẽ duyệt sớm. Lịch sẽ hiển thị sau khi HR bấm Duyệt.</div>
+          </div>`;
+        }
+        return el.innerHTML='<div class="bg-white rounded-2xl border border-slate-200 p-8 text-center text-sm text-slate-400">Chưa có lịch tuần sau - vui lòng đăng ký OFF 2 ngày (T6 12:00 - T7 15:00) để AI sắp lịch</div>';
+      }
+    }
     const today = new Date().toISOString().split('T')[0];
-    
-    el.innerHTML = mySchedules.map(s=>{
+    el.innerHTML = displaySchedules.map(s=>{
       const isCurrentWeek = isDateInCurrentWeek(new Date(s.weekStart));
       const workingDays = s.days.filter(d => d.status === 'WORKING' || d.status === 'SUBSTITUTE').length;
       
