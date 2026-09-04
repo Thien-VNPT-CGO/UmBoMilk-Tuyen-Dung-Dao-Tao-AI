@@ -1093,7 +1093,6 @@ async function loadSchedule(){
               <div>• <b>SUBSTITUTE:</b> Ngày thay ca cho NV khác (đổi ca)</div>
               <div>• <b>Tuần này/Tuần tới:</b> Nhãn phân biệt tuần hiện tại và tuần sau</div>
               <div>• Lịch tuần sau AI tạo sau khi HR duyệt OFF (T7 15:00) và gửi đến NV qua thông báo</div>
-              <div>• Đổi ca: Gửi yêu cầu → TH1 gửi riêng, TH2 gửi toàn chi nhánh → AI duyệt sau 24h nếu có người nhận</div>
             </div>`;
           }
         })()}
