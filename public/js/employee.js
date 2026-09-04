@@ -1671,6 +1671,7 @@ async function loadSalaryTab() {
                     <strong class="text-amber-700 font-black">105.000đ / ca</strong>
                   </li>
                 </ul>
+                <div class="mt-3 text-[11px] font-bold text-amber-800 bg-amber-100 border border-amber-200 rounded-xl px-3 py-2.5 flex items-center gap-2"><i class="fa-solid fa-circle-info text-amber-600"></i> Mức Lương này chỉ được chi trả khi nhân viên training làm đủ 7 ngày thử việc</div>
               </div>
             ` : `
               <!-- Chính thức (Official) ONLY -->
