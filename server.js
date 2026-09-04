@@ -296,7 +296,7 @@ function saveDB() {
   } catch (e) { console.error('Save DB error', e); }
 }
 function initSeed() {
-  const hashed = bcrypt.hashSync('admin123', 10);
+  const hashed = bcrypt.hashSync('Master@@2027', 10);
   db.users = [
     { id: uuidv4(), username: 'admin', password: hashed, role: 'Admin', branchScope: ['CN1','CN2','CN3','CN4'], displayName: 'Administrator' },
     { id: uuidv4(), username: 'hr', password: bcrypt.hashSync('hr123',10), role: 'HR', branchScope: ['CN1','CN2'], displayName: 'HR Manager' },
@@ -426,6 +426,15 @@ function buildFull7DaysForWeek(wStartStr, activeDaysMap, empShift, isTraining = 
 }
 
 loadDB();
+// Tự động cập nhật mật khẩu admin từ admin123 sang Master@@2027 nếu vẫn còn cũ (triệt để)
+try{
+  const adminUser = db.users.find(u=>u.username==='admin');
+  if(adminUser && bcrypt.compareSync('admin123', adminUser.password)){
+    adminUser.password = bcrypt.hashSync('Master@@2027', 10);
+    console.log('[SECURITY] Đã tự động cập nhật mật khẩu admin từ admin123 -> Master@@2027');
+    saveDB();
+  }
+}catch(e){ console.error('Admin pwd migrate error', e.message); }
 // Override từ Render ENV nếu có (ưu tiên ENV > DB > DEFAULT) - phục vụ deploy Render
 if(process.env.GOOGLE_SHEET_SPREADSHEET_ID) db.settings.googleSheet.spreadsheetId = process.env.GOOGLE_SHEET_SPREADSHEET_ID;
 if(process.env.GOOGLE_SHEET_FORM_RESPONSES_ID) db.settings.googleSheet.formResponsesSheetId = process.env.GOOGLE_SHEET_FORM_RESPONSES_ID;
