@@ -19,6 +19,18 @@ const JWT_SECRET = process.env.JWT_SECRET || 'um-bo-milk-2026-secret-key-very-se
 if (!process.env.JWT_SECRET) console.warn('[SECURITY] JWT_SECRET dùng giá trị mặc định - hãy đặt JWT_SECRET trong .env cho production!');
 const DATA_FILE = path.join(__dirname, 'data', 'db.json');
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '*').split(',').map(s=>s.trim());
+// === VIETNAM TIMEZONE REALTIME - Toàn bộ hệ thống theo giờ Việt Nam (Asia/Ho_Chi_Minh, UTC+7) ===
+function getVietnamTodayStr(){
+  return new Date().toLocaleDateString('en-CA', {timeZone: 'Asia/Ho_Chi_Minh'});
+}
+function getVietnamNow(){
+  return new Date(new Date().toLocaleString('en-US', {timeZone: 'Asia/Ho_Chi_Minh'}));
+}
+function toVietnamDateStr(date){
+  const d = date instanceof Date ? date : new Date(date);
+  return d.toLocaleDateString('en-CA', {timeZone: 'Asia/Ho_Chi_Minh'});
+}
+
 const CORS_ORIGIN = ALLOWED_ORIGINS.includes('*') ? '*' : ALLOWED_ORIGINS;
 
 const app = express();
@@ -363,15 +375,15 @@ function initSeed() {
     const days = [];
     for(let i=0;i<7;i++){
       const d = new Date(weekStart); d.setDate(weekStart.getDate()+i);
-      const dateStr = d.toISOString().split('T')[0];
+      const dateStr = toVietnamDateStr(d);
       // random OFF 1 day
       const isOff = Math.random()<0.15;
       days.push({ date: dateStr, dayName: ['T2','T3','T4','T5','T6','T7','CN'][i], shift: emp.shift, status: isOff?'OFF':'WORKING', substituteFor: null });
     }
-    db.schedules.push({ id: uuidv4(), employeeId: emp.employeeId, weekStart: weekStart.toISOString().split('T')[0], days, version:1, updated_at: new Date().toISOString() });
+    db.schedules.push({ id: uuidv4(), employeeId: emp.employeeId, weekStart: toVietnamDateStr(weekStart), days, version:1, updated_at: new Date().toISOString() });
   });
   // Attendance mock for today
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getVietnamTodayStr();
   db.employees.filter(e=>e.status==='OFFICIAL').slice(0,2).forEach(emp=>{
     db.attendances.push({
       id: uuidv4(), employeeId: emp.employeeId, date: todayStr, shift: emp.shift,
@@ -877,8 +889,8 @@ app.post('/api/employees', authMiddleware, roleCheck(['Admin','HR']), (req,res)=
   const end = new Date(); end.setDate(now.getDate()+7);
   const emp = {
     id: uuidv4(), employeeId, name, phone, branchId, shift,
-    startDate: now.toISOString().split('T')[0],
-    endDate: end.toISOString().split('T')[0],
+    startDate: toVietnamDateStr(now),
+    endDate: toVietnamDateStr(end),
     trainingDays: 7, status: 'TRAINING', testScore: null, testResult: null,
     type: 'TRAINING', category: category||'STORE', avatar:'', checkHistory:[],
     version:1, updated_at: now.toISOString(), updated_by: req.user.username, source:'WEB_HR', sync_status:'PENDING'
@@ -924,7 +936,7 @@ app.post('/api/employees/import-official', authMiddleware, roleCheck(['Admin','H
     return 'CA_SANG';
   }
   function parseDate(input){
-    if(!input) return new Date().toISOString().split('T')[0];
+    if(!input) return getVietnamTodayStr();
     const s = String(input).trim();
     // already yyyy-mm-dd
     if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
@@ -945,8 +957,8 @@ app.post('/api/employees/import-official', authMiddleware, roleCheck(['Admin','H
       if(p.length===3) return `${p[2]}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`;
     }
     const d = new Date(s);
-    if(!isNaN(d)) return d.toISOString().split('T')[0];
-    return new Date().toISOString().split('T')[0];
+    if(!isNaN(d)) return toVietnamDateStr(d);
+    return getVietnamTodayStr();
   }
   const results = { imported:0, skipped:[], errors:[], employees:[], keys:[] };
   rows.forEach((row, idx)=>{
@@ -1041,7 +1053,7 @@ app.post('/api/employees/import-training', authMiddleware, roleCheck(['Admin','H
     return 'CA_SANG';
   }
   function parseDate(input){
-    if(!input) return new Date().toISOString().split('T')[0];
+    if(!input) return getVietnamTodayStr();
     const s = String(input).trim();
     if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
     if(s.includes('/')){
@@ -1059,8 +1071,8 @@ app.post('/api/employees/import-training', authMiddleware, roleCheck(['Admin','H
       if(p.length===3) return `${p[2]}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`;
     }
     const d = new Date(s);
-    if(!isNaN(d)) return d.toISOString().split('T')[0];
-    return new Date().toISOString().split('T')[0];
+    if(!isNaN(d)) return toVietnamDateStr(d);
+    return getVietnamTodayStr();
   }
   const results = { imported:0, updated:0, skipped:[], errors:[], employees:[], keys:[] };
   rows.forEach((row, idx)=>{
@@ -1110,7 +1122,7 @@ app.post('/api/employees/import-training', authMiddleware, roleCheck(['Admin','H
         const emp = {
           id: uuidv4(), employeeId, name, phone, branchId, shift,
           startDate,
-          endDate: endDateInput ? parseDate(endDateInput) : (()=>{ const d=new Date(startDate); d.setDate(d.getDate()+11); return d.toISOString().split('T')[0]; })(),
+          endDate: endDateInput ? parseDate(endDateInput) : (()=>{ const d=new Date(startDate); d.setDate(d.getDate()+11); return toVietnamDateStr(d); })(),
           trainingDays: 12,
           status: 'TRAINING',
           testScore: null, testResult: null,
@@ -1229,8 +1241,8 @@ app.post('/api/employees/:id/transition', authMiddleware, roleCheck(['Admin','HR
   // Rule: only WAITING_TEST with PASS can go OFFICIAL, etc.
   if(target==='OFFICIAL'){
     // Nếu có chọn ngày tương lai, xử lý WAITING_OFFICIAL
-    const selDate = officialStartDate || new Date().toISOString().split('T')[0];
-    const todayStr = new Date().toISOString().split('T')[0];
+    const selDate = officialStartDate || getVietnamTodayStr();
+    const todayStr = getVietnamTodayStr();
     const isFuture = selDate > todayStr;
     if(bodyShift) emp.shift = bodyShift;
     if(officialStartDate) emp.officialStartDate = officialStartDate;
@@ -1303,10 +1315,10 @@ app.post('/api/employees/:id/transition', authMiddleware, roleCheck(['Admin','HR
       const days = [];
       for(let i=0;i<7;i++){
         const d = new Date(weekStart); d.setDate(weekStart.getDate()+i);
-        const dateStr = d.toISOString().split('T')[0];
+        const dateStr = toVietnamDateStr(d);
         days.push({ date: dateStr, dayName: ['T2','T3','T4','T5','T6','T7','CN'][i], shift: emp.shift, status:'WORKING', substituteFor: null });
       }
-      db.schedules.push({ id: uuidv4(), employeeId: emp.employeeId, weekStart: weekStart.toISOString().split('T')[0], days, version:1, updated_at: new Date().toISOString() });
+      db.schedules.push({ id: uuidv4(), employeeId: emp.employeeId, weekStart: toVietnamDateStr(weekStart), days, version:1, updated_at: new Date().toISOString() });
     }
     audit(req.user.username,isFuture?'TRANSITION_WAITING_OFFICIAL':'TRANSITION_OFFICIAL','EMPLOYEE',before,emp, req.ip);
   } else {
@@ -2068,13 +2080,13 @@ app.post('/api/applicants/:id/convert', authMiddleware, (req,res)=>{
   const branchId = req.body.branchId || appRec.branchPreference || 'CN2';
   const employeeId = generateEmployeeId(branchId);
   
-  const startDateStr = req.body.startDate || new Date().toISOString().split('T')[0];
+  const startDateStr = req.body.startDate || getVietnamTodayStr();
   const trainingDays = 12; // Strictly 12 trial days (7 working + 5 off)
   
   const startD = new Date(startDateStr);
   const endD = new Date(startD);
   endD.setDate(startD.getDate() + 11);
-  const endDateStr = endD.toISOString().split('T')[0];
+  const endDateStr = toVietnamDateStr(endD);
 
   let shiftFromForm = req.body.shift || appRec.shiftPreference || appRec.shiftText || '';
   if(shiftFromForm && SHIFT_MAP[shiftFromForm]) shiftFromForm = SHIFT_MAP[shiftFromForm];
@@ -2097,7 +2109,7 @@ app.post('/api/applicants/:id/convert', authMiddleware, (req,res)=>{
     const day = date.getDay();
     const diff = date.getDate() - day + (day === 0 ? -6 : 1);
     date.setDate(diff);
-    return date.toISOString().split('T')[0];
+    return toVietnamDateStr(date);
   };
 
   const buildFull7DaysForWeek = (wStartStr, activeDaysMap, empShift, isTraining = false, startDStr = null) => {
@@ -2362,7 +2374,7 @@ app.post('/api/admin/sync-from-sheet', authMiddleware, roleCheck(['Admin']), asy
     const phone = get('SĐT','') || '';
     const branchId = get('Chi nhánh','') || 'CN2';
     const shift = get('Ca','') || 'CA_SANG';
-    const startDate = get('Ngày bắt đầu','') || new Date().toISOString().split('T')[0];
+    const startDate = get('Ngày bắt đầu','') || getVietnamTodayStr();
     const endDate = get('Ngày kết thúc','') || null;
     const trainingDays = parseInt(get('Số ngày Training','')) || 7;
     const status = get('Trạng thái','') || (foundSheet==='NHAN_VIEN_CHINH_THUC' ? 'OFFICIAL' : 'TRAINING');
@@ -2878,7 +2890,7 @@ app.post('/api/employee/register-off', (req, res) => {
     return res.status(400).json({ error: 'Vui lòng chọn đủ 5 ngày NGHỈ (OFF) trong 12 ngày thử việc' });
   }
 
-  const startDateStr = emp.startDate || new Date().toISOString().split('T')[0];
+  const startDateStr = emp.startDate || getVietnamTodayStr();
   const parts = startDateStr.split('T')[0].split('-').map(Number);
   const startD = (parts.length === 3 && !isNaN(parts[0])) ? new Date(parts[0], parts[1] - 1, parts[2]) : new Date();
 
@@ -3001,7 +3013,7 @@ app.post('/api/employees/:id/transition-official', authMiddleware, roleCheck(['A
 });
 // Tự động bật Chính thức khi đến ngày officialStartDate (HR chọn ngày tương lai)
 function checkAutoOfficialTransitions(){
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getVietnamTodayStr();
   let changed=false;
   db.employees.forEach(emp=>{
     if(emp.status==='WAITING_OFFICIAL' && emp.officialStartDate && emp.officialStartDate <= todayStr){
@@ -3057,7 +3069,7 @@ function realtimeAutomationPoller(){
       } else {
         r.status='REJECTED';
         r.reasonReject='[TH3 Poller] Không có nhân viên cùng CN khác ca';
-        const ws = getMonday(new Date(r.date)).toISOString().split('T')[0];
+        const ws = getMonday(new toVietnamDateStr(Date(r.date)));
         const sched = db.schedules.find(s=>s.employeeId===r.employeeId && s.weekStart===ws);
         if(sched){ const day=sched.days.find(d=>d.date===r.date); if(day && day.status==='EMERGENCY_PENDING'){ day.status='WORKING'; } }
         io.emit('emergencyRequests:update', db.emergencyRequests);
@@ -3068,7 +3080,7 @@ function realtimeAutomationPoller(){
     } else if(r.cascadeStep===2){
       r.status='REJECTED';
       r.reasonReject='[TH3 Poller] Không có nhân viên thay ca sau 2 bước (2p+30p)';
-      const ws = getMonday(new Date(r.date)).toISOString().split('T')[0];
+      const ws = getMonday(new toVietnamDateStr(Date(r.date)));
       const sched = db.schedules.find(s=>s.employeeId===r.employeeId && s.weekStart===ws);
       if(sched){ const day=sched.days.find(d=>d.date===r.date); if(day && day.status==='EMERGENCY_PENDING'){ day.status='WORKING'; day.shift = db.employees.find(e=>e.employeeId===r.employeeId)?.shift || 'CA_SANG'; } }
       const zr = { id: uuidv4(), sent_at: new Date().toISOString(), receiver: db.employees.find(e=>e.employeeId===r.employeeId)?.phone, type:'EMERGENCY_REJECTED', content:`[TH3 Poller] OFF đột xuất ngày ${r.date} bị HỦY do không có người thay`, status:'SENT', error:'' };
@@ -3105,7 +3117,7 @@ function realtimeAutomationPoller(){
           db.schedules.push(newSched);
           addSyncQueue('SCHEDULE','CREATE', newSched, 'AUTO_15P', 'AUTO');
         }
-        const todayStr = new Date().toISOString().split('T')[0];
+        const todayStr = getVietnamTodayStr();
         let att = db.attendances.find(a=> a.employeeId===r.employeeId && a.date===r.date);
         const shiftInfo = db.settings.payroll.shifts[r.toShift] || DEFAULT_SHIFTS[r.toShift] || DEFAULT_SHIFTS['CA_SANG'];
         if(!att){
@@ -3608,7 +3620,7 @@ app.post('/api/employees/:id/simulate-7days-training', authMiddleware, roleCheck
   const emp = db.employees.find(e => e.id === empId || e.employeeId === empId);
   if (!emp) return res.status(404).json({ error: 'Không tìm thấy nhân viên' });
 
-  const startDateStr = emp.startDate || new Date().toISOString().split('T')[0];
+  const startDateStr = emp.startDate || getVietnamTodayStr();
   const parts = startDateStr.split('T')[0].split('-').map(Number);
   const startD = (parts.length === 3 && !isNaN(parts[0])) ? new Date(parts[0], parts[1] - 1, parts[2]) : new Date();
 
@@ -3806,7 +3818,7 @@ app.post('/api/attendance/checkin', (req,res)=>{
     return res.status(403).json({ error: 'Bạn đang trong thời gian thực hiện bài TEST đầu ra trên Web App. Chức năng điểm danh (Check-in/Check-out) tạm thời khóa.' });
   }
   // Kiểm tra ngày bắt đầu chính thức - nếu chưa đến ngày thì chưa mở điểm danh, nhưng vẫn hiển thị lịch
-  const todayForOfficialCheck = new Date().toISOString().split('T')[0];
+  const todayForOfficialCheck = getVietnamTodayStr();
   if(emp.officialStartDate && todayForOfficialCheck < emp.officialStartDate){
     return res.status(403).json({ error: `Chưa đến ngày bắt đầu chính thức (${emp.officialStartDate.split('T')[0].split('-').reverse().join('/')}). Lịch đã hiển thị nhưng chưa gán ca. Điểm danh sẽ tự động mở vào ${emp.officialStartDate.split('T')[0].split('-').reverse().join('/')}.` });
   }
@@ -3814,11 +3826,11 @@ app.post('/api/attendance/checkin', (req,res)=>{
     return res.status(403).json({ error: `Tài khoản đang chờ đến ngày chính thức ${emp.officialStartDate ? emp.officialStartDate.split('T')[0].split('-').reverse().join('/') : ''}. Vui lòng quay lại đúng ngày.` });
   }
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = getVietnamTodayStr();
 
   const isTraining = emp.type === 'TRAINING' || emp.status === 'TRAINING';
   if (isTraining) {
-    const startDateStr = emp.startDate || new Date().toISOString().split('T')[0];
+    const startDateStr = emp.startDate || getVietnamTodayStr();
     const parts = startDateStr.split('T')[0].split('-').map(Number);
     const startD = (parts.length === 3 && !isNaN(parts[0])) ? new Date(parts[0], parts[1] - 1, parts[2]) : new Date();
     const trialEndD = new Date(startD);
@@ -3836,19 +3848,19 @@ app.post('/api/attendance/checkin', (req,res)=>{
   if(record && record.checkIn) return res.status(400).json({error:'Đã Check-in hôm nay'});
 
   const shiftInfo = (db.settings.payroll.shifts && db.settings.payroll.shifts[shift||emp.shift]) || DEFAULT_SHIFTS[shift||emp.shift] || DEFAULT_SHIFTS['CA_SANG'];
-  const now = new Date();
+  const now = getVietnamNow();
   const [sh, sm] = shiftInfo.start.split(':').map(Number);
-  const shiftStart = new Date(); shiftStart.setHours(sh, sm, 0,0);
-  const open = new Date(shiftStart.getTime() - 30*60000); // 30 mins before shift start
+  const shiftStart = new Date(now); shiftStart.setHours(sh, sm, 0,0);
+  const open = new Date(shiftStart.getTime() - 30*60000); // 30 mins before shift start - Vietnam
 
   if(now < open) {
-    return res.status(400).json({error: `Chưa đến giờ mở Check-in. Camera sẽ mở lúc ${open.toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit'})}`});
+    return res.status(400).json({error: `Chưa đến giờ mở Check-in. Camera sẽ mở lúc ${open.toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit', timeZone:'Asia/Ho_Chi_Minh'})} (giờ Việt Nam)`});
   }
   // Spec 16: Đóng Check-in theo ngưỡng cho phép (Rule Engine) - default 60 phút sau giờ bắt đầu
   const closeAfter = db.settings?.attendance?.checkInCloseAfter ?? 60;
   const close = new Date(shiftStart.getTime() + closeAfter*60000);
   if(now > close){
-    return res.status(400).json({error: `Đã đóng Check-in. Cửa sổ Check-in: ${open.toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'})} - ${close.toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'})}. Vui lòng liên hệ HR.`});
+    return res.status(400).json({error: `Đã đóng Check-in. Cửa sổ Check-in: ${open.toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit', timeZone:'Asia/Ho_Chi_Minh'})} - ${close.toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit', timeZone:'Asia/Ho_Chi_Minh'})} (giờ Việt Nam). Vui lòng liên hệ HR.`});
   }
 
   const isOfficial = emp.type === 'OFFICIAL' || emp.status === 'OFFICIAL';
@@ -3896,7 +3908,7 @@ app.post('/api/attendance/checkin', (req,res)=>{
   const drivePath = generateDrivePath(emp, today, 'CHECK_IN');
   const newRec = {
     id: uuidv4(), employeeId, date: today, shift: shift||emp.shift, branchId: emp.branchId,
-    checkIn: { time: now.toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'}), gps: gps||'10.762622,106.660172', address: address||db.branches.find(b=>b.id===emp.branchId)?.address, image: safeImage, timestamp: now.toISOString(), content: 'Điểm danh Vào ca UBM', drivePath },
+    checkIn: { time: now.toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit', timeZone:'Asia/Ho_Chi_Minh'}), gps: gps||'10.762622,106.660172', address: address||db.branches.find(b=>b.id===emp.branchId)?.address, image: safeImage, timestamp: now.toISOString(), content: 'Điểm danh Vào ca UBM', drivePath },
     checkOut: null, status: violations.length ? violations[0] : 'CHECKED_IN', violations, penalty: penaltyObj, version:1, updated_at: now.toISOString(), sync_status:'PENDING'
   };
   db.attendances.push(newRec);
@@ -3926,15 +3938,15 @@ app.post('/api/attendance/checkout', (req,res)=>{
   if(!gps || typeof gps!=='string' || !gps.includes(',')) return res.status(400).json({error:'GPS bắt buộc khi Check-out'});
   if(!/^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?/.test(gps)) return res.status(400).json({error:'GPS không hợp lệ (định dạng: lat, lng)'});
   if(!address || address.trim().length<3) return res.status(400).json({error:'Địa chỉ/GPS address bắt buộc khi Check-out'});
-  const today = new Date().toISOString().split('T')[0];
+  const today = getVietnamTodayStr();
   const record = db.attendances.find(a=>a.employeeId===employeeId && a.date===today);
   if(!record || !record.checkIn) return res.status(400).json({error:'Bạn chưa Check-in ca làm việc'});
   if(record.checkOut) return res.status(400).json({error:'Bạn đã Check-out ca làm việc hôm nay rồi'});
 
-  const now = new Date();
+  const now = getVietnamNow();
   const shiftInfo = (db.settings.payroll.shifts && db.settings.payroll.shifts[record.shift]) || DEFAULT_SHIFTS[record.shift] || DEFAULT_SHIFTS['CA_SANG'];
   const [eh, em] = shiftInfo.end.split(':').map(Number);
-  const shiftEnd = new Date(); shiftEnd.setHours(eh, em, 0,0);
+  const shiftEnd = new Date(now); shiftEnd.setHours(eh, em, 0,0);
 
   if (now < shiftEnd) {
     const isEarly = (shiftEnd - now) > 2 * 60000;
@@ -3953,7 +3965,7 @@ app.post('/api/attendance/checkout', (req,res)=>{
   let safeOutImage = image||'';
   if(safeOutImage && safeOutImage.length>500*1024) safeOutImage = safeOutImage.slice(0,500*1024);
   const outDrivePath = generateDrivePath(emp, today, 'CHECK_OUT');
-  record.checkOut = { time: now.toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'}), gps: gps||'10.762622,106.660172', address: address||db.branches.find(b=>b.id===emp.branchId)?.address, image: safeOutImage, timestamp: now.toISOString(), content:'Điểm danh Ra ca UBM', drivePath: outDrivePath };
+  record.checkOut = { time: now.toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit', timeZone:'Asia/Ho_Chi_Minh'}), gps: gps||'10.762622,106.660172', address: address||db.branches.find(b=>b.id===emp.branchId)?.address, image: safeOutImage, timestamp: now.toISOString(), content:'Điểm danh Ra ca UBM', drivePath: outDrivePath };
   record.status = 'COMPLETED';
   record.updated_at = now.toISOString();
   record.sync_status = 'PENDING';
@@ -3972,7 +3984,7 @@ app.post('/api/attendance/checkout', (req,res)=>{
 // ============ SCHEDULES ============
 app.get('/api/schedules', authMiddleware, (req,res)=>{
   const getMondayStr = (dStr) => {
-    if (!dStr) return new Date().toISOString().split('T')[0];
+    if (!dStr) return getVietnamTodayStr();
     const parts = dStr.split('T')[0].split('-').map(Number);
     let date;
     if (parts.length === 3 && !isNaN(parts[0])) {
@@ -3994,7 +4006,7 @@ app.get('/api/schedules', authMiddleware, (req,res)=>{
   db.employees.filter(e => e.status === 'TRAINING' || e.type === 'TRAINING').forEach(emp => {
     const hasSched = db.schedules.some(s => s.employeeId === emp.employeeId);
     if (!hasSched) {
-      const startDateStr = emp.startDate || new Date().toISOString().split('T')[0];
+      const startDateStr = emp.startDate || getVietnamTodayStr();
       const trainingDays = emp.trainingDays || 7;
       const parts = startDateStr.split('T')[0].split('-').map(Number);
       const startD = (parts.length === 3 && !isNaN(parts[0])) ? new Date(parts[0], parts[1] - 1, parts[2]) : new Date();
@@ -4137,7 +4149,7 @@ app.post('/api/schedules', authMiddleware, (req,res)=>{
     // TRAINING linh hoạt: HR đổi ca -> auto cập nhật + tự điểm danh (cập nhật)
     const empForUpdate = db.employees.find(e=> e.employeeId===employeeId);
     if(empForUpdate && (empForUpdate.type==='TRAINING' || empForUpdate.status==='TRAINING')){
-      const todayStrUp = new Date().toISOString().split('T')[0];
+      const todayStrUp = getVietnamTodayStr();
       days.forEach(day=>{
         if(day.status==='WORKING'){
           let att = db.attendances.find(a=> a.employeeId===employeeId && a.date===day.date);
@@ -4211,7 +4223,7 @@ app.post('/api/schedules', authMiddleware, (req,res)=>{
   if(empForSched && (empForSched.type==='TRAINING' || empForSched.status==='TRAINING')){
     // Đồng bộ ca linh hoạt: nếu HR set ca khác nhau mỗi ngày thì giữ nguyên, không ghi đè emp.shift cố định
     // Tự động điểm danh cho TRAINING: với mỗi ngày WORKING đã qua hoặc hôm nay, tạo attendance COMPLETED
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = getVietnamTodayStr();
     days.forEach(day=>{
       if(day.status==='WORKING'){
         let att = db.attendances.find(a=> a.employeeId===employeeId && a.date===day.date);
@@ -4444,7 +4456,7 @@ app.post('/api/schedules/auto-training', authMiddleware, roleCheck(['Admin','HR'
   const trainings = db.employees.filter(e=> e.status==='TRAINING' || e.type==='TRAINING');
   if(trainings.length===0) return res.status(400).json({ error:'Không có nhân viên Training' });
   const today = new Date(); today.setHours(0,0,0,0);
-  const todayStr = today.toISOString().split('T')[0];
+  const todayStr = toVietnamDateStr(today);
   // Tạo lịch 12 ngày trial (7 WORKING + 5 OFF) linh hoạt ca
   const empDayStatus={}; const empDayShift={};
   trainings.forEach(emp=>{
@@ -4508,7 +4520,7 @@ app.post('/api/schedules/auto-training', authMiddleware, roleCheck(['Admin','HR'
       }
     }
     // Tự động điểm danh realtime cho Training (ngày đã qua -> COMPLETED)
-    const todayStr2 = new Date().toISOString().split('T')[0];
+    const todayStr2 = getVietnamTodayStr();
     trainings.forEach(emp=>{
       Object.keys(empDayStatus[emp.employeeId]).forEach(dateStr=>{
         const status = empDayStatus[emp.employeeId][dateStr];
@@ -4560,7 +4572,7 @@ app.post('/api/training/shift-change', (req,res)=>{
   if(diffHours <12){
     return res.status(400).json({ error:`Phải đổi ca trước giờ bắt đầu ca mới ít nhất 12 tiếng. Ca ${toShift} ${shiftInfo.start} ngày ${date} chỉ còn ${diffHours.toFixed(1)}h`, need12h:true });
   }
-  if(new Date(date) < new Date(new Date().toISOString().split('T')[0])) return res.status(400).json({ error:'Không thể đổi ca cho ngày đã qua' });
+  if(new Date(date) < new Date(getVietnamTodayStr())) return res.status(400).json({ error:'Không thể đổi ca cho ngày đã qua' });
   // Kiểm tra đã có request pending cho ngày này chưa
   const existingPending = db.trainingShiftRequests.find(r=> r.employeeId===employeeId && r.date===date && r.status==='PENDING');
   if(existingPending) return res.status(409).json({ error:'Đã có phiếu đổi ca đang chờ duyệt cho ngày này', request: existingPending });
@@ -4632,7 +4644,7 @@ app.post('/api/training/shift-change/:id/approve', authMiddleware, roleCheck(['A
     }
     // Cập nhật attendance nếu là Training
     if(emp.type==='TRAINING' || emp.status==='TRAINING'){
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = getVietnamTodayStr();
       let att = db.attendances.find(a=> a.employeeId===r.employeeId && a.date===r.date);
       const shiftInfo = db.settings.payroll.shifts[r.toShift] || DEFAULT_SHIFTS[r.toShift];
       if(!att){
@@ -5201,13 +5213,13 @@ app.post('/api/off-requests', (req,res)=>{
   db.offRequests.push(newReq);
   // AI tự động cập nhật lịch tuần sau (T2→CN) theo ca còn lại
   const nextWeekMonday = getMonday(new Date(Date.now()+7*24*60*60*1000));
-  const weekStr = nextWeekMonday.toISOString().split('T')[0];
+  const weekStr = toVietnamDateStr(nextWeekMonday);
   let sched = db.schedules.find(s=>s.employeeId===employeeId && s.weekStart===weekStr);
   if(!sched){
     const days=[];
     for(let i=0;i<7;i++){
       const d = new Date(nextWeekMonday); d.setDate(nextWeekMonday.getDate()+i);
-      const ds = d.toISOString().split('T')[0];
+      const ds = toVietnamDateStr(d);
       // AI: nếu ngày trong dates => OFF, còn lại WORKING theo ca
       days.push({ date: ds, dayName:['T2','T3','T4','T5','T6','T7','CN'][i], shift: emp.shift, status: dates.includes(ds)?'OFF':'WORKING', substituteFor:null });
     }
@@ -5226,7 +5238,7 @@ app.post('/api/off-requests', (req,res)=>{
     // Ensure all days in next week are correctly set by AI
     for(let i=0;i<7;i++){
       const d = new Date(nextWeekMonday); d.setDate(nextWeekMonday.getDate()+i);
-      const ds = d.toISOString().split('T')[0];
+      const ds = toVietnamDateStr(d);
       const dayRec = sched.days.find(x=>x.date===ds);
       if(dayRec){
         dayRec.status = dates.includes(ds)?'OFF':'WORKING';
@@ -5250,7 +5262,7 @@ app.post('/api/off-requests', (req,res)=>{
 function isSameWeek(date1, date2){
   const d1 = getMonday(new Date(date1));
   const d2 = getMonday(new Date(date2));
-  return d1.toISOString().split('T')[0]===d2.toISOString().split('T')[0];
+  return toVietnamDateStr(d1)===toVietnamDateStr(d2);
 }
 app.get('/api/off-window', (req,res)=>{
   const isOpen = isOffWindowOpen();
@@ -5339,7 +5351,7 @@ app.post('/api/emergency-requests', (req,res)=>{
   // AI đăng ký tạm lịch EMERGENCY_PENDING cho NV gửi yêu cầu
   try{
     const weekStart = getMonday(new Date(date));
-    const ws = weekStart.toISOString().split('T')[0];
+    const ws = toVietnamDateStr(weekStart);
     let sched = db.schedules.find(s=>s.employeeId===employeeId && s.weekStart===ws);
     if(!sched){
       const dayNames=['T2','T3','T4','T5','T6','T7','CN'];
@@ -5405,7 +5417,7 @@ function handleEmergencyCascade(request){
             r2.reasonReject='[TH3] Không có nhân viên thay ca sau 2 bước (2 phút cùng ca + 30 phút khác ca)';
             // Hủy lịch tạm EMERGENCY_PENDING → trả về WORKING
             try{
-              const ws = getMonday(new Date(r2.date)).toISOString().split('T')[0];
+              const ws = getMonday(new toVietnamDateStr(Date(r2.date)));
               const sched = db.schedules.find(s=>s.employeeId===r2.employeeId && s.weekStart===ws);
               if(sched){ const day=sched.days.find(d=>d.date===r2.date); if(day && day.status==='EMERGENCY_PENDING'){ day.status='WORKING'; day.shift = db.employees.find(e=>e.employeeId===r2.employeeId)?.shift || 'CA_SANG'; io.emit('schedules:update', db.schedules); }}
             }catch(e){}
@@ -5424,7 +5436,7 @@ function handleEmergencyCascade(request){
         r.reasonReject='[TH3] Không có nhân viên cùng CN khác ca để thay';
         // Hủy tạm
         try{
-          const ws = getMonday(new Date(r.date)).toISOString().split('T')[0];
+          const ws = getMonday(new toVietnamDateStr(Date(r.date)));
           const sched = db.schedules.find(s=>s.employeeId===r.employeeId && s.weekStart===ws);
           if(sched){ const day=sched.days.find(d=>d.date===r.date); if(day && day.status==='EMERGENCY_PENDING'){ day.status='WORKING'; io.emit('schedules:update', db.schedules); }}
         }catch(e){}
@@ -5456,7 +5468,7 @@ function handleEmergencyCascade(request){
         if(r2 && r2.status==='PENDING'){
           r2.status='REJECTED';
           r2.reasonReject='[TH3] Không tìm được người thay ca (khác ca) sau 30 phút';
-          try{ const ws=getMonday(new Date(r2.date)).toISOString().split('T')[0]; const sched=db.schedules.find(s=>s.employeeId===r2.employeeId && s.weekStart===ws); if(sched){ const day=sched.days.find(d=>d.date===r2.date); if(day && day.status==='EMERGENCY_PENDING'){ day.status='WORKING'; io.emit('schedules:update', db.schedules); }}}catch(e){}
+          try{ const ws=getMonday(new toVietnamDateStr(Date(r2.date))); const sched=db.schedules.find(s=>s.employeeId===r2.employeeId && s.weekStart===ws); if(sched){ const day=sched.days.find(d=>d.date===r2.date); if(day && day.status==='EMERGENCY_PENDING'){ day.status='WORKING'; io.emit('schedules:update', db.schedules); }}}catch(e){}
           saveDB(); io.emit('emergencyRequests:update', db.emergencyRequests);
           const zr = { id: uuidv4(), sent_at: new Date().toISOString(), receiver: db.employees.find(e=>e.employeeId===r2.employeeId)?.phone, type:'EMERGENCY_REJECTED', content:`OFF đột xuất ngày ${r2.date} bị hủy do không có người thay`, status:'SENT', error:'' };
           db.zaloRecords.unshift(zr); io.emit('zalo:update', db.zaloRecords);
@@ -5465,7 +5477,7 @@ function handleEmergencyCascade(request){
     } else {
       request.status='REJECTED';
       request.reasonReject='[TH3] Không có ứng viên thay ca (cùng CN)';
-      try{ const ws=getMonday(new Date(request.date)).toISOString().split('T')[0]; const sched=db.schedules.find(s=>s.employeeId===request.employeeId && s.weekStart===ws); if(sched){ const day=sched.days.find(d=>d.date===request.date); if(day) {day.status='WORKING'; io.emit('schedules:update', db.schedules);}}}catch(e){}
+      try{ const ws=getMonday(new toVietnamDateStr(Date(request.date))); const sched=db.schedules.find(s=>s.employeeId===request.employeeId && s.weekStart===ws); if(sched){ const day=sched.days.find(d=>d.date===request.date); if(day) {day.status='WORKING'; io.emit('schedules:update', db.schedules);}}}catch(e){}
       saveDB(); io.emit('emergencyRequests:update', db.emergencyRequests);
     }
   }
@@ -5500,7 +5512,7 @@ app.post('/api/emergency-requests/:id/respond', (req,res)=>{
   } else {
     // create schedule for substitute
     const weekStart = getMonday(new Date(er.date));
-    const ws = weekStart.toISOString().split('T')[0];
+    const ws = toVietnamDateStr(weekStart);
     const existing = db.schedules.find(s=>s.employeeId===substituteId && s.weekStart===ws);
     if(existing){
       const d = existing.days.find(x=>x.date===er.date);
@@ -5586,10 +5598,10 @@ app.post('/api/courses/:id/submit', (req,res)=>{
         const days=[];
         for(let i=0;i<7;i++){
           const d=new Date(weekStart); d.setDate(weekStart.getDate()+i);
-          const ds=d.toISOString().split('T')[0];
+          const ds=toVietnamDateStr(d);
           days.push({date:ds, dayName:['T2','T3','T4','T5','T6','T7','CN'][i], shift:e.shift, status:'WORKING', substituteFor:null});
         }
-        db.schedules.push({ id: uuidv4(), employeeId: e.employeeId, weekStart: weekStart.toISOString().split('T')[0], days, version:1, updated_at: new Date().toISOString()});
+        db.schedules.push({ id: uuidv4(), employeeId: e.employeeId, weekStart: toVietnamDateStr(weekStart), days, version:1, updated_at: new Date().toISOString()});
         saveDB();
         io.emit('employees:update', db.employees);
         io.emit('schedules:update', db.schedules);
@@ -5922,7 +5934,7 @@ app.get('/api/reports/daily', authMiddleware, (req,res)=>{
   db.schedules.filter(s=>s.employeeId===employeeId).forEach(s=> s.days.forEach(d=>{ if(d.date>=start&&d.date<=end) schedMap[d.date]=d; }));
   const dates = [];
   let cur = new Date(start); const endD = new Date(end);
-  while(cur<=endD){ dates.push(cur.toISOString().split('T')[0]); cur.setDate(cur.getDate()+1); }
+  while(cur<=endD){ toVietnamDateStr(dates.push(cur)); cur.setDate(cur.getDate()+1); }
   const details = dates.map(date=>{
     const sched = schedMap[date];
     const att = db.attendances.find(a=>a.employeeId===employeeId && a.date===date);
@@ -6321,7 +6333,7 @@ app.post('/api/notifications/:id/read', (req,res)=>{
 
 // ============ DASHBOARD ============
 app.get('/api/dashboard/kpi', authMiddleware, (req,res)=>{
-  const today = new Date().toISOString().split('T')[0];
+  const today = getVietnamTodayStr();
   
   const passedInterviewCount = db.applicants.filter(a => a.status === 'PASS' || a.evaluationResult === 'PASS').length;
   const failedInterviewCount = db.applicants.filter(a => a.status === 'FAILED_INTERVIEW' || a.status === 'REJECTED' || a.evaluationResult === 'LOẠI' || a.isDisqualified).length;

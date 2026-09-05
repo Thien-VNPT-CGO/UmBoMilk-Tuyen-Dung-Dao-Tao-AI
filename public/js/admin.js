@@ -3,6 +3,11 @@ let token = localStorage.getItem('admin_token');
 let currentUser = JSON.parse(localStorage.getItem('admin_user') || 'null');
 let socket = null;
 let branches = [];
+// === VIETNAM TIMEZONE REALTIME ===
+function getVietnamTodayStr(){ return new Date().toLocaleDateString('en-CA', {timeZone: 'Asia/Ho_Chi_Minh'}); }
+function toVietnamDateStr(d){ const date = d instanceof Date ? d : new Date(d); return date.toLocaleDateString('en-CA', {timeZone: 'Asia/Ho_Chi_Minh'}); }
+
+
 let employees = [];
 let applicants = [];
 let attendances = [];
@@ -610,9 +615,9 @@ async function loadBranches(){
   branches = await api('/branches');
   // populate selects already
   const sel = document.getElementById('scheduleWeek');
-  if(sel && !sel.value) sel.value = new Date().toISOString().split('T')[0];
+  if(sel && !sel.value) sel.value = getVietnamTodayStr();
   const attDate = document.getElementById('attDate');
-  if(attDate && !attDate.value) attDate.value = new Date().toISOString().split('T')[0];
+  if(attDate && !attDate.value) attDate.value = getVietnamTodayStr();
   const reportMonth = document.getElementById('reportMonth');
   if(reportMonth && !reportMonth.value) reportMonth.value = new Date().toISOString().slice(0,7);
 }
@@ -1408,7 +1413,7 @@ async function openInterviewModal(applicantId) {
   // Default to tomorrow YYYY-MM-DD
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
-  const defaultDateStr = tomorrow.toISOString().split('T')[0];
+  const defaultDateStr = toVietnamDateStr(tomorrow);
 
   const defaultMeetLink = `https://meet.google.com/umb-pv-${Math.random().toString(36).substring(2,8)}`;
 
@@ -1424,7 +1429,7 @@ async function openInterviewModal(applicantId) {
 
       <div>
         <label class="text-xs font-bold text-slate-700 flex items-center gap-1"><i class="fa-solid fa-calendar text-pink-500"></i> Chọn Ngày Phỏng Vấn:</label>
-        <input id="invDate" type="date" value="${defaultDateStr}" min="${new Date().toISOString().split('T')[0]}" class="w-full mt-1 px-3 py-2 rounded-xl border border-slate-300 text-sm font-bold focus:ring-2 focus:ring-pink-200 outline-none" onchange="renderInterviewTimeGrid('${applicantId}')">
+        <input id="invDate" type="date" value="${defaultDateStr}" min="${getVietnamTodayStr()}" class="w-full mt-1 px-3 py-2 rounded-xl border border-slate-300 text-sm font-bold focus:ring-2 focus:ring-pink-200 outline-none" onchange="renderInterviewTimeGrid('${applicantId}')">
       </div>
 
       <div>
@@ -1810,7 +1815,7 @@ function convertApplicant(id) {
   }
 
   const today = new Date();
-  const todayStr = today.toISOString().split('T')[0];
+  const todayStr = toVietnamDateStr(today);
 
   let defaultShift = a.shiftPreference || a.shiftText || 'CA_TRUA';
   if (SHIFT_MAP[defaultShift]) defaultShift = SHIFT_MAP[defaultShift];
@@ -2160,19 +2165,19 @@ function getEmployeeTrainingProgress(emp) {
       const allEmerg = (typeof emergencyRequests!=='undefined' ? emergencyRequests : []);
       // Tìm tuần mục tiêu: ưu tiên lịch có sẵn chứa hôm nay, else tuần sau (nơi AI đã sắp OFF) - realtime đúng lịch web
       const today = new Date(); today.setHours(0,0,0,0);
-      const todayStr = today.toISOString().split('T')[0];
-      const curMonStr = getMonday(today).toISOString().split('T')[0];
-      const nextMonStr = getMonday(new Date(Date.now()+7*24*60*60*1000)).toISOString().split('T')[0];
+      const todayStr = toVietnamDateStr(today);
+      const curMonStr = toVietnamDateStr(getMonday(today));
+      const nextMonStr = getMonday(new Date(Date.now()+7*24*60*60*toVietnamDateStr(1000)));
       let targetWeekStr = curMonStr;
       let sched = allSchedules.find(s=>s.employeeId===emp.employeeId && s.weekStart===targetWeekStr);
       // Nếu NV chính thức có ngày bắt đầu tương lai và tuần hiện tại là tuần chờ (partial), chọn tuần đầu tiên đủ 7 ngày làm việc
       if(emp.officialStartDate && todayStr < emp.officialStartDate){
-        const startMon = getMonday(new Date(emp.officialStartDate)).toISOString().split('T')[0];
+        const startMon = getMonday(new toVietnamDateStr(Date(emp.officialStartDate)));
         let candidate = new Date(startMon);
         if(emp.officialStartDate !== startMon){
           candidate.setDate(candidate.getDate()+7); // tuần đầu tiên đủ 7 ngày sau start
         }
-        const candidateStr = candidate.toISOString().split('T')[0];
+        const candidateStr = toVietnamDateStr(candidate);
         const candSched = allSchedules.find(s=>s.employeeId===emp.employeeId && s.weekStart===candidateStr);
         if(candSched){
           targetWeekStr = candidateStr;
@@ -2202,7 +2207,7 @@ function getEmployeeTrainingProgress(emp) {
         // Nếu schedule chưa đủ 7 ngày (do mới tạo), bổ sung từ offRequests
         if(sched.days.length<7){
           const weekDates = [];
-          for(let i=0;i<7;i++){ const cur=new Date(wDate); cur.setDate(wDate.getDate()+i); weekDates.push(cur.toISOString().split('T')[0]); }
+          for(let i=0;i<7;i++){ const cur=new Date(wDate); cur.setDate(wDate.getDate()+i); toVietnamDateStr(weekDates.push(cur)); }
           // Nếu schedule thiếu, ước tính (không tính OFF đột xuất trên HR)
           if(working+off <7){
             const remaining = 7 - (working+off);
@@ -2212,7 +2217,7 @@ function getEmployeeTrainingProgress(emp) {
       } else {
         // Không có schedule: tính từ offRequests cho tuần target (không tính OFF đột xuất trên HR)
         const weekDates = [];
-        for(let i=0;i<7;i++){ const cur=new Date(wDate); cur.setDate(wDate.getDate()+i); weekDates.push(cur.toISOString().split('T')[0]); }
+        for(let i=0;i<7;i++){ const cur=new Date(wDate); cur.setDate(wDate.getDate()+i); toVietnamDateStr(weekDates.push(cur)); }
         off = allOff.filter(r=>r.employeeId===emp.employeeId && r.status==='APPROVED').reduce((s,r)=> s + r.dates.filter(d=> weekDates.includes(d)).length,0);
         working = 7 - off;
         if(working<0) working=0;
@@ -2248,8 +2253,8 @@ function getEmployeeOffProgress(emp) {
     try{
       const offList = (typeof offRequests!=='undefined' ? offRequests : []);
       // Đếm OFF tuần sau (next week Mon-Sun) - AI đã sắp lịch
-      const nextMon = getMonday(new Date(Date.now()+7*24*60*60*1000)).toISOString().split('T')[0];
-      const nextSun = new Date(new Date(nextMon).getTime()+6*24*60*60*1000).toISOString().split('T')[0];
+      const nextMon = getMonday(new Date(Date.now()+7*24*60*60*toVietnamDateStr(1000)));
+      const nextSun = new Date(new Date(nextMon).getTime()+6*24*60*60*toVietnamDateStr(1000));
       const countNextWeek = offList.filter(r=>r.employeeId===emp.employeeId && r.status==='APPROVED' && r.dates.some(d=>d>=nextMon && d<=nextSun)).reduce((s,r)=>s+r.dates.filter(d=>d>=nextMon && d<=nextSun).length,0);
       if(countNextWeek===2) return { count:2, label: '2/2 ngày OFF (tuần sau)', isFull: true };
       if(countNextWeek>0) return { count:countNextWeek, label: `${countNextWeek}/2 ngày OFF`, isFull: false };
@@ -2276,7 +2281,7 @@ function getEmployeeTrialWindowInfo(emp) {
   if (emp.status === 'OFFICIAL' || emp.status === 'WAITING_OFFICIAL' || emp.type === 'OFFICIAL') {
     // Ràng buộc: Chưa đến ngày bắt đầu chính thức → Chưa chính thức, đến ngày → Chính thức
     try{
-      const today = new Date().toISOString().split('T')[0];
+      const today = getVietnamTodayStr();
       if(emp.officialStartDate && today < emp.officialStartDate){
         return { label: 'Chưa chính thức', sub: `Chờ đến ${fmtDMY(emp.officialStartDate)} • ${emp.branchId} • ${emp.shift}` };
       }
@@ -2291,7 +2296,7 @@ function getEmployeeTrialWindowInfo(emp) {
     }
   }
 
-  const startDateStr = emp.startDate || new Date().toISOString().split('T')[0];
+  const startDateStr = emp.startDate || getVietnamTodayStr();
   const parts = startDateStr.split('T')[0].split('-').map(Number);
   const startD = (parts.length === 3 && !isNaN(parts[0])) ? new Date(parts[0], parts[1] - 1, parts[2]) : new Date();
   
@@ -2717,7 +2722,7 @@ function renderEmployeesStore(){
               const nowLocal = new Date();
               const todayLocal = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth()+1).padStart(2,'0')}-${String(nowLocal.getDate()).padStart(2,'0')}`;
               const todayVN = new Date().toLocaleDateString('en-CA', {timeZone:'Asia/Ho_Chi_Minh'});
-              const todayUTC = new Date().toISOString().split('T')[0];
+              const todayUTC = getVietnamTodayStr();
               const candidates = [todayLocal, todayVN, todayUTC];
               let attToday = null;
               for(const d of candidates){ attToday = (typeof attendances!=='undefined'?attendances:[]).find(a=>a.employeeId===e.employeeId && a.date===d); if(attToday) break; }
@@ -3467,7 +3472,7 @@ function transitionOfficial(employeeId){
 
   const e = employees.find(x=>x.employeeId===employeeId || x.id===employeeId);
   const name = e ? e.name : '';
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getVietnamTodayStr();
 
   openModal('🎓 XÁC NHẬN CHUYỂN CHÍNH THỨC & CẬP NHẬT NGÀY BẮT ĐẦU', `
     <div class="space-y-4">
@@ -3651,7 +3656,7 @@ function switchScheduleCategory(cat){
   renderSchedules();
 }
 function getMondayStr(dStr) {
-  if (!dStr) return new Date().toISOString().split('T')[0];
+  if (!dStr) return getVietnamTodayStr();
   const parts = dStr.split('T')[0].split('-').map(Number);
   let date;
   if (parts.length === 3 && !isNaN(parts[0])) {
@@ -3912,7 +3917,7 @@ function renderSchedules(){
                     </div>
                   </div>
                   <div class="flex flex-wrap items-center gap-2">
-                    <span class="text-sm font-black px-3 py-1.5 rounded-full ${emp.type==='OFFICIAL'?'bg-pink-500 text-white':'bg-blue-100 text-blue-700 border border-blue-200'}">${(emp.type==='OFFICIAL' ? (emp.officialStartDate && new Date().toISOString().split('T')[0] < emp.officialStartDate ? 'Chưa chính thức' : 'Chính thức') : getStatusVi(emp.type||'')+' '+getStatusVi(emp.status||''))}</span>
+                    <span class="text-sm font-black px-3 py-1.5 rounded-full ${emp.type==='OFFICIAL'?'bg-pink-500 text-white':'bg-blue-100 text-blue-700 border border-blue-200'}">${(emp.type==='OFFICIAL' ? (emp.officialStartDate && getVietnamTodayStr() < emp.officialStartDate ? 'Chưa chính thức' : 'Chính thức') : getStatusVi(emp.type||'')+' '+getStatusVi(emp.status||''))}</span>
                     ${(emp.type==='TRAINING' && (emp.status === 'WAITING_OFFICIAL' || (emp.status === 'TRAINING' && typeof getTrainingCompletedDays === 'function' && getTrainingCompletedDays(emp) >= 7))) ? `<span class="text-sm font-black px-3 py-1.5 rounded-full bg-amber-500 text-white shadow-xs animate-pulse flex items-center gap-1" title="Khóa lịch: NV đã hoàn thành đủ 7 ngày Training — Chờ HR duyệt Chính thức"><i class="fa-solid fa-lock"></i> 🔒 Đã 7/7 Training (Khóa lịch)</span>` : ''}
                     <span class="text-sm font-bold bg-white border border-pink-200 text-pink-700 px-3 py-1.5 rounded-full"><i class="fa-solid fa-calendar-week text-pink-500"></i> ${startDateRange}</span>
                   </div>

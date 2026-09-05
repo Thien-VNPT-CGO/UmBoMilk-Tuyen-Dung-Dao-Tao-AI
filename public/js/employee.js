@@ -6,6 +6,11 @@ localStorage.setItem('device_id', deviceId);
 let socket=null;
 const API_BASE = location.hostname.includes('vercel.app') ? 'https://umbomilk-hr.onrender.com' : '';
 let branches=[];
+// === VIETNAM TIMEZONE REALTIME ===
+function getVietnamTodayStr(){ return new Date().toLocaleDateString('en-CA', {timeZone: 'Asia/Ho_Chi_Minh'}); }
+function toVietnamDateStr(d){ const date = d instanceof Date ? d : new Date(d); return date.toLocaleDateString('en-CA', {timeZone: 'Asia/Ho_Chi_Minh'}); }
+
+
 let testCourses=[];
 let currentTest=null;
 let testAnswers=[];
@@ -334,7 +339,7 @@ function switchTab(id){
 
   // Ràng buộc Điểm danh cho Chính thức: Phải đúng ngày officialStartDate
   if(isOfficial && id === 'attendance' && employee.officialStartDate){
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = getVietnamTodayStr();
     if(todayStr < employee.officialStartDate){
       showToast(`🔒 Chưa đến ngày bắt đầu chính thức (${employee.officialStartDate.split('-').reverse().join('/')}). Điểm danh sẽ tự động mở vào ngày này.`, 'info');
       return;
@@ -596,7 +601,7 @@ async function loadHome(){
   // schedule today
   try{
     const scheds = await api('/api/schedules?employeeId='+employee.employeeId);
-    const today = new Date().toISOString().split('T')[0];
+    const today = getVietnamTodayStr();
     let todaySched = null;
     scheds.forEach(s=>{ const d=s.days.find(x=>x.date===today); if(d) todaySched=d; });
     document.getElementById('homeSchedule').textContent= todaySched? `${todaySched.status} • ${todaySched.shift}` : '—';
@@ -604,7 +609,7 @@ async function loadHome(){
   }catch(e){ document.getElementById('homeSchedule').textContent='—'; }
   // attendance today
   try{
-    const atts = await api('/api/attendances?employeeId='+employee.employeeId+'&date='+new Date().toISOString().split('T')[0]);
+    const atts = await api('/api/attendances?employeeId='+employee.employeeId+'&date='+getVietnamTodayStr());
     const a=atts[0];
     document.getElementById('homeCheckin').textContent= a?.checkIn? a.checkIn.time + (a.status==='LATE'?' (TRỄ)':'') : 'Chưa';
     document.getElementById('homeCheckout').textContent= a?.checkOut? a.checkOut.time : (a?.checkIn?'Chưa':'—');
@@ -638,7 +643,7 @@ function renderTrainingOffPicker() {
     return;
   }
   box.classList.remove('hidden');
-  const startDateStr = employee.startDate || new Date().toISOString().split('T')[0];
+  const startDateStr = employee.startDate || getVietnamTodayStr();
   const parts = startDateStr.split('T')[0].split('-').map(Number);
   const startD = (parts.length === 3 && !isNaN(parts[0])) ? new Date(parts[0], parts[1] - 1, parts[2]) : new Date();
   const trialDates = [];
@@ -922,7 +927,7 @@ async function loadAttendanceTab(){
 
   // Sequential Check-in / Check-out UI + AI window realtime (official)
   try{
-    const today = new Date().toISOString().split('T')[0];
+    const today = getVietnamTodayStr();
     const atts = await api('/api/attendances?employeeId='+employee.employeeId+'&date='+today);
     const todayAtt = atts[0];
 
@@ -1107,7 +1112,7 @@ async function loadSchedule(){
     const isOfficial = employee.type==='OFFICIAL' || employee.status==='OFFICIAL';
     let displaySchedules = [...mySchedules];
     if(isOfficial){
-      const nextMon = getMonday(new Date(Date.now()+7*24*60*60*1000)).toISOString().split('T')[0];
+      const nextMon = getMonday(new Date(Date.now()+7*24*60*60*toVietnamDateStr(1000)));
       const nextWeekSched = mySchedules.find(s=>s.weekStart===nextMon);
       const hasOffForNextWeek = (await api('/api/off-requests?employeeId='+employee.employeeId).catch(()=>[])).some(r=>r.status==='APPROVED' && r.dates && r.dates.some(d=> nextWeekSched && nextWeekSched.days.some(day=>day.date===d)));
       // Nếu chưa đăng ký OFF 2 ngày cho tuần sau thì chỉ hiện lịch tuần hiện tại, không hiện tuần tới (dù có draft)
@@ -1138,7 +1143,7 @@ async function loadSchedule(){
         return el.innerHTML='<div class="bg-white rounded-2xl border border-slate-200 p-8 text-center text-sm text-slate-400">Chưa có lịch tuần sau - vui lòng đăng ký OFF 2 ngày (T6 12:00 - T7 15:00) để AI sắp lịch</div>';
       }
     }
-    const today = new Date().toISOString().split('T')[0];
+    const today = getVietnamTodayStr();
     el.innerHTML = displaySchedules.map(s=>{
       const isCurrentWeek = isDateInCurrentWeek(new Date(s.weekStart));
       const workingDays = s.days.filter(d => d.status === 'WORKING' || d.status === 'SUBSTITUTE').length;
@@ -1309,9 +1314,9 @@ function isDateInCurrentWeek(date) {
 async function loadOff(){
   // generate dates for next week Mon-Sun
   const nextMon = getMonday(new Date(Date.now()+7*24*60*60*1000));
-  const nextWeekStr = nextMon.toISOString().split('T')[0];
+  const nextWeekStr = toVietnamDateStr(nextMon);
   const dates=[];
-  for(let i=0;i<7;i++){ const d=new Date(nextMon); d.setDate(nextMon.getDate()+i); dates.push(d.toISOString().split('T')[0]); }
+  for(let i=0;i<7;i++){ const d=new Date(nextMon); d.setDate(nextMon.getDate()+i); toVietnamDateStr(dates.push(d)); }
 
   try{
     const win = await api('/api/off-window');
@@ -1417,7 +1422,7 @@ async function loadEmergency(){
     // Check if next week's schedule is displayed
     mySchedules = await api('/api/schedules?employeeId='+employee.employeeId);
     const nextMon = getMonday(new Date(Date.now()+7*24*60*60*1000));
-    const nextWeekStr = nextMon.toISOString().split('T')[0];
+    const nextWeekStr = toVietnamDateStr(nextMon);
     const hasNextWeekSchedule = mySchedules.some(s => s.weekStart === nextWeekStr);
 
     // Find the form card (first .card in tab-emergency)
