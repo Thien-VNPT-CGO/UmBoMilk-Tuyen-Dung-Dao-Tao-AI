@@ -139,6 +139,17 @@ function getModeVi(m){
   if(m==='AUTO') return 'Tự động';
   return m;
 }
+// === CA LÀM VIỆC TIẾNG VIỆT - giữ mã kỹ thuật, hiển thị tiếng Việt ===
+function getShiftVi(s){
+  if(!s) return '—';
+  const m={CA_SANG:'Ca Sáng', CA_CHIEU:'Ca Chiều', CA_TRUA:'Ca Chiều', CA_TOI:'Ca Tối'};
+  return m[s] || s;
+}
+function getShiftShortVi(s){
+  if(!s) return '—';
+  const m={CA_SANG:'SÁNG', CA_CHIEU:'CHIỀU', CA_TRUA:'CHIỀU', CA_TOI:'TỐI'};
+  return m[normalizeShift(s)] || s;
+}
 let currentMode = localStorage.getItem('app_mode') || 'AUTO';
 function updateModeBadge(){
   const badge=document.getElementById('modeBadge');
@@ -641,10 +652,10 @@ async function loadHome(){
   }
   document.getElementById('homeName').textContent=employee.name;
   document.getElementById('homeId').textContent=employee.employeeId+' • '+employee.phone;
-  document.getElementById('homeType').textContent=employee.type==='OFFICIAL' ? 'CHÍNH THỨC' : 'TRAINING';
+  document.getElementById('homeType').textContent=employee.type==='OFFICIAL' ? 'CHÍNH THỨC' : 'THỬ VIỆC';
   document.getElementById('homeType').className='text-xs font-black px-3 py-1 rounded-full shadow '+(employee.type==='OFFICIAL'?'official-badge':'training-badge');
   document.getElementById('homeBranch').textContent=getBranchFull(employee.branchId);
-  document.getElementById('homeShift').textContent=employee.shift;
+  document.getElementById('homeShift').textContent=getShiftVi(normalizeShift(employee.shift));
   document.getElementById('homeStatus').textContent=getStatusVi(employee.status);
   document.getElementById('homeStatus').className='mt-2 inline-flex text-xs font-black px-3 py-1 rounded-full '+(employee.status==='OFFICIAL'?'bg-pink-100 text-pink-700':employee.status==='TRAINING'?'bg-blue-100 text-blue-700':employee.status==='FAILED_TEST'?'bg-red-100 text-red-700':'bg-pink-100 text-pink-700');
   document.getElementById('homeDate').textContent=new Date().toLocaleDateString('vi-VN',{weekday:'long', timeZone:'Asia/Ho_Chi_Minh'}) + ' ' + fmtDMY(getVietnamTodayStr());
@@ -654,7 +665,7 @@ async function loadHome(){
     const today = getVietnamTodayStr();
     let todaySched = null;
     scheds.forEach(s=>{ const d=s.days.find(x=>x.date===today); if(d) todaySched=d; });
-    document.getElementById('homeSchedule').textContent= todaySched? `${todaySched.status} • ${todaySched.shift}` : '—';
+    document.getElementById('homeSchedule').textContent= todaySched? `${getStatusVi(todaySched.status)} • ${getShiftVi(normalizeShift(todaySched.shift))}` : '—';
     document.getElementById('homeSchedule').className='font-black text-sm mt-1 '+(todaySched?.status==='OFF'?'text-red-600':todaySched?.status==='WORKING'?'text-green-600':'');
   }catch(e){ document.getElementById('homeSchedule').textContent='—'; }
   // attendance today
@@ -1023,9 +1034,9 @@ async function loadAttendanceTab(){
           const remain = openCheckIn - nowMins;
           if(cardCheckin) cardCheckin.classList.remove('hidden');
           if(cardCheckout) cardCheckout.classList.add('hidden');
-          if(shiftMsg){ shiftMsg.innerHTML = `<i class=\"fa-solid fa-robot text-pink-500 text-xl mb-2 block\"></i> AI chưa mở Check-in<br><span class=\"text-sm\">Ca ${employee.shift} ${sInfo.start}-${sInfo.end} • AI sẽ mở lúc <b>${fmtHM(openCheckIn)}</b> (còn ${remain} phút)</span>`; shiftMsg.className='card bg-slate-50 border-slate-200 text-slate-600 text-sm font-bold text-center p-6'; shiftMsg.classList.remove('hidden'); }
+          if(shiftMsg){ shiftMsg.innerHTML = `<i class=\"fa-solid fa-robot text-pink-500 text-xl mb-2 block\"></i> AI chưa mở điểm danh<br><span class=\"text-sm\">Ca ${getShiftVi(normalizeShift(employee.shift))} ${sInfo.start}-${sInfo.end} • AI sẽ mở lúc <b>${fmtHM(openCheckIn)}</b> (còn ${remain} phút)</span>`; shiftMsg.className='card bg-slate-50 border-slate-200 text-slate-600 text-sm font-bold text-center p-6'; shiftMsg.classList.remove('hidden'); }
           if(btnIn) btnIn.disabled = true, btnIn.classList.add('opacity-50','cursor-not-allowed');
-          showAiInfo(`<i class=\"fa-solid fa-clock\"></i> AI tự động mở Check-in trước giờ làm 30 phút • Sau ${fmtHM(closeCheckIn)} sẽ đóng và tính phạt theo nội quy`, 'bg-slate-50 border-slate-200 text-slate-600');
+          showAiInfo(`<i class=\"fa-solid fa-clock\"></i> AI tự động mở điểm danh trước giờ làm 30 phút • Sau ${fmtHM(closeCheckIn)} sẽ đóng và tính phạt theo nội quy`, 'bg-slate-50 border-slate-200 text-slate-600');
         } else if(nowMins <= closeCheckIn){
           const remain = closeCheckIn - nowMins;
           const late5 = diffLate >=5 && diffLate <30;
@@ -1087,7 +1098,7 @@ async function loadAttendanceTab(){
          if (cardCheckin) cardCheckin.classList.add('hidden');
          if (cardCheckout) cardCheckout.classList.add('hidden');
          if(shiftMsg){
-           shiftMsg.innerHTML = `<i class=\"fa-solid fa-clock text-2xl mb-2 block\"></i> Ngoài giờ ca làm việc (${employee.shift})<br><span class=\"text-xs font-normal opacity-75\">Training: điểm danh linh hoạt, không phạt trễ</span>`;
+           shiftMsg.innerHTML = `<i class=\"fa-solid fa-clock text-2xl mb-2 block\"></i> Ngoài giờ ca làm việc (${getShiftVi(normalizeShift(employee.shift))})<br><span class=\"text-xs font-normal opacity-75\">Training: điểm danh linh hoạt, không phạt trễ</span>`;
            shiftMsg.className='card bg-amber-50 border-amber-200 text-amber-800 text-sm font-bold text-center p-6';
            shiftMsg.classList.remove('hidden');
          }
@@ -1212,7 +1223,7 @@ async function loadSchedule(){
             let bgColor = 'bg-white';
             let borderColor = 'border-slate-100';
             let statusClass = 'bg-slate-100 text-slate-500';
-            let statusText = d.status;
+            let statusText = getStatusVi(d.status).toUpperCase();
             
             if(d.status === 'OFF') {
               bgColor = 'bg-red-50/30';
@@ -1228,11 +1239,22 @@ async function loadSchedule(){
               bgColor = 'bg-white';
               borderColor = isToday ? 'border-pink-400' : 'border-slate-100';
               statusClass = 'bg-pink-100 text-pink-700';
+              statusText = 'LÀM VIỆC';
             } else if(d.status === 'SUBSTITUTE') {
               bgColor = 'bg-indigo-50/30';
               borderColor = 'border-indigo-200';
               statusClass = 'bg-indigo-600 text-white';
               statusText = 'THAY CA';
+            } else if(d.status === 'WAITING_OFFICIAL') {
+              bgColor = 'bg-slate-50';
+              borderColor = 'border-slate-200';
+              statusClass = 'bg-slate-200 text-slate-600';
+              statusText = 'CHỜ CHÍNH THỨC';
+            } else if(d.status === 'EMERGENCY_PENDING') {
+              bgColor = 'bg-amber-50/30';
+              borderColor = 'border-amber-200';
+              statusClass = 'bg-amber-500 text-white';
+              statusText = 'CHỜ DUYỆT';
             }
 
             return `
@@ -1243,7 +1265,7 @@ async function loadSchedule(){
               <div class="mt-3 flex flex-col items-center gap-2">
                 <span class="text-sm font-black px-4 py-1.5 rounded-full ${statusClass}">${statusText}</span>
                 <div class="text-lg font-black text-slate-800 leading-tight min-h-[32px] flex items-center justify-center">
-                  ${(d.status === 'WORKING' || d.status === 'SUBSTITUTE') ? normalizeShift(d.shift).replace('CA_', '') : '—'}
+                  ${(d.status === 'WORKING' || d.status === 'SUBSTITUTE') ? getShiftShortVi(d.shift) : '—'}
                 </div>
               </div>
               ${isToday ? '<div class="text-sm font-black text-pink-600 mt-2 uppercase tracking-widest">● Hôm nay</div>' : ''}
@@ -1260,21 +1282,21 @@ async function loadSchedule(){
           const isTraining = employee.type==='TRAINING';
           if(isTraining){
             return `<div class="px-5 py-4 bg-amber-50 border-t border-amber-100 text-sm text-amber-800 leading-relaxed">
-              <div class="font-black text-base flex items-center gap-2"><i class="fa-solid fa-circle-info text-amber-600"></i> Chú thích lịch Training (12 ngày thử việc):</div>
-              <div class="mt-2 text-sm">• <b>WORKING:</b> Ngày làm việc (7/12 ngày) - AI tự xếp theo ca đăng ký</div>
-              <div class="text-sm">• <b>OFF:</b> Ngày nghỉ đã đăng ký (5/12 ngày) - chọn khi đăng ký OFF</div>
-              <div class="text-sm">• <b>WAITING_OFFICIAL:</b> Chờ HR duyệt lên chính thức</div>
+              <div class="font-black text-base flex items-center gap-2"><i class="fa-solid fa-circle-info text-amber-600"></i> Chú thích lịch Thử việc (12 ngày thử việc):</div>
+              <div class="mt-2 text-sm">• <b>LÀM VIỆC:</b> Ngày làm việc (7/12 ngày) - AI tự xếp theo ca đăng ký</div>
+              <div class="text-sm">• <b>NGHỈ:</b> Ngày nghỉ đã đăng ký (5/12 ngày) - chọn khi đăng ký nghỉ</div>
+              <div class="text-sm">• <b>CHỜ CHÍNH THỨC:</b> Chờ HR duyệt lên chính thức</div>
               <div class="text-sm">• <b>Hôm nay:</b> Viền hồng đậm</div>
-              <div class="text-sm">• Đổi ca: Training có thể đổi/thêm ca (1 ngày 2 ca) để rút ngắn 7→6 ngày - HR duyệt 15 phút</div>
+              <div class="text-sm">• Đổi ca: Thử việc có thể đổi/thêm ca (1 ngày 2 ca) để rút ngắn 7→6 ngày - HR duyệt 15 phút</div>
             </div>`;
           } else {
             return `<div class="px-5 py-4 bg-blue-50 border-t border-blue-100 text-sm text-blue-800 leading-relaxed">
               <div class="font-black text-base flex items-center gap-2"><i class="fa-solid fa-circle-info text-blue-600"></i> Chú thích hệ thống gán ca tự động:</div>
-              <div class="mt-2 text-sm">• <b>WORKING:</b> Ngày làm việc theo ca đã gán (CA_SANG:07-12h, CA_CHIEU:12-18h, CA_TOI:18-23h)</div>
-              <div class="text-sm">• <b>OFF:</b> Ngày nghỉ (đã đăng ký OFF 2 ngày/tuần hoặc Chủ Nhật) - AI đảm bảo không trùng ca cùng chi nhánh</div>
-              <div class="text-sm">• <b>SUBSTITUTE:</b> Ngày thay ca cho NV khác (đổi ca)</div>
+              <div class="mt-2 text-sm">• <b>LÀM VIỆC:</b> Ngày làm việc theo ca đã gán (Ca Sáng:07-12h, Ca Chiều:12-18h, Ca Tối:18-23h)</div>
+              <div class="text-sm">• <b>NGHỈ:</b> Ngày nghỉ (đã đăng ký nghỉ 2 ngày/tuần hoặc Chủ Nhật) - AI đảm bảo không trùng ca cùng chi nhánh</div>
+              <div class="text-sm">• <b>THAY CA:</b> Ngày thay ca cho nhân viên khác (đổi ca)</div>
               <div class="text-sm">• <b>Tuần này/Tuần tới:</b> Nhãn phân biệt tuần hiện tại và tuần sau</div>
-              <div class="text-sm">• Lịch tuần sau AI tạo sau khi HR duyệt OFF (T7 15:00) và gửi đến NV qua thông báo</div>
+              <div class="text-sm">• Lịch tuần sau AI tạo sau khi HR duyệt nghỉ (T7 15:00) và gửi đến nhân viên qua thông báo</div>
               <div class="text-sm">• <b>Đổi ca:</b></div>
               <div class="ml-3 text-sm">+ Xin phép đổi ca &gt; 24 tiếng trước lịch làm: thực hiện theo quy trình đổi ca trong app</div>
               <div class="ml-3 text-sm">+ Xin phép đổi ca &lt; 24 tiếng trước lịch làm: Vui lòng liên hệ trực tiếp HR</div>
@@ -1291,7 +1313,7 @@ function openTrainingShiftModal(weekStart){
   if(!employee) return;
   const dates = mySchedules.find(s=>s.weekStart===weekStart)?.days || [];
   if(dates.length===0) return showToast('Không có lịch tuần này','error');
-  const options = dates.map(d=> `<option value="${d.date}">${fmtDMY(d.date)} (${d.dayName}) - ${d.shift} [${d.status}]</option>`).join('');
+  const options = dates.map(d=> `<option value="${d.date}">${fmtDMY(d.date)} (${d.dayName}) - ${getShiftVi(normalizeShift(d.shift))} [${getStatusVi(d.status)}]</option>`).join('');
   const modalHtml = `
     <div id="trainingShiftModal" class="fixed inset-0 z-[100] bg-black/50 flex items-center justify-center p-4">
       <div class="bg-white rounded-2xl w-full max-w-md p-5 shadow-xl">
@@ -1310,13 +1332,13 @@ function openTrainingShiftModal(weekStart){
 function openTrainingAddShiftModal(weekStart){
   if(!employee) return;
   const dates = mySchedules.find(s=>s.weekStart===weekStart)?.days.filter(d=>d.status==='WORKING') || [];
-  if(dates.length===0) return showToast('Không có ngày WORKING để thêm ca','error');
-  const options = dates.map(d=> `<option value="${d.date}">${fmtDMY(d.date)} (${d.dayName}) - ${d.shift}</option>`).join('');
+  if(dates.length===0) return showToast('Không có ngày làm việc để thêm ca','error');
+  const options = dates.map(d=> `<option value="${d.date}">${fmtDMY(d.date)} (${d.dayName}) - ${getShiftVi(normalizeShift(d.shift))}</option>`).join('');
   const modalHtml = `
     <div id="trainingShiftModal" class="fixed inset-0 z-[100] bg-black/50 flex items-center justify-center p-4">
       <div class="bg-white rounded-2xl w-full max-w-md p-5 shadow-xl">
         <div class="font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-plus text-pink-600"></i> Thêm ca (1 ngày 2 ca)</div>
-        <div class="text-xs text-slate-500 mt-1">Chọn ngày đã có ca và ca muốn THÊM (ví dụ: đã CA_SANG thêm CA_CHIEU). Giúp rút ngắn 7→6 ngày.</div>
+        <div class="text-xs text-slate-500 mt-1">Chọn ngày đã có ca và ca muốn THÊM (ví dụ: đã Ca Sáng thêm Ca Chiều). Giúp rút ngắn 7→6 ngày.</div>
         <div class="mt-3 space-y-3">
           <div><label class="text-xs font-bold">Ngày (đã có ca)</label><select id="shiftDate" class="w-full mt-1 px-3 py-2 rounded-xl border text-sm">${options}</select></div>
           <div><label class="text-xs font-bold">Ca THÊM</label><select id="shiftTo" class="w-full mt-1 px-3 py-2 rounded-xl border text-sm"><option value="CA_CHIEU">Ca Chiều (12:00-18:00)</option><option value="CA_SANG">Ca Sáng (07:00-12:00)</option><option value="CA_TOI">Ca Tối (18:00-23:00)</option></select></div>
@@ -1503,7 +1525,7 @@ async function loadEmergency(){
       const isPending = r.status==='PENDING';
       return `
       <div class="border rounded-xl p-3 ${isPending?'bg-amber-50 border-amber-200':'bg-white'}">
-        <div class="flex justify-between items-start"><span class="font-bold text-sm">${fmtDMY(r.date)} • ${r.shift} • ${getBranchDisplay(r.branchId)}</span><span class="text-[11px] font-black px-2 py-1 rounded-full ${r.status==='PENDING'?'bg-amber-500 text-white':r.status==='APPROVED'?'bg-emerald-500 text-white':'bg-red-100 text-red-700'}">${getStatusVi(r.status)}</span></div>
+        <div class="flex justify-between items-start"><span class="font-bold text-sm">${fmtDMY(r.date)} • ${getShiftVi(normalizeShift(r.shift))} • ${getBranchDisplay(r.branchId)}</span><span class="text-[11px] font-black px-2 py-1 rounded-full ${r.status==='PENDING'?'bg-amber-500 text-white':r.status==='APPROVED'?'bg-emerald-500 text-white':'bg-red-100 text-red-700'}">${getStatusVi(r.status)}</span></div>
         <div class="text-xs text-slate-600 mt-1">Lý do: ${r.reason}</div>
         <div class="text-[11px] mt-1 flex flex-wrap gap-1.5">
           <span class="bg-white border px-2 py-0.5 rounded-full">${stepText}</span>
@@ -1527,7 +1549,7 @@ async function loadEmergency(){
     document.getElementById('inviteList').innerHTML = invites.slice(0,5).map(r=>`
       <div class="border border-blue-200 bg-blue-50 rounded-xl p-3">
         <div class="font-bold text-sm">${r.employeeName} cần thay ca <span class="text-[11px] bg-blue-600 text-white px-2 py-0.5 rounded-full">${stepInviteText(r)}</span></div>
-        <div class="text-xs text-slate-600">Ngày ${fmtDMY(r.date)} • ${r.shift} • ${getBranchDisplay(r.branchId)} • Lý do: ${r.reason}</div>
+        <div class="text-xs text-slate-600">Ngày ${fmtDMY(r.date)} • ${getShiftVi(normalizeShift(r.shift))} • ${getBranchDisplay(r.branchId)} • Lý do: ${r.reason}</div>
         <div class="text-[11px] text-blue-700 mt-1">AI đã tạm đăng ký OFF cho người gửi, cần bạn thay ca (TH3)</div>
         <div class="mt-2 flex gap-2"><button onclick="respondEmergency('${r.id}','APPROVE')" class="flex-1 bg-emerald-600 text-white text-xs font-bold py-1.5 rounded-lg">✅ Đồng ý thay ca</button><button onclick="respondEmergency('${r.id}','REJECT')" class="flex-1 bg-white border text-xs font-bold py-1.5 rounded-lg">Từ chối</button></div>
       </div>
@@ -1559,7 +1581,7 @@ async function loadShiftSwap(){
     // Load all employees cùng chi nhánh để chọn người thay thế
     const branchEmps = await api('/api/employees?branch='+employee.branchId).catch(()=>[]);
     const emps = Array.isArray(branchEmps) ? branchEmps : (branchEmps.data||[]);
-    const opts = emps.filter(e=>e.employeeId!==employee.employeeId && e.status==='OFFICIAL').map(e=>`<option value="${e.employeeId}">${e.name} - ${e.employeeId} - ${e.shift}</option>`).join('');
+    const opts = emps.filter(e=>e.employeeId!==employee.employeeId && e.status==='OFFICIAL').map(e=>`<option value="${e.employeeId}">${e.name} - ${e.employeeId} - ${getShiftVi(normalizeShift(e.shift))}</option>`).join('');
     const sel=document.getElementById('swapTarget');
     if(sel){
       const cur = sel.value;
@@ -1576,7 +1598,7 @@ async function loadShiftSwap(){
       const statusColor = r.status==='PENDING_TARGET' ? 'bg-amber-500 text-white' : r.status==='PENDING_BROADCAST' ? 'bg-blue-500 text-white' : r.status==='APPROVED' ? 'bg-emerald-500 text-white' : r.status==='REJECTED' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600';
       const thText = r.targetEmployeeId ? `Gửi tới ${r.targetEmployeeName||r.targetEmployeeId}` : 'Gửi toàn chi nhánh';
       return `<div class="border rounded-xl p-3 ${r.status.includes('PENDING')?'bg-amber-50 border-amber-200':'bg-white'}">
-        <div class="flex justify-between items-start"><span class="font-bold text-sm">${fmtDMY(r.date)} • ${r.fromShift} → ${r.toShift}</span><span class="text-[11px] font-black px-2 py-1 rounded-full ${statusColor}">${getStatusVi(r.status)}</span></div>
+        <div class="flex justify-between items-start"><span class="font-bold text-sm">${fmtDMY(r.date)} • ${getShiftVi(normalizeShift(r.fromShift))} → ${getShiftVi(normalizeShift(r.toShift))}</span><span class="text-[11px] font-black px-2 py-1 rounded-full ${statusColor}">${getStatusVi(r.status)}</span></div>
         <div class="text-xs text-slate-600 mt-1">${thText} • ${getBranchDisplay(r.branchId)}</div>
         <div class="text-xs text-slate-500 mt-1">Lý do: ${r.reason||'—'}</div>
         <div class="text-[11px] text-slate-400 mt-1">Tạo: ${fmtDMYTime(r.createdAt)} • Hết hạn: ${fmtDMYTime(r.expiresAt)}</div>
@@ -1591,7 +1613,7 @@ async function loadShiftSwap(){
       const isDirect = r.targetEmployeeId===employee.employeeId;
       return `<div class="border ${isDirect?'border-blue-200 bg-blue-50':'border-emerald-200 bg-emerald-50'} rounded-xl p-3">
         <div class="font-bold text-sm">${r.requesterName} muốn đổi ca <span class="text-[11px] bg-slate-900 text-white px-2 py-0.5 rounded-full">${isDirect?'Gửi riêng bạn':'Toàn chi nhánh'}</span></div>
-        <div class="text-xs text-slate-600">Ngày ${fmtDMY(r.date)} • ${r.fromShift} → ${r.toShift} • ${getBranchDisplay(r.branchId)} • Lý do: ${r.reason||'—'}</div>
+        <div class="text-xs text-slate-600">Ngày ${fmtDMY(r.date)} • ${getShiftVi(normalizeShift(r.fromShift))} → ${getShiftVi(normalizeShift(r.toShift))} • ${getBranchDisplay(r.branchId)} • Lý do: ${r.reason||'—'}</div>
         <div class="text-[11px] text-slate-500 mt-1">Hết hạn: ${fmtDMYTime(r.expiresAt)}</div>
         <div class="mt-2 flex gap-2"><button onclick="respondShiftSwap('${r.id}','ACCEPT')" class="flex-1 bg-emerald-600 text-white text-xs font-bold py-1.5 rounded-lg">✅ Chấp nhận</button><button onclick="respondShiftSwap('${r.id}','REJECT')" class="flex-1 bg-white border text-xs font-bold py-1.5 rounded-lg">Từ chối</button></div>
       </div>`;
@@ -1801,7 +1823,7 @@ async function loadAccount(){
       <div class="flex-1">
         <div class="font-black text-lg text-pink-900 leading-tight">${employee.name}</div>
         <div class="font-mono text-xs text-slate-500 mt-0.5">${employee.employeeId}</div>
-        <div class="text-sm text-slate-600 mt-0.5">${employee.phone} • ${getBranchDisplay(employee.branchId)} • ${employee.shift}</div>
+        <div class="text-sm text-slate-600 mt-0.5">${employee.phone} • ${getBranchDisplay(employee.branchId)} • ${getShiftVi(normalizeShift(employee.shift))}</div>
         <div class="mt-1.5 inline-flex items-center gap-1.5 text-xs font-black px-3 py-1 rounded-full bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow-sm">
           <i class="fa-solid fa-circle-check text-[10px]"></i>${getStatusVi(employee.type)} • ${getStatusVi(employee.status)}
         </div>
@@ -1809,7 +1831,7 @@ async function loadAccount(){
     </div>
     <div class="grid grid-cols-2 gap-3 text-sm mt-4">
       <div class="bg-pink-50 border border-pink-100 rounded-xl p-3"><div class="text-[11px] font-bold text-pink-500 uppercase tracking-wide">Chi nhánh</div><div class="font-bold text-slate-800 mt-0.5 text-xs">${getBranchFull(employee.branchId)}</div></div>
-      <div class="bg-pink-50 border border-pink-100 rounded-xl p-3"><div class="text-[11px] font-bold text-pink-500 uppercase tracking-wide">Ca làm</div><div class="font-bold text-slate-800 mt-0.5">${employee.shift}</div></div>
+      <div class="bg-pink-50 border border-pink-100 rounded-xl p-3"><div class="text-[11px] font-bold text-pink-500 uppercase tracking-wide">Ca làm</div><div class="font-bold text-slate-800 mt-0.5">${getShiftVi(normalizeShift(employee.shift))}</div></div>
       <div class="bg-pink-50 border border-pink-100 rounded-xl p-3"><div class="text-[11px] font-bold text-pink-500 uppercase tracking-wide">Key kích hoạt</div><div class="font-mono font-bold text-slate-800 mt-0.5 text-xs break-all">${empKey}</div></div>
       <div class="bg-pink-50 border border-pink-100 rounded-xl p-3"><div class="text-[11px] font-bold text-pink-500 uppercase tracking-wide">Ngày bắt đầu</div><div class="font-bold text-slate-800 mt-0.5">${fmtDMY(employee.startDate)||'—'}</div></div>
       <div class="bg-pink-50 border border-pink-100 rounded-xl p-3 col-span-2"><div class="text-[11px] font-bold text-pink-500 uppercase tracking-wide">Kết quả TEST</div><div class="font-black mt-0.5 ${employee.testScore<5?'text-red-600':employee.testScore<=7?'text-amber-600':'text-green-600'}">${employee.testScore??'Chưa thi'} ${employee.testResult||''}</div></div>
