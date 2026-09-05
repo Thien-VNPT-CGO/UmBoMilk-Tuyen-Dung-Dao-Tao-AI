@@ -24,6 +24,8 @@ let mySchedules=[];
 let myOffs=[];
 let myEmergencies=[];
 let myNotifs=[];
+// Tab đang mở hiện tại - nguồn duy nhất quyết định section nào được hiển thị
+let currentTab='home';
 
 const NAV = [
   {id:'home', icon:'fa-house', label:'Trang chủ'},
@@ -235,52 +237,62 @@ function getVisibleNav(){
   }
 }
 
-// Cập nhật nav + section visibility sau khi employee data thay đổi (realtime #5,6)
+// Cập nhật nav sau khi employee data thay đổi (realtime #5,6)
+// RÀNG BUỘC: chỉ switchTab() được phép ẩn/hiện section. Hàm này KHÔNG được
+// remove 'hidden' khỏi bất kỳ section nào (trước đây gây lỗi hiện 2 chức năng cùng lúc).
 function refreshNavVisibility(){
   if(!employee) return;
   const isOfficial = employee.status === 'OFFICIAL' || employee.type === 'OFFICIAL';
   const unlocked = isElearningUnlocked();
   initNav();
-  // Training: ẩn off/emergency/shiftSwap
+  // Chỉ gắn class khóa để mờ nav, không đụng tới 'hidden' của section
   TRAINING_HIDDEN_TABS.forEach(tabId => {
     const sec = document.getElementById('tab-' + tabId);
     if(sec){
-      if(!isOfficial) sec.classList.add('hidden', 'training-locked');
-      else {
-        if(tabId==='off'){
-          if(isOffWindowOpen()) sec.classList.remove('hidden','training-locked');
-          else { sec.classList.add('hidden','training-locked'); if(document.querySelector('.tab-section:not(.hidden)')?.id==='tab-off') switchTab('home'); }
-        } else if(tabId==='emergency'){
-          // Bỏ OFF đột xuất cho chính thức - luôn ẩn
-          sec.classList.add('hidden','training-locked');
-          if(document.querySelector('.tab-section:not(.hidden)')?.id==='tab-emergency') switchTab('home');
-        } else if(tabId==='shiftSwap'){
-          // Đổi ca luôn hiện cho chính thức
-          sec.classList.remove('hidden','training-locked');
-        }
-      }
+      if(!isOfficial) sec.classList.add('training-locked');
+      else sec.classList.remove('training-locked');
     }
   });
-  // Đảm bảo shiftSwap ẩn với training, hiện với official (dù không trong TRAINING_HIDDEN_TABS cho official)
   const shiftSwapSec = document.getElementById('tab-shiftSwap');
   if(shiftSwapSec){
-    if(!isOfficial) shiftSwapSec.classList.add('hidden','training-locked');
-    else shiftSwapSec.classList.remove('hidden','training-locked');
+    if(!isOfficial) shiftSwapSec.classList.add('training-locked');
+    else shiftSwapSec.classList.remove('training-locked');
   }
-  // Ẩn notifs tab khỏi nav nhưng vẫn cho phép mở qua chuông
-  const notifSec = document.getElementById('tab-notifs');
-  if(notifSec) { /* giữ nguyên, chỉ ẩn khỏi nav, không ẩn section khi mở qua chuông */ }
   const elSec = document.getElementById('tab-elearning');
   if(elSec){
-    if(!unlocked){
-      elSec.classList.add('hidden', 'training-locked');
-      const active = document.querySelector('.tab-section:not(.hidden)')?.id;
-      if(active === 'tab-elearning') switchTab('home');
-    } else {
-      elSec.classList.remove('hidden', 'training-locked');
-      if(!elSec.classList.contains('hidden')) loadElearning();
+    if(!unlocked) elSec.classList.add('training-locked');
+    else {
+      elSec.classList.remove('training-locked');
+      if(currentTab === 'elearning') loadElearning();
     }
   }
+  // Nếu tab đang mở không còn được phép (OFF hết giờ, elearning bị khóa...) -> về trang chủ
+  if(!isTabAllowed(currentTab)){
+    switchTab('home');
+    return;
+  }
+  // Ép ràng buộc: chỉ 1 section hiển thị tại 1 thời điểm
+  enforceSingleVisibleTab();
+}
+// Tab có được phép mở với trạng thái NV hiện tại không (dùng chung cho switchTab + refresh)
+function isTabAllowed(id){
+  if(!employee) return true;
+  const isOfficial = employee.status === 'OFFICIAL' || employee.type === 'OFFICIAL';
+  if(TRAINING_HIDDEN_TABS.includes(id) && !isOfficial) return false;
+  if(isOfficial && id === 'emergency') return false; // Bỏ OFF đột xuất cho chính thức
+  if(isOfficial && id === 'off' && !isOffWindowOpen()) return false;
+  if(id === 'elearning' && !isElearningUnlocked()) return false;
+  if(!isOfficial && (id === 'attendance' || id === 'schedule') && isTraining7DaysCompleted()) return false;
+  if(isOfficial && id === 'attendance' && employee.officialStartDate && getVietnamTodayStr() < employee.officialStartDate) return false;
+  return document.getElementById('tab-' + id) ? true : false;
+}
+// Ẩn tất cả section trừ tab đang mở - chống hiện 2 chức năng cùng lúc
+function enforceSingleVisibleTab(){
+  const target = 'tab-' + currentTab;
+  document.querySelectorAll('.tab-section').forEach(s=>{
+    if(s.id === target) s.classList.remove('hidden');
+    else s.classList.add('hidden');
+  });
 }
 // Tự động refresh nav mỗi phút để cập nhật window OFF realtime
 setInterval(()=>{ if(employee) refreshNavVisibility(); }, 60000);
@@ -332,6 +344,11 @@ function initNav(){
   }).join('');
 
   if(el) el.innerHTML=html;
+  // Giữ highlight tab đang mở sau khi vẽ lại nav (initNav hay được gọi realtime)
+  document.querySelectorAll('[id^="nav-"]').forEach(b=>b.classList.remove('tab-active'));
+  document.querySelectorAll('[id^="mnav-"]').forEach(b=>b.classList.remove('text-green-600'));
+  document.getElementById('nav-'+currentTab)?.classList.add('tab-active');
+  document.getElementById('mnav-'+currentTab)?.classList.add('text-green-600');
 
   if(mobile) mobile.innerHTML = visibleNav.map(n=>{
     let isLocked = false;
@@ -377,6 +394,11 @@ function switchTab(id){
     showToast('Chức năng này chỉ mở khi HR duyệt bạn lên Nhân viên Chính thức 🔒','error');
     return;
   }
+  // Bỏ OFF đột xuất cho chính thức
+  if(isOfficial && id === 'emergency'){
+    showToast('Chức năng OFF đột xuất đã tắt, vui lòng dùng Đổi ca 🔒','info');
+    return;
+  }
   // Ràng buộc OFF: T6 < 12:00
   if(isOfficial && id === 'off' && getVietnamNow().getDay() === 5 && getVietnamNow().getHours() < 12){
     showToast('🔒 Chức năng Nghỉ OFF sẽ mở vào lúc 12:00 trưa nay (Thứ 6).', 'info');
@@ -407,12 +429,17 @@ function switchTab(id){
     }
   }
 
+  // Ràng buộc: chỉ 1 section hiển thị - ẩn hết rồi mới hiện tab được chọn
+  currentTab = id;
   document.querySelectorAll('.tab-section').forEach(s=>s.classList.add('hidden'));
-  document.getElementById('tab-'+id)?.classList.remove('hidden');
+  const target = document.getElementById('tab-'+id);
+  if(!target){ currentTab='home'; document.getElementById('tab-home')?.classList.remove('hidden'); }
+  else target.classList.remove('hidden');
+  enforceSingleVisibleTab();
   document.querySelectorAll('[id^="nav-"]').forEach(b=>b.classList.remove('tab-active'));
   document.querySelectorAll('[id^="mnav-"]').forEach(b=>b.classList.remove('text-green-600'));
-  document.getElementById('nav-'+id)?.classList.add('tab-active');
-  document.getElementById('mnav-'+id)?.classList.add('text-green-600');
+  document.getElementById('nav-'+currentTab)?.classList.add('tab-active');
+  document.getElementById('mnav-'+currentTab)?.classList.add('text-green-600');
   if(id==='home') loadHome();
   if(id==='attendance') loadAttendanceTab();
   if(id==='schedule') loadSchedule();
