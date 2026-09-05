@@ -3745,6 +3745,16 @@ async function loadSchedules(){
   renderSchedules();
 }
 function renderSchedules(){
+  // Cập nhật ngày trong chú thích legend Lich làm việc (realtime)
+  try{
+    const nowLegend = new Date();
+    const todayL = nowLegend.toLocaleDateString('vi-VN', {timeZone:'Asia/Ho_Chi_Minh'});
+    const todayISO = nowLegend.toLocaleDateString('en-CA', {timeZone:'Asia/Ho_Chi_Minh'});
+    const elSchedLegend = document.getElementById('scheduleLegendTodayDate');
+    if(elSchedLegend) elSchedLegend.textContent = todayL + ' • ' + todayISO;
+    const elLegend = document.getElementById('legendTodayDate');
+    if(elLegend) elLegend.textContent = todayL + ' • ' + todayISO;
+  }catch(_){}
   const grid=document.getElementById('scheduleGrid');
   const countEl=document.getElementById('scheduleCategoryCount');
   if(!grid) return;
