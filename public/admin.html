@@ -51,11 +51,11 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
     <form id="loginForm" class="p-8 space-y-4">
       <div>
         <label class="text-xs font-bold text-slate-700">Tài khoản</label>
-        <div class="relative mt-1"><i class="fa-solid fa-user absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i><input id="username" value="" class="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:border-pink-500 focus:ring-2 focus:ring-pink-100 outline-none font-medium text-sm" placeholder="Nhập tài khoản"></div>
+        <div class="relative mt-1"><i class="fa-solid fa-user absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i><input id="username" value="" class="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:border-pink-500 focus:ring-2 focus:ring-pink-100 outline-none font-medium text-sm" placeholder="Nhập tên đăng nhập"></div>
       </div>
       <div>
         <label class="text-xs font-bold text-slate-700">Mật khẩu</label>
-        <div class="relative mt-1"><i class="fa-solid fa-lock absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i><input id="password" type="password" value="" class="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:border-pink-500 focus:ring-2 focus:ring-pink-100 outline-none font-medium text-sm" placeholder="••••••••"><button type="button" onclick="togglePass()" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"><i class="fa-solid fa-eye"></i></button></div>
+        <div class="relative mt-1"><i class="fa-solid fa-lock absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i><input id="password" type="password" value="" class="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:border-pink-500 focus:ring-2 focus:ring-pink-100 outline-none font-medium text-sm" placeholder="Nhập mật khẩu"><button type="button" onclick="togglePass()" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"><i class="fa-solid fa-eye"></i></button></div>
       </div>
       <div id="loginError" class="hidden text-xs font-bold bg-red-50 text-red-700 border border-red-200 rounded-xl px-3 py-2"></div>
       <button type="submit" class="w-full bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white font-black py-3 rounded-xl shadow-lg shadow-pink-200 transition flex items-center justify-center gap-2"><i class="fa-solid fa-right-to-bracket"></i> ĐĂNG NHẬP</button>
@@ -201,8 +201,8 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
         <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
           <h2 class="text-xl font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-chart-line text-pink-500"></i> Tổng quan</h2>
           <div class="flex items-center gap-2">
-            <span class="text-xs font-bold bg-white border border-pink-200 rounded-full px-3 py-1.5 text-pink-700">Realtime KPI • Auto refresh</span>
-            <button onclick="loadDashboard()" class="text-xs font-bold bg-gradient-to-r from-pink-500 to-rose-500 text-white px-3 py-1.5 rounded-full hover:from-pink-600 hover:to-rose-600 shadow"><i class="fa-solid fa-rotate"></i> Refresh</button>
+            <span class="text-xs font-bold bg-white border border-pink-200 rounded-full px-3 py-1.5 text-pink-700">Realtime KPI • Tự động làm mới</span>
+            <button onclick="loadDashboard()" class="text-xs font-bold bg-gradient-to-r from-pink-500 to-rose-500 text-white px-3 py-1.5 rounded-full hover:from-pink-600 hover:to-rose-600 shadow"><i class="fa-solid fa-rotate"></i> Làm mới</button>
           </div>
         </div>
         <div id="kpiGrid" class="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-3"></div>
@@ -214,7 +214,7 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
         <div class="grid lg:grid-cols-2 gap-4 mt-4">
           <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm">
             <div class="font-bold text-pink-900 text-sm flex items-center justify-between flex-wrap gap-1">
-              <span>Sync Queue <span class="text-[11px] bg-pink-100 text-pink-700 px-2 py-0.5 rounded-full border border-pink-200">SYNCED/PENDING/FAILED/UNCONFIGURED</span></span>
+              <span>Hàng đợi đồng bộ <span class="text-[11px] bg-pink-100 text-pink-700 px-2 py-0.5 rounded-full border border-pink-200">ĐÃ ĐỒNG BỘ/CHỜ/LỖI/CHƯA CẤU HÌNH</span></span>
               <div class="flex items-center gap-1">
                 <button onclick="retryAllSyncQueue()" class="text-[11px] font-bold bg-pink-500 text-white px-2 py-0.5 rounded-lg hover:bg-pink-600 shadow-xs"><i class="fa-solid fa-rotate-right"></i> Thử lại</button>
                 <button onclick="clearFailedSyncQueue()" class="text-[11px] font-bold bg-rose-500 text-white px-2 py-0.5 rounded-lg hover:bg-rose-600 shadow-xs"><i class="fa-solid fa-trash-can"></i> Xóa lỗi</button>
@@ -225,7 +225,7 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
             <div id="dashSync" class="mt-3 space-y-2 max-h-[220px] overflow-auto scrollbar-thin"></div>
           </div>
           <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm">
-            <div class="font-bold text-pink-900 text-sm">Audit Log gần đây</div>
+            <div class="font-bold text-pink-900 text-sm">Nhật ký hệ thống gần đây</div>
             <div id="dashAudit" class="mt-3 space-y-2 max-h-[220px] overflow-auto scrollbar-thin"></div>
           </div>
         </div>
@@ -234,7 +234,7 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
       <!-- Nhân viên mới -->
       <section id="tab-applicants" class="tab-section hidden">
         <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
-          <h2 class="text-xl font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-user-plus text-pink-500"></i> Nhân viên mới <span class="text-xs font-bold bg-pink-100 text-pink-700 px-2 py-1 rounded-full border border-pink-200">Google Form Sync</span></h2>
+          <h2 class="text-xl font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-user-plus text-pink-500"></i> Nhân viên mới <span class="text-xs font-bold bg-pink-100 text-pink-700 px-2 py-1 rounded-full border border-pink-200">Đồng bộ Google Form</span></h2>
           <div class="flex gap-2">
             <a href="https://docs.google.com/forms/d/e/1FAIpQLSd9rRG4QLvmLclPseVVmpgPdizij1XYwiSTCgc6x2BPMfA_AA/viewform" target="_blank" class="text-xs font-bold bg-white border border-pink-200 text-pink-700 px-3 py-2 rounded-xl hover:bg-pink-50 flex items-center gap-1"><i class="fa-solid fa-arrow-up-right-from-square"></i> Mở Form</a>
           </div>
@@ -412,12 +412,12 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
             <div class="flex items-center gap-2">
               <select id="empStoreFilter" class="px-3 py-1.5 rounded-xl bg-white border border-pink-200 text-xs font-bold text-pink-700 focus:border-pink-400 focus:ring-2 focus:ring-pink-100 outline-none" onchange="pagination.employees.page=1; renderEmployeesStore()">
                 <option value="">Tất cả trạng thái</option>
-                <option value="TRAINING">Training</option>
-                <option value="WAITING_TEST">Chờ TEST</option>
+                <option value="TRAINING">Thử việc</option>
+                <option value="WAITING_TEST">Chờ Kiểm tra</option>
                 <option value="RETEST">Chờ thi lại</option>
-                <option value="PASSED_TEST">Đậu TEST</option>
-                <option value="FAILED_TEST">FAILED</option>
-                <option value="ARCHIVED">ARCHIVED</option>
+                <option value="PASSED_TEST">Đậu Kiểm tra</option>
+                <option value="FAILED_TEST">Không đạt</option>
+                <option value="ARCHIVED">Đã lưu trữ</option>
               </select>
               <span id="empCountBadge" class="text-xs font-black bg-gradient-to-r from-pink-500 to-rose-500 text-white px-3 py-1 rounded-full shadow-xs">0 NV</span>
             </div>
@@ -449,24 +449,24 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
       <section id="tab-beta-workshop" class="tab-section hidden">
         <div class="bg-white rounded-2xl border border-pink-200 p-8 text-center shadow-sm">
           <div class="w-16 h-16 bg-pink-100 text-pink-600 rounded-2xl flex items-center justify-center mx-auto text-2xl"><i class="fa-solid fa-industry"></i></div>
-          <div class="font-black text-pink-900 mt-3">Nhân viên Xưởng — BETA</div>
-          <div class="text-sm text-slate-500 mt-1">Schema đã sẵn sàng (category=WORKSHOP). Chưa áp logic cửa hàng cứng, có thể mở rộng ca/xưởng riêng.</div>
+          <div class="font-black text-pink-900 mt-3">Nhân viên Xưởng — THỬ NGHIỆM</div>
+          <div class="text-sm text-slate-500 mt-1">Cấu trúc đã sẵn sàng (nhóm=Xưởng). Chưa áp logic cửa hàng cứng, có thể mở rộng ca/xưởng riêng.</div>
           <div id="betaWorkshopList" class="mt-4 grid md:grid-cols-3 gap-3 text-left"></div>
         </div>
       </section>
       <section id="tab-beta-office" class="tab-section hidden">
         <div class="bg-white rounded-2xl border border-pink-200 p-8 text-center shadow-sm">
           <div class="w-16 h-16 bg-pink-100 text-pink-600 rounded-2xl flex items-center justify-center mx-auto text-2xl"><i class="fa-solid fa-building"></i></div>
-          <div class="font-black text-pink-900 mt-3">Nhân viên Văn phòng — BETA</div>
-          <div class="text-sm text-slate-500 mt-1">Schema đã sẵn sàng (category=OFFICE). Tái sử dụng Employee/Schedule/Attendance/Request/Payroll.</div>
+          <div class="font-black text-pink-900 mt-3">Nhân viên Văn phòng — THỬ NGHIỆM</div>
+          <div class="text-sm text-slate-500 mt-1">Cấu trúc đã sẵn sàng (nhóm=Văn phòng). Tái sử dụng Nhân viên/Lịch/Điểm danh/Phiếu/Lương.</div>
           <div id="betaOfficeList" class="mt-4"></div>
         </div>
       </section>
       <section id="tab-beta-sale" class="tab-section hidden">
         <div class="bg-white rounded-2xl border border-pink-200 p-8 text-center shadow-sm">
           <div class="w-16 h-16 bg-pink-100 text-pink-600 rounded-2xl flex items-center justify-center mx-auto text-2xl"><i class="fa-solid fa-bullhorn"></i></div>
-          <div class="font-black text-pink-900 mt-3">Nhân viên Sale — BETA</div>
-          <div class="text-sm text-slate-500 mt-1">Schema đã sẵn sàng (category=SALE). Có thể tái sử dụng toàn bộ module.</div>
+          <div class="font-black text-pink-900 mt-3">Nhân viên Sale — THỬ NGHIỆM</div>
+          <div class="text-sm text-slate-500 mt-1">Cấu trúc đã sẵn sàng (nhóm=Sale). Có thể tái sử dụng toàn bộ chức năng.</div>
           <div id="betaSaleList" class="mt-4"></div>
         </div>
       </section>
@@ -586,10 +586,10 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
         </div>
       </section>
 
-      <!-- Record điểm danh -->
+      <!-- Bản ghi điểm danh -->
       <section id="tab-attendance" class="tab-section hidden">
         <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
-          <h2 class="text-xl font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-camera text-pink-500"></i> Record điểm danh</h2>
+          <h2 class="text-xl font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-camera text-pink-500"></i> Bản ghi điểm danh</h2>
           <div class="flex gap-2">
             <input id="attDate" type="date" class="px-3 py-2 rounded-xl border border-pink-200 text-xs">
             <select id="attBranch" class="px-3 py-2 rounded-xl border border-pink-200 text-xs font-bold"><option value="">Tất cả CN</option><option value="CN1">CN1 - 130 Vạn kiếp</option><option value="CN2">CN2 - 261 Tô Hiến Thành</option><option value="CN3">CN3 - 120 Hoàng Diệu 2</option><option value="CN4">CN4 - 111 Tôn Đản</option></select>
@@ -599,11 +599,11 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
         <div id="attendanceList" class="grid md:grid-cols-2 xl:grid-cols-3 gap-3"></div>
       </section>
 
-      <!-- Record Zalo -->
+      <!-- Lịch sử Zalo -->
       <section id="tab-zalo" class="tab-section hidden">
         <div class="flex items-center justify-between mb-4">
-          <h2 class="text-xl font-black text-pink-900 flex items-center gap-2"><i class="fa-brands fa-viber text-pink-500"></i> Record Zalo</h2>
-          <span class="text-xs font-bold bg-pink-100 text-pink-700 px-3 py-1 rounded-full border border-pink-200">QUEUED/SENT/DELIVERED/FAILED</span>
+          <h2 class="text-xl font-black text-pink-900 flex items-center gap-2"><i class="fa-brands fa-viber text-pink-500"></i> Lịch sử Zalo</h2>
+          <span class="text-xs font-bold bg-pink-100 text-pink-700 px-3 py-1 rounded-full border border-pink-200">ĐANG CHỜ/ĐÃ GỬI/ĐÃ NHẬN/LỖI</span>
         </div>
         <div class="bg-white rounded-2xl border border-pink-200 overflow-hidden shadow-sm">
           <div class="overflow-auto max-h-[70vh] scrollbar-thin">
@@ -723,7 +723,7 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
       <!-- Finance Keys - Kế toán -->
       <section id="tab-finance-keys" class="tab-section hidden">
         <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
-          <h2 class="text-xl font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-coins text-sky-500"></i> Finance Keys <span class="text-xs font-bold bg-sky-100 text-sky-700 px-2 py-1 rounded-full border border-sky-200">Kế toán • WEEK/MONTH/YEAR</span></h2>
+          <h2 class="text-xl font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-coins text-sky-500"></i> Khóa Tài chính <span class="text-xs font-bold bg-sky-100 text-sky-700 px-2 py-1 rounded-full border border-sky-200">Kế toán • TUẦN/THÁNG/NĂM</span></h2>
           <div class="flex gap-2 flex-wrap">
             <button onclick="generateFinanceKey('WEEK')" class="px-4 py-2 rounded-xl bg-blue-500 hover:bg-blue-600 text-white text-xs font-black shadow"><i class="fa-solid fa-plus"></i> Key Tuần (7 ngày)</button>
             <button onclick="generateFinanceKey('MONTH')" class="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-black shadow"><i class="fa-solid fa-plus"></i> Key Tháng</button>
@@ -736,8 +736,8 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
         </div>
         <div class="bg-white rounded-2xl border border-pink-200 overflow-hidden shadow-sm">
           <div class="p-3 border-b border-pink-100 flex justify-between items-center">
-            <span class="font-bold text-sm text-pink-900">Danh sách Finance Keys</span>
-            <span id="financeKeysCount" class="text-xs bg-sky-100 text-sky-700 px-2 py-1 rounded-full">0 keys</span>
+            <span class="font-bold text-sm text-pink-900">Danh sách Khóa Tài chính</span>
+            <span id="financeKeysCount" class="text-xs bg-sky-100 text-sky-700 px-2 py-1 rounded-full">0 khóa</span>
           </div>
           <div class="overflow-auto max-h-[60vh]">
             <table class="w-full text-sm">
@@ -751,7 +751,7 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
       <!-- E-learning -->
       <section id="tab-elearning" class="tab-section hidden">
         <div class="flex items-center justify-between mb-4">
-          <h2 class="text-xl font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-graduation-cap text-pink-500"></i> E-learning & TEST đầu ra</h2>
+          <h2 class="text-xl font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-graduation-cap text-pink-500"></i> Đào tạo & Kiểm tra đầu ra</h2>
           <span class="text-xs font-bold bg-pink-100 text-pink-700 px-3 py-1 rounded-full border border-pink-200">20 câu • ≥5s/câu • 100s tối thiểu</span>
         </div>
         <div class="grid lg:grid-cols-3 gap-4">
@@ -759,13 +759,13 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
             <div id="courseAdmin" class="space-y-3"></div>
           </div>
           <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm">
-            <div class="font-bold text-sm text-pink-900">Kết quả TEST gần đây</div>
+              <div class="font-bold text-sm text-pink-900">Kết quả Kiểm tra gần đây</div>
             <div id="testResultsAdmin" class="mt-3 space-y-2 max-h-[600px] overflow-auto scrollbar-thin"></div>
             <div class="mt-4 bg-pink-50 border border-pink-200 rounded-xl p-3 text-xs">
               <div class="font-black text-pink-900">Quy tắc chuyển trạng thái:</div>
               <div class="mt-1 space-y-1 font-medium">
-                <div class="flex justify-between"><span>&lt; 5</span><span class="font-bold text-rose-600">FAILED → ARCHIVED</span></div>
-                <div class="flex justify-between"><span>5 ≤ điểm ≤ 7</span><span class="font-bold text-pink-600">CHƯA ĐỦ ĐK • Giữ Training</span></div>
+                <div class="flex justify-between"><span>&lt; 5</span><span class="font-bold text-rose-600">KHÔNG ĐẠT → ĐÃ LƯU TRỮ</span></div>
+                <div class="flex justify-between"><span>5 ≤ điểm ≤ 7</span><span class="font-bold text-pink-600">CHƯA ĐỦ ĐK • Giữ Thử việc</span></div>
                 <div class="flex justify-between"><span>&gt; 7</span><span class="font-bold text-green-600">ĐẠT → Chính thức</span></div>
               </div>
             </div>
@@ -776,12 +776,12 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
       <!-- Cài đặt -->
       <section id="tab-google-sheet-hub" class="tab-section hidden">
         <div class="flex items-center justify-between mb-4">
-          <h2 class="text-xl font-black text-sky-900 flex items-center gap-2"><i class="fa-solid fa-database text-sky-500"></i> Google Sheet - Operational Data Hub</h2>
-          <span class="text-xs font-bold bg-sky-50 text-sky-700 border border-sky-200 px-3 py-1 rounded-full">1rcq • 17iXM • Finance</span>
+          <h2 class="text-xl font-black text-sky-900 flex items-center gap-2"><i class="fa-solid fa-database text-sky-500"></i> Google Sheet - Trung tâm Dữ liệu Vận hành</h2>
+          <span class="text-xs font-bold bg-sky-50 text-sky-700 border border-sky-200 px-3 py-1 rounded-full">1rcq • 17iXM • Tài chính</span>
         </div>
         <div class="grid lg:grid-cols-2 gap-4">
           <div class="bg-white rounded-2xl border border-sky-200 p-4 shadow-sm">
-            <div class="font-bold text-sm text-sky-900">Google Sheet - Operational Data Hub</div>
+            <div class="font-bold text-sm text-sky-900">Google Sheet - Trung tâm Dữ liệu Vận hành</div>
             <div class="mt-3 space-y-3 text-sm">
               <div><label class="text-xs font-bold text-pink-700">Sheet Database chính (Nguồn xuất ra 20 cột)</label><input id="setTargetDatabaseSheetId" class="w-full mt-1 px-3 py-2 rounded-xl border border-pink-200 text-sm font-bold text-pink-900 focus:border-pink-400 focus:ring-2 focus:ring-pink-100 outline-none" placeholder="1rcqEKraSRhr-Tn9qwlhADlkQUei8j65bXeHF_Tmkd38"></div>
               <div><label class="text-xs font-bold text-pink-700">Sheet nộp Form (Nguồn vào)</label><input id="setSheetId" class="w-full mt-1 px-3 py-2 rounded-xl border border-pink-200 text-sm focus:border-pink-400 focus:ring-2 focus:ring-pink-100 outline-none" placeholder="17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w"></div>
@@ -802,16 +802,16 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
           </div>
         </div>
         <div class="mt-4 flex gap-2">
-          <button onclick="saveSettings()" class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white font-black text-sm shadow"><i class="fa-solid fa-floppy-disk"></i> Lưu cài đặt (Audit Log)</button>
+          <button onclick="saveSettings()" class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white font-black text-sm shadow"><i class="fa-solid fa-floppy-disk"></i> Lưu cài đặt (Nhật ký hệ thống)</button>
           <button onclick="loadSettings()" class="px-6 py-2.5 rounded-xl bg-white border border-pink-200 font-bold text-sm text-pink-700">Tải lại</button>
-          <button onclick="resetSystem()" class="ml-auto px-6 py-2.5 rounded-xl bg-white border border-rose-200 hover:bg-rose-50 text-rose-600 font-bold text-sm"><i class="fa-solid fa-triangle-exclamation"></i> Reset hệ thống</button>
+          <button onclick="resetSystem()" class="ml-auto px-6 py-2.5 rounded-xl bg-white border border-rose-200 hover:bg-rose-50 text-rose-600 font-bold text-sm"><i class="fa-solid fa-triangle-exclamation"></i> Đặt lại hệ thống</button>
         </div>
       </section>
 
       <section id="tab-settings" class="tab-section hidden">
         <div class="flex items-center justify-between mb-4">
           <h2 class="text-xl font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-gear text-pink-500"></i> Cài đặt hệ thống</h2>
-          <span class="text-xs font-bold bg-white text-pink-700 border border-pink-200 px-3 py-1 rounded-full"><i class="fa-solid fa-lock text-pink-500"></i> Chỉ Admin • Secret masked</span>
+          <span class="text-xs font-bold bg-white text-pink-700 border border-pink-200 px-3 py-1 rounded-full"><i class="fa-solid fa-lock text-pink-500"></i> Chỉ Admin • Đã ẩn mã bí mật</span>
         </div>
         <div class="grid lg:grid-cols-2 gap-4">
           <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm">
@@ -860,25 +860,25 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
           </div>
         </div>
         <div class="mt-4 flex gap-2">
-          <button onclick="saveSettings()" class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white font-black text-sm shadow"><i class="fa-solid fa-floppy-disk"></i> Lưu cài đặt (Audit Log)</button>
+          <button onclick="saveSettings()" class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white font-black text-sm shadow"><i class="fa-solid fa-floppy-disk"></i> Lưu cài đặt (Nhật ký hệ thống)</button>
           <button onclick="loadSettings()" class="px-6 py-2.5 rounded-xl bg-white border border-pink-200 font-bold text-sm text-pink-700">Tải lại</button>
-          <button onclick="resetSystem()" class="ml-auto px-6 py-2.5 rounded-xl bg-white border border-rose-200 hover:bg-rose-50 text-rose-600 font-bold text-sm"><i class="fa-solid fa-triangle-exclamation"></i> Reset hệ thống</button>
+          <button onclick="resetSystem()" class="ml-auto px-6 py-2.5 rounded-xl bg-white border border-rose-200 hover:bg-rose-50 text-rose-600 font-bold text-sm"><i class="fa-solid fa-triangle-exclamation"></i> Đặt lại hệ thống</button>
         </div>
         <div class="mt-4 grid lg:grid-cols-2 gap-4">
           <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm">
             <div class="font-bold text-sm text-pink-900">Tài khoản & Phân quyền</div>
             <div class="mt-3 flex gap-2">
-              <input id="newUserName" placeholder="username" class="px-3 py-2 rounded-xl border border-pink-200 text-sm flex-1">
-              <input id="newUserPass" placeholder="password" class="px-3 py-2 rounded-xl border border-pink-200 text-sm flex-1">
+              <input id="newUserName" placeholder="tên đăng nhập" class="px-3 py-2 rounded-xl border border-pink-200 text-sm flex-1">
+              <input id="newUserPass" placeholder="mật khẩu" class="px-3 py-2 rounded-xl border border-pink-200 text-sm flex-1">
               <select id="newUserRole" class="px-3 py-2 rounded-xl border border-pink-200 text-sm"><option>HR</option><option>Manager</option><option>Umbomilk</option><option>Admin</option></select>
               <button onclick="createUser()" class="px-4 py-2 rounded-xl bg-pink-500 text-white text-sm font-bold hover:bg-pink-600">Tạo</button>
             </div>
             <div id="usersList" class="mt-3 space-y-2 max-h-[240px] overflow-auto scrollbar-thin"></div>
           </div>
           <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm">
-            <div class="font-bold text-sm text-pink-900">Sync Status & Audit</div>
+            <div class="font-bold text-sm text-pink-900">Trạng thái Đồng bộ & Nhật ký</div>
             <div class="mt-2 flex gap-2">
-              <button onclick="document.getElementById('tab-audit').scrollIntoView()" class="text-xs font-bold bg-pink-500 text-white px-3 py-1.5 rounded-full">Xem Audit Log</button>
+              <button onclick="document.getElementById('tab-audit').scrollIntoView()" class="text-xs font-bold bg-pink-500 text-white px-3 py-1.5 rounded-full">Xem Nhật ký hệ thống</button>
               <span class="text-xs bg-pink-50 text-pink-700 px-3 py-1.5 rounded-full font-bold border border-pink-200">Version + updated_at + source</span>
             </div>
             <div id="settingsSync" class="mt-3 space-y-2 max-h-[240px] overflow-auto scrollbar-thin"></div>
@@ -888,7 +888,7 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
 
       <!-- Audit standalone -->
       <section id="tab-audit" class="tab-section hidden">
-        <h2 class="text-xl font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-shield-halved text-pink-500"></i> Audit Log & Security</h2>
+        <h2 class="text-xl font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-shield-halved text-pink-500"></i> Nhật ký Hệ thống & Bảo mật</h2>
         <div class="bg-white rounded-2xl border border-pink-200 overflow-hidden mt-4 shadow-sm">
           <div class="overflow-auto max-h-[70vh] scrollbar-thin">
             <table class="w-full text-sm">

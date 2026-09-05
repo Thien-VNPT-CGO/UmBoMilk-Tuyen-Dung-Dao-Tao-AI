@@ -26,6 +26,13 @@ function getVietnamTodayStr(){
 function getVietnamNow(){
   return new Date(new Date().toLocaleString('en-US', {timeZone: 'Asia/Ho_Chi_Minh'}));
 }
+function getVietnamISOString(){
+  const vn = new Date().toLocaleString("sv-SE", {timeZone: "Asia/Ho_Chi_Minh"});
+  return vn.replace(" ", "T") + ".000+07:00";
+}
+function getVietnamDateTimeStr(){
+  return new Date().toLocaleString("en-CA", {timeZone: "Asia/Ho_Chi_Minh", hour12:false}).replace(",", "");
+}
 function toVietnamDateStr(date){
   const d = date instanceof Date ? date : new Date(date);
   return d.toLocaleDateString('en-CA', {timeZone: 'Asia/Ho_Chi_Minh'});
@@ -322,7 +329,7 @@ function saveDB() {
         db.attendances.slice(-50).forEach(a=>{ if(a.checkIn?.image && a.checkIn.image.length>50000) a.checkIn.image='[pruned]'; if(a.checkOut?.image && a.checkOut.image.length>50000) a.checkOut.image='[pruned]'; });
       }
     }catch(e){}
-    io.emit('db:update', { timestamp: new Date().toISOString() });
+    io.emit('db:update', { timestamp: getVietnamISOString() });
   } catch (e) { console.error('Save DB error', e); }
 }
 function initSeed() {
@@ -334,7 +341,7 @@ function initSeed() {
     { id: uuidv4(), username: 'umbomilk', password: bcrypt.hashSync('view123',10), role: 'Umbomilk', branchScope: ['CN1','CN2','CN3','CN4'], displayName: 'Umbomilk Viewer' }
   ];
   // Seed employees
-  const today = new Date();
+  const today = getVietnamNow();
   const dd = String(today.getDate()).padStart(2,'0');
   const mm = String(today.getMonth()+1).padStart(2,'0');
   const yyyy = today.getFullYear();
@@ -344,25 +351,25 @@ function initSeed() {
     return `${prefix}_UBM${dateStr}_NV${rnd}`;
   }
   db.employees = [
-    { id: uuidv4(), employeeId: genId('CN130'), name: 'Nguyễn Văn An', phone: '0901234567', branchId: 'CN1', shift: 'CA_SANG', startDate: '2026-08-10', endDate: '2026-08-17', trainingDays: 7, status: 'TRAINING', testScore: null, testResult: null, type: 'TRAINING', category: 'STORE', avatar: '', checkHistory: [], version:1, updated_at: new Date().toISOString(), updated_by:'SYSTEM', source:'WEB_HR', sync_status:'SYNCED' },
-    { id: uuidv4(), employeeId: genId('CN261'), name: 'Trần Thị Bích', phone: '0907654321', branchId: 'CN2', shift: 'CA_CHIEU', startDate: '2026-08-12', endDate: '2026-08-19', trainingDays: 7, status: 'WAITING_TEST', testScore: null, testResult: null, type: 'TRAINING', category: 'STORE', avatar: '', checkHistory: [], version:1, updated_at: new Date().toISOString(), updated_by:'SYSTEM', source:'WEB_HR', sync_status:'SYNCED' },
-    { id: uuidv4(), employeeId: genId('CN261'), name: 'Lê Văn Cường', phone: '0909998888', branchId: 'CN2', shift: 'CA_TOI', startDate: '2026-07-01', endDate: null, trainingDays: null, status: 'OFFICIAL', testScore: 8.5, testResult: 'DAT', type: 'OFFICIAL', category: 'STORE', avatar: '', checkHistory: [], version:2, updated_at: new Date().toISOString(), updated_by:'SYSTEM', source:'WEB_HR', sync_status:'SYNCED' },
-    { id: uuidv4(), employeeId: genId('CN120'), name: 'Phạm Thị Dung', phone: '0912345678', branchId: 'CN3', shift: 'CA_SANG', startDate: '2026-06-15', endDate: null, trainingDays: null, status: 'OFFICIAL', testScore: 9, testResult: 'DAT', type: 'OFFICIAL', category: 'STORE', avatar: '', checkHistory: [], version:2, updated_at: new Date().toISOString(), updated_by:'SYSTEM', source:'WEB_HR', sync_status:'SYNCED' },
-    { id: uuidv4(), employeeId: genId('CN111'), name: 'Hoàng Văn Em', phone: '0923456789', branchId: 'CN4', shift: 'CA_CHIEU', startDate: '2026-08-20', endDate: '2026-08-27', trainingDays: 7, status: 'TRAINING', testScore: 6, testResult: 'CHUA_DU_DK', type: 'TRAINING', category: 'STORE', avatar: '', checkHistory: [], version:1, updated_at: new Date().toISOString(), updated_by:'SYSTEM', source:'WEB_HR', sync_status:'SYNCED' }
+    { id: uuidv4(), employeeId: genId('CN130'), name: 'Nguyễn Văn An', phone: '0901234567', branchId: 'CN1', shift: 'CA_SANG', startDate: '2026-08-10', endDate: '2026-08-17', trainingDays: 7, status: 'TRAINING', testScore: null, testResult: null, type: 'TRAINING', category: 'STORE', avatar: '', checkHistory: [], version:1, updated_at: getVietnamISOString(), updated_by:'SYSTEM', source:'WEB_HR', sync_status:'SYNCED' },
+    { id: uuidv4(), employeeId: genId('CN261'), name: 'Trần Thị Bích', phone: '0907654321', branchId: 'CN2', shift: 'CA_CHIEU', startDate: '2026-08-12', endDate: '2026-08-19', trainingDays: 7, status: 'WAITING_TEST', testScore: null, testResult: null, type: 'TRAINING', category: 'STORE', avatar: '', checkHistory: [], version:1, updated_at: getVietnamISOString(), updated_by:'SYSTEM', source:'WEB_HR', sync_status:'SYNCED' },
+    { id: uuidv4(), employeeId: genId('CN261'), name: 'Lê Văn Cường', phone: '0909998888', branchId: 'CN2', shift: 'CA_TOI', startDate: '2026-07-01', endDate: null, trainingDays: null, status: 'OFFICIAL', testScore: 8.5, testResult: 'DAT', type: 'OFFICIAL', category: 'STORE', avatar: '', checkHistory: [], version:2, updated_at: getVietnamISOString(), updated_by:'SYSTEM', source:'WEB_HR', sync_status:'SYNCED' },
+    { id: uuidv4(), employeeId: genId('CN120'), name: 'Phạm Thị Dung', phone: '0912345678', branchId: 'CN3', shift: 'CA_SANG', startDate: '2026-06-15', endDate: null, trainingDays: null, status: 'OFFICIAL', testScore: 9, testResult: 'DAT', type: 'OFFICIAL', category: 'STORE', avatar: '', checkHistory: [], version:2, updated_at: getVietnamISOString(), updated_by:'SYSTEM', source:'WEB_HR', sync_status:'SYNCED' },
+    { id: uuidv4(), employeeId: genId('CN111'), name: 'Hoàng Văn Em', phone: '0923456789', branchId: 'CN4', shift: 'CA_CHIEU', startDate: '2026-08-20', endDate: '2026-08-27', trainingDays: 7, status: 'TRAINING', testScore: 6, testResult: 'CHUA_DU_DK', type: 'TRAINING', category: 'STORE', avatar: '', checkHistory: [], version:1, updated_at: getVietnamISOString(), updated_by:'SYSTEM', source:'WEB_HR', sync_status:'SYNCED' }
   ];
   // Keys for official
   db.keys = db.employees.filter(e=>e.status==='OFFICIAL').map(e=>({
-    id: uuidv4(), employeeId: e.employeeId, key: 'KEY-'+Math.random().toString(36).substring(2,10).toUpperCase(), deviceId: null, boundAt: null, status: 'ACTIVE', version:1, updated_at: new Date().toISOString(), sync_status:'SYNCED'
+    id: uuidv4(), employeeId: e.employeeId, key: 'KEY-'+Math.random().toString(36).substring(2,10).toUpperCase(), deviceId: null, boundAt: null, status: 'ACTIVE', version:1, updated_at: getVietnamISOString(), sync_status:'SYNCED'
   }));
   // also keys for training waiting
   db.employees.filter(e=>e.type==='TRAINING').forEach(e=>{
-    db.keys.push({ id: uuidv4(), employeeId: e.employeeId, key: 'KEY-'+Math.random().toString(36).substring(2,10).toUpperCase(), deviceId: null, boundAt: null, status: 'ACTIVE', version:1, updated_at: new Date().toISOString(), sync_status:'SYNCED' });
+    db.keys.push({ id: uuidv4(), employeeId: e.employeeId, key: 'KEY-'+Math.random().toString(36).substring(2,10).toUpperCase(), deviceId: null, boundAt: null, status: 'ACTIVE', version:1, updated_at: getVietnamISOString(), sync_status:'SYNCED' });
   });
   // Applicants
   db.applicants = [
-    { id: uuidv4(), name: 'Vũ Thị F', phone: '0931112222', email:'vu.f@gmail.com', branchPreference:'CN2', cvData:'Có kinh nghiệm pha chế 1 năm, giao tiếp tốt, sẵn sàng làm ca tối', aiScore: 85, aiBreakdown: [{criteria:'Kinh nghiệm',score:28, reason:'Có 1 năm pha chế'},{criteria:'Giao tiếp',score:22, reason:'Mô tả tốt'},{criteria:'Thái độ',score:20, reason:'Nhiệt tình'},{criteria:'Sẵn sàng ca',score:15, reason:'Chỉ ca tối'}], status:'NEW_APPLICANT', source_id:'form_'+uuidv4(), createdAt: new Date().toISOString(), version:1, sync_status:'SYNCED' },
-    { id: uuidv4(), name: 'Ngô Văn G', phone: '0933334444', email:'ngo.g@gmail.com', branchPreference:'CN1', cvData:'Sinh viên, chưa có kinh nghiệm, rảnh ca sáng', aiScore: 62, aiBreakdown: [{criteria:'Kinh nghiệm',score:15, reason:'Chưa có KN'},{criteria:'Giao tiếp',score:18, reason:'TB'},{criteria:'Thái độ',score:19, reason:'Tốt'},{criteria:'Sẵn sàng ca',score:10, reason:'Chỉ sáng'}], status:'INTERVIEW', source_id:'form_'+uuidv4(), createdAt: new Date().toISOString(), version:1, sync_status:'SYNCED' },
-    { id: uuidv4(), name: 'Đặng Thị H', phone: '0935556666', email:'dang.h@gmail.com', branchPreference:'CN3', cvData:'2 năm kinh nghiệm sales, giao tiếp xuất sắc', aiScore: 92, aiBreakdown: [{criteria:'Kinh nghiệm',score:30, reason:'Xuất sắc'},{criteria:'Giao tiếp',score:24, reason:'Rất tốt'},{criteria:'Thái độ',score:22, reason:'Tốt'},{criteria:'Sẵn sàng ca',score:16, reason:'Linh hoạt'}], status:'NEW_APPLICANT', source_id:'form_'+uuidv4(), createdAt: new Date().toISOString(), version:1, sync_status:'SYNCED' }
+    { id: uuidv4(), name: 'Vũ Thị F', phone: '0931112222', email:'vu.f@gmail.com', branchPreference:'CN2', cvData:'Có kinh nghiệm pha chế 1 năm, giao tiếp tốt, sẵn sàng làm ca tối', aiScore: 85, aiBreakdown: [{criteria:'Kinh nghiệm',score:28, reason:'Có 1 năm pha chế'},{criteria:'Giao tiếp',score:22, reason:'Mô tả tốt'},{criteria:'Thái độ',score:20, reason:'Nhiệt tình'},{criteria:'Sẵn sàng ca',score:15, reason:'Chỉ ca tối'}], status:'NEW_APPLICANT', source_id:'form_'+uuidv4(), createdAt: getVietnamISOString(), version:1, sync_status:'SYNCED' },
+    { id: uuidv4(), name: 'Ngô Văn G', phone: '0933334444', email:'ngo.g@gmail.com', branchPreference:'CN1', cvData:'Sinh viên, chưa có kinh nghiệm, rảnh ca sáng', aiScore: 62, aiBreakdown: [{criteria:'Kinh nghiệm',score:15, reason:'Chưa có KN'},{criteria:'Giao tiếp',score:18, reason:'TB'},{criteria:'Thái độ',score:19, reason:'Tốt'},{criteria:'Sẵn sàng ca',score:10, reason:'Chỉ sáng'}], status:'INTERVIEW', source_id:'form_'+uuidv4(), createdAt: getVietnamISOString(), version:1, sync_status:'SYNCED' },
+    { id: uuidv4(), name: 'Đặng Thị H', phone: '0935556666', email:'dang.h@gmail.com', branchPreference:'CN3', cvData:'2 năm kinh nghiệm sales, giao tiếp xuất sắc', aiScore: 92, aiBreakdown: [{criteria:'Kinh nghiệm',score:30, reason:'Xuất sắc'},{criteria:'Giao tiếp',score:24, reason:'Rất tốt'},{criteria:'Thái độ',score:22, reason:'Tốt'},{criteria:'Sẵn sàng ca',score:16, reason:'Linh hoạt'}], status:'NEW_APPLICANT', source_id:'form_'+uuidv4(), createdAt: getVietnamISOString(), version:1, sync_status:'SYNCED' }
   ];
   // Test course
   db.testCourses = [
@@ -383,11 +390,11 @@ function initSeed() {
         { id:'vs1', scenario:'Khách hỏi: Trà sữa có béo quá không em?', rubric: ['Hiểu nhu cầu','Kiến thức SP','Logic tư vấn','Xử lý phản đối','Thái độ']},
         { id:'vs2', scenario:'Khách phàn nàn: Sao đợi lâu vậy?', rubric: ['Hiểu nhu cầu','Kiến thức SP','Logic tư vấn','Xử lý phản đối','Thái độ']}
       ],
-      createdAt: new Date().toISOString()
+      createdAt: getVietnamISOString()
     }
   ];
   // Schedules example: generate for current week Mon-Sun
-  const weekStart = getMonday(new Date());
+  const weekStart = getMonday(getVietnamNow());
   db.employees.filter(e=>e.status==='OFFICIAL').forEach(emp=>{
     const days = [];
     for(let i=0;i<7;i++){
@@ -397,7 +404,7 @@ function initSeed() {
       const isOff = Math.random()<0.15;
       days.push({ date: dateStr, dayName: ['T2','T3','T4','T5','T6','T7','CN'][i], shift: emp.shift, status: isOff?'OFF':'WORKING', substituteFor: null });
     }
-    db.schedules.push({ id: uuidv4(), employeeId: emp.employeeId, weekStart: toVietnamDateStr(weekStart), days, version:1, updated_at: new Date().toISOString() });
+    db.schedules.push({ id: uuidv4(), employeeId: emp.employeeId, weekStart: toVietnamDateStr(weekStart), days, version:1, updated_at: getVietnamISOString() });
   });
   // Attendance mock cho NV chính thức - realtime đúng ca Vietnam (không tạo CA_TOI vào buổi sáng)
   const todayStr = getVietnamTodayStr();
@@ -421,14 +428,14 @@ function initSeed() {
     const drivePath = `NHAN_VIEN_CHINH_THUC/${branchFolder}/${emp.shift}/${emp.name} - ${emp.phone} - ${emp.employeeId}/${todayStr.split('-').reverse().join('-')}/CHECK_IN`;
     db.attendances.push({
       id: uuidv4(), employeeId: emp.employeeId, date: todayStr, shift: emp.shift,
-      checkIn: { time: checkTime, gps: '10.762622,106.660172', address: branch?.address||'130 Vạn Kiếp', image: '', drivePath, timestamp: new Date().toISOString() },
-      checkOut: null, status: 'CHECKED_IN', violations: [], branchId: emp.branchId, version:1, updated_at: new Date().toISOString(), sync_status:'SYNCED'
+      checkIn: { time: checkTime, gps: '10.762622,106.660172', address: branch?.address||'130 Vạn Kiếp', image: '', drivePath, timestamp: getVietnamISOString() },
+      checkOut: null, status: 'CHECKED_IN', violations: [], branchId: emp.branchId, version:1, updated_at: getVietnamISOString(), sync_status:'SYNCED'
     });
   });
   // Zalo records
   db.zaloRecords = [
-    { id: uuidv4(), sent_at: new Date().toISOString(), receiver: '0901234567', type: 'INTERVIEW_INVITE', content: 'Mời phỏng vấn tại CN2 261 Tô Hiến Thành lúc 09:00 29/08', status:'SENT', error:'' },
-    { id: uuidv4(), sent_at: new Date().toISOString(), receiver: '0907654321', type: 'TEST_RESULT', content: 'Chúc mừng bạn đạt 8.5 điểm', status:'DELIVERED', error:'' }
+    { id: uuidv4(), sent_at: getVietnamISOString(), receiver: '0901234567', type: 'INTERVIEW_INVITE', content: 'Mời phỏng vấn tại CN2 261 Tô Hiến Thành lúc 09:00 29/08', status:'SENT', error:'' },
+    { id: uuidv4(), sent_at: getVietnamISOString(), receiver: '0907654321', type: 'TEST_RESULT', content: 'Chúc mừng bạn đạt 8.5 điểm', status:'DELIVERED', error:'' }
   ];
   saveDB();
 }
@@ -569,7 +576,7 @@ console.log(`[CONFIG] Finance: ${db.settings.finance?.webhookUrl ? db.settings.f
     });
     // Chuyển FAILED do KEY/placeholder về trạng thái không lỗi
     db.syncQueue.forEach(i=>{
-      if(i.entity==='KEY' && (i.sync_status==='FAILED' || i.sync_status==='DEAD')){ i.sync_status='SYNCED'; delete i.error; i.note='Key embedded - auto fixed'; i.syncedAt=new Date().toISOString(); }
+      if(i.entity==='KEY' && (i.sync_status==='FAILED' || i.sync_status==='DEAD')){ i.sync_status='SYNCED'; delete i.error; i.note='Key embedded - auto fixed'; i.syncedAt=getVietnamISOString(); }
       if(isPH && i.error?.includes('placeholder') && i.sync_status==='FAILED'){ i.sync_status='UNCONFIGURED'; i.error='Webhook placeholder - dữ liệu lưu local, Sheets API 60s sẽ đồng bộ khi có ServiceAccount'; }
       if(i.error?.includes('No Google Sheet mapping for KEY')){ i.sync_status='SYNCED'; delete i.error; i.note='Key embedded'; }
     });
@@ -591,14 +598,14 @@ console.log(`[CONFIG] Finance: ${db.settings.finance?.webhookUrl ? db.settings.f
 
 // ============ HELPERS ============
 function audit(actor, action, entity, before, after, ip='127.0.0.1'){
-  const log = { id: uuidv4(), actor, action, entity, before, after, timestamp: new Date().toISOString(), ip, device: 'web' };
+  const log = { id: uuidv4(), actor, action, entity, before, after, timestamp: getVietnamISOString(), ip, device: 'web' };
   db.auditLogs.unshift(log);
   if(db.auditLogs.length>500) db.auditLogs.pop();
   saveDB();
   io.emit('audit:new', log);
 }
 function emitForceLogout(employeeId, reason='Tài khoản không tồn tại'){
-  const payload = { employeeId, reason, timestamp: new Date().toISOString() };
+  const payload = { employeeId, reason, timestamp: getVietnamISOString() };
   // Gửi tới room riêng + broadcast để web app nhân viên dù chưa join room vẫn nhận
   try{ io.to(`employee:${employeeId}`).emit('employee:forceLogout', payload); }catch(e){}
   io.emit('employee:forceLogout', payload);
@@ -674,7 +681,7 @@ function addSyncQueue(entity, operation, payload, actor, source='WEB_HR'){
     operation, 
     payload, 
     version: payload.version||1, 
-    updated_at: new Date().toISOString(), 
+    updated_at: getVietnamISOString(), 
     updated_by: actor, 
     source, 
     sync_status: initialStatus, 
@@ -687,14 +694,14 @@ function addSyncQueue(entity, operation, payload, actor, source='WEB_HR'){
   if(initialStatus==='SYNCED' && isKeyEntity){
     item.error = undefined;
     item.note = 'Key đã gộp vào dòng nhân viên (NHAN_VIEN_TRAINING/CHINH_THUC) - không cần sync riêng';
-    item.syncedAt = new Date().toISOString();
+    item.syncedAt = getVietnamISOString();
   }
   db.syncQueue.unshift(item);
   if(db.syncQueue.length>200) db.syncQueue.pop();
 
   if(initialStatus==='PENDING'){
     syncToGoogleSheet(item)
-      .then(()=>{ item.sync_status='SYNCED'; item.syncedAt=new Date().toISOString(); delete item.error; saveDB(); io.emit('sync:update', db.syncQueue); })
+      .then(()=>{ item.sync_status='SYNCED'; item.syncedAt=getVietnamISOString(); delete item.error; saveDB(); io.emit('sync:update', db.syncQueue); })
       .catch(err=>{
         // Nếu lỗi do placeholder thì đánh UNCONFIGURED thay vì FAILED để không thành DEAD
         if(err.message && err.message.includes('placeholder')){
@@ -713,8 +720,8 @@ function addSyncQueue(entity, operation, payload, actor, source='WEB_HR'){
 }
 function generateEmployeeId(branchId){
   const branch = db.branches.find(b=>b.id===branchId);
-  if(!branch) throw new Error('Branch not found');
-  const now = new Date();
+  if(!branch) throw new Error('Không tìm thấy chi nhánh');
+  const now = getVietnamNow();
   const dd = String(now.getDate()).padStart(2,'0');
   const mm = String(now.getMonth()+1).padStart(2,'0');
   const yyyy = now.getFullYear();
@@ -726,7 +733,7 @@ function generateEmployeeId(branchId){
     if(!db.employees.find(e=>e.employeeId===eid)) return eid;
     attempt++;
   }
-  throw new Error('Cannot generate unique ID');
+  throw new Error('Không th? t?o mô nhôn viôn duy nh?t');
 }
 function isOffWindowOpen(){
   // Dùng giờ Việt Nam (Asia/Ho_Chi_Minh, UTC+7) để realtime đúng với client VN
@@ -809,16 +816,16 @@ function validateOfficialMonthlyMin12(employeeId, monthStr, additionalOffDates){
 }
 function authMiddleware(req,res,next){
   const token = req.headers.authorization?.replace('Bearer ','');
-  if(!token) return res.status(401).json({error:'No token'});
+  if(!token) return res.status(401).json({error:'Chưa có token - vui lòng đăng nhập lại', code:'No token'});
   try{
     const decoded = jwt.verify(token, JWT_SECRET);
     req.user = decoded;
     next();
-  }catch(e){ return res.status(401).json({error:'Invalid token'}); }
+  }catch(e){ return res.status(401).json({error:'Token không hợp lệ - vui lòng đăng nhập lại', code:'Invalid token'}); }
 }
 function roleCheck(allowed){
   return (req,res,next)=>{
-    if(!allowed.includes(req.user.role)) return res.status(403).json({error:'Forbidden'});
+    if(!allowed.includes(req.user.role)) return res.status(403).json({error:'Không có quyền truy cập', code:'Forbidden'});
     next();
   };
 }
@@ -870,7 +877,7 @@ app.post('/api/auth/employee-login', authLimiter, (req,res)=>{
   }
   if(!keyRec.deviceId && deviceId){
     keyRec.deviceId = deviceId;
-    keyRec.boundAt = new Date().toISOString();
+    keyRec.boundAt = getVietnamISOString();
     audit(employeeId,'DEVICE_BIND','KEY',null,{employeeId, deviceId}, req.ip);
     addSyncQueue('KEY','UPDATE',keyRec, employeeId, 'WEB_EMPLOYEE');
     saveDB();
@@ -883,7 +890,7 @@ app.post('/api/auth/employee-login', authLimiter, (req,res)=>{
 // Ràng buộc: Kiểm tra tài khoản nhân viên còn tồn tại không (realtime logout)
 app.get('/api/employee/me', (req,res)=>{
   const token = req.headers.authorization?.replace('Bearer ','');
-  if(!token) return res.status(401).json({ error:'No token', forceLogout:true });
+  if(!token) return res.status(401).json({ error:'Chưa có token - vui lòng đăng nhập lại', code:'No token', forceLogout:true });
   try{
     const decoded = jwt.verify(token, JWT_SECRET);
     const emp = db.employees.find(e=> e.employeeId===decoded.employeeId);
@@ -901,10 +908,10 @@ app.post('/api/auth/device-request', (req,res)=>{
   const { employeeId, reason, deviceId } = req.body;
   if(!reason) return res.status(400).json({error:'Lý do là bắt buộc'});
   const emp = db.employees.find(e=>e.employeeId===employeeId);
-  if(!emp) return res.status(404).json({error:'Not found'});
+  if(!emp) return res.status(404).json({error:'Không tìm thấy'});
   const keyRec = db.keys.find(k=>k.employeeId===employeeId);
   const reqId = uuidv4();
-  const now = new Date();
+  const now = getVietnamNow();
   const expiresAt = new Date(now.getTime()+30*60000); // 30 min
   const dr = { id:reqId, employeeId, reason, newDeviceId: deviceId, oldDeviceId: keyRec? keyRec.deviceId:null, status:'PENDING', createdAt: now.toISOString(), expiresAt: expiresAt.toISOString(), version:1 };
   db.deviceRequests.unshift(dr);
@@ -917,7 +924,7 @@ app.post('/api/auth/device-request', (req,res)=>{
 });
 
 // ============ HEALTH & REALTIME ============
-app.get('/health', (req,res)=> res.json({ status:'ok', uptime: process.uptime(), timestamp: new Date().toISOString(), employees: db.employees.length, applicants: db.applicants.length, attendances: db.attendances.length, pendingDevices: db.deviceRequests.filter(r=>r.status==='PENDING').length, pendingEmerg: db.emergencyRequests.filter(r=>r.status==='PENDING').length }));
+app.get('/health', (req,res)=> res.json({ status:'ok', uptime: process.uptime(), timestamp: getVietnamISOString(), employees: db.employees.length, applicants: db.applicants.length, attendances: db.attendances.length, pendingDevices: db.deviceRequests.filter(r=>r.status==='PENDING').length, pendingEmerg: db.emergencyRequests.filter(r=>r.status==='PENDING').length }));
 app.get('/api/health', (req,res)=> res.json({ status:'ok', realtime: true, socket: io.engine.clientsCount, db: { employees: db.employees.length, applicants: db.applicants.length } }));
 
 // ============ BRANCHES ============
@@ -937,7 +944,7 @@ app.post('/api/drive/upload', authMiddleware, (req,res)=>{
   const { employeeId, date, type, fileName, base64 } = req.body;
   if(!employeeId || !date) return res.status(400).json({error:'Thiếu employeeId/date'});
   const f = addDriveFile(employeeId, date, type||'CHECK_IN', fileName||`capture_${Date.now()}.jpg`, { size: base64? base64.length : 0, uploader: req.user.username });
-  if(!f) return res.status(404).json({error:'Employee not found'});
+  if(!f) return res.status(404).json({error:'Không tìm thấy nhôn viôn'});
   saveDB();
   res.json(f);
 });
@@ -948,7 +955,7 @@ app.get('/api/sync/status', authMiddleware, (req,res)=>{
     failed: db.syncQueue.filter(s=>s.sync_status==='FAILED').length,
     synced: db.syncQueue.filter(s=>s.sync_status==='SYNCED').length,
     driveFiles: db.driveFiles.length,
-    lastHeartbeat: new Date().toISOString()
+    lastHeartbeat: getVietnamISOString()
   });
 });
 
@@ -978,8 +985,8 @@ app.post('/api/employees', authMiddleware, roleCheck(['Admin','HR']), (req,res)=
   if(!name||!phone||!branchId||!shift) return res.status(400).json({error:'Thiếu thông tin'});
   if(!db.branches.find(b=>b.id===branchId)) return res.status(400).json({error:'Chi nhánh không hợp lệ'});
   const employeeId = generateEmployeeId(branchId);
-  const now = new Date();
-  const end = new Date(); end.setDate(now.getDate()+7);
+  const now = getVietnamNow();
+  const end = getVietnamNow(); end.setDate(now.getDate()+7);
   const emp = {
     id: uuidv4(), employeeId, name, phone, branchId, shift,
     startDate: toVietnamDateStr(now),
@@ -1087,7 +1094,7 @@ app.post('/api/employees/import-official', authMiddleware, roleCheck(['Admin','H
           if(++attempts>5) break;
         }
       }
-      const now = new Date().toISOString();
+      const now = getVietnamISOString();
       const emp = {
         id: uuidv4(), employeeId, name, phone, branchId, shift,
         startDate,
@@ -1196,7 +1203,7 @@ app.post('/api/employees/import-training', authMiddleware, roleCheck(['Admin','H
         existing.status = statusIn.includes('OFFICIAL') ? 'OFFICIAL' : (statusIn || existing.status);
         existing.category = category;
         existing.version = (existing.version||1)+1;
-        existing.updated_at = new Date().toISOString();
+        existing.updated_at = getVietnamISOString();
         existing.updated_by = req.user.username;
         existing.sync_status='PENDING';
         results.updated++;
@@ -1211,7 +1218,7 @@ app.post('/api/employees/import-training', authMiddleware, roleCheck(['Admin','H
         if(!employeeId){
           try{ employeeId = generateEmployeeId(branchId); }catch(e){ results.errors.push({idx, reason:'Không sinh được Mã NV', row}); return; }
         }
-        const now = new Date().toISOString();
+        const now = getVietnamISOString();
         const emp = {
           id: uuidv4(), employeeId, name, phone, branchId, shift,
           startDate,
@@ -1242,11 +1249,11 @@ app.post('/api/employees/import-training', authMiddleware, roleCheck(['Admin','H
 });
 app.put('/api/employees/:id', authMiddleware, roleCheck(['Admin','HR','Manager']), (req,res)=>{
   const emp = db.employees.find(e=>e.id===req.params.id || e.employeeId===req.params.id);
-  if(!emp) return res.status(404).json({error:'Not found'});
+  if(!emp) return res.status(404).json({error:'Không tìm thấy'});
   const before = {...emp};
   Object.assign(emp, req.body);
   emp.version = (emp.version||1)+1;
-  emp.updated_at = new Date().toISOString();
+  emp.updated_at = getVietnamISOString();
   emp.updated_by = req.user.username;
   emp.sync_status = 'PENDING';
   audit(req.user.username,'UPDATE','EMPLOYEE',before,emp, req.ip);
@@ -1272,7 +1279,7 @@ app.delete('/api/employees/:id', authMiddleware, roleCheck(['Admin','HR']), (req
       if(norm) idx = db.employees.findIndex(e=> typeof normalizePhone==='function' && normalizePhone(e.phone)===norm);
     }catch(e){}
   }
-  if(idx===-1) return res.status(404).json({error:'Not found'});
+  if(idx===-1) return res.status(404).json({error:'Không tìm thấy'});
   const before = db.employees[idx];
   const isHard = req.query.hard === 'true';
   if(isHard){
@@ -1325,7 +1332,7 @@ app.post('/api/employees/:id/transition', authMiddleware, roleCheck(['Admin','HR
     if(empCheck && !req.user.branchScope.includes(empCheck.branchId)) return res.status(403).json({error:'Manager chỉ được thao tác chi nhánh được phân quyền'});
   }
   const emp = db.employees.find(e=>e.id===req.params.id || e.employeeId===req.params.id);
-  if(!emp) return res.status(404).json({error:'Not found'});
+  if(!emp) return res.status(404).json({error:'Không tìm thấy'});
   let { target, officialStartDate, shift: bodyShift } = req.body; // OFFICIAL etc
   if(!target && officialStartDate) target='OFFICIAL';
   if(!target) return res.status(400).json({error:'Thiếu target'});
@@ -1362,7 +1369,7 @@ app.post('/api/employees/:id/transition', authMiddleware, roleCheck(['Admin','HR
         return `${y}-${m}-${d}`;
       };
       const op = selDate.split('T')[0].split('-').map(Number);
-      const oStartD = (op.length === 3 && !isNaN(op[0])) ? new Date(op[0], op[1] - 1, op[2]) : new Date();
+      const oStartD = (op.length === 3 && !isNaN(op[0])) ? new Date(op[0], op[1] - 1, op[2]) : getVietnamNow();
       const weekMap = {};
       for (let i = 0; i < 28; i++) {
         const curr = new Date(oStartD);
@@ -1397,21 +1404,21 @@ app.post('/api/employees/:id/transition', authMiddleware, roleCheck(['Admin','HR
         if (existingSched) {
           existingSched.days = fullDays;
           existingSched.version = (existingSched.version || 1) + 1;
-          existingSched.updated_at = new Date().toISOString();
+          existingSched.updated_at = getVietnamISOString();
         } else {
-          db.schedules.push({ id: uuidv4(), employeeId: emp.employeeId, weekStart: wStart, days: fullDays, version: 1, updated_at: new Date().toISOString() });
+          db.schedules.push({ id: uuidv4(), employeeId: emp.employeeId, weekStart: wStart, days: fullDays, version: 1, updated_at: getVietnamISOString() });
         }
       }
     } else {
       // Không chọn ngày: tạo lịch tuần hiện tại như cũ
-      const weekStart = getMonday(new Date());
+      const weekStart = getMonday(getVietnamNow());
       const days = [];
       for(let i=0;i<7;i++){
         const d = new Date(weekStart); d.setDate(weekStart.getDate()+i);
         const dateStr = toVietnamDateStr(d);
         days.push({ date: dateStr, dayName: ['T2','T3','T4','T5','T6','T7','CN'][i], shift: emp.shift, status:'WORKING', substituteFor: null });
       }
-      db.schedules.push({ id: uuidv4(), employeeId: emp.employeeId, weekStart: toVietnamDateStr(weekStart), days, version:1, updated_at: new Date().toISOString() });
+      db.schedules.push({ id: uuidv4(), employeeId: emp.employeeId, weekStart: toVietnamDateStr(weekStart), days, version:1, updated_at: getVietnamISOString() });
     }
     audit(req.user.username,isFuture?'TRANSITION_WAITING_OFFICIAL':'TRANSITION_OFFICIAL','EMPLOYEE',before,emp, req.ip);
   } else {
@@ -1419,7 +1426,7 @@ app.post('/api/employees/:id/transition', authMiddleware, roleCheck(['Admin','HR
     audit(req.user.username,'TRANSITION','EMPLOYEE',before,emp, req.ip);
   }
   emp.version = (emp.version||1)+1;
-  emp.updated_at = new Date().toISOString();
+  emp.updated_at = getVietnamISOString();
   emp.sync_status='PENDING';
   addSyncQueue('EMPLOYEE','UPDATE',emp, req.user.username, 'WEB_HR');
   saveDB();
@@ -1640,7 +1647,7 @@ async function syncOutboundToMasterDatabaseSheet(applicant) {
 
   const row = [
     applicant.id,
-    applicant.createdAt || new Date().toISOString(),
+    applicant.createdAt || getVietnamISOString(),
     applicant.name || '',
     applicant.gender || '',
     applicant.birthYear || '',
@@ -1655,7 +1662,7 @@ async function syncOutboundToMasterDatabaseSheet(applicant) {
     applicant.source || '',
     resultText,
     applicant.version || 1,
-    new Date().toISOString(),
+    getVietnamISOString(),
     'AI_SYSTEM',
     'SYNCED',
     computeDataHash(applicant)
@@ -1669,7 +1676,7 @@ async function syncOutboundToMasterDatabaseSheet(applicant) {
     applicantId: applicant.id,
     applicantName: applicant.name,
     status: 'SUCCESS',
-    timestamp: new Date().toISOString(),
+    timestamp: getVietnamISOString(),
     rowPayload: row
   };
   db.syncQueue.unshift(syncItem);
@@ -1755,7 +1762,7 @@ app.post('/api/applicants', (req,res)=>{
     gender: gender||'', birthYear: birthYear||'', education: education||'', hometown: hometown||'',
     shiftPreference: shift||'CA_SANG', shiftText: shiftPreference||'',
     experience: experience||'', handling: handling||'', facebook: facebook||'', source: source||'',
-    aiScore: null, aiBreakdown: [], status:'NEW_APPLICANT', source_id, createdAt: new Date().toISOString(), version:1, sync_status:'PENDING',
+    aiScore: null, aiBreakdown: [], status:'NEW_APPLICANT', source_id, createdAt: getVietnamISOString(), version:1, sync_status:'PENDING',
     rawData: req.body
   };
   applicant = runAIScoring(applicant);
@@ -1764,7 +1771,7 @@ app.post('/api/applicants', (req,res)=>{
   saveDB();
   io.emit('applicants:update', db.applicants);
   // Zalo notify
-  const zr = { id: uuidv4(), sent_at: new Date().toISOString(), receiver: phone||'unknown', type:'NEW_APPLICANT', content:`[FORM] Ứng viên mới: ${name} - ${phone} - ${branchId} (AI: ${applicant.aiScore} điểm)`, status:'SENT', error:'' };
+  const zr = { id: uuidv4(), sent_at: getVietnamISOString(), receiver: phone||'unknown', type:'NEW_APPLICANT', content:`[FORM] Ứng viên mới: ${name} - ${phone} - ${branchId} (AI: ${applicant.aiScore} điểm)`, status:'SENT', error:'' };
   db.zaloRecords.unshift(zr);
   io.emit('zalo:update', db.zaloRecords);
   res.json(applicant);
@@ -1816,21 +1823,21 @@ app.post('/api/recruitment/form-submit', (req,res)=>{
     gender: mapped.gender||'', birthYear: mapped.birthYear||'', education: mapped.education||'', hometown: mapped.hometown||'',
     shiftPreference: shift||'CA_SANG', shiftText: mapped.shiftPreference||'',
     experience: mapped.experience||'', handling: mapped.handling||'', facebook: mapped.facebook||'', source: mapped.source||'',
-    aiScore: null, aiBreakdown: [], status:'NEW_APPLICANT', source_id:'form_'+uuidv4(), createdAt: new Date().toISOString(), version:1, sync_status:'SYNCED', rawData: mapped
+    aiScore: null, aiBreakdown: [], status:'NEW_APPLICANT', source_id:'form_'+uuidv4(), createdAt: getVietnamISOString(), version:1, sync_status:'SYNCED', rawData: mapped
   };
   applicant = runAIScoring(applicant);
   db.applicants.push(applicant);
   addSyncQueue('APPLICANT','CREATE',applicant,'SYSTEM','FORM');
   saveDB();
   io.emit('applicants:update', db.applicants);
-  const zr = { id: uuidv4(), sent_at: new Date().toISOString(), receiver: mapped.phone, type:'NEW_APPLICANT', content:`[FORM] ${mapped.name} - ${mapped.phone} - ${branchId} (AI: ${applicant.aiScore} điểm)`, status:'SENT', error:'' };
+  const zr = { id: uuidv4(), sent_at: getVietnamISOString(), receiver: mapped.phone, type:'NEW_APPLICANT', content:`[FORM] ${mapped.name} - ${mapped.phone} - ${branchId} (AI: ${applicant.aiScore} điểm)`, status:'SENT', error:'' };
   db.zaloRecords.unshift(zr);
   io.emit('zalo:update', db.zaloRecords);
   res.json({success:true, applicant});
 });
 app.post('/api/applicants/:id/score', authMiddleware, (req,res)=>{
   const appRec = db.applicants.find(a=>a.id===req.params.id);
-  if(!appRec) return res.status(404).json({error:'Not found'});
+  if(!appRec) return res.status(404).json({error:'Không tìm thấy'});
 
   if (req.body.score != null || req.body.aiScore != null) {
     appRec.aiScore = req.body.score ?? req.body.aiScore;
@@ -1872,7 +1879,7 @@ async function sendZaloBotNotification(payload) {
   const { phone, name, content, type } = payload;
   const cfg = (db.settings && db.settings.zalo) ? db.settings.zalo : {};
   const recordId = uuidv4();
-  const timestamp = new Date().toISOString();
+  const timestamp = getVietnamISOString();
 
   const zr = {
     id: recordId,
@@ -2017,7 +2024,7 @@ app.post('/api/applicants/:id/schedule-interview', authMiddleware, async (req, r
     interview.meetLink = generatedMeet;
     interview.notes = notes || '';
     interview.scheduledBy = req.user.username;
-    interview.updatedAt = new Date().toISOString();
+    interview.updatedAt = getVietnamISOString();
   } else {
     interview = {
       id: uuidv4(),
@@ -2033,7 +2040,7 @@ app.post('/api/applicants/:id/schedule-interview', authMiddleware, async (req, r
       scheduledBy: req.user.username,
       status: 'SCHEDULED',
       reminderSent: false,
-      createdAt: new Date().toISOString()
+      createdAt: getVietnamISOString()
     };
     db.interviews.push(interview);
   }
@@ -2066,7 +2073,7 @@ app.post('/api/applicants/:id/schedule-interview', authMiddleware, async (req, r
 // Background 30-Minute Prior Interview Reminder Poller + Auto-PASS after meet ends
 setInterval(async () => {
   if (!db.interviews || db.interviews.length === 0) return;
-  const now = new Date();
+  const now = getVietnamNow();
   const nowMs = now.getTime();
 
   for (const inv of db.interviews) {
@@ -2109,8 +2116,8 @@ setInterval(async () => {
             const before = { ...appRec };
             appRec.status = 'PASS';
             appRec.version = (appRec.version || 1) + 1;
-            appRec.updated_at = new Date().toISOString();
-            appRec.passedAt = new Date().toISOString();
+            appRec.updated_at = getVietnamISOString();
+            appRec.passedAt = getVietnamISOString();
             appRec.passSource = 'AUTO_MEET_END';
             inv.autoPassTriggered = true;
             inv.status = 'COMPLETED';
@@ -2146,15 +2153,15 @@ setInterval(async () => {
 
 app.post('/api/applicants/:id/status', authMiddleware, (req,res)=>{
   const appRec = db.applicants.find(a=>a.id===req.params.id);
-  if(!appRec) return res.status(404).json({error:'Not found'});
+  if(!appRec) return res.status(404).json({error:'Không tìm thấy'});
   const { status } = req.body;
   const before = {...appRec};
   appRec.status = status;
   appRec.version = (appRec.version||1)+1;
-  appRec.updated_at = new Date().toISOString();
+  appRec.updated_at = getVietnamISOString();
   if(status==='PASS'){
     // Create calendar event mock + zalo
-    const zr = { id: uuidv4(), sent_at: new Date().toISOString(), receiver: appRec.phone, type:'INTERVIEW_INVITE', content:`Mời ${appRec.name} phỏng vấn tại ${db.branches.find(b=>b.id===appRec.branchPreference)?.address||'CN2'} - Meet link: https://meet.google.com/${Math.random().toString(36).substring(2,10)}`, status:'QUEUED', error:'' };
+    const zr = { id: uuidv4(), sent_at: getVietnamISOString(), receiver: appRec.phone, type:'INTERVIEW_INVITE', content:`Mời ${appRec.name} phỏng vấn tại ${db.branches.find(b=>b.id===appRec.branchPreference)?.address||'CN2'} - Meet link: https://meet.google.com/${Math.random().toString(36).substring(2,10)}`, status:'QUEUED', error:'' };
     db.zaloRecords.unshift(zr);
     setTimeout(()=>{ zr.status='SENT'; io.emit('zalo:update', db.zaloRecords); saveDB(); }, 1500);
     io.emit('zalo:update', db.zaloRecords);
@@ -2168,7 +2175,7 @@ app.post('/api/applicants/:id/status', authMiddleware, (req,res)=>{
 });
 app.post('/api/applicants/:id/convert', authMiddleware, (req,res)=>{
   const appRec = db.applicants.find(a=>a.id===req.params.id);
-  if(!appRec) return res.status(404).json({error:'Not found'});
+  if(!appRec) return res.status(404).json({error:'Không tìm thấy'});
 
   const branchId = req.body.branchId || appRec.branchPreference || 'CN2';
   const employeeId = generateEmployeeId(branchId);
@@ -2189,11 +2196,11 @@ app.post('/api/applicants/:id/convert', authMiddleware, (req,res)=>{
     id: uuidv4(), employeeId, name: appRec.name, phone: appRec.phone, branchId, shift: shiftFromForm,
     startDate: startDateStr, endDate: endDateStr,
     trainingDays, status:'TRAINING', testScore:null, testResult:null, type:'TRAINING', category:'STORE', avatar:'', checkHistory:[],
-    version:1, updated_at: new Date().toISOString(), updated_by: req.user.username, source:'WEB_HR', sync_status:'PENDING'
+    version:1, updated_at: getVietnamISOString(), updated_by: req.user.username, source:'WEB_HR', sync_status:'PENDING'
   };
   db.employees.push(emp);
 
-  const key = { id: uuidv4(), employeeId, key: 'KEY-'+Math.random().toString(36).substring(2,10).toUpperCase(), deviceId:null, boundAt:null, status:'ACTIVE', version:1, updated_at: new Date().toISOString(), sync_status:'PENDING' };
+  const key = { id: uuidv4(), employeeId, key: 'KEY-'+Math.random().toString(36).substring(2,10).toUpperCase(), deviceId:null, boundAt:null, status:'ACTIVE', version:1, updated_at: getVietnamISOString(), sync_status:'PENDING' };
   db.keys.push(key);
 
   // Auto-generate schedules in db.schedules for Tab Lịch làm việc
@@ -2280,7 +2287,7 @@ app.post('/api/applicants/:id/convert', authMiddleware, (req,res)=>{
     if (existingSched) {
       existingSched.days = fullDays;
       existingSched.version = (existingSched.version || 1) + 1;
-      existingSched.updated_at = new Date().toISOString();
+      existingSched.updated_at = getVietnamISOString();
     } else {
       const newSched = {
         id: uuidv4(),
@@ -2288,7 +2295,7 @@ app.post('/api/applicants/:id/convert', authMiddleware, (req,res)=>{
         weekStart: wStart,
         days: fullDays,
         version: 1,
-        updated_at: new Date().toISOString()
+        updated_at: getVietnamISOString()
       };
       db.schedules.push(newSched);
     }
@@ -2495,7 +2502,7 @@ app.post('/api/admin/sync-from-sheet', authMiddleware, roleCheck(['Admin']), asy
       avatar:'',
       checkHistory:[],
       version,
-      updated_at: new Date().toISOString(),
+      updated_at: getVietnamISOString(),
       updated_by: req.user.username,
       source:'SYNC_FROM_SHEET',
       sync_status:'SYNCED'
@@ -2510,12 +2517,12 @@ app.post('/api/admin/sync-from-sheet', authMiddleware, roleCheck(['Admin']), asy
     let keyRec = db.keys.find(k=>k.employeeId===cleanId);
     const finalKey = keyFromSheet && keyFromSheet.length>=6 ? keyFromSheet : (keyRec?.key || 'KEY-'+Math.random().toString(36).substring(2,10).toUpperCase());
     if(!keyRec){
-      keyRec = { id: uuidv4(), employeeId: cleanId, key: finalKey, deviceId:null, boundAt:null, status:'ACTIVE', version:1, updated_at: new Date().toISOString(), sync_status:'SYNCED' };
+      keyRec = { id: uuidv4(), employeeId: cleanId, key: finalKey, deviceId:null, boundAt:null, status:'ACTIVE', version:1, updated_at: getVietnamISOString(), sync_status:'SYNCED' };
       db.keys.push(keyRec);
     } else {
       keyRec.key = finalKey;
       keyRec.status='ACTIVE';
-      keyRec.updated_at = new Date().toISOString();
+      keyRec.updated_at = getVietnamISOString();
     }
     saveDB();
     io.emit('employees:update', db.employees);
@@ -2757,7 +2764,7 @@ function syncLiveGoogleSheetCSV(spreadsheetId, sheetName) {
               aiBreakdown: [],
               status: 'NEW_APPLICANT',
               source_id: 'sheet_live_' + uuidv4(),
-              createdAt: new Date().toISOString(),
+              createdAt: getVietnamISOString(),
               version: 1,
               sync_status: 'SYNCED',
               rawData: { row }
@@ -2798,7 +2805,7 @@ app.post('/api/recruitment/sync-form', authMiddleware, async (req,res)=>{
   const formSid = cfg.formResponsesSheetId || cfg.spreadsheetId || '1rcqEKraSRhr-Tn9qwlhADlkQUei8j65bXeHF_Tmkd38';
   const targetDbId = cfg.targetDatabaseSpreadsheetId || '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w';
   const added = await syncLiveGoogleSheetCSV(formSid);
-  const q = { id: uuidv4(), entity:'APPLICANT', operation:'SYNC_SHEET_REAL', payload:{added, addedForm:0, spreadsheetId: formSid, targetDatabaseSpreadsheetId: targetDbId}, version:1, updated_at: new Date().toISOString(), updated_by:req.user.username, source:'SHEET_FORM', sync_status:'SYNCED' };
+  const q = { id: uuidv4(), entity:'APPLICANT', operation:'SYNC_SHEET_REAL', payload:{added, addedForm:0, spreadsheetId: formSid, targetDatabaseSpreadsheetId: targetDbId}, version:1, updated_at: getVietnamISOString(), updated_by:req.user.username, source:'SHEET_FORM', sync_status:'SYNCED' };
   db.syncQueue.unshift(q);
   saveDB();
   io.emit('applicants:update', db.applicants);
@@ -2870,7 +2877,7 @@ app.get('/api/keys', authMiddleware, (req,res)=>{
 app.post('/api/keys/generate', authMiddleware, (req,res)=>{
   const { employeeId } = req.body;
   const emp = db.employees.find(e=>e.employeeId===employeeId);
-  if(!emp) return res.status(404).json({error:'Employee not found'});
+  if(!emp) return res.status(404).json({error:'Không tìm thấy nhôn viôn'});
   let keyRec = db.keys.find(k=>k.employeeId===employeeId);
   const newKey = 'KEY-'+Math.random().toString(36).substring(2,10).toUpperCase();
   if(keyRec){
@@ -2879,10 +2886,10 @@ app.post('/api/keys/generate', authMiddleware, (req,res)=>{
     keyRec.deviceId = null;
     keyRec.boundAt = null;
     keyRec.version = (keyRec.version||1)+1;
-    keyRec.updated_at = new Date().toISOString();
+    keyRec.updated_at = getVietnamISOString();
     audit(req.user.username,'REGENERATE_KEY','KEY',before,keyRec, req.ip);
   } else {
-    keyRec = { id: uuidv4(), employeeId, key: newKey, deviceId:null, boundAt:null, status:'ACTIVE', version:1, updated_at: new Date().toISOString(), sync_status:'PENDING' };
+    keyRec = { id: uuidv4(), employeeId, key: newKey, deviceId:null, boundAt:null, status:'ACTIVE', version:1, updated_at: getVietnamISOString(), sync_status:'PENDING' };
     db.keys.push(keyRec);
     audit(req.user.username,'CREATE_KEY','KEY',null,keyRec, req.ip);
   }
@@ -2893,12 +2900,12 @@ app.post('/api/keys/generate', authMiddleware, (req,res)=>{
 });
 app.post('/api/keys/:id/revoke', authMiddleware, (req,res)=>{
   const keyRec = db.keys.find(k=>k.id===req.params.id);
-  if(!keyRec) return res.status(404).json({error:'Not found'});
+  if(!keyRec) return res.status(404).json({error:'Không tìm thấy'});
   const before = {...keyRec};
   keyRec.deviceId=null;
   keyRec.boundAt=null;
   keyRec.version=(keyRec.version||1)+1;
-  keyRec.updated_at=new Date().toISOString();
+  keyRec.updated_at=getVietnamISOString();
   audit(req.user.username,'REVOKE_KEY','KEY',before,keyRec, req.ip);
   addSyncQueue('KEY','UPDATE',keyRec, req.user.username, 'WEB_HR');
   saveDB();
@@ -2918,8 +2925,8 @@ app.get('/api/device-requests', authMiddleware, (req,res)=>{
 });
 app.post('/api/device-requests/:id/approve', authMiddleware, (req,res)=>{
   const dr = db.deviceRequests.find(d=>d.id===req.params.id);
-  if(!dr) return res.status(404).json({error:'Not found'});
-  if(dr.status!=='PENDING') return res.status(400).json({error:'Already processed'});
+  if(!dr) return res.status(404).json({error:'Không tìm thấy'});
+  if(dr.status!=='PENDING') return res.status(400).json({error:'Đã xử lý rồi'});
   const keyRec = db.keys.find(k=>k.employeeId===dr.employeeId);
   if(keyRec){
     keyRec.deviceId=null;
@@ -2930,7 +2937,7 @@ app.post('/api/device-requests/:id/approve', authMiddleware, (req,res)=>{
   }
   dr.status='APPROVED';
   dr.approvedBy=req.user.username;
-  dr.approvedAt=new Date().toISOString();
+  dr.approvedAt=getVietnamISOString();
   saveDB();
   io.emit('deviceRequests:update', db.deviceRequests);
   io.emit('keys:update', db.keys);
@@ -2938,10 +2945,10 @@ app.post('/api/device-requests/:id/approve', authMiddleware, (req,res)=>{
 });
 app.post('/api/device-requests/:id/reject', authMiddleware, (req,res)=>{
   const dr = db.deviceRequests.find(d=>d.id===req.params.id);
-  if(!dr) return res.status(404).json({error:'Not found'});
+  if(!dr) return res.status(404).json({error:'Không tìm thấy'});
   dr.status='REJECTED';
   dr.rejectedBy=req.user.username;
-  dr.rejectedAt=new Date().toISOString();
+  dr.rejectedAt=getVietnamISOString();
   audit(req.user.username,'REJECT_DEVICE_RESET','DEVICE',null,dr, req.ip);
   saveDB();
   io.emit('deviceRequests:update', db.deviceRequests);
@@ -2968,7 +2975,7 @@ app.get('/api/attendance/official-monthly', (req,res)=>{
   const { employeeId, month } = req.query; // month "2026-08"
   if(!employeeId || !month) return res.status(400).json({error:'Thiếu employeeId hoặc month (YYYY-MM)'});
   const emp = db.employees.find(e=>e.employeeId===employeeId);
-  if(!emp) return res.status(404).json({error:'Employee not found'});
+  if(!emp) return res.status(404).json({error:'Không tìm thấy nhôn viôn'});
   if(emp.type!=='OFFICIAL' && emp.status!=='OFFICIAL') return res.status(403).json({error:'Chỉ áp dụng cho Nhân viên Chính thức'});
   const stats = getOfficialMonthlyStats(employeeId, month);
   res.json(stats);
@@ -2985,7 +2992,7 @@ app.post('/api/employee/register-off', (req, res) => {
 
   const startDateStr = emp.startDate || getVietnamTodayStr();
   const parts = startDateStr.split('T')[0].split('-').map(Number);
-  const startD = (parts.length === 3 && !isNaN(parts[0])) ? new Date(parts[0], parts[1] - 1, parts[2]) : new Date();
+  const startD = (parts.length === 3 && !isNaN(parts[0])) ? new Date(parts[0], parts[1] - 1, parts[2]) : getVietnamNow();
 
   // Compute 12 trial dates
   const trialDates = [];
@@ -3072,7 +3079,7 @@ app.post('/api/employee/register-off', (req, res) => {
     if (existingSched) {
       existingSched.days = fullDays;
       existingSched.version = (existingSched.version || 1) + 1;
-      existingSched.updated_at = new Date().toISOString();
+      existingSched.updated_at = getVietnamISOString();
     } else {
       db.schedules.push({
         id: uuidv4(),
@@ -3080,7 +3087,7 @@ app.post('/api/employee/register-off', (req, res) => {
         weekStart: wStart,
         days: fullDays,
         version: 1,
-        updated_at: new Date().toISOString()
+        updated_at: getVietnamISOString()
       });
     }
   }
@@ -3151,9 +3158,9 @@ function realtimeAutomationPoller(){
       const candidates2 = db.employees.filter(e=>e.branchId===r.branchId && e.shift!==r.shift && e.employeeId!==r.employeeId && e.status==='OFFICIAL');
       if(candidates2.length>0){
         candidates2.forEach(c=>{
-          const zr = { id: uuidv4(), sent_at: new Date().toISOString(), receiver: c.phone, type:'SUBSTITUTE_INVITE_STEP2_POLL', content:`[TH3-B2 Poller] Mời thay ca cho ${r.employeeName} ngày ${r.date} - Phản hồi trong 30 phút`, status:'SENT', error:'' };
+          const zr = { id: uuidv4(), sent_at: getVietnamISOString(), receiver: c.phone, type:'SUBSTITUTE_INVITE_STEP2_POLL', content:`[TH3-B2 Poller] Mời thay ca cho ${r.employeeName} ngày ${r.date} - Phản hồi trong 30 phút`, status:'SENT', error:'' };
           db.zaloRecords.unshift(zr);
-          db.notifications.unshift({ id: uuidv4(), to: c.employeeId, type:'SUBSTITUTE_INVITE', title:'[TH3] Mời thay ca (khác ca) - Poller', content:`Mời thay ca khác ca cho ${r.employeeName} ngày ${r.date} ca ${r.shift}.`, requestId: r.id, step:2, createdAt: new Date().toISOString(), read:false });
+          db.notifications.unshift({ id: uuidv4(), to: c.employeeId, type:'SUBSTITUTE_INVITE', title:'[TH3] Mời thay ca (khác ca) - Poller', content:`Mời thay ca khác ca cho ${r.employeeName} ngày ${r.date} ca ${r.shift}.`, requestId: r.id, step:2, createdAt: getVietnamISOString(), read:false });
         });
         io.emit('zalo:update', db.zaloRecords);
         io.emit('notifications:update', db.notifications);
@@ -3176,7 +3183,7 @@ function realtimeAutomationPoller(){
       const ws = toVietnamDateStr(getMonday(new Date(r.date)));
       const sched = db.schedules.find(s=>s.employeeId===r.employeeId && s.weekStart===ws);
       if(sched){ const day=sched.days.find(d=>d.date===r.date); if(day && day.status==='EMERGENCY_PENDING'){ day.status='WORKING'; day.shift = db.employees.find(e=>e.employeeId===r.employeeId)?.shift || 'CA_SANG'; } }
-      const zr = { id: uuidv4(), sent_at: new Date().toISOString(), receiver: db.employees.find(e=>e.employeeId===r.employeeId)?.phone, type:'EMERGENCY_REJECTED', content:`[TH3 Poller] OFF đột xuất ngày ${r.date} bị HỦY do không có người thay`, status:'SENT', error:'' };
+      const zr = { id: uuidv4(), sent_at: getVietnamISOString(), receiver: db.employees.find(e=>e.employeeId===r.employeeId)?.phone, type:'EMERGENCY_REJECTED', content:`[TH3 Poller] OFF đột xuất ngày ${r.date} bị HỦY do không có người thay`, status:'SENT', error:'' };
       db.zaloRecords.unshift(zr);
       io.emit('emergencyRequests:update', db.emergencyRequests);
       io.emit('zalo:update', db.zaloRecords);
@@ -3195,7 +3202,7 @@ function realtimeAutomationPoller(){
         financeChanged=true;
         console.log(`[AUTO] FinanceKey ${k.key} EXPIRED (${k.type})`);
         // emit force logout for finance clients
-        io.emit('finance:forceLogout', { key: k.key, reason: `Key ${k.key} đã hết hạn (${k.type}) - ${k.expiresAt}` });
+        io.emit('finance:forceLogout', { key: k.key, reason: `Key ${k.key} đã hết hạn (${k.type}) - vui lòng xin key mới - ${k.expiresAt}` });
       }
     });
     if(financeChanged){ saveDB(); io.emit('financeKeys:update', db.financeKeys); changed=true; }
@@ -3204,7 +3211,7 @@ function realtimeAutomationPoller(){
   let trainingChanged=false;
   db.trainingShiftRequests.forEach(r=>{
     if(r.status==='PENDING' && r.expiresAt && new Date(r.expiresAt).getTime() <= now){
-      r.status='APPROVED'; r.approvedBy='AUTO_15P'; r.approvedAt=new Date().toISOString(); r.version=(r.version||1)+1;
+      r.status='APPROVED'; r.approvedBy='AUTO_15P'; r.approvedAt=getVietnamISOString(); r.version=(r.version||1)+1;
       const emp = db.employees.find(e=> e.employeeId===r.employeeId);
       if(emp){
         let sched = db.schedules.find(s=> s.employeeId===r.employeeId && s.days.some(d=> d.date===r.date));
@@ -3212,7 +3219,7 @@ function realtimeAutomationPoller(){
           const day = sched.days.find(d=> d.date===r.date);
           const before={...day};
           day.shift = r.toShift; if(day.status==='OFF') day.status='WORKING';
-          sched.version=(sched.version||1)+1; sched.updated_at=new Date().toISOString();
+          sched.version=(sched.version||1)+1; sched.updated_at=getVietnamISOString();
           audit('AUTO_15P','AUTO_APPROVE_TRAINING_SHIFT','SCHEDULE', before, day, 'system');
           addSyncQueue('SCHEDULE','UPDATE', sched, 'AUTO_15P', 'AUTO');
         } else {
@@ -3220,7 +3227,7 @@ function realtimeAutomationPoller(){
           const wy=monday.getFullYear(); const wm=String(monday.getMonth()+1).padStart(2,'0'); const wd=String(monday.getDate()).padStart(2,'0');
           const weekStart=`${wy}-${wm}-${wd}`;
           const days=[]; for(let i=0;i<7;i++){ const cur=new Date(monday); cur.setDate(monday.getDate()+i); const y=cur.getFullYear(); const m=String(cur.getMonth()+1).padStart(2,'0'); const d=String(cur.getDate()).padStart(2,'0'); const dateStr=`${y}-${m}-${d}`; const isTarget = dateStr===r.date; days.push({ date: dateStr, dayName:['T2','T3','T4','T5','T6','T7','CN'][i], shift: isTarget ? r.toShift : emp.shift, status: isTarget ? 'WORKING' : 'OFF', substituteFor:null }); }
-          const newSched={ id: uuidv4(), employeeId: r.employeeId, weekStart, days, version:1, updated_at: new Date().toISOString() };
+          const newSched={ id: uuidv4(), employeeId: r.employeeId, weekStart, days, version:1, updated_at: getVietnamISOString() };
           db.schedules.push(newSched);
           addSyncQueue('SCHEDULE','CREATE', newSched, 'AUTO_15P', 'AUTO');
         }
@@ -3228,9 +3235,9 @@ function realtimeAutomationPoller(){
         let att = db.attendances.find(a=> a.employeeId===r.employeeId && a.date===r.date);
         const shiftInfo = db.settings.payroll.shifts[r.toShift] || DEFAULT_SHIFTS[r.toShift] || DEFAULT_SHIFTS['CA_SANG'];
         if(!att){
-          att={ id: uuidv4(), employeeId: r.employeeId, date: r.date, shift: r.toShift, branchId: emp.branchId, checkIn:null, checkOut:null, status: r.date <= todayStr ? 'COMPLETED' : 'NOT_STARTED', violations:[], version:1, updated_at: new Date().toISOString(), sync_status:'PENDING' };
+          att={ id: uuidv4(), employeeId: r.employeeId, date: r.date, shift: r.toShift, branchId: emp.branchId, checkIn:null, checkOut:null, status: r.date <= todayStr ? 'COMPLETED' : 'NOT_STARTED', violations:[], version:1, updated_at: getVietnamISOString(), sync_status:'PENDING' };
           if(r.date <= todayStr){
-            const now2=new Date();
+            const now2=getVietnamNow();
             att.checkIn={ time: shiftInfo.start, gps:'10.762622,106.660172', address: db.branches.find(b=>b.id===emp.branchId)?.address || 'Training Auto', image:'', timestamp: now2.toISOString(), content:'Điểm danh Vào ca UBM (Training Auto - đổi ca AUTO)', drivePath: generateDrivePath({...emp, shift: r.toShift}, r.date, 'CHECK_IN') };
             att.checkOut={ time: shiftInfo.end, gps:'10.762622,106.660172', address: db.branches.find(b=>b.id===emp.branchId)?.address || 'Training Auto', image:'', timestamp: now2.toISOString(), content:'Điểm danh Ra ca UBM (Training Auto - đổi ca AUTO)', drivePath: generateDrivePath({...emp, shift: r.toShift}, r.date, 'CHECK_OUT') };
             addDriveFile(r.employeeId, r.date, 'CHECK_IN', `Anh_chup_cua_hang.jpg`, { gps: att.checkIn.gps, time: att.checkIn.time });
@@ -3243,13 +3250,13 @@ function realtimeAutomationPoller(){
           att.shift=r.toShift;
           if(att.checkIn){ att.checkIn.time=shiftInfo.start; att.checkIn.drivePath=generateDrivePath({...emp, shift: r.toShift}, r.date, 'CHECK_IN'); }
           if(att.checkOut){ att.checkOut.time=shiftInfo.end; att.checkOut.drivePath=generateDrivePath({...emp, shift: r.toShift}, r.date, 'CHECK_OUT'); }
-          att.version=(att.version||1)+1; att.updated_at=new Date().toISOString();
+          att.version=(att.version||1)+1; att.updated_at=getVietnamISOString();
           audit('AUTO_15P','UPDATE_ATTENDANCE_TRAINING_SHIFT','ATTENDANCE', before, att, 'system');
           addSyncQueue('ATTENDANCE','UPDATE', att, 'AUTO_15P', 'AUTO');
         }
-        const notifEmp={ id: uuidv4(), to: r.employeeId, type:'TRAINING_SHIFT_AUTO_APPROVED', title:`Đổi ca ${r.date} tự động duyệt`, content:`Ca ${r.fromShift}->${r.toShift} ngày ${r.date} đã tự động duyệt sau 15 phút (HR không phản hồi)`, createdAt: new Date().toISOString(), read:false };
+        const notifEmp={ id: uuidv4(), to: r.employeeId, type:'TRAINING_SHIFT_AUTO_APPROVED', title:`Đổi ca ${r.date} tự động duyệt`, content:`Ca ${r.fromShift}->${r.toShift} ngày ${r.date} đã tự động duyệt sau 15 phút (HR không phản hồi)`, createdAt: getVietnamISOString(), read:false };
         db.notifications.push(notifEmp);
-        const zr={ id: uuidv4(), sent_at: new Date().toISOString(), receiver: emp.phone, type:'TRAINING_SHIFT_AUTO', content:`[ỤM BÒ MILK] Đổi ca Training ${emp.name} ${r.date} ${r.fromShift}->${r.toShift} tự động duyệt sau 15 phút`, status:'SENT', error:'' };
+        const zr={ id: uuidv4(), sent_at: getVietnamISOString(), receiver: emp.phone, type:'TRAINING_SHIFT_AUTO', content:`[ỤM BÒ MILK] Đổi ca Training ${emp.name} ${r.date} ${r.fromShift}->${r.toShift} tự động duyệt sau 15 phút`, status:'SENT', error:'' };
         db.zaloRecords.unshift(zr);
       }
       audit('AUTO_15P','AUTO_APPROVE_TRAINING_SHIFT','TRAINING_SHIFT', null, r, 'system');
@@ -3302,7 +3309,7 @@ function realtimeAutomationPoller(){
       syncToGoogleSheet(item)
         .then(()=>{
           item.sync_status='SYNCED';
-          item.retriedAt=item.syncedAt=new Date().toISOString();
+          item.retriedAt=item.syncedAt=getVietnamISOString();
           delete item.error;
           delete item.nextRetryAt;
         })
@@ -3324,7 +3331,7 @@ function realtimeAutomationPoller(){
   // ponytail: queue chạy tối đa 3 tác vụ/poll; chuyển sang worker bền vững khi chạy đa instance.
   // 4. Broadcast realtime health + sync status
   io.emit('automation:heartbeat', {
-    now: new Date().toISOString(),
+    now: getVietnamISOString(),
     pendingDevices: db.deviceRequests.filter(r=>r.status==='PENDING').length,
     pendingEmerg: db.emergencyRequests.filter(r=>r.status==='PENDING').length,
     syncPending: db.syncQueue.filter(s=>s.sync_status==='PENDING').length,
@@ -3534,7 +3541,7 @@ function addDriveFile(employeeId, dateStr, type, fileName, meta){
     drivePath: drivePath + '/' + fileName,
     url: `https://drive.google.com/drive/folders/${db.settings?.googleDrive?.rootFolderId||'1-Wy-Di6KvfeGCKoTV7TSuFQpY_yKNy-1'}/${encodeURIComponent(drivePath)}/${fileName}`,
     meta: meta||{},
-    createdAt: new Date().toISOString(),
+    createdAt: getVietnamISOString(),
     sync_status: 'PENDING'
   };
   db.driveFiles.unshift(file);
@@ -3713,7 +3720,7 @@ async function syncAllTabsToSheetsRealtime(){
     await syncSheetTab(key);
     await new Promise(r=>setTimeout(r, 200)); // throttle
   }
-  io.emit('sync:update', { type:'SHEETS_REALTIME', timestamp: new Date().toISOString(), sheets: Object.keys(SHEET_DEFINITIONS).length });
+  io.emit('sync:update', { type:'SHEETS_REALTIME', timestamp: getVietnamISOString(), sheets: Object.keys(SHEET_DEFINITIONS).length });
 }
 // Auto-sync every 60s + on data change
 setInterval(syncAllTabsToSheetsRealtime, 60*1000);
@@ -3729,7 +3736,7 @@ app.post('/api/employees/:id/simulate-7days-training', authMiddleware, roleCheck
 
   const startDateStr = emp.startDate || getVietnamTodayStr();
   const parts = startDateStr.split('T')[0].split('-').map(Number);
-  const startD = (parts.length === 3 && !isNaN(parts[0])) ? new Date(parts[0], parts[1] - 1, parts[2]) : new Date();
+  const startD = (parts.length === 3 && !isNaN(parts[0])) ? new Date(parts[0], parts[1] - 1, parts[2]) : getVietnamNow();
 
   const offSet = new Set(emp.registeredOffDates || []);
   const createdDates = [];
@@ -3754,17 +3761,17 @@ app.post('/api/employees/:id/simulate-7days-training', authMiddleware, roleCheck
         date: dateStr,
         shift: emp.shift || 'CA_SANG',
         branchId: emp.branchId || 'CN1',
-        checkIn: { time: '07:00', gps: '10.762622,106.660172', address: 'CN Test Admin', timestamp: new Date().toISOString() },
-        checkOut: { time: '12:00', gps: '10.762622,106.660172', address: 'CN Test Admin', timestamp: new Date().toISOString() },
+        checkIn: { time: '07:00', gps: '10.762622,106.660172', address: 'CN Test Admin', timestamp: getVietnamISOString() },
+        checkOut: { time: '12:00', gps: '10.762622,106.660172', address: 'CN Test Admin', timestamp: getVietnamISOString() },
         status: 'COMPLETED',
         violations: [],
         version: 1,
-        updated_at: new Date().toISOString()
+        updated_at: getVietnamISOString()
       });
     } else {
       existingAtt.status = 'COMPLETED';
-      existingAtt.checkIn = existingAtt.checkIn || { time: '07:00', gps: '10.762622,106.660172', address: 'CN Test Admin', timestamp: new Date().toISOString() };
-      existingAtt.checkOut = existingAtt.checkOut || { time: '12:00', gps: '10.762622,106.660172', address: 'CN Test Admin', timestamp: new Date().toISOString() };
+      existingAtt.checkIn = existingAtt.checkIn || { time: '07:00', gps: '10.762622,106.660172', address: 'CN Test Admin', timestamp: getVietnamISOString() };
+      existingAtt.checkOut = existingAtt.checkOut || { time: '12:00', gps: '10.762622,106.660172', address: 'CN Test Admin', timestamp: getVietnamISOString() };
     }
     createdDates.push(dateStr);
     if (createdDates.length >= 7) break;
@@ -3786,10 +3793,10 @@ app.post('/api/employees/:id/trigger-online-test', authMiddleware, (req, res) =>
   emp.testSchedule = {
     type: 'ONLINE_APP',
     status: 'WAITING_TEST',
-    createdAt: new Date().toISOString()
+    createdAt: getVietnamISOString()
   };
   emp.status = 'WAITING_TEST';
-  emp.updated_at = new Date().toISOString();
+  emp.updated_at = getVietnamISOString();
 
   saveDB();
   io.emit('employees:update', db.employees);
@@ -3829,10 +3836,10 @@ app.post('/api/employees/:id/schedule-test', authMiddleware, (req, res) => {
     scheduledAt: new Date(scheduledAt).toISOString(),
     meetLink: meetLink || 'https://meet.google.com/ubm-test-meet',
     status: 'SCHEDULED',
-    createdAt: new Date().toISOString()
+    createdAt: getVietnamISOString()
   };
   emp.status = 'WAITING_TEST';
-  emp.updated_at = new Date().toISOString();
+  emp.updated_at = getVietnamISOString();
 
   saveDB();
   io.emit('employees:update', db.employees);
@@ -3847,8 +3854,8 @@ app.post('/api/employees/:id/complete-meet-test', authMiddleware, (req, res) => 
 
   if (!emp.testSchedule) emp.testSchedule = {};
   emp.testSchedule.status = 'COMPLETED_INTERVIEW';
-  emp.testSchedule.completedAt = new Date().toISOString();
-  emp.updated_at = new Date().toISOString();
+  emp.testSchedule.completedAt = getVietnamISOString();
+  emp.updated_at = getVietnamISOString();
 
   saveDB();
   io.emit('employees:update', db.employees);
@@ -3896,9 +3903,9 @@ app.post('/api/employees/:id/evaluate-test', authMiddleware, (req, res) => {
     part1Details: part1Scores || [],
     part2Details: part2Scores || [],
     evaluatedBy: req.user?.username || 'HR',
-    evaluatedAt: new Date().toISOString()
+    evaluatedAt: getVietnamISOString()
   };
-  emp.updated_at = new Date().toISOString();
+  emp.updated_at = getVietnamISOString();
 
   saveDB();
   io.emit('employees:update', db.employees);
@@ -3908,7 +3915,7 @@ app.post('/api/employees/:id/evaluate-test', authMiddleware, (req, res) => {
 app.post('/api/attendance/checkin', (req,res)=>{
   const { employeeId, gps, address, image, shift, isCameraCapture } = req.body;
   const emp = db.employees.find(e=>e.employeeId===employeeId);
-  if(!emp) return res.status(404).json({error:'Employee not found'});
+  if(!emp) return res.status(404).json({error:'Không tìm thấy nhôn viôn'});
   // Spec 16.1 - dữ liệu bắt buộc
   if(!image || typeof image!=='string' || image.length<100) return res.status(400).json({error:'Ảnh Check-in bắt buộc - phải chụp trực tiếp bằng camera (không cho upload gallery)'});
   // Chặn upload gallery: phải là ảnh chụp trực tiếp data:image/* base64, không chấp nhận URL/generic
@@ -3939,7 +3946,7 @@ app.post('/api/attendance/checkin', (req,res)=>{
   if (isTraining) {
     const startDateStr = emp.startDate || getVietnamTodayStr();
     const parts = startDateStr.split('T')[0].split('-').map(Number);
-    const startD = (parts.length === 3 && !isNaN(parts[0])) ? new Date(parts[0], parts[1] - 1, parts[2]) : new Date();
+    const startD = (parts.length === 3 && !isNaN(parts[0])) ? new Date(parts[0], parts[1] - 1, parts[2]) : getVietnamNow();
     const trialEndD = new Date(startD);
     trialEndD.setDate(startD.getDate() + 11);
 
@@ -4037,7 +4044,7 @@ app.post('/api/attendance/checkin', (req,res)=>{
 app.post('/api/attendance/checkout', (req,res)=>{
   const { employeeId, gps, address, image, isCameraCapture } = req.body;
   const emp = db.employees.find(e=>e.employeeId===employeeId);
-  if(!emp) return res.status(404).json({error:'Employee not found'});
+  if(!emp) return res.status(404).json({error:'Không tìm thấy nhôn viôn'});
   // Spec 17 - dữ liệu bắt buộc
   if(!image || typeof image!=='string' || image.length<100) return res.status(400).json({error:'Ảnh Check-out bắt buộc - phải chụp trực tiếp bằng camera'});
   if(!image.startsWith('data:image/')) return res.status(400).json({error:'Ảnh phải được chụp trực tiếp từ camera (data:image), không cho upload từ thư viện'});
@@ -4116,7 +4123,7 @@ app.get('/api/schedules', authMiddleware, (req,res)=>{
       const startDateStr = emp.startDate || getVietnamTodayStr();
       const trainingDays = emp.trainingDays || 7;
       const parts = startDateStr.split('T')[0].split('-').map(Number);
-      const startD = (parts.length === 3 && !isNaN(parts[0])) ? new Date(parts[0], parts[1] - 1, parts[2]) : new Date();
+      const startD = (parts.length === 3 && !isNaN(parts[0])) ? new Date(parts[0], parts[1] - 1, parts[2]) : getVietnamNow();
       
       const weekMap = {};
       for (let i = 0; i < trainingDays; i++) {
@@ -4140,14 +4147,14 @@ app.get('/api/schedules', authMiddleware, (req,res)=>{
           weekStart: wStart,
           days: fullDays,
           version: 1,
-          updated_at: new Date().toISOString()
+          updated_at: getVietnamISOString()
         });
       }
       updated = true;
     }
   });
   // FIX: OFFICIAL chưa có lịch → tạo lịch tuần hiện tại (T2-CN) với ràng buộc AI: cùng CN cùng ca không trùng ngày
-  const currentMonday = getMonday(new Date());
+  const currentMonday = getMonday(getVietnamNow());
   const cy = currentMonday.getFullYear(); const cm = String(currentMonday.getMonth()+1).padStart(2,'0'); const cd = String(currentMonday.getDate()).padStart(2,'0');
   const currentWeekStart = `${cy}-${cm}-${cd}`;
   const officialsNeedingWeek = db.employees.filter(e => (e.status === 'OFFICIAL' || e.type === 'OFFICIAL') && !db.schedules.some(s => s.employeeId === e.employeeId && s.weekStart === currentWeekStart));
@@ -4212,7 +4219,7 @@ app.get('/api/schedules', authMiddleware, (req,res)=>{
         const status = found ? found.status : 'WORKING';
         days.push({ date: dateStr, dayName: ['T2','T3','T4','T5','T6','T7','CN'][i], shift: emp.shift, status, substituteFor: null });
       }
-      db.schedules.push({ id: uuidv4(), employeeId: emp.employeeId, weekStart: currentWeekStart, days, version:1, updated_at: new Date().toISOString() });
+      db.schedules.push({ id: uuidv4(), employeeId: emp.employeeId, weekStart: currentWeekStart, days, version:1, updated_at: getVietnamISOString() });
       delete emp._weekDays;
       updated = true;
       console.log(`[SCHEDULE] Auto-generated OFFICIAL (constrained) for ${emp.name} ${emp.employeeId} week ${currentWeekStart}`);
@@ -4250,7 +4257,7 @@ app.post('/api/schedules', authMiddleware, (req,res)=>{
     const before = {...existing};
     existing.days = days;
     existing.version = (existing.version||1)+1;
-    existing.updated_at = new Date().toISOString();
+    existing.updated_at = getVietnamISOString();
     audit(req.user.username,'UPDATE_SCHEDULE','SCHEDULE',before,existing, req.ip);
     addSyncQueue('SCHEDULE','UPDATE',existing, req.user.username, 'WEB_HR');
     // TRAINING linh hoạt: HR đổi ca -> auto cập nhật + tự điểm danh (cập nhật)
@@ -4262,9 +4269,9 @@ app.post('/api/schedules', authMiddleware, (req,res)=>{
           let att = db.attendances.find(a=> a.employeeId===employeeId && a.date===day.date);
           const shiftInfo = db.settings.payroll.shifts[day.shift] || DEFAULT_SHIFTS[day.shift] || DEFAULT_SHIFTS['CA_SANG'];
           if(!att){
-            att = { id: uuidv4(), employeeId, date: day.date, shift: day.shift, branchId: empForUpdate.branchId, checkIn: null, checkOut: null, status: 'NOT_STARTED', violations:[], version:1, updated_at: new Date().toISOString(), sync_status:'PENDING' };
+            att = { id: uuidv4(), employeeId, date: day.date, shift: day.shift, branchId: empForUpdate.branchId, checkIn: null, checkOut: null, status: 'NOT_STARTED', violations:[], version:1, updated_at: getVietnamISOString(), sync_status:'PENDING' };
             if(day.date <= todayStrUp){
-              const now=new Date();
+              const now=getVietnamNow();
               att.checkIn={ time: shiftInfo.start, gps: '10.762622,106.660172', address: db.branches.find(b=>b.id===empForUpdate.branchId)?.address || 'Training Auto', image:'', timestamp: now.toISOString(), content:'Điểm danh Vào ca UBM (Training Auto)', drivePath: generateDrivePath({...empForUpdate, shift: day.shift}, day.date, 'CHECK_IN') };
               att.checkOut={ time: shiftInfo.end, gps: '10.762622,106.660172', address: db.branches.find(b=>b.id===empForUpdate.branchId)?.address || 'Training Auto', image:'', timestamp: now.toISOString(), content:'Điểm danh Ra ca UBM (Training Auto)', drivePath: generateDrivePath({...empForUpdate, shift: day.shift}, day.date, 'CHECK_OUT') };
               att.status='COMPLETED';
@@ -4292,7 +4299,7 @@ app.post('/api/schedules', authMiddleware, (req,res)=>{
                 att.checkOut.drivePath = generateDrivePath({...empForUpdate, shift: day.shift}, day.date, 'CHECK_OUT');
                 att.checkOut.content = `Điểm danh Ra ca UBM (Training Auto - đổi ca ${day.shift})`;
               }
-              att.version=(att.version||1)+1; att.updated_at=new Date().toISOString();
+              att.version=(att.version||1)+1; att.updated_at=getVietnamISOString();
               audit(req.user.username,'UPDATE_ATTENDANCE_SHIFT_TRAINING','ATTENDANCE',beforeAtt,att,req.ip);
               addSyncQueue('ATTENDANCE','UPDATE',att,req.user.username,'WEB_HR');
               // Cập nhật Drive files cho ca mới
@@ -4301,7 +4308,7 @@ app.post('/api/schedules', authMiddleware, (req,res)=>{
             }
             if(day.date <= todayStrUp && att.status!=='COMPLETED' && day.status==='WORKING'){
               const shiftInfo2 = db.settings.payroll.shifts[day.shift] || DEFAULT_SHIFTS[day.shift] || DEFAULT_SHIFTS['CA_SANG'];
-              const now2=new Date();
+              const now2=getVietnamNow();
               att.checkIn = att.checkIn || { time: shiftInfo2.start, gps: '10.762622,106.660172', address: db.branches.find(b=>b.id===empForUpdate.branchId)?.address || 'Training Auto', image:'', timestamp: now2.toISOString(), content:'Điểm danh Vào ca UBM (Training Auto)', drivePath: generateDrivePath(empForUpdate, day.date, 'CHECK_IN') };
               att.checkOut = att.checkOut || { time: shiftInfo2.end, gps: '10.762622,106.660172', address: db.branches.find(b=>b.id===empForUpdate.branchId)?.address || 'Training Auto', image:'', timestamp: now2.toISOString(), content:'Điểm danh Ra ca UBM (Training Auto)', drivePath: generateDrivePath(empForUpdate, day.date, 'CHECK_OUT') };
               att.status='COMPLETED'; addSyncQueue('ATTENDANCE','UPDATE',att,req.user.username,'WEB_HR');
@@ -4321,7 +4328,7 @@ app.post('/api/schedules', authMiddleware, (req,res)=>{
     io.emit('schedules:update', db.schedules);
     return res.json(existing);
   }
-  const sched = { id: uuidv4(), employeeId, weekStart, days, version:1, updated_at: new Date().toISOString() };
+  const sched = { id: uuidv4(), employeeId, weekStart, days, version:1, updated_at: getVietnamISOString() };
   db.schedules.push(sched);
   audit(req.user.username,'CREATE_SCHEDULE','SCHEDULE',null,sched, req.ip);
   addSyncQueue('SCHEDULE','CREATE',sched, req.user.username, 'WEB_HR');
@@ -4339,11 +4346,11 @@ app.post('/api/schedules', authMiddleware, (req,res)=>{
           // Tạo mới
           att = {
             id: uuidv4(), employeeId, date: day.date, shift: day.shift, branchId: empForSched.branchId,
-            checkIn: null, checkOut: null, status: 'NOT_STARTED', violations:[], version:1, updated_at: new Date().toISOString(), sync_status:'PENDING'
+            checkIn: null, checkOut: null, status: 'NOT_STARTED', violations:[], version:1, updated_at: getVietnamISOString(), sync_status:'PENDING'
           };
           // Nếu ngày đã qua hoặc hôm nay -> tự động điểm danh COMPLETED (AI auto) - dùng ca linh hoạt per day
           if(day.date <= todayStr){
-            const now = new Date();
+            const now = getVietnamNow();
             att.checkIn = { time: shiftInfo.start, gps: '10.762622,106.660172', address: db.branches.find(b=>b.id===empForSched.branchId)?.address || 'Training Auto', image: '', timestamp: now.toISOString(), content: 'Điểm danh Vào ca UBM (Training Auto)', drivePath: generateDrivePath({...empForSched, shift: day.shift}, day.date, 'CHECK_IN') };
             att.checkOut = { time: shiftInfo.end, gps: '10.762622,106.660172', address: db.branches.find(b=>b.id===empForSched.branchId)?.address || 'Training Auto', image: '', timestamp: now.toISOString(), content: 'Điểm danh Ra ca UBM (Training Auto)', drivePath: generateDrivePath({...empForSched, shift: day.shift}, day.date, 'CHECK_OUT') };
             att.status='COMPLETED';
@@ -4365,14 +4372,14 @@ app.post('/api/schedules', authMiddleware, (req,res)=>{
             const before = {...att};
             att.shift = day.shift;
             att.version = (att.version||1)+1;
-            att.updated_at = new Date().toISOString();
+            att.updated_at = getVietnamISOString();
             audit(req.user.username,'UPDATE_ATTENDANCE_SHIFT_TRAINING','ATTENDANCE', before, att, req.ip);
             addSyncQueue('ATTENDANCE','UPDATE', att, req.user.username, 'WEB_HR');
           }
           // Nếu ngày đã qua mà chưa COMPLETED thì auto COMPLETED
           if(day.date <= todayStr && att.status!=='COMPLETED' && day.status==='WORKING'){
             const shiftInfo2 = db.settings.payroll.shifts[day.shift] || DEFAULT_SHIFTS[day.shift] || DEFAULT_SHIFTS['CA_SANG'];
-            const now2 = new Date();
+            const now2=getVietnamNow();
             att.checkIn = att.checkIn || { time: shiftInfo2.start, gps: '10.762622,106.660172', address: db.branches.find(b=>b.id===empForSched.branchId)?.address || 'Training Auto', image: '', timestamp: now2.toISOString(), content: 'Điểm danh Vào ca UBM (Training Auto)', drivePath: generateDrivePath(empForSched, day.date, 'CHECK_IN') };
             att.checkOut = att.checkOut || { time: shiftInfo2.end, gps: '10.762622,106.660172', address: db.branches.find(b=>b.id===empForSched.branchId)?.address || 'Training Auto', image: '', timestamp: now2.toISOString(), content: 'Điểm danh Ra ca UBM (Training Auto)', drivePath: generateDrivePath(empForSched, day.date, 'CHECK_OUT') };
             att.status='COMPLETED';
@@ -4407,7 +4414,7 @@ app.post('/api/schedules', authMiddleware, (req,res)=>{
 // ============ AI AUTO SCHEDULE FOR OFFICIAL (Spec: cùng CN cùng ca không trùng + min 12 ngày/tháng) ============
 app.post('/api/schedules/auto-official', authMiddleware, roleCheck(['Admin','HR','Manager']), (req,res)=>{
   const { month, preview } = req.body; // month: "2026-09" hoặc "2026-09-01", preview=true thì không lưu
-  const targetMonth = month ? month.slice(0,7) : new Date().toISOString().slice(0,7);
+  const targetMonth = month ? month.slice(0,7) : getVietnamTodayStr().slice(0,7);
   const [y,m] = targetMonth.split('-').map(Number);
   const daysInMonth = getDaysInMonth(y,m);
   const officials = db.employees.filter(e=> e.status==='OFFICIAL' || e.type==='OFFICIAL');
@@ -4536,7 +4543,7 @@ app.post('/api/schedules/auto-official', authMiddleware, roleCheck(['Admin','HR'
             if(!day.date.startsWith(targetMonth)) day.status='OFF';
           }
         });
-        db.schedules.push({ id: uuidv4(), employeeId: empId, weekStart, days, version:1, updated_at: new Date().toISOString() });
+        db.schedules.push({ id: uuidv4(), employeeId: empId, weekStart, days, version:1, updated_at: getVietnamISOString() });
       }
     }
     saveDB();
@@ -4562,7 +4569,7 @@ app.post('/api/schedules/auto-training', authMiddleware, roleCheck(['Admin','HR'
   const { preview, shifts } = req.body; // shifts: optional { employeeId: ['CA_SANG','CA_CHIEU',...] } linh hoạt
   const trainings = db.employees.filter(e=> e.status==='TRAINING' || e.type==='TRAINING');
   if(trainings.length===0) return res.status(400).json({ error:'Không có nhân viên Training' });
-  const today = new Date(); today.setHours(0,0,0,0);
+  const today = getVietnamNow(); today.setHours(0,0,0,0);
   const todayStr = toVietnamDateStr(today);
   // Tạo lịch 12 ngày trial (7 WORKING + 5 OFF) linh hoạt ca
   const empDayStatus={}; const empDayShift={};
@@ -4623,7 +4630,7 @@ app.post('/api/schedules/auto-training', authMiddleware, roleCheck(['Admin','HR'
           if(empDayStatus[empId][day.date]) day.status = empDayStatus[empId][day.date];
           else if(!weekMapByEmp[empId][weekStart][day.date]) day.status='OFF';
         });
-        db.schedules.push({ id: uuidv4(), employeeId: empId, weekStart, days, version:1, updated_at: new Date().toISOString(), isTrainingAuto:true });
+        db.schedules.push({ id: uuidv4(), employeeId: empId, weekStart, days, version:1, updated_at: getVietnamISOString(), isTrainingAuto:true });
       }
     }
     // Tự động điểm danh realtime cho Training (ngày đã qua -> COMPLETED)
@@ -4636,7 +4643,7 @@ app.post('/api/schedules/auto-training', authMiddleware, roleCheck(['Admin','HR'
           let att = db.attendances.find(a=> a.employeeId===emp.employeeId && a.date===dateStr);
           if(!att){
             const shiftInfo = db.settings.payroll.shifts[shift] || DEFAULT_SHIFTS[shift] || DEFAULT_SHIFTS['CA_SANG'];
-            const now=new Date();
+            const now=getVietnamNow();
             att={ id: uuidv4(), employeeId: emp.employeeId, date: dateStr, shift, branchId: emp.branchId, checkIn:{ time: shiftInfo.start, gps:'10.762622,106.660172', address: db.branches.find(b=>b.id===emp.branchId)?.address || 'Training Auto', image:'', timestamp: now.toISOString(), content:'Điểm danh Vào ca UBM (Training Auto)', drivePath: generateDrivePath({...emp, shift}, dateStr, 'CHECK_IN') }, checkOut:{ time: shiftInfo.end, gps:'10.762622,106.660172', address: db.branches.find(b=>b.id===emp.branchId)?.address || 'Training Auto', image:'', timestamp: now.toISOString(), content:'Điểm danh Ra ca UBM (Training Auto)', drivePath: generateDrivePath({...emp, shift}, dateStr, 'CHECK_OUT') }, status:'COMPLETED', violations:[], version:1, updated_at: now.toISOString(), sync_status:'PENDING' };
             db.attendances.push(att);
             addDriveFile(emp.employeeId, dateStr, 'CHECK_IN', `Anh_chup_cua_hang.jpg`, { gps: att.checkIn.gps, time: att.checkIn.time });
@@ -4673,7 +4680,7 @@ app.post('/api/training/shift-change', (req,res)=>{
   const shiftInfo = db.settings.payroll.shifts[toShift] || DEFAULT_SHIFTS[toShift];
   const [sh, sm] = shiftInfo.start.split(':').map(Number);
   const shiftStart = new Date(date); shiftStart.setHours(sh, sm, 0,0);
-  const now = new Date();
+  const now = getVietnamNow();
   const diffMs = shiftStart.getTime() - now.getTime();
   const diffHours = diffMs / (1000*60*60);
   if(diffHours <12){
@@ -4684,7 +4691,7 @@ app.post('/api/training/shift-change', (req,res)=>{
   const existingPending = db.trainingShiftRequests.find(r=> r.employeeId===employeeId && r.date===date && r.status==='PENDING');
   if(existingPending) return res.status(409).json({ error:'Đã có phiếu đổi ca đang chờ duyệt cho ngày này', request: existingPending });
   const reqId = uuidv4();
-  const createdAt = new Date().toISOString();
+  const createdAt = getVietnamISOString();
   const expiresAt = new Date(Date.now() + 15*60*1000).toISOString(); // 15 phút
   const newReq = {
     id: reqId, employeeId, employeeName: emp.name, branchId: emp.branchId,
@@ -4724,7 +4731,7 @@ app.post('/api/training/shift-change/:id/approve', authMiddleware, roleCheck(['A
     const emp = db.employees.find(e=> e.employeeId===r.employeeId);
     if(emp && !req.user.branchScope.includes(emp.branchId)) return res.status(403).json({ error:'Manager chỉ duyệt chi nhánh được phân quyền' });
   }
-  r.status='APPROVED'; r.approvedBy=req.user.username; r.approvedAt=new Date().toISOString(); r.version=(r.version||1)+1;
+  r.status='APPROVED'; r.approvedBy=req.user.username; r.approvedAt=getVietnamISOString(); r.version=(r.version||1)+1;
   // Tự động cập nhật ca + lịch + attendance
   const emp = db.employees.find(e=> e.employeeId===r.employeeId);
   if(emp){
@@ -4736,7 +4743,7 @@ app.post('/api/training/shift-change/:id/approve', authMiddleware, roleCheck(['A
       day.shift = r.toShift;
       // Nếu ngày là OFF thì chuyển thành WORKING khi đổi ca
       if(day.status==='OFF') day.status='WORKING';
-      sched.version=(sched.version||1)+1; sched.updated_at=new Date().toISOString();
+      sched.version=(sched.version||1)+1; sched.updated_at=getVietnamISOString();
       audit(req.user.username,'APPROVE_TRAINING_SHIFT','SCHEDULE', before, day, req.ip);
       addSyncQueue('SCHEDULE','UPDATE', sched, req.user.username, 'WEB_HR');
     } else {
@@ -4745,7 +4752,7 @@ app.post('/api/training/shift-change/:id/approve', authMiddleware, roleCheck(['A
       const wy=monday.getFullYear(); const wm=String(monday.getMonth()+1).padStart(2,'0'); const wd=String(monday.getDate()).padStart(2,'0');
       const weekStart=`${wy}-${wm}-${wd}`;
       const days=[]; for(let i=0;i<7;i++){ const cur=new Date(monday); cur.setDate(monday.getDate()+i); const y=cur.getFullYear(); const m=String(cur.getMonth()+1).padStart(2,'0'); const d=String(cur.getDate()).padStart(2,'0'); const dateStr=`${y}-${m}-${d}`; const isTarget = dateStr===r.date; days.push({ date: dateStr, dayName:['T2','T3','T4','T5','T6','T7','CN'][i], shift: isTarget ? r.toShift : (isTarget? r.toShift : emp.shift), status: isTarget ? 'WORKING' : 'OFF', substituteFor:null }); }
-      const newSched={ id: uuidv4(), employeeId: r.employeeId, weekStart, days, version:1, updated_at: new Date().toISOString() };
+      const newSched={ id: uuidv4(), employeeId: r.employeeId, weekStart, days, version:1, updated_at: getVietnamISOString() };
       db.schedules.push(newSched);
       addSyncQueue('SCHEDULE','CREATE', newSched, req.user.username, 'WEB_HR');
     }
@@ -4755,9 +4762,9 @@ app.post('/api/training/shift-change/:id/approve', authMiddleware, roleCheck(['A
       let att = db.attendances.find(a=> a.employeeId===r.employeeId && a.date===r.date);
       const shiftInfo = db.settings.payroll.shifts[r.toShift] || DEFAULT_SHIFTS[r.toShift];
       if(!att){
-        att={ id: uuidv4(), employeeId: r.employeeId, date: r.date, shift: r.toShift, branchId: emp.branchId, checkIn:null, checkOut:null, status: r.date <= todayStr ? 'COMPLETED' : 'NOT_STARTED', violations:[], version:1, updated_at: new Date().toISOString(), sync_status:'PENDING' };
+        att={ id: uuidv4(), employeeId: r.employeeId, date: r.date, shift: r.toShift, branchId: emp.branchId, checkIn:null, checkOut:null, status: r.date <= todayStr ? 'COMPLETED' : 'NOT_STARTED', violations:[], version:1, updated_at: getVietnamISOString(), sync_status:'PENDING' };
         if(r.date <= todayStr){
-          const now=new Date();
+          const now=getVietnamNow();
           att.checkIn={ time: shiftInfo.start, gps:'10.762622,106.660172', address: db.branches.find(b=>b.id===emp.branchId)?.address || 'Training Auto', image:'', timestamp: now.toISOString(), content:'Điểm danh Vào ca UBM (Training Auto - đổi ca)', drivePath: generateDrivePath({...emp, shift: r.toShift}, r.date, 'CHECK_IN') };
           att.checkOut={ time: shiftInfo.end, gps:'10.762622,106.660172', address: db.branches.find(b=>b.id===emp.branchId)?.address || 'Training Auto', image:'', timestamp: now.toISOString(), content:'Điểm danh Ra ca UBM (Training Auto - đổi ca)', drivePath: generateDrivePath({...emp, shift: r.toShift}, r.date, 'CHECK_OUT') };
           addDriveFile(r.employeeId, r.date, 'CHECK_IN', `Anh_chup_cua_hang.jpg`, { gps: att.checkIn.gps, time: att.checkIn.time });
@@ -4770,15 +4777,15 @@ app.post('/api/training/shift-change/:id/approve', authMiddleware, roleCheck(['A
         att.shift=r.toShift;
         if(att.checkIn){ att.checkIn.time=shiftInfo.start; att.checkIn.drivePath=generateDrivePath({...emp, shift: r.toShift}, r.date, 'CHECK_IN'); }
         if(att.checkOut){ att.checkOut.time=shiftInfo.end; att.checkOut.drivePath=generateDrivePath({...emp, shift: r.toShift}, r.date, 'CHECK_OUT'); }
-        att.version=(att.version||1)+1; att.updated_at=new Date().toISOString();
+        att.version=(att.version||1)+1; att.updated_at=getVietnamISOString();
         audit(req.user.username,'UPDATE_ATTENDANCE_TRAINING_SHIFT','ATTENDANCE', before, att, req.ip);
         addSyncQueue('ATTENDANCE','UPDATE', att, req.user.username, 'WEB_HR');
       }
     }
     // Thông báo cho NV
-    const notifEmp={ id: uuidv4(), to: r.employeeId, type:'TRAINING_SHIFT_APPROVED', title:`Đổi ca ${r.date} đã duyệt`, content:`Ca ${r.fromShift} -> ${r.toShift} ngày ${r.date} đã được ${req.user.username} duyệt. Lịch đã cập nhật.`, createdAt: new Date().toISOString(), read:false };
+    const notifEmp={ id: uuidv4(), to: r.employeeId, type:'TRAINING_SHIFT_APPROVED', title:`Đổi ca ${r.date} đã duyệt`, content:`Ca ${r.fromShift} -> ${r.toShift} ngày ${r.date} đã được ${req.user.username} duyệt. Lịch đã cập nhật.`, createdAt: getVietnamISOString(), read:false };
     db.notifications.push(notifEmp);
-    const zr={ id: uuidv4(), sent_at: new Date().toISOString(), receiver: emp.phone, type:'TRAINING_SHIFT_APPROVED', content:`[ỤM BÒ MILK] Đổi ca Training ${emp.name} ${r.date} ${r.fromShift}->${r.toShift} đã duyệt`, status:'SENT', error:'' };
+    const zr={ id: uuidv4(), sent_at: getVietnamISOString(), receiver: emp.phone, type:'TRAINING_SHIFT_APPROVED', content:`[ỤM BÒ MILK] Đổi ca Training ${emp.name} ${r.date} ${r.fromShift}->${r.toShift} đã duyệt`, status:'SENT', error:'' };
     db.zaloRecords.unshift(zr);
   }
   saveDB();
@@ -4794,13 +4801,13 @@ app.post('/api/training/shift-change/:id/reject', authMiddleware, roleCheck(['Ad
   const r = db.trainingShiftRequests.find(x=> x.id===req.params.id);
   if(!r) return res.status(404).json({ error:'Không tìm thấy phiếu' });
   if(r.status!=='PENDING') return res.status(400).json({ error:'Phiếu đã xử lý' });
-  r.status='REJECTED'; r.rejectedBy=req.user.username; r.rejectedAt=new Date().toISOString(); r.reasonReject=req.body.reason||'';
+  r.status='REJECTED'; r.rejectedBy=req.user.username; r.rejectedAt=getVietnamISOString(); r.reasonReject=req.body.reason||'';
   saveDB();
   io.emit('trainingShiftRequests:update', db.trainingShiftRequests);
   audit(req.user.username,'REJECT_TRAINING_SHIFT','TRAINING_SHIFT', null, r, req.ip);
   addSyncQueue('TRAINING_SHIFT','UPDATE', r, req.user.username, 'WEB_HR');
   // Thông báo NV
-  const notif={ id: uuidv4(), to: r.employeeId, type:'TRAINING_SHIFT_REJECTED', title:`Đổi ca ${r.date} bị từ chối`, content:`Yêu cầu đổi ${r.fromShift}->${r.toShift} ngày ${r.date} bị từ chối. Lý do: ${r.reasonReject}`, createdAt: new Date().toISOString(), read:false };
+  const notif={ id: uuidv4(), to: r.employeeId, type:'TRAINING_SHIFT_REJECTED', title:`Đổi ca ${r.date} bị từ chối`, content:`Yêu cầu đổi ${r.fromShift}->${r.toShift} ngày ${r.date} bị từ chối. Lý do: ${r.reasonReject}`, createdAt: getVietnamISOString(), read:false };
   db.notifications.push(notif);
   io.emit('notifications:update', db.notifications);
   res.json({ success:true, request: r });
@@ -4830,7 +4837,7 @@ app.post('/api/shift-swap', (req,res)=>{
   // Kiểm tra trùng request pending cùng ngày
   const existing = db.shiftSwapRequests.find(r=>r.requesterId===requesterId && r.date===date && r.status.includes('PENDING'));
   if(existing) return res.status(409).json({error:'Đã có yêu cầu đổi ca đang chờ cho ngày này', request: existing});
-  const now = new Date();
+  const now = getVietnamNow();
   const expiresAt = new Date(now.getTime() + 24*60*60*1000).toISOString();
   const reqId = uuidv4();
   const isDirect = !!targetEmployeeId;
@@ -4896,11 +4903,11 @@ app.post('/api/shift-swap/:id/respond', (req,res)=>{
     if(r.status==='PENDING_TARGET'){
       // TH1 từ chối -> chuyển sang TH2 (broadcast)
       r.status='PENDING_BROADCAST';
-      r.rejectedBy=employeeId; r.rejectedAt=new Date().toISOString();
+      r.rejectedBy=employeeId; r.rejectedAt=getVietnamISOString();
       // Gửi broadcast tới toàn chi nhánh
       const branchEmps = db.employees.filter(e=>e.branchId===r.branchId && e.employeeId!==r.requesterId && e.status==='OFFICIAL' && e.employeeId!==employeeId);
       branchEmps.forEach(e=>{
-        const notif = { id: uuidv4(), to: e.employeeId, type:'SHIFT_SWAP_BROADCAST', title:`Cần người đổi ca ${r.date} (TH1 từ chối)`, content:`${r.requesterName} cần đổi ${r.fromShift}→${r.toShift} ngày ${r.date} - TH1 bị từ chối, chuyển TH2 toàn chi nhánh.`, createdAt: new Date().toISOString(), read:false, requestId: r.id };
+        const notif = { id: uuidv4(), to: e.employeeId, type:'SHIFT_SWAP_BROADCAST', title:`Cần người đổi ca ${r.date} (TH1 từ chối)`, content:`${r.requesterName} cần đổi ${r.fromShift}→${r.toShift} ngày ${r.date} - TH1 bị từ chối, chuyển TH2 toàn chi nhánh.`, createdAt: getVietnamISOString(), read:false, requestId: r.id };
         db.notifications.push(notif);
       });
       audit(employeeId,'REJECT_SHIFT_SWAP_TH1','SHIFT_SWAP',null,r, req.ip);
@@ -4918,7 +4925,7 @@ app.post('/api/shift-swap/:id/respond', (req,res)=>{
   if(action==='ACCEPT'){
     if(r.status==='PENDING_TARGET'){
       // TH1 chấp nhận -> AI cập nhật lịch 2 NV ngay
-      r.status='APPROVED'; r.acceptedBy=employeeId; r.acceptedAt=new Date().toISOString(); r.approvedAt=new Date().toISOString();
+      r.status='APPROVED'; r.acceptedBy=employeeId; r.acceptedAt=getVietnamISOString(); r.approvedAt=getVietnamISOString();
       // Đổi lịch 2 NV
       const requester = db.employees.find(e=>e.employeeId===r.requesterId);
       const target = db.employees.find(e=>e.employeeId===r.targetEmployeeId);
@@ -4935,8 +4942,8 @@ app.post('/api/shift-swap/:id/respond', (req,res)=>{
       io.emit('shiftSwap:update', db.shiftSwapRequests);
       io.emit('schedules:update', db.schedules);
       // Thông báo 2 bên
-      const notif1 = { id: uuidv4(), to: r.requesterId, type:'SHIFT_SWAP_APPROVED', title:`Đổi ca ${r.date} đã duyệt (TH1)`, content:`${emp.name} đã chấp nhận đổi ${r.fromShift}→${r.toShift} ngày ${r.date}. Lịch đã cập nhật.`, createdAt: new Date().toISOString(), read:false };
-      const notif2 = { id: uuidv4(), to: r.targetEmployeeId, type:'SHIFT_SWAP_APPROVED', title:`Đổi ca ${r.date} đã duyệt`, content:`Bạn đã chấp nhận đổi ca với ${r.requesterName} ngày ${r.date}. Lịch đã cập nhật.`, createdAt: new Date().toISOString(), read:false };
+      const notif1 = { id: uuidv4(), to: r.requesterId, type:'SHIFT_SWAP_APPROVED', title:`Đổi ca ${r.date} đã duyệt (TH1)`, content:`${emp.name} đã chấp nhận đổi ${r.fromShift}→${r.toShift} ngày ${r.date}. Lịch đã cập nhật.`, createdAt: getVietnamISOString(), read:false };
+      const notif2 = { id: uuidv4(), to: r.targetEmployeeId, type:'SHIFT_SWAP_APPROVED', title:`Đổi ca ${r.date} đã duyệt`, content:`Bạn đã chấp nhận đổi ca với ${r.requesterName} ngày ${r.date}. Lịch đã cập nhật.`, createdAt: getVietnamISOString(), read:false };
       db.notifications.push(notif1, notif2);
       io.emit('notifications:update', db.notifications);
       audit(employeeId,'ACCEPT_SHIFT_SWAP_TH1','SHIFT_SWAP',null,r, req.ip);
@@ -4946,13 +4953,13 @@ app.post('/api/shift-swap/:id/respond', (req,res)=>{
     } else if(r.status==='PENDING_BROADCAST'){
       // TH2: ghi nhận người chấp nhận đầu tiên, nhưng chưa duyệt ngay - đợi 24h
       if(r.acceptedBy) return res.status(409).json({error:'Đã có người chấp nhận trước, đang chờ AI duyệt sau 24h', acceptedBy: r.acceptedBy});
-      r.acceptedBy=employeeId; r.acceptedAt=new Date().toISOString();
+      r.acceptedBy=employeeId; r.acceptedAt=getVietnamISOString();
       r.status='PENDING_BROADCAST_ACCEPTED'; // chờ 24h
       audit(employeeId,'ACCEPT_SHIFT_SWAP_TH2','SHIFT_SWAP',null,r, req.ip);
       addSyncQueue('SHIFT_SWAP','UPDATE',r, employeeId, 'WEB_EMPLOYEE');
       saveDB();
       io.emit('shiftSwap:update', db.shiftSwapRequests);
-      const notif = { id: uuidv4(), to: r.requesterId, type:'SHIFT_SWAP_TH2_ACCEPTED', title:`Có người nhận đổi ca ${r.date} (TH2)`, content:`${emp.name} đã nhận đổi ca ${r.fromShift}→${r.toShift} ngày ${r.date}. AI sẽ tự duyệt sau 24h kể từ lúc gửi yêu cầu (${fmtDMY?fmtDMY(r.date):r.date}).`, createdAt: new Date().toISOString(), read:false };
+      const notif = { id: uuidv4(), to: r.requesterId, type:'SHIFT_SWAP_TH2_ACCEPTED', title:`Có người nhận đổi ca ${r.date} (TH2)`, content:`${emp.name} đã nhận đổi ca ${r.fromShift}→${r.toShift} ngày ${r.date}. AI sẽ tự duyệt sau 24h kể từ lúc gửi yêu cầu (${fmtDMY?fmtDMY(r.date):r.date}).`, createdAt: getVietnamISOString(), read:false };
       db.notifications.push(notif);
       io.emit('notifications:update', db.notifications);
       return res.json({success:true, request:r, message:'Đã ghi nhận chấp nhận TH2 - AI sẽ tự duyệt sau 24h'});
@@ -4975,7 +4982,7 @@ app.post('/api/shift-swap/hr-broadcast', authMiddleware, roleCheck(['Admin','HR'
     curShift = day ? day.shift : emp.shift;
   }
   const finalToShift = toShift || (curShift==='CA_SANG'?'CA_CHIEU': curShift==='CA_CHIEU'?'CA_TOI':'CA_SANG');
-  const now = new Date();
+  const now = getVietnamNow();
   const expiresAt = new Date(now.getTime() + 24*60*60*1000).toISOString();
   const reqId = uuidv4();
   const newReq = {
@@ -5016,7 +5023,7 @@ function checkShiftSwap24h(){
     if(r.status==='PENDING_BROADCAST_ACCEPTED' && r.createdAt){
       const elapsed = now - new Date(r.createdAt).getTime();
       if(elapsed >= 24*60*60*1000){
-        r.status='AUTO_APPROVED'; r.approvedAt=new Date().toISOString();
+        r.status='AUTO_APPROVED'; r.approvedAt=getVietnamISOString();
         // Cập nhật lịch như TH1
         const requester = db.employees.find(e=>e.employeeId===r.requesterId);
         const accepter = db.employees.find(e=>e.employeeId===r.acceptedBy);
@@ -5031,8 +5038,8 @@ function checkShiftSwap24h(){
             }
           });
         }
-        const notif1={ id: uuidv4(), to: r.requesterId, type:'SHIFT_SWAP_AUTO_APPROVED', title:`Đổi ca ${r.date} tự duyệt sau 24h`, content:`Yêu cầu đổi ${r.fromShift}→${r.toShift} ngày ${r.date} đã được AI tự duyệt sau 24h (TH2).`, createdAt: new Date().toISOString(), read:false };
-        const notif2={ id: uuidv4(), to: r.acceptedBy, type:'SHIFT_SWAP_AUTO_APPROVED', title:`Đổi ca ${r.date} tự duyệt`, content:`Bạn đã được duyệt đổi ca với ${r.requesterName} ngày ${r.date} sau 24h.`, createdAt: new Date().toISOString(), read:false };
+        const notif1={ id: uuidv4(), to: r.requesterId, type:'SHIFT_SWAP_AUTO_APPROVED', title:`Đổi ca ${r.date} tự duyệt sau 24h`, content:`Yêu cầu đổi ${r.fromShift}→${r.toShift} ngày ${r.date} đã được AI tự duyệt sau 24h (TH2).`, createdAt: getVietnamISOString(), read:false };
+        const notif2={ id: uuidv4(), to: r.acceptedBy, type:'SHIFT_SWAP_AUTO_APPROVED', title:`Đổi ca ${r.date} tự duyệt`, content:`Bạn đã được duyệt đổi ca với ${r.requesterName} ngày ${r.date} sau 24h.`, createdAt: getVietnamISOString(), read:false };
         db.notifications.push(notif1, notif2);
         audit('SYSTEM','AUTO_APPROVE_SHIFT_SWAP','SHIFT_SWAP',null,r,'system');
         addSyncQueue('SHIFT_SWAP','UPDATE',r,'SYSTEM','AUTO');
@@ -5166,7 +5173,7 @@ async function generateNextWeekDraft(triggerBy='SYSTEM'){
       const status = empDayStatus[emp.employeeId][dateStr] || 'WORKING';
       days.push({ date: dateStr, dayName: ['T2','T3','T4','T5','T6','T7','CN'][i], shift: emp.shift, status, substituteFor: null });
     }
-    db.schedules.push({ id: uuidv4(), employeeId: emp.employeeId, weekStart: nextWeekStart, days, version:1, updated_at: new Date().toISOString(), approvalStatus:'PENDING_APPROVAL', generatedBy: triggerBy, generatedAt: new Date().toISOString() });
+    db.schedules.push({ id: uuidv4(), employeeId: emp.employeeId, weekStart: nextWeekStart, days, version:1, updated_at: getVietnamISOString(), approvalStatus:'PENDING_APPROVAL', generatedBy: triggerBy, generatedAt: getVietnamISOString() });
   }
   saveDB();
   io.emit('schedules:update', db.schedules);
@@ -5219,15 +5226,15 @@ app.post('/api/schedules/approve-next-week', authMiddleware, roleCheck(['Admin',
   drafts.forEach(d=>{
     d.approvalStatus='APPROVED';
     d.approvedBy = req.user.username;
-    d.approvedAt = new Date().toISOString();
+    d.approvedAt = getVietnamISOString();
     d.version = (d.version||1)+1;
     // Tạo notification cho NV
-    const notif = { id: uuidv4(), to: d.employeeId, type:'SCHEDULE_APPROVED', title: `Lịch tuần sau ${nextWeekStart} đã được duyệt`, content: `Lịch làm việc tuần ${nextWeekStart} của bạn đã được HR duyệt. Vui lòng kiểm tra Web App Nhân viên.`, createdAt: new Date().toISOString(), read:false };
+    const notif = { id: uuidv4(), to: d.employeeId, type:'SCHEDULE_APPROVED', title: `Lịch tuần sau ${nextWeekStart} đã được duyệt`, content: `Lịch làm việc tuần ${nextWeekStart} của bạn đã được HR duyệt. Vui lòng kiểm tra Web App Nhân viên.`, createdAt: getVietnamISOString(), read:false };
     db.notifications.push(notif);
     // Zalo record
     const emp = db.employees.find(e=> e.employeeId===d.employeeId);
     if(emp){
-      const zr = { id: uuidv4(), sent_at: new Date().toISOString(), receiver: emp.phone, type:'SCHEDULE_APPROVED', content: `[ỤM BÒ MILK] Lịch tuần ${nextWeekStart} của ${emp.name} đã duyệt: ${d.days.filter(day=> day.status==='WORKING').map(day=> day.dayName).join(', ')}`, status:'SENT', error:'' };
+      const zr = { id: uuidv4(), sent_at: getVietnamISOString(), receiver: emp.phone, type:'SCHEDULE_APPROVED', content: `[ỤM BÒ MILK] Lịch tuần ${nextWeekStart} của ${emp.name} đã duyệt: ${d.days.filter(day=> day.status==='WORKING').map(day=> day.dayName).join(', ')}`, status:'SENT', error:'' };
       db.zaloRecords.unshift(zr);
     }
   });
@@ -5280,7 +5287,7 @@ app.get('/api/off-requests', authMiddleware, (req,res)=>{
 app.post('/api/off-requests', (req,res)=>{
   const { employeeId, dates } = req.body;
   const emp = db.employees.find(e=>e.employeeId===employeeId);
-  if(!emp) return res.status(404).json({error:'Employee not found'});
+  if(!emp) return res.status(404).json({error:'Không tìm thấy nhôn viôn'});
   if(emp.status!=='OFFICIAL') return res.status(403).json({error:'Chỉ nhân viên Chính thức (status OFFICIAL) mới được đăng ký OFF hàng tuần'});
   // Check window - allow bypass for demo if setting offWindowBypass
   const bypass = req.body.bypassWindow;
@@ -5290,7 +5297,7 @@ app.post('/api/off-requests', (req,res)=>{
   if(!dates || dates.length===0) return res.status(400).json({error:'Chưa chọn ngày'});
   if(dates.length>db.settings.off.maxPerWeek) return res.status(400).json({error:`Tối đa ${db.settings.off.maxPerWeek} ngày/tuần`});
   // Check already has OFF this week approved count
-  const weekOffCount = db.offRequests.filter(r=>r.employeeId===employeeId && r.status==='APPROVED' && isSameWeek(r.createdAt, new Date().toISOString())).reduce((s,r)=>s+r.dates.length,0);
+  const weekOffCount = db.offRequests.filter(r=>r.employeeId===employeeId && r.status==='APPROVED' && isSameWeek(r.createdAt, getVietnamISOString())).reduce((s,r)=>s+r.dates.length,0);
   if(weekOffCount + dates.length > db.settings.off.maxPerWeek) return res.status(400).json({error:`Bạn đã có ${weekOffCount} ngày OFF tuần này, chỉ được tối đa ${db.settings.off.maxPerWeek}`});
   // TH1: Conflict check FCFS - Cùng CN cùng ca không được OFF trùng ngày
   for(const date of dates){
@@ -5312,12 +5319,12 @@ app.post('/api/off-requests', (req,res)=>{
   const reqId = uuidv4();
   const newReq = {
     id: reqId, employeeId, employeeName: emp.name, branchId: emp.branchId, shift: emp.shift,
-    dates, type:'WEEKLY', status:'APPROVED', autoApproved:true, createdAt: new Date().toISOString(),
+    dates, type:'WEEKLY', status:'APPROVED', autoApproved:true, createdAt: getVietnamISOString(),
     message: 'AI Auto Approve - Thỏa TH1/TH2 (12 ngày/tháng, không trùng ca)', version:1, sync_status:'SYNCED'
   };
   db.offRequests.push(newReq);
   // AI tự động cập nhật lịch tuần sau (T2→CN) theo ca còn lại
-  const nextWeekMonday = getMonday(new Date(Date.now()+7*24*60*60*1000));
+  const nextWeekMonday = getMonday(new Date(getVietnamNow().getTime()+7*24*60*60*1000));
   const weekStr = toVietnamDateStr(nextWeekMonday);
   let sched = db.schedules.find(s=>s.employeeId===employeeId && s.weekStart===weekStr);
   if(!sched){
@@ -5328,7 +5335,7 @@ app.post('/api/off-requests', (req,res)=>{
       // AI: nếu ngày trong dates => OFF, còn lại WORKING theo ca
       days.push({ date: ds, dayName:['T2','T3','T4','T5','T6','T7','CN'][i], shift: emp.shift, status: dates.includes(ds)?'OFF':'WORKING', substituteFor:null });
     }
-    sched = { id: uuidv4(), employeeId, weekStart: weekStr, days, version:1, updated_at: new Date().toISOString(), approvalStatus:'APPROVED' };
+    sched = { id: uuidv4(), employeeId, weekStart: weekStr, days, version:1, updated_at: getVietnamISOString(), approvalStatus:'APPROVED' };
     db.schedules.push(sched);
   } else {
     sched.days.forEach(d=>{
@@ -5351,7 +5358,7 @@ app.post('/api/off-requests', (req,res)=>{
       }
     }
     sched.version = (sched.version||1)+1;
-    sched.updated_at = new Date().toISOString();
+    sched.updated_at = getVietnamISOString();
     // Đảm bảo lịch tuần sau hiển thị ngay cho NV sau khi đăng ký OFF (realtime) - gỡ trạng thái chờ duyệt
     sched.approvalStatus = 'APPROVED';
   }
@@ -5361,7 +5368,7 @@ app.post('/api/off-requests', (req,res)=>{
   saveDB();
   io.emit('offRequests:update', db.offRequests);
   io.emit('schedules:update', db.schedules);
-  const zr = { id: uuidv4(), sent_at: new Date().toISOString(), receiver: emp.phone, type:'OFF_APPROVED', content:`OFF tuần sau đã được Auto Approve: ${dates.join(', ')}`, status:'SENT', error:'' };
+  const zr = { id: uuidv4(), sent_at: getVietnamISOString(), receiver: emp.phone, type:'OFF_APPROVED', content:`OFF tuần sau đã được Auto Approve: ${dates.join(', ')}`, status:'SENT', error:'' };
   db.zaloRecords.unshift(zr);
   io.emit('zalo:update', db.zaloRecords);
   res.json(newReq);
@@ -5373,7 +5380,7 @@ function isSameWeek(date1, date2){
 }
 app.get('/api/off-window', (req,res)=>{
   const isOpen = isOffWindowOpen();
-  const now = new Date();
+  const now = getVietnamNow();
   // Tính next open/close AI cho Official (dùng giờ VN)
   function getNextWindow(){
     const curUtc = new Date();
@@ -5422,7 +5429,7 @@ app.get('/api/off-window', (req,res)=>{
 // Broadcast OFF window AI status every minute
 setInterval(()=>{
   const isOpen = isOffWindowOpen();
-  io.emit('offWindow:update', { isOpen, now: new Date().toISOString(), aiAuto:true });
+  io.emit('offWindow:update', { isOpen, now: getVietnamISOString(), aiAuto:true });
 }, 60*1000);
 
 // ============ EMERGENCY OFF ============
@@ -5438,21 +5445,21 @@ app.get('/api/emergency-requests', authMiddleware, (req,res)=>{
 app.post('/api/emergency-requests', (req,res)=>{
   const { employeeId, date, reason } = req.body;
   const emp = db.employees.find(e=>e.employeeId===employeeId);
-  if(!emp) return res.status(404).json({error:'Not found'});
+  if(!emp) return res.status(404).json({error:'Không tìm thấy'});
   if(emp.status!=='OFFICIAL') return res.status(403).json({error:'Chỉ Nhân viên Chính thức (status OFFICIAL) mới được tạo phiếu OFF đột xuất'});
   // TH2: Check monthly min 12 days for OFF đột xuất
   const monthStr = String(date).slice(0,7);
   const chk = validateOfficialMonthlyMin12(employeeId, monthStr, [date]);
   if(!chk.valid) return res.status(400).json({error:`Tháng ${monthStr} sau khi OFF đột xuất sẽ chỉ còn ${chk.workingAfter} ngày làm. Tối thiểu 12 ngày/tháng.`, detail:chk});
   // Check max 1 per week
-  const weekCount = db.emergencyRequests.filter(r=>r.employeeId===employeeId && r.status==='APPROVED' && isSameWeek(r.createdAt, new Date().toISOString())).length;
+  const weekCount = db.emergencyRequests.filter(r=>r.employeeId===employeeId && r.status==='APPROVED' && isSameWeek(r.createdAt, getVietnamISOString())).length;
   if(weekCount>=1) return res.status(400).json({error:'Đã đạt giới hạn 1 OFF đột xuất/tuần'});
   if(!reason) return res.status(400).json({error:'Lý do bắt buộc'});
   const reqId = uuidv4();
   const er = {
     id: reqId, employeeId, employeeName: emp.name, branchId: emp.branchId, shift: emp.shift,
     date, reason, status:'PENDING', cascadeStep:1, substituteId:null, substituteName:null,
-    createdAt: new Date().toISOString(), timeoutAt: new Date(Date.now()+2*60*1000).toISOString(), attempts:0, version:1
+    createdAt: getVietnamISOString(), timeoutAt: new Date(Date.now()+2*60*1000).toISOString(), attempts:0, version:1
   };
   db.emergencyRequests.unshift(er);
   // AI đăng ký tạm lịch EMERGENCY_PENDING cho NV gửi yêu cầu
@@ -5465,7 +5472,7 @@ app.post('/api/emergency-requests', (req,res)=>{
       const wDate = weekStart;
       const days=[];
       for(let i=0;i<7;i++){ const cur=new Date(wDate); cur.setDate(wDate.getDate()+i); const y=cur.getFullYear(); const m=String(cur.getMonth()+1).padStart(2,'0'); const d=String(cur.getDate()).padStart(2,'0'); const ds=`${y}-${m}-${d}`; days.push({date:ds, dayName:dayNames[i], shift: emp.shift, status: ds===date ? 'EMERGENCY_PENDING' : 'WORKING', substituteFor:null});}
-      sched={ id: uuidv4(), employeeId, weekStart: ws, days, version:1, updated_at: new Date().toISOString()};
+      sched={ id: uuidv4(), employeeId, weekStart: ws, days, version:1, updated_at: getVietnamISOString()};
       db.schedules.push(sched);
     } else {
       const day = sched.days.find(d=>d.date===date);
@@ -5485,9 +5492,9 @@ function handleEmergencyCascade(request){
   const step1Candidates = db.employees.filter(e=>e.branchId===request.branchId && e.shift===request.shift && e.employeeId!==request.employeeId && e.status==='OFFICIAL');
   if(step1Candidates.length>0){
     step1Candidates.forEach(c=>{
-      const zr = { id: uuidv4(), sent_at: new Date().toISOString(), receiver: c.phone, type:'SUBSTITUTE_INVITE_STEP1', content:`[TH3-B1] Mời thay ca (cùng CN cùng ca) cho ${request.employeeName} ngày ${request.date} ca ${request.shift} - Phản hồi trong 2 phút`, status:'SENT', error:'' };
+      const zr = { id: uuidv4(), sent_at: getVietnamISOString(), receiver: c.phone, type:'SUBSTITUTE_INVITE_STEP1', content:`[TH3-B1] Mời thay ca (cùng CN cùng ca) cho ${request.employeeName} ngày ${request.date} ca ${request.shift} - Phản hồi trong 2 phút`, status:'SENT', error:'' };
       db.zaloRecords.unshift(zr);
-      db.notifications.unshift({ id: uuidv4(), to: c.employeeId, type:'SUBSTITUTE_INVITE', title:'[TH3] Mời thay ca đột xuất (cùng ca)', content:`Bạn (cùng CN ${request.branchId} cùng ca ${request.shift}) được mời thay ca cho ${request.employeeName} ngày ${request.date}. Vui lòng phản hồi trong 2 phút.`, requestId: request.id, step:1, createdAt: new Date().toISOString(), read:false });
+      db.notifications.unshift({ id: uuidv4(), to: c.employeeId, type:'SUBSTITUTE_INVITE', title:'[TH3] Mời thay ca đột xuất (cùng ca)', content:`Bạn (cùng CN ${request.branchId} cùng ca ${request.shift}) được mời thay ca cho ${request.employeeName} ngày ${request.date}. Vui lòng phản hồi trong 2 phút.`, requestId: request.id, step:1, createdAt: getVietnamISOString(), read:false });
     });
     io.emit('zalo:update', db.zaloRecords);
     io.emit('notifications:update', db.notifications);
@@ -5509,9 +5516,9 @@ function handleEmergencyCascade(request){
       const candidates2 = db.employees.filter(e=>e.branchId===request.branchId && e.shift!==request.shift && e.employeeId!==request.employeeId && e.status==='OFFICIAL');
       if(candidates2.length>0){
         candidates2.forEach(c=>{
-          const zr = { id: uuidv4(), sent_at: new Date().toISOString(), receiver: c.phone, type:'SUBSTITUTE_INVITE_STEP2', content:`[TH3-B2] Mời thay ca (cùng CN khác ca) cho ${request.employeeName} ngày ${request.date} - Phản hồi trong 30 phút`, status:'SENT', error:'' };
+          const zr = { id: uuidv4(), sent_at: getVietnamISOString(), receiver: c.phone, type:'SUBSTITUTE_INVITE_STEP2', content:`[TH3-B2] Mời thay ca (cùng CN khác ca) cho ${request.employeeName} ngày ${request.date} - Phản hồi trong 30 phút`, status:'SENT', error:'' };
           db.zaloRecords.unshift(zr);
-          db.notifications.unshift({ id: uuidv4(), to: c.employeeId, type:'SUBSTITUTE_INVITE', title:'[TH3] Mời thay ca (khác ca)', content:`Bạn (cùng CN ${request.branchId} khác ca) được mời thay ca cho ${request.employeeName} ngày ${request.date} ca ${request.shift}. Phản hồi trong 30 phút.`, requestId: request.id, step:2, createdAt: new Date().toISOString(), read:false });
+          db.notifications.unshift({ id: uuidv4(), to: c.employeeId, type:'SUBSTITUTE_INVITE', title:'[TH3] Mời thay ca (khác ca)', content:`Bạn (cùng CN ${request.branchId} khác ca) được mời thay ca cho ${request.employeeName} ngày ${request.date} ca ${request.shift}. Phản hồi trong 30 phút.`, requestId: request.id, step:2, createdAt: getVietnamISOString(), read:false });
         });
         io.emit('zalo:update', db.zaloRecords);
         io.emit('notifications:update', db.notifications);
@@ -5530,9 +5537,9 @@ function handleEmergencyCascade(request){
             }catch(e){}
             saveDB();
             io.emit('emergencyRequests:update', db.emergencyRequests);
-            const zr = { id: uuidv4(), sent_at: new Date().toISOString(), receiver: db.employees.find(e=>e.employeeId===r2.employeeId)?.phone, type:'EMERGENCY_REJECTED', content:`[TH3] OFF đột xuất ngày ${r2.date} bị HỦY do không có người thay ca sau 2 phút + 30 phút. Vui lòng liên hệ quản lý.`, status:'SENT', error:'' };
+            const zr = { id: uuidv4(), sent_at: getVietnamISOString(), receiver: db.employees.find(e=>e.employeeId===r2.employeeId)?.phone, type:'EMERGENCY_REJECTED', content:`[TH3] OFF đột xuất ngày ${r2.date} bị HỦY do không có người thay ca sau 2 phút + 30 phút. Vui lòng liên hệ quản lý.`, status:'SENT', error:'' };
             db.zaloRecords.unshift(zr);
-            db.notifications.unshift({ id: uuidv4(), to: r2.employeeId, type:'EMERGENCY_REJECTED', title:'OFF đột xuất bị hủy', content:`Phiếu OFF đột xuất ngày ${r2.date} bị hủy do không tìm được người thay ca (TH3).`, requestId: r2.id, createdAt: new Date().toISOString(), read:false });
+            db.notifications.unshift({ id: uuidv4(), to: r2.employeeId, type:'EMERGENCY_REJECTED', title:'OFF đột xuất bị hủy', content:`Phiếu OFF đột xuất ngày ${r2.date} bị hủy do không tìm được người thay ca (TH3).`, requestId: r2.id, createdAt: getVietnamISOString(), read:false });
             io.emit('zalo:update', db.zaloRecords);
             io.emit('notifications:update', db.notifications);
           }
@@ -5549,7 +5556,7 @@ function handleEmergencyCascade(request){
         }catch(e){}
         saveDB();
         io.emit('emergencyRequests:update', db.emergencyRequests);
-        const zr = { id: uuidv4(), sent_at: new Date().toISOString(), receiver: db.employees.find(e=>e.employeeId===r.employeeId)?.phone, type:'EMERGENCY_REJECTED', content:`OFF đột xuất ngày ${r.date} bị hủy do không có ứng viên thay ca (cùng CN).`, status:'SENT', error:'' };
+        const zr = { id: uuidv4(), sent_at: getVietnamISOString(), receiver: db.employees.find(e=>e.employeeId===r.employeeId)?.phone, type:'EMERGENCY_REJECTED', content:`OFF đột xuất ngày ${r.date} bị hủy do không có ứng viên thay ca (cùng CN).`, status:'SENT', error:'' };
         db.zaloRecords.unshift(zr);
         io.emit('zalo:update', db.zaloRecords);
       }
@@ -5563,9 +5570,9 @@ function handleEmergencyCascade(request){
     const candidates2 = db.employees.filter(e=>e.branchId===request.branchId && e.shift!==request.shift && e.employeeId!==request.employeeId && e.status==='OFFICIAL');
     if(candidates2.length>0){
       candidates2.forEach(c=>{
-        const zr = { id: uuidv4(), sent_at: new Date().toISOString(), receiver: c.phone, type:'SUBSTITUTE_INVITE_STEP2_DIRECT', content:`[TH3-B2 trực tiếp] Mời thay ca (khác ca) cho ${request.employeeName} ngày ${request.date}`, status:'SENT', error:'' };
+        const zr = { id: uuidv4(), sent_at: getVietnamISOString(), receiver: c.phone, type:'SUBSTITUTE_INVITE_STEP2_DIRECT', content:`[TH3-B2 trực tiếp] Mời thay ca (khác ca) cho ${request.employeeName} ngày ${request.date}`, status:'SENT', error:'' };
         db.zaloRecords.unshift(zr);
-        db.notifications.unshift({ id: uuidv4(), to: c.employeeId, type:'SUBSTITUTE_INVITE', title:'[TH3] Mời thay ca (khác ca)', content:`Mời thay ca khác ca cho ${request.employeeName} ngày ${request.date}`, requestId: request.id, step:2, createdAt: new Date().toISOString(), read:false });
+        db.notifications.unshift({ id: uuidv4(), to: c.employeeId, type:'SUBSTITUTE_INVITE', title:'[TH3] Mời thay ca (khác ca)', content:`Mời thay ca khác ca cho ${request.employeeName} ngày ${request.date}`, requestId: request.id, step:2, createdAt: getVietnamISOString(), read:false });
       });
       io.emit('zalo:update', db.zaloRecords);
       io.emit('notifications:update', db.notifications);
@@ -5577,7 +5584,7 @@ function handleEmergencyCascade(request){
           r2.reasonReject='[TH3] Không tìm được người thay ca (khác ca) sau 30 phút';
           try{ const ws=toVietnamDateStr(getMonday(new Date(r2.date))); const sched=db.schedules.find(s=>s.employeeId===r2.employeeId && s.weekStart===ws); if(sched){ const day=sched.days.find(d=>d.date===r2.date); if(day && day.status==='EMERGENCY_PENDING'){ day.status='WORKING'; io.emit('schedules:update', db.schedules); }}}catch(e){}
           saveDB(); io.emit('emergencyRequests:update', db.emergencyRequests);
-          const zr = { id: uuidv4(), sent_at: new Date().toISOString(), receiver: db.employees.find(e=>e.employeeId===r2.employeeId)?.phone, type:'EMERGENCY_REJECTED', content:`OFF đột xuất ngày ${r2.date} bị hủy do không có người thay`, status:'SENT', error:'' };
+          const zr = { id: uuidv4(), sent_at: getVietnamISOString(), receiver: db.employees.find(e=>e.employeeId===r2.employeeId)?.phone, type:'EMERGENCY_REJECTED', content:`OFF đột xuất ngày ${r2.date} bị hủy do không có người thay`, status:'SENT', error:'' };
           db.zaloRecords.unshift(zr); io.emit('zalo:update', db.zaloRecords);
         }
       }, 30*60*1000);
@@ -5592,10 +5599,10 @@ function handleEmergencyCascade(request){
 app.post('/api/emergency-requests/:id/respond', (req,res)=>{
   const { substituteId, action } = req.body; // action APPROVE/REJECT
   const er = db.emergencyRequests.find(r=>r.id===req.params.id);
-  if(!er) return res.status(404).json({error:'Not found'});
-  if(er.status!=='PENDING') return res.status(400).json({error:'Already processed'});
+  if(!er) return res.status(404).json({error:'Không tìm thấy'});
+  if(er.status!=='PENDING') return res.status(400).json({error:'Đã xử lý rồi'});
   const subEmp = db.employees.find(e=>e.employeeId===substituteId);
-  if(!subEmp) return res.status(404).json({error:'Substitute not found'});
+  if(!subEmp) return res.status(404).json({error:'Không tìm thấy người thay thế'});
   if(action==='REJECT'){
     // just log, keep pending for others
     audit(substituteId,'REJECT_SUBSTITUTE','EMERGENCY',null,{er, substituteId}, req.ip);
@@ -5605,7 +5612,7 @@ app.post('/api/emergency-requests/:id/respond', (req,res)=>{
   er.status='APPROVED';
   er.substituteId = substituteId;
   er.substituteName = subEmp.name;
-  er.approvedAt = new Date().toISOString();
+  er.approvedAt = getVietnamISOString();
   // Update schedules for both
   const sched1 = db.schedules.find(s=>s.employeeId===er.employeeId && s.days.some(d=>d.date===er.date));
   if(sched1){
@@ -5631,7 +5638,7 @@ app.post('/api/emergency-requests/:id/respond', (req,res)=>{
   saveDB();
   io.emit('emergencyRequests:update', db.emergencyRequests);
   io.emit('schedules:update', db.schedules);
-  const zr = { id: uuidv4(), sent_at: new Date().toISOString(), receiver: db.employees.find(e=>e.employeeId===er.employeeId)?.phone, type:'EMERGENCY_APPROVED', content:`OFF đột xuất ngày ${er.date} đã được duyệt, người thay: ${subEmp.name}`, status:'SENT', error:'' };
+  const zr = { id: uuidv4(), sent_at: getVietnamISOString(), receiver: db.employees.find(e=>e.employeeId===er.employeeId)?.phone, type:'EMERGENCY_APPROVED', content:`OFF đột xuất ngày ${er.date} đã được duyệt, người thay: ${subEmp.name}`, status:'SENT', error:'' };
   db.zaloRecords.unshift(zr);
   io.emit('zalo:update', db.zaloRecords);
   res.json(er);
@@ -5648,9 +5655,9 @@ app.get('/api/test-results', (req,res)=>{
 app.post('/api/courses/:id/submit', (req,res)=>{
   const { employeeId, answers, timeSpent, voiceAnswers } = req.body;
   const course = db.testCourses.find(c=>c.id===req.params.id);
-  if(!course) return res.status(404).json({error:'Not found'});
+  if(!course) return res.status(404).json({error:'Không tìm thấy'});
   const emp = db.employees.find(e=>e.employeeId===employeeId);
-  if(!emp) return res.status(404).json({error:'Employee not found'});
+  if(!emp) return res.status(404).json({error:'Không tìm thấy nhôn viôn'});
   // Validate min time 5s per question
   const minTime = (course.minPerQuestion || 5) * (course.totalQuestions || 20);
   if(timeSpent && timeSpent < minTime) {
@@ -5670,7 +5677,7 @@ app.post('/api/courses/:id/submit', (req,res)=>{
   else { result='DAT'; newStatus='OFFICIAL'; }
   const testRes = {
     id: uuidv4(), employeeId, courseId: course.id, score: rounded, correct, total: course.totalQuestions,
-    answers, timeSpent, voiceAnswers, result, createdAt: new Date().toISOString(), version:1
+    answers, timeSpent, voiceAnswers, result, createdAt: getVietnamISOString(), version:1
   };
   db.testResults.unshift(testRes);
   const before = {...emp};
@@ -5701,14 +5708,14 @@ app.post('/api/courses/:id/submit', (req,res)=>{
         e.type='OFFICIAL';
         e.endDate=null;
         // create schedule
-        const weekStart = getMonday(new Date());
+        const weekStart = getMonday(getVietnamNow());
         const days=[];
         for(let i=0;i<7;i++){
           const d=new Date(weekStart); d.setDate(weekStart.getDate()+i);
           const ds=toVietnamDateStr(d);
           days.push({date:ds, dayName:['T2','T3','T4','T5','T6','T7','CN'][i], shift:e.shift, status:'WORKING', substituteFor:null});
         }
-        db.schedules.push({ id: uuidv4(), employeeId: e.employeeId, weekStart: toVietnamDateStr(weekStart), days, version:1, updated_at: new Date().toISOString()});
+        db.schedules.push({ id: uuidv4(), employeeId: e.employeeId, weekStart: toVietnamDateStr(weekStart), days, version:1, updated_at: getVietnamISOString()});
         saveDB();
         io.emit('employees:update', db.employees);
         io.emit('schedules:update', db.schedules);
@@ -5717,7 +5724,7 @@ app.post('/api/courses/:id/submit', (req,res)=>{
     emp.status='WAITING_OFFICIAL'; // transitional
   }
   emp.version=(emp.version||1)+1;
-  emp.updated_at=new Date().toISOString();
+  emp.updated_at=getVietnamISOString();
   emp.sync_status='PENDING';
   addSyncQueue('TEST_RESULT','CREATE',testRes, employeeId, 'WEB_EMPLOYEE');
   addSyncQueue('EMPLOYEE','UPDATE',emp, employeeId, 'WEB_EMPLOYEE');
@@ -5725,7 +5732,7 @@ app.post('/api/courses/:id/submit', (req,res)=>{
   saveDB();
   io.emit('testResults:update', db.testResults);
   io.emit('employees:update', db.employees);
-  const zr = { id: uuidv4(), sent_at: new Date().toISOString(), receiver: emp.phone, type:'TEST_RESULT', content:`Kết quả TEST: ${rounded} điểm - ${result}`, status:'SENT', error:'' };
+  const zr = { id: uuidv4(), sent_at: getVietnamISOString(), receiver: emp.phone, type:'TEST_RESULT', content:`Kết quả TEST: ${rounded} điểm - ${result}`, status:'SENT', error:'' };
   db.zaloRecords.unshift(zr);
   io.emit('zalo:update', db.zaloRecords);
   res.json({ testResult: testRes, employee: emp });
@@ -5848,7 +5855,7 @@ app.post('/api/users', authMiddleware, roleCheck(['Admin']), (req,res)=>{
 });
 app.put('/api/users/:id', authMiddleware, roleCheck(['Admin']), (req,res)=>{
   const user = db.users.find(u=>u.id===req.params.id);
-  if(!user) return res.status(404).json({error:'Not found'});
+  if(!user) return res.status(404).json({error:'Không tìm thấy'});
   const before = {...user};
   if(req.body.role) user.role = req.body.role;
   if(req.body.branchScope) user.branchScope = req.body.branchScope;
@@ -5863,7 +5870,7 @@ app.put('/api/users/:id', authMiddleware, roleCheck(['Admin']), (req,res)=>{
 });
 app.delete('/api/users/:id', authMiddleware, roleCheck(['Admin']), (req,res)=>{
   const idx = db.users.findIndex(u=>u.id===req.params.id);
-  if(idx===-1) return res.status(404).json({error:'Not found'});
+  if(idx===-1) return res.status(404).json({error:'Không tìm thấy'});
   const removed = db.users.splice(idx,1)[0];
   audit(req.user.username,'DELETE_USER','USER',removed,null, req.ip);
   saveDB();
@@ -5892,7 +5899,7 @@ app.get('/api/reports/attendance', authMiddleware, (req,res)=>{
 });
 app.get('/api/reports/payroll', authMiddleware, roleCheck(['Admin','HR']), (req,res)=>{
   const { month, branch } = req.query; // month YYYY-MM
-  const m = month || new Date().toISOString().slice(0,7);
+  const m = month || getVietnamTodayStr().slice(0,7);
   let emps = [...db.employees];
   if(branch) emps = emps.filter(e=>e.branchId===branch);
   const payrolls = emps.map(e=> calculatePayroll(e.employeeId, m)).filter(Boolean);
@@ -5902,7 +5909,7 @@ app.get('/api/reports/payroll', authMiddleware, roleCheck(['Admin','HR']), (req,
 // ============ REPORT OVERVIEW (Spec 3.2) ============
 app.get('/api/reports/overview', authMiddleware, (req,res)=>{
   const { month, branch, startDate, endDate } = req.query;
-  const m = month || new Date().toISOString().slice(0,7);
+  const m = month || getVietnamTodayStr().slice(0,7);
   const start = startDate || (m+'-01');
   const end = endDate || (m+'-31');
   let emps = [...db.employees];
@@ -5989,7 +5996,7 @@ app.get('/api/reports/overview', authMiddleware, (req,res)=>{
 // Bảng chốt công - mỗi NV 1 dòng (Spec 4.1)
 app.get('/api/reports/monthly', authMiddleware, (req,res)=>{
   const { month, branch } = req.query;
-  const m = month || new Date().toISOString().slice(0,7);
+  const m = month || getVietnamTodayStr().slice(0,7);
   const start = m+'-01';
   const end = m+'-31';
   let emps = [...db.employees].filter(e=>e.status!=='ARCHIVED');
@@ -6038,11 +6045,11 @@ app.get('/api/reports/monthly', authMiddleware, (req,res)=>{
 app.get('/api/reports/daily', authMiddleware, (req,res)=>{
   const { employeeId, month, startDate, endDate } = req.query;
   if(!employeeId) return res.status(400).json({error:'Thiếu employeeId'});
-  const m = month || new Date().toISOString().slice(0,7);
+  const m = month || getVietnamTodayStr().slice(0,7);
   const start = startDate || (m+'-01');
   const end = endDate || (m+'-31');
   const emp = db.employees.find(e=>e.employeeId===employeeId);
-  if(!emp) return res.status(404).json({error:'Not found'});
+  if(!emp) return res.status(404).json({error:'Không tìm thấy'});
   const schedMap = {};
   db.schedules.filter(s=>s.employeeId===employeeId).forEach(s=> s.days.forEach(d=>{ if(d.date>=start&&d.date<=end) schedMap[d.date]=d; }));
   const dates = [];
@@ -6067,7 +6074,7 @@ app.get('/api/reports/daily', authMiddleware, (req,res)=>{
 // Sai lệch (Spec 10)
 app.get('/api/attendance/anomalies', authMiddleware, (req,res)=>{
   const { month, branch } = req.query;
-  const m = month || new Date().toISOString().slice(0,7);
+  const m = month || getVietnamTodayStr().slice(0,7);
   const start=m+'-01', end=m+'-31';
   let emps=[...db.employees].filter(e=>e.status!=='ARCHIVED');
   if(branch) emps=emps.filter(e=>e.branchId===branch);
@@ -6098,7 +6105,7 @@ app.get('/api/attendance/adjustments', authMiddleware, (req,res)=> res.json(db.a
 app.post('/api/attendance/adjustments', authMiddleware, (req,res)=>{
   const { employeeId, date, field, oldValue, newValue, reason } = req.body;
   if(!employeeId||!date||!field) return res.status(400).json({error:'Thiếu thông tin'});
-  const adj={ id: uuidv4(), employeeId, date, field, oldValue, newValue, reason, status:'PENDING', requestedBy: req.user.username, requestedAt: new Date().toISOString(), approvedBy:null, approvedAt:null };
+  const adj={ id: uuidv4(), employeeId, date, field, oldValue, newValue, reason, status:'PENDING', requestedBy: req.user.username, requestedAt: getVietnamISOString(), approvedBy:null, approvedAt:null };
   db.attendanceAdjustments.push(adj);
   audit(req.user.username,'CREATE_ADJUST','ATTENDANCE',null,adj, req.ip);
   saveDB(); io.emit('adjustments:update', db.attendanceAdjustments);
@@ -6106,8 +6113,8 @@ app.post('/api/attendance/adjustments', authMiddleware, (req,res)=>{
 });
 app.post('/api/attendance/adjustments/:id/approve', authMiddleware, roleCheck(['Admin','HR']), (req,res)=>{
   const adj=db.attendanceAdjustments.find(a=>a.id===req.params.id);
-  if(!adj) return res.status(404).json({error:'Not found'});
-  adj.status='APPROVED'; adj.approvedBy=req.user.username; adj.approvedAt=new Date().toISOString();
+  if(!adj) return res.status(404).json({error:'Không tìm thấy'});
+  adj.status='APPROVED'; adj.approvedBy=req.user.username; adj.approvedAt=getVietnamISOString();
   // apply to attendance
   const att=db.attendances.find(a=>a.employeeId===adj.employeeId && a.date===adj.date);
   if(att) att[adj.field]=adj.newValue;
@@ -6117,8 +6124,8 @@ app.post('/api/attendance/adjustments/:id/approve', authMiddleware, roleCheck(['
 });
 app.post('/api/attendance/adjustments/:id/reject', authMiddleware, roleCheck(['Admin','HR']), (req,res)=>{
   const adj=db.attendanceAdjustments.find(a=>a.id===req.params.id);
-  if(!adj) return res.status(404).json({error:'Not found'});
-  adj.status='REJECTED'; adj.approvedBy=req.user.username; adj.approvedAt=new Date().toISOString();
+  if(!adj) return res.status(404).json({error:'Không tìm thấy'});
+  adj.status='REJECTED'; adj.approvedBy=req.user.username; adj.approvedAt=getVietnamISOString();
   audit(req.user.username,'REJECT_ADJUST','ATTENDANCE',null,adj, req.ip);
   saveDB(); io.emit('adjustments:update', db.attendanceAdjustments);
   res.json(adj);
@@ -6137,8 +6144,8 @@ app.post('/api/overtime-requests', authMiddleware, (req,res)=>{
   const { employeeId, date, hours, type, reason } = req.body;
   if(!employeeId || !date || !hours) return res.status(400).json({error:'Thiếu employeeId/date/hours'});
   const emp = db.employees.find(e=>e.employeeId===employeeId);
-  if(!emp) return res.status(404).json({error:'Employee not found'});
-  const ot = { id: uuidv4(), employeeId, employeeName: emp.name, branchId: emp.branchId, date, hours: Number(hours), type: type||'OT_NORMAL', reason: reason||'', status:'PENDING', createdAt: new Date().toISOString(), createdBy: req.user.username };
+  if(!emp) return res.status(404).json({error:'Không tìm thấy nhôn viôn'});
+  const ot = { id: uuidv4(), employeeId, employeeName: emp.name, branchId: emp.branchId, date, hours: Number(hours), type: type||'OT_NORMAL', reason: reason||'', status:'PENDING', createdAt: getVietnamISOString(), createdBy: req.user.username };
   db.overtimeRequests.unshift(ot);
   audit(req.user.username,'CREATE_OT','OVERTIME',null,ot, req.ip);
   saveDB();
@@ -6148,16 +6155,16 @@ app.post('/api/overtime-requests', authMiddleware, (req,res)=>{
 });
 app.post('/api/overtime-requests/:id/approve', authMiddleware, roleCheck(['Admin','HR','Manager']), (req,res)=>{
   const ot = db.overtimeRequests.find(x=>x.id===req.params.id);
-  if(!ot) return res.status(404).json({error:'Not found'});
-  ot.status='APPROVED'; ot.approvedBy=req.user.username; ot.approvedAt=new Date().toISOString();
+  if(!ot) return res.status(404).json({error:'Không tìm thấy'});
+  ot.status='APPROVED'; ot.approvedBy=req.user.username; ot.approvedAt=getVietnamISOString();
   audit(req.user.username,'APPROVE_OT','OVERTIME',null,ot, req.ip);
   saveDB(); io.emit('overtime:update', db.overtimeRequests);
   res.json(ot);
 });
 app.post('/api/overtime-requests/:id/reject', authMiddleware, roleCheck(['Admin','HR','Manager']), (req,res)=>{
   const ot = db.overtimeRequests.find(x=>x.id===req.params.id);
-  if(!ot) return res.status(404).json({error:'Not found'});
-  ot.status='REJECTED'; ot.rejectedBy=req.user.username; ot.rejectedAt=new Date().toISOString(); ot.rejectReason=req.body.reason||'';
+  if(!ot) return res.status(404).json({error:'Không tìm thấy'});
+  ot.status='REJECTED'; ot.rejectedBy=req.user.username; ot.rejectedAt=getVietnamISOString(); ot.rejectReason=req.body.reason||'';
   audit(req.user.username,'REJECT_OT','OVERTIME',null,ot, req.ip);
   saveDB(); io.emit('overtime:update', db.overtimeRequests);
   res.json(ot);
@@ -6190,8 +6197,8 @@ app.post('/api/leave-requests', authMiddleware, (req,res)=>{
   const { employeeId, date, days, type, reason } = req.body;
   if(!employeeId || !date) return res.status(400).json({error:'Thiếu employeeId/date'});
   const emp = db.employees.find(e=>e.employeeId===employeeId);
-  if(!emp) return res.status(404).json({error:'Employee not found'});
-  const leave = { id: uuidv4(), employeeId, employeeName: emp.name, branchId: emp.branchId, date, days: Number(days)||1, type: type||'ANNUAL_LEAVE', reason: reason||'', status:'PENDING', createdAt: new Date().toISOString(), createdBy: req.user.username||employeeId };
+  if(!emp) return res.status(404).json({error:'Không tìm thấy nhôn viôn'});
+  const leave = { id: uuidv4(), employeeId, employeeName: emp.name, branchId: emp.branchId, date, days: Number(days)||1, type: type||'ANNUAL_LEAVE', reason: reason||'', status:'PENDING', createdAt: getVietnamISOString(), createdBy: req.user.username||employeeId };
   db.leaveRequests.unshift(leave);
   audit(req.user.username||employeeId,'CREATE_LEAVE','LEAVE',null,leave, req.ip);
   saveDB(); io.emit('leave:update', db.leaveRequests);
@@ -6199,16 +6206,16 @@ app.post('/api/leave-requests', authMiddleware, (req,res)=>{
 });
 app.post('/api/leave-requests/:id/approve', authMiddleware, roleCheck(['Admin','HR','Manager']), (req,res)=>{
   const lv = db.leaveRequests.find(x=>x.id===req.params.id);
-  if(!lv) return res.status(404).json({error:'Not found'});
-  lv.status='APPROVED'; lv.approvedBy=req.user.username; lv.approvedAt=new Date().toISOString();
+  if(!lv) return res.status(404).json({error:'Không tìm thấy'});
+  lv.status='APPROVED'; lv.approvedBy=req.user.username; lv.approvedAt=getVietnamISOString();
   audit(req.user.username,'APPROVE_LEAVE','LEAVE',null,lv, req.ip);
   saveDB(); io.emit('leave:update', db.leaveRequests);
   res.json(lv);
 });
 app.post('/api/leave-requests/:id/reject', authMiddleware, roleCheck(['Admin','HR','Manager']), (req,res)=>{
   const lv = db.leaveRequests.find(x=>x.id===req.params.id);
-  if(!lv) return res.status(404).json({error:'Not found'});
-  lv.status='REJECTED'; lv.rejectedBy=req.user.username; lv.rejectedAt=new Date().toISOString();
+  if(!lv) return res.status(404).json({error:'Không tìm thấy'});
+  lv.status='REJECTED'; lv.rejectedBy=req.user.username; lv.rejectedAt=getVietnamISOString();
   audit(req.user.username,'REJECT_LEAVE','LEAVE',null,lv, req.ip);
   saveDB(); io.emit('leave:update', db.leaveRequests);
   res.json(lv);
@@ -6221,7 +6228,7 @@ app.post('/api/payroll-periods', authMiddleware, roleCheck(['Admin','HR']), (req
   const { month } = req.body; // YYYY-MM
   if(!month) return res.status(400).json({error:'Thiếu month'});
   if(db.payrollPeriods.find(p=>p.month===month)) return res.status(409).json({error:'Kỳ đã tồn tại'});
-  const period={ id: uuidv4(), month, startDate: month+'-01', endDate: month+'-31', status:'DRAFT', createdBy: req.user.username, createdAt: new Date().toISOString(), lockedBy:null, lockedAt:null };
+  const period={ id: uuidv4(), month, startDate: month+'-01', endDate: month+'-31', status:'DRAFT', createdBy: req.user.username, createdAt: getVietnamISOString(), lockedBy:null, lockedAt:null };
   db.payrollPeriods.push(period);
   audit(req.user.username,'CREATE_PERIOD','PAYROLL',null,period, req.ip);
   saveDB(); io.emit('payrollPeriods:update', db.payrollPeriods);
@@ -6229,7 +6236,7 @@ app.post('/api/payroll-periods', authMiddleware, roleCheck(['Admin','HR']), (req
 });
 app.post('/api/payroll-periods/:id/lock', authMiddleware, roleCheck(['Admin']), (req,res)=>{
   const p=db.payrollPeriods.find(x=>x.id===req.params.id);
-  if(!p) return res.status(404).json({error:'Not found'});
+  if(!p) return res.status(404).json({error:'Không tìm thấy'});
   const m=p.month; const start=m+'-01', end=m+'-31';
   const hasMissing = db.attendances.some(a=>a.date>=start&&a.date<=end && a.checkIn && !a.checkOut);
   if(hasMissing && !req.body.force) return res.status(400).json({error:'Còn lỗi thiếu Check-out, không thể chốt. Dùng force=true để bỏ qua.'});
@@ -6237,7 +6244,7 @@ app.post('/api/payroll-periods/:id/lock', authMiddleware, roleCheck(['Admin']), 
   const pendingOT = db.overtimeRequests.filter(r=>r.status==='PENDING' && r.date>=start && r.date<=end).length;
   const pendingAdj = db.attendanceAdjustments.filter(r=>r.status==='PENDING').length;
   if((pendingOT>0 || pendingAdj>0) && !req.body.force) return res.status(400).json({error:`Còn ${pendingOT} OT chưa duyệt và ${pendingAdj} điều chỉnh pending - dùng force=true để chốt`});
-  p.status='LOCKED'; p.lockedBy=req.user.username; p.lockedAt=new Date().toISOString();
+  p.status='LOCKED'; p.lockedBy=req.user.username; p.lockedAt=getVietnamISOString();
   // Snapshot payroll realtime (spec 28) - đóng băng dữ liệu lương tháng cũ
   try{
     const snapshotData = db.employees.filter(e=>e.status!=='ARCHIVED').map(emp=>{
@@ -6274,10 +6281,10 @@ app.post('/api/payroll-periods/:id/lock', authMiddleware, roleCheck(['Admin']), 
 });
 app.post('/api/payroll-periods/:id/reopen', authMiddleware, roleCheck(['Admin']), (req,res)=>{
   const p=db.payrollPeriods.find(x=>x.id===req.params.id);
-  if(!p) return res.status(404).json({error:'Not found'});
+  if(!p) return res.status(404).json({error:'Không tìm thấy'});
   const { reason } = req.body;
   if(!reason) return res.status(400).json({error:'Cần lý do reopen'});
-  p.status='DRAFT'; p.reopenReason=reason; p.reopenedBy=req.user.username; p.reopenedAt=new Date().toISOString();
+  p.status='DRAFT'; p.reopenReason=reason; p.reopenedBy=req.user.username; p.reopenedAt=getVietnamISOString();
   audit(req.user.username,'REOPEN_PERIOD','PAYROLL',null,p, req.ip);
   saveDB(); io.emit('payrollPeriods:update', db.payrollPeriods);
   res.json(p);
@@ -6286,7 +6293,7 @@ app.post('/api/payroll-periods/:id/reopen', authMiddleware, roleCheck(['Admin'])
 app.get('/api/reports/export/:type', authMiddleware, (req,res)=>{
   const { type } = req.params; // payroll-input, attendance, anomalies, etc.
   const { month, branch } = req.query;
-  const m = month || new Date().toISOString().slice(0,7);
+  const m = month || getVietnamTodayStr().slice(0,7);
   if(type==='payroll-input'){
     // Du_lieu_tinh_luong_08_2026.csv
     let emps=[...db.employees].filter(e=>e.status!=='ARCHIVED');
@@ -6362,7 +6369,7 @@ app.post('/api/sync-queue/retry-all', authMiddleware, async (req,res)=>{
 });
 app.post('/api/sync-queue/:id/retry', authMiddleware, async (req,res)=>{
   const item = db.syncQueue.find(s=>s.id===req.params.id);
-  if(!item) return res.status(404).json({error:'Not found'});
+  if(!item) return res.status(404).json({error:'Không tìm thấy'});
   // Reset để cho phép thử lại đủ 5 lần (fix lỗi dừng sau 5 lần)
   item.sync_status='PENDING';
   item.retryCount=0;
@@ -6371,7 +6378,7 @@ app.post('/api/sync-queue/:id/retry', authMiddleware, async (req,res)=>{
   try {
     await syncToGoogleSheet(item);
     item.sync_status='SYNCED';
-    item.syncedAt=new Date().toISOString();
+    item.syncedAt=getVietnamISOString();
     delete item.error;
     saveDB();
     io.emit('sync:update', db.syncQueue);
@@ -6393,7 +6400,7 @@ app.post('/api/sync/test-webhook', authMiddleware, roleCheck(['Admin']), async (
     const testRes = await fetch(webhookUrl, {
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ secret, sheetName:'TEST', operation:'PING', payload:{ test:true, timestamp: new Date().toISOString() } })
+      body: JSON.stringify({ secret, sheetName:'TEST', operation:'PING', payload:{ test:true, timestamp: getVietnamISOString() } })
     });
     const text = await testRes.text();
     let data; try{ data=JSON.parse(text);}catch(e){ data={ raw: text.slice(0,500)}; }
@@ -6547,7 +6554,7 @@ app.post('/api/interviews/clear-all', authMiddleware, roleCheck(['Admin']), (req
       a.status='NEW_APPLICANT';
       delete a.interview;
       a.version=(a.version||1)+1;
-      a.updated_at=new Date().toISOString();
+      a.updated_at=getVietnamISOString();
       resetCount++;
     }
   });
@@ -6568,7 +6575,7 @@ function generateFinanceKey(type){
   return `${prefix}-${rnd}-${Date.now().toString(36).toUpperCase().slice(-4)}`;
 }
 function getFinanceExpiry(type){
-  const now = new Date();
+  const now = getVietnamNow();
   if(type==='WEEK'){ const d=new Date(now); d.setDate(now.getDate()+7); return d; }
   if(type==='YEAR'){ const d=new Date(now); d.setFullYear(now.getFullYear()+1); return d; }
   // MONTH default
@@ -6578,10 +6585,10 @@ function getFinanceExpiry(type){
 app.post('/api/finance-keys/generate', authMiddleware, roleCheck(['Admin']), (req,res)=>{
   const { type, label } = req.body; // WEEK, MONTH, YEAR
   const t = (type||'MONTH').toUpperCase();
-  if(!['WEEK','MONTH','YEAR'].includes(t)) return res.status(400).json({error:'type phải là WEEK/MONTH/YEAR'});
+  if(!['WEEK','MONTH','YEAR'].includes(t)) return res.status(400).json({error:'Loại key phải là WEEK (tuần), MONTH (tháng) hoặc YEAR (năm)'});
   const key = generateFinanceKey(t);
   const expiresAt = getFinanceExpiry(t).toISOString();
-  const rec = { id: uuidv4(), key, type: t, label: label||`Kế toán ${t} ${new Date().toLocaleDateString('vi-VN', {timeZone:'Asia/Ho_Chi_Minh'})}`, expiresAt, createdAt: new Date().toISOString(), createdBy: req.user.username, status:'ACTIVE', version:1 };
+  const rec = { id: uuidv4(), key, type: t, label: label||`Kế toán ${t} ${new Date().toLocaleDateString('vi-VN', {timeZone:'Asia/Ho_Chi_Minh'})}`, expiresAt, createdAt: getVietnamISOString(), createdBy: req.user.username, status:'ACTIVE', version:1 };
   db.financeKeys.unshift(rec);
   if(db.financeKeys.length>100) db.financeKeys.pop();
   audit(req.user.username,'CREATE_FINANCE_KEY','FINANCE_KEY',null,rec, req.ip);
@@ -6599,9 +6606,9 @@ app.get('/api/finance-keys', authMiddleware, roleCheck(['Admin']), (req,res)=>{
 });
 app.post('/api/finance-keys/:id/revoke', authMiddleware, roleCheck(['Admin']), (req,res)=>{
   const rec = db.financeKeys.find(k=>k.id===req.params.id);
-  if(!rec) return res.status(404).json({error:'Not found'});
+  if(!rec) return res.status(404).json({error:'Không tìm thấy key'});
   const before={...rec};
-  rec.status='REVOKED'; rec.revokedBy=req.user.username; rec.revokedAt=new Date().toISOString();
+  rec.status='REVOKED'; rec.revokedBy=req.user.username; rec.revokedAt=getVietnamISOString();
   audit(req.user.username,'REVOKE_FINANCE_KEY','FINANCE_KEY',before,rec, req.ip);
   saveDB(); io.emit('financeKeys:update', db.financeKeys);
   res.json(rec);
@@ -6609,16 +6616,16 @@ app.post('/api/finance-keys/:id/revoke', authMiddleware, roleCheck(['Admin']), (
 // Finance login bằng key (không cần username/password)
 app.post('/api/auth/finance-login', (req,res)=>{
   const { key } = req.body;
-  if(!key) return res.status(400).json({error:'Thiếu key'});
+  if(!key) return res.status(400).json({error:'Vui lòng nhập Finance Key'});
   const rec = db.financeKeys.find(k=>k.key===key);
-  if(!rec) return res.status(401).json({error:'Key không hợp lệ'});
-  if(rec.status!=='ACTIVE') return res.status(403).json({error:`Key đã ${rec.status} (${rec.status==='EXPIRED'?'hết hạn':'bị thu hồi'})`});
+  if(!rec) return res.status(401).json({error:'Key không hợp lệ - vui lòng kiểm tra lại'});
+  if(rec.status!=='ACTIVE') return res.status(403).json({error:`Key đã ${rec.status==='EXPIRED'?'hết hạn':'bị thu hồi'} (${rec.status})`});
   if(new Date(rec.expiresAt).getTime() <= Date.now()){
     rec.status='EXPIRED'; saveDB(); io.emit('financeKeys:update', db.financeKeys);
-    return res.status(403).json({error:'Key đã hết hạn', expired:true});
+    return res.status(403).json({error:'Key đã hết hạn - vui lòng xin key mới từ Quản trị', expired:true});
   }
   const expSec = Math.floor((new Date(rec.expiresAt).getTime() - Date.now())/1000);
-  if(expSec <=0) return res.status(403).json({error:'Key đã hết hạn'});
+  if(expSec <=0) return res.status(403).json({error:'Key đã hết hạn - vui lòng xin key mới từ Quản trị'});
   const token = jwt.sign({ financeKeyId: rec.id, key: rec.key, role:'Finance', type: rec.type, label: rec.label }, JWT_SECRET, {expiresIn: expSec});
   audit('FINANCE_KEY','FINANCE_LOGIN','FINANCE_KEY',null,{key: rec.key, type: rec.type}, req.ip);
   res.json({ token, key: rec, expiresAt: rec.expiresAt, expSec });
@@ -6626,27 +6633,27 @@ app.post('/api/auth/finance-login', (req,res)=>{
 // Middleware cho Finance
 function financeAuthMiddleware(req,res,next){
   const token = req.headers.authorization?.replace('Bearer ','');
-  if(!token) return res.status(401).json({error:'No token', needLogin:true});
+  if(!token) return res.status(401).json({error:'Chưa có token - vui lòng đăng nhập lại', code:'No token', needLogin:true});
   try{
     const decoded = jwt.verify(token, JWT_SECRET);
-    if(decoded.role!=='Finance') return res.status(403).json({error:'Not Finance role'});
+    if(decoded.role!=='Finance') return res.status(403).json({error:'Bạn không có quyền truy cập Tài chính (yêu cầu vai trò Finance)'});
     // check key still active
     const rec = db.financeKeys.find(k=>k.id===decoded.financeKeyId || k.key===decoded.key);
-    if(!rec) return res.status(401).json({error:'Key không tồn tại', needLogin:true});
-    if(rec.status!=='ACTIVE') return res.status(403).json({error:`Key đã ${rec.status}`, needLogin:true, expired: rec.status==='EXPIRED'});
+    if(!rec) return res.status(401).json({error:'Key không tồn tại - vui lòng đăng nhập lại', needLogin:true});
+    if(rec.status!=='ACTIVE') return res.status(403).json({error:`Key đã ${rec.status==='EXPIRED'?'hết hạn':'bị thu hồi'} (${rec.status})`, needLogin:true, expired: rec.status==='EXPIRED'});
     if(new Date(rec.expiresAt).getTime() <= Date.now()){
       rec.status='EXPIRED'; saveDB(); io.emit('financeKeys:update', db.financeKeys);
-      return res.status(403).json({error:'Key đã hết hạn', needLogin:true, expired:true});
+      return res.status(403).json({error:'Key đã hết hạn - phiên đăng nhập đã hết hạn', needLogin:true, expired:true});
     }
     req.finance = decoded;
     req.financeKey = rec;
     next();
-  }catch(e){ return res.status(401).json({error:'Invalid/Expired token', needLogin:true, expired:true}); }
+  }catch(e){ return res.status(401).json({error:'Token không hợp lệ hoặc đã hết hạn - vui lòng đăng nhập lại', needLogin:true, expired:true}); }
 }
 // Finance reports - chỉ đọc báo cáo chấm công (reuse logic)
 app.get('/api/finance/reports/overview', financeAuthMiddleware, (req,res)=>{
   const { month, branch } = req.query;
-  const m = month || new Date().toLocaleDateString('en-CA', {timeZone:'Asia/Ho_Chi_Minh'}).slice(0,7);
+  const m = month || getVietnamTodayStr().slice(0,7);
   // reuse overview logic (copy from /api/reports/overview)
   const start = m+'-01'; const end = m+'-31';
   let emps = [...db.employees].filter(e=>e.status!=='ARCHIVED');
@@ -6673,7 +6680,7 @@ app.get('/api/finance/reports/overview', financeAuthMiddleware, (req,res)=>{
   res.json({ month:m, start, end, branch: branch||'ALL', totalEmployees:activeEmps.length, totalScheduledDays, totalScheduledHours:Math.round(totalScheduledHours*10)/10, totalActualDays, totalActualHours:Math.round(totalActualHours*10)/10, totalPayableDays, totalPayableHours:Math.round(totalPayableHours*10)/10, totalOT:otHours, paidLeave, unpaidLeave:0, lateCount, lateMinutes, earlyCount, earlyMinutes, missingCheckIn:missingIn, missingCheckOut:missingOut, pendingAdjust, locked:status==='LOCKED'?1:0, pending:status!=='LOCKED'?1:0, status, financeKey: req.financeKey.key, expiresAt: req.financeKey.expiresAt });
 });
 app.get('/api/finance/reports/monthly', financeAuthMiddleware, (req,res)=>{
-  const { month, branch } = req.query; const m = month || new Date().toLocaleDateString('en-CA', {timeZone:'Asia/Ho_Chi_Minh'}).slice(0,7); const start=m+'-01'; const end=m+'-31';
+  const { month, branch } = req.query; const m = month || getVietnamTodayStr().slice(0,7); const start=m+'-01'; const end=m+'-31';
   let emps=[...db.employees].filter(e=>e.status!=='ARCHIVED'); if(branch) emps=emps.filter(e=>e.branchId===branch);
   const rows=emps.map(emp=>{
     const scheds=db.schedules.filter(s=>s.employeeId===emp.employeeId); let scheduledDays=0, scheduledHours=0;
@@ -6692,8 +6699,8 @@ app.get('/api/finance/reports/monthly', financeAuthMiddleware, (req,res)=>{
   res.json(rows);
 });
 app.get('/api/finance/reports/daily', financeAuthMiddleware, (req,res)=>{
-  const { employeeId, month } = req.query; if(!employeeId) return res.status(400).json({error:'Thiếu employeeId'}); const m = month || new Date().toLocaleDateString('en-CA', {timeZone:'Asia/Ho_Chi_Minh'}).slice(0,7); const start=m+'-01'; const end=m+'-31';
-  const emp=db.employees.find(e=>e.employeeId===employeeId); if(!emp) return res.status(404).json({error:'Not found'});
+  const { employeeId, month } = req.query; if(!employeeId) return res.status(400).json({error:'Thiếu mã nhân viên (employeeId)'}); const m = month || getVietnamTodayStr().slice(0,7); const start=m+'-01'; const end=m+'-31';
+  const emp=db.employees.find(e=>e.employeeId===employeeId); if(!emp) return res.status(404).json({error:'Không tìm thấy nhân viên'});
   const schedMap={}; db.schedules.filter(s=>s.employeeId===employeeId).forEach(s=> s.days.forEach(d=>{ if(d.date>=start&&d.date<=end) schedMap[d.date]=d; }));
   const dates=[]; let cur=new Date(start); const endD=new Date(end); while(cur<=endD){ dates.push(cur.toLocaleDateString('en-CA', {timeZone:'Asia/Ho_Chi_Minh'})); cur.setDate(cur.getDate()+1); }
   const details=dates.map(date=>{
@@ -6706,7 +6713,7 @@ app.get('/api/finance/reports/daily', financeAuthMiddleware, (req,res)=>{
   res.json(details);
 });
 app.get('/api/finance/reports/anomalies', financeAuthMiddleware, (req,res)=>{
-  const { month, branch } = req.query; const m = month || new Date().toLocaleDateString('en-CA', {timeZone:'Asia/Ho_Chi_Minh'}).slice(0,7); const start=m+'-01', end=m+'-31';
+  const { month, branch } = req.query; const m = month || getVietnamTodayStr().slice(0,7); const start=m+'-01', end=m+'-31';
   let emps=[...db.employees].filter(e=>e.status!=='ARCHIVED'); if(branch) emps=emps.filter(e=>e.branchId===branch);
   const anomalies=[]; emps.forEach(emp=>{
     const scheds=db.schedules.filter(s=>s.employeeId===emp.employeeId); const schedDates=new Set();
@@ -6718,7 +6725,7 @@ app.get('/api/finance/reports/anomalies', financeAuthMiddleware, (req,res)=>{
   res.json(anomalies);
 });
 app.get('/api/finance/export/payroll-input', financeAuthMiddleware, (req,res)=>{
-  const { month, branch } = req.query; const m = month || new Date().toLocaleDateString('en-CA', {timeZone:'Asia/Ho_Chi_Minh'}).slice(0,7);
+  const { month, branch } = req.query; const m = month || getVietnamTodayStr().slice(0,7);
   let emps=[...db.employees].filter(e=>e.status!=='ARCHIVED'); if(branch) emps=emps.filter(e=>e.branchId===branch);
   const header='MaNV,Thang,NgayTieuChuan,NgayThucTe,NghiPhep,NgayTinhLuong,GioTieuChuan,GioThucTe,GioTinhLuong,TangCa,SoLanTre,SoPhutTre,SoLanVeSom,SoPhutVeSom\n';
   const rows=emps.map(emp=>{
@@ -6764,13 +6771,13 @@ app.get('/api/finance/sheets/template-info', financeAuthMiddleware, (req,res)=>{
       hoanCoc: '=XLOOKUP(A6, DONG_PHUC!A:A, DONG_PHUC!C:C, 0)+XLOOKUP(A6, KHAM_SUC_KHOE!A:A, KHAM_SUC_KHOE!C:C, 0)',
       tongLuong: '=AL6+AM6+AN6'
     },
-    note: 'Sheet ẩn _TEMPLATE_LUONG chứa công thức, khi tạo LUONG_THANG_MM_YYYY sẽ copy nguyên mẫu'
+    note: 'Trang tính ẩn MẪU_LƯƠNG chứa công thức, khi tạo LUONG_THANG_MM_YYYY sẽ sao chép nguyên mẫu'
   });
 });
 // Finance 4 sheets - đồng bộ 2 chiều khi kế toán sửa trên web
 app.post('/api/finance/sheets/master-data', financeAuthMiddleware, async (req,res)=>{
   const { bhCode, hoTen, branchGoc, status, ngayLenChinhThuc } = req.body;
-  if(!bhCode) return res.status(400).json({ error:'Thiếu BH_Code' });
+  if(!bhCode) return res.status(400).json({ error:'Thiếu Mã NV (BH_Code)' });
   // Cập nhật local DB (MASTER_DATA) - nếu chưa có thì tạo mới (finance có thể tạo BH mới)
   let emp = db.employees.find(e=> e.employeeId===bhCode);
   if(emp){
@@ -6779,20 +6786,20 @@ app.post('/api/finance/sheets/master-data', financeAuthMiddleware, async (req,re
     if(branchGoc) emp.branchId=branchGoc;
     if(status) emp.status=status;
     if(ngayLenChinhThuc!==undefined) emp.officialStartDate=ngayLenChinhThuc;
-    emp.updated_at=new Date().toISOString();
+    emp.updated_at=getVietnamISOString();
     audit(req.finance.key,'UPDATE_MASTER_DATA','MASTER_DATA', before, emp, req.ip);
   } else {
     // Tạo mới BH_Code từ Finance web (chưa có trong HR)
     const newEmp = {
       id: uuidv4(), employeeId: bhCode, name: hoTen||bhCode, phone: '', branchId: branchGoc||'CN1', shift: 'CA_SANG',
-      startDate: new Date().toISOString().split('T')[0], status: status||'Training', type: (status==='Official'?'OFFICIAL':'TRAINING'),
-      category: 'STORE', version:1, updated_at: new Date().toISOString(), updated_by: req.finance.key, source:'FINANCE_WEB', sync_status:'PENDING'
+      startDate: getVietnamTodayStr(), status: status||'Training', type: (status==='Official'?'OFFICIAL':'TRAINING'),
+      category: 'STORE', version:1, updated_at: getVietnamISOString(), updated_by: req.finance.key, source:'FINANCE_WEB', sync_status:'PENDING'
     };
     if(ngayLenChinhThuc) newEmp.officialStartDate=ngayLenChinhThuc;
     db.employees.push(newEmp);
     audit(req.finance.key,'CREATE_MASTER_DATA','MASTER_DATA', null, newEmp, req.ip);
     // Tạo key cho NV mới nếu cần
-    const newKey={ id: uuidv4(), employeeId: bhCode, key: 'KEY-'+Math.random().toString(36).substring(2,10).toUpperCase(), status:'ACTIVE', version:1, updated_at: new Date().toISOString(), sync_status:'PENDING' };
+    const newKey={ id: uuidv4(), employeeId: bhCode, key: 'KEY-'+Math.random().toString(36).substring(2,10).toUpperCase(), status:'ACTIVE', version:1, updated_at: getVietnamISOString(), sync_status:'PENDING' };
     db.keys.push(newKey);
   }
   // Đồng bộ lên Google Sheets Finance MASTER_DATA
@@ -6807,11 +6814,11 @@ app.post('/api/finance/sheets/master-data', financeAuthMiddleware, async (req,re
 });
 app.post('/api/finance/sheets/dong-phuc', financeAuthMiddleware, async (req,res)=>{
   const { bhCode, hoTen, soTien, ngay, ghiChu } = req.body;
-  if(!bhCode) return res.status(400).json({ error:'Thiếu BH_Code' });
+  if(!bhCode) return res.status(400).json({ error:'Thiếu Mã NV (BH_Code)' });
   if(!db.financeDongPhuc) db.financeDongPhuc=[];
   let row = db.financeDongPhuc.find(r=> r.bhCode===bhCode);
-  if(row){ Object.assign(row, { hoTen: hoTen||row.hoTen, soTien: soTien!=null?Number(soTien):row.soTien, ngay: ngay||row.ngay, ghiChu: ghiChu||row.ghiChu, updatedAt: new Date().toISOString() }); }
-  else { row={ bhCode, hoTen: hoTen||'', soTien: Number(soTien)||0, ngay: ngay||new Date().toISOString().split('T')[0], ghiChu: ghiChu||'', createdAt: new Date().toISOString() }; db.financeDongPhuc.push(row); }
+  if(row){ Object.assign(row, { hoTen: hoTen||row.hoTen, soTien: soTien!=null?Number(soTien):row.soTien, ngay: ngay||row.ngay, ghiChu: ghiChu||row.ghiChu, updatedAt: getVietnamISOString() }); }
+  else { row={ bhCode, hoTen: hoTen||'', soTien: Number(soTien)||0, ngay: ngay||getVietnamTodayStr(), ghiChu: ghiChu||'', createdAt: getVietnamISOString() }; db.financeDongPhuc.push(row); }
   const webhookUrl = db.settings.finance?.webhookUrl || process.env.FINANCE_WEBHOOK_URL;
   const secret = db.settings.finance?.secret || process.env.FINANCE_WEBHOOK_SECRET || 'umbomilk_secret_2026';
   if(webhookUrl){ try{ await fetch(webhookUrl, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ secret, action:'UPSERT_DONGPHUC', payload: row }) }); }catch(e){} }
@@ -6820,11 +6827,11 @@ app.post('/api/finance/sheets/dong-phuc', financeAuthMiddleware, async (req,res)
 });
 app.post('/api/finance/sheets/kham-suc-khoe', financeAuthMiddleware, async (req,res)=>{
   const { bhCode, hoTen, soTien, ngay, ghiChu } = req.body;
-  if(!bhCode) return res.status(400).json({ error:'Thiếu BH_Code' });
+  if(!bhCode) return res.status(400).json({ error:'Thiếu Mã NV (BH_Code)' });
   if(!db.financeKhamSK) db.financeKhamSK=[];
   let row = db.financeKhamSK.find(r=> r.bhCode===bhCode);
-  if(row){ Object.assign(row, { hoTen: hoTen||row.hoTen, soTien: soTien!=null?Number(soTien):row.soTien, ngay: ngay||row.ngay, ghiChu: ghiChu||row.ghiChu, updatedAt: new Date().toISOString() }); }
-  else { row={ bhCode, hoTen: hoTen||'', soTien: Number(soTien)||0, ngay: ngay||new Date().toISOString().split('T')[0], ghiChu: ghiChu||'', createdAt: new Date().toISOString() }; db.financeKhamSK.push(row); }
+  if(row){ Object.assign(row, { hoTen: hoTen||row.hoTen, soTien: soTien!=null?Number(soTien):row.soTien, ngay: ngay||row.ngay, ghiChu: ghiChu||row.ghiChu, updatedAt: getVietnamISOString() }); }
+  else { row={ bhCode, hoTen: hoTen||'', soTien: Number(soTien)||0, ngay: ngay||getVietnamTodayStr(), ghiChu: ghiChu||'', createdAt: getVietnamISOString() }; db.financeKhamSK.push(row); }
   const webhookUrl = db.settings.finance?.webhookUrl || process.env.FINANCE_WEBHOOK_URL;
   const secret = db.settings.finance?.secret || process.env.FINANCE_WEBHOOK_SECRET || 'umbomilk_secret_2026';
   if(webhookUrl){ try{ await fetch(webhookUrl, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ secret, action:'UPSERT_KHAMSUC', payload: row }) }); }catch(e){} }
@@ -6847,15 +6854,28 @@ io.use((socket, next)=>{
   next();
 });
 io.on('connection', (socket)=>{
-  console.log('Socket connected', socket.id, socket.user ? `user:${socket.user.username||socket.user.employeeId}` : 'anonymous');
-  socket.emit('db:init', { employees: db.employees.length, applicants: db.applicants.length, timestamp: new Date().toISOString(), heartbeat: true });
-  socket.emit('automation:heartbeat', { now: new Date().toISOString(), realtime: true });
-  // Realtime room per branch + per employee (để force logout khi xóa tài khoản)
+  console.log('Socket connected', socket.id, socket.user ? `user:${socket.user.username||socket.user.employeeId||socket.user.key||socket.user.role}` : 'anonymous');
+  socket.emit('db:init', { employees: db.employees.length, applicants: db.applicants.length, timestamp: getVietnamISOString(), heartbeat: true });
+  socket.emit('automation:heartbeat', { now: getVietnamISOString(), realtime: true });
+  // Realtime room per branch + per employee (để force logout khi xóa tài khoản) + finance
   if(socket.user?.branchScope) socket.user.branchScope.forEach(b=> socket.join(`branch:${b}`));
   if(socket.user?.branchId) socket.join(`branch:${socket.user.branchId}`);
   if(socket.user?.employeeId) socket.join(`employee:${socket.user.employeeId}`);
+  // Finance: join global finance room + all branches để nhận broadcast kế toán (dù broadcast toàn cục vẫn nhận, join để hỗ trợ io.to('finance').emit sau này)
+  if(socket.user?.role==='Finance'){
+    socket.join('finance');
+    // Finance có quyền đọc tất cả chi nhánh - join all branch rooms
+    (db.branches||[]).forEach(b=> socket.join(`branch:${b.id}`));
+    if(socket.user?.financeKeyId) socket.join(`finance:${socket.user.financeKeyId}`);
+    if(socket.user?.key) socket.join(`finance:${socket.user.key}`);
+  }
+  // Admin không có branchScope cụ thể nhưng role Admin -> join all branches
+  if(socket.user?.role==='Admin'){
+    (db.branches||[]).forEach(b=> socket.join(`branch:${b.id}`));
+    socket.join('admin');
+  }
   socket.on('disconnect', ()=> console.log('disconnected', socket.id));
-  socket.on('ping:heartbeat', ()=> socket.emit('pong:heartbeat', { now: new Date().toISOString() }));
+  socket.on('ping:heartbeat', ()=> socket.emit('pong:heartbeat', { now: getVietnamISOString() }));
 });
 
 server.listen(PORT, ()=> console.log(`Ụm Bò Milk HR running at http://localhost:${PORT}`));

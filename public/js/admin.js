@@ -43,24 +43,24 @@ const SHIFT_MAP = {
 };
 
 const NAV = [
-  {id:'dashboard', icon:'fa-chart-line', label:'Tổng quan', desc:'Dashboard KPI', group:'Tổng quan'},
-  {id:'applicants', icon:'fa-user-plus', label:'Nhân viên mới', badge:'Form', group:'Tuyển dụng'},
+  {id:'dashboard', icon:'fa-chart-line', label:'Tổng quan', desc:'KPI tổng quan', group:'Tổng quan'},
+  {id:'applicants', icon:'fa-user-plus', label:'Nhân viên mới', badge:'Biểu mẫu', group:'Tuyển dụng'},
   {id:'interviews', icon:'fa-calendar-check', label:'Lịch phỏng vấn', badge:'Google Meet', group:'Tuyển dụng'},
-  {id:'employees-store', icon:'fa-store', label:'NV Cửa hàng', badge:'Training/Chính thức', group:'Nhân sự'},
-  {id:'beta-workshop', icon:'fa-industry', label:'NV Xưởng', badge:'Beta', group:'Nhân sự'},
-  {id:'beta-office', icon:'fa-building', label:'NV Văn phòng', badge:'Beta', group:'Nhân sự'},
-  {id:'beta-sale', icon:'fa-bullhorn', label:'NV Sale', badge:'Beta', group:'Nhân sự'},
+  {id:'employees-store', icon:'fa-store', label:'NV Cửa hàng', badge:'Thử việc/Chính thức', group:'Nhân sự'},
+  {id:'beta-workshop', icon:'fa-industry', label:'NV Xưởng', badge:'Thử nghiệm', group:'Nhân sự'},
+  {id:'beta-office', icon:'fa-building', label:'NV Văn phòng', badge:'Thử nghiệm', group:'Nhân sự'},
+  {id:'beta-sale', icon:'fa-bullhorn', label:'NV Sale', badge:'Thử nghiệm', group:'Nhân sự'},
   {id:'schedule', icon:'fa-calendar-days', label:'Lịch làm việc', desc:'T2→CN', group:'Vận hành'},
   {id:'shiftSwap', icon:'fa-people-arrows', label:'Đổi ca', desc:'24h AI', group:'Vận hành'},
-  {id:'requests', icon:'fa-clipboard-check', label:'Duyệt phiếu', badge:'OFF/Reset', group:'Vận hành'},
-  {id:'attendance', icon:'fa-camera', label:'Record điểm danh', desc:'GPS/Ảnh', group:'Vận hành'},
-  {id:'zalo', icon:'fa-brands fa-viber', label:'Record Zalo', desc:'SENT/FAILED', group:'Vận hành'},
+  {id:'requests', icon:'fa-clipboard-check', label:'Duyệt phiếu', badge:'Nghỉ/Đặt lại', group:'Vận hành'},
+  {id:'attendance', icon:'fa-camera', label:'Bản ghi điểm danh', desc:'GPS/Ảnh', group:'Vận hành'},
+  {id:'zalo', icon:'fa-brands fa-viber', label:'Lịch sử Zalo', desc:'Đã gửi/Lỗi', group:'Vận hành'},
   {id:'report', icon:'fa-file-invoice', label:'Báo cáo chấm công', desc:'Lương', group:'Vận hành'},
-  {id:'finance-keys', icon:'fa-coins', label:'Finance Keys', badge:'Kế toán', group:'Hệ thống'},
-  {id:'google-sheet-hub', icon:'fa-database', label:'Google Sheet Hub', badge:'Operational', group:'Hệ thống', desc:'1rcq/17iXM/Finance'},
-  {id:'elearning', icon:'fa-graduation-cap', label:'E-learning', desc:'TEST', group:'Hệ thống'},
+  {id:'finance-keys', icon:'fa-coins', label:'Khóa Tài chính', badge:'Kế toán', group:'Hệ thống'},
+  {id:'google-sheet-hub', icon:'fa-database', label:'Trung tâm Google Sheet', badge:'Vận hành', group:'Hệ thống', desc:'1rcq/17iXM/Tài chính'},
+  {id:'elearning', icon:'fa-graduation-cap', label:'Đào tạo', desc:'Kiểm tra', group:'Hệ thống'},
   {id:'settings', icon:'fa-gear', label:'Cài đặt', badge:'Admin', group:'Hệ thống'},
-  {id:'audit', icon:'fa-shield-halved', label:'Audit Log', desc:'Security', group:'Hệ thống'},
+  {id:'audit', icon:'fa-shield-halved', label:'Nhật ký hệ thống', desc:'Bảo mật', group:'Hệ thống'},
 ];
 const NAV_GROUPS = ['Tổng quan','Tuyển dụng','Nhân sự','Vận hành','Hệ thống'];
 const NAV_GROUP_ICONS = {'Tổng quan':'fa-chart-pie','Tuyển dụng':'fa-user-plus','Nhân sự':'fa-users','Vận hành':'fa-gears','Hệ thống':'fa-shield-halved'};
@@ -89,13 +89,10 @@ function fmtDMYTime(iso){
   try{
     const dt = new Date(iso);
     if(isNaN(dt)) return iso;
-    const dd=String(dt.getDate()).padStart(2,'0');
-    const mm=String(dt.getMonth()+1).padStart(2,'0');
-    const yyyy=dt.getFullYear();
-    const hh=String(dt.getHours()).padStart(2,'0');
-    const mi=String(dt.getMinutes()).padStart(2,'0');
-    const ss=String(dt.getSeconds()).padStart(2,'0');
-    return `${dd}/${mm}/${yyyy} ${hh}:${mi}:${ss}`;
+    // Vietnam timezone display
+    const vn = new Date(dt.toLocaleString('en-US', {timeZone: 'Asia/Ho_Chi_Minh'}));
+    // Fallback to toLocaleString vi-VN with timezone for correctness
+    return dt.toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh', day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false});
   }catch(e){ return iso;}
 }
 
@@ -124,14 +121,14 @@ function getStatusVi(status) {
     NEW_APPLICANT: 'Ứng viên mới',
     INTERVIEW: 'Đã hẹn phỏng vấn',
     PASS: 'Đạt phỏng vấn',
-    CONVERTED: 'Đã chuyển Training',
+    CONVERTED: 'Đã chuyển thử việc',
     REJECTED: 'Bị loại',
     TRAINING: 'Thử việc (12 ngày)',
     OFFICIAL: 'Chính thức',
-    WAITING_TEST: 'Chờ làm bài Test',
-    FAILED_TEST: 'Chưa đạt bài Test',
-    RETEST: 'Thi lại Test',
-    WAITING_OFFICIAL: 'Chưa chính thức',
+    WAITING_TEST: 'Chờ làm bài kiểm tra',
+    FAILED_TEST: 'Chưa đạt bài kiểm tra',
+    RETEST: 'Thi lại',
+    WAITING_OFFICIAL: 'Chờ chính thức',
     ARCHIVED: 'Đã lưu trữ',
     WORKING: 'Đang làm việc',
     SUBSTITUTE: 'Làm thay',
@@ -140,12 +137,23 @@ function getStatusVi(status) {
     NONE: 'Nghỉ',
     ACTIVE: 'Hoạt động',
     PENDING: 'Chờ duyệt',
+    PENDING_TARGET: 'Chờ người được mời',
+    PENDING_BROADCAST: 'Chờ phổ biến',
+    PENDING_BROADCAST_ACCEPTED: 'Đã có người nhận',
     APPROVED: 'Đã duyệt',
     DENIED: 'Từ chối',
     EXPIRED: 'Hết hạn',
     SYNCED: 'Đã đồng bộ',
     FAILED: 'Thất bại',
-    SENT: 'Đã gửi'
+    SENT: 'Đã gửi',
+    QUEUED: 'Đang chờ',
+    DELIVERED: 'Đã nhận',
+    UNCONFIGURED: 'Chưa cấu hình',
+    DEAD: 'Đã dừng',
+    COMPLETED: 'Hoàn thành',
+    CHECKED_IN: 'Đã check-in',
+    LATE: 'Trễ',
+    NO_SCHEDULE: 'Không có lịch'
   };
   return map[status] || status;
 }
@@ -526,9 +534,9 @@ function connectSocket(){
       const active = document.querySelector('.tab-section:not(.hidden)')?.id?.replace('tab-','');
       const syncEl = document.getElementById('syncStatus') || document.getElementById('syncBadge');
       if (syncEl) {
-        syncEl.textContent = 'LIVE UPDATE';
+        syncEl.textContent = 'CẬP NHẬT TRỰC TIẾP';
         syncEl.classList.add('bg-emerald-500','animate-pulse');
-        setTimeout(() => { if (syncEl) { syncEl.textContent = 'SYNCED'; syncEl.classList.remove('animate-pulse'); } }, 1200);
+        setTimeout(() => { if (syncEl) { syncEl.textContent = 'ĐÃ ĐỒNG BỘ'; syncEl.classList.remove('animate-pulse'); } }, 1200);
       }
       // === REALTIME RÀNG BUỘC: Chấm công -> Lịch + Nhân viên Training/Chính thức ===
       // Cập nhật local ngay để render tức thì (không chờ fetch), rồi vẫn fetch nền để đồng bộ
@@ -626,7 +634,7 @@ async function loadBranches(){
   const attDate = document.getElementById('attDate');
   if(attDate && !attDate.value) attDate.value = getVietnamTodayStr();
   const reportMonth = document.getElementById('reportMonth');
-  if(reportMonth && !reportMonth.value) reportMonth.value = new Date().toISOString().slice(0,7);
+  if(reportMonth && !reportMonth.value) reportMonth.value = getVietnamTodayStr().slice(0,7);
 }
 
 // Dashboard
@@ -720,7 +728,7 @@ function renderCharts(charts){
       if(testChartInstance) try{testChartInstance.destroy();}catch(_){}
       testChartInstance = new Chart(ctx2, {
         type:'doughnut',
-        data:{labels:['FAILED','CHƯA ĐỦ ĐK','ĐẠT'], datasets:[{data:[(charts.testDist?.failed||0), (charts.testDist?.retake||0), (charts.testDist?.passed||0)], backgroundColor:['#ef4444','#f59e0b','#10b981']}]},
+        data:{labels:['KHÔNG ĐẠT','CHƯA ĐỦ ĐK','ĐẠT'], datasets:[{data:[(charts.testDist?.failed||0), (charts.testDist?.retake||0), (charts.testDist?.passed||0)], backgroundColor:['#ef4444','#f59e0b','#10b981']}]},
         options:{plugins:{legend:{position:'bottom', labels:{font:{size:10}}}} }
       });
     }
@@ -747,7 +755,7 @@ function renderDashSync(){
         <div class="text-xs font-bold text-slate-700 truncate">${s.entity} • ${s.operation}</div>
         <div class="text-[11px] text-slate-500 truncate">${fmtDMYTime(s.updated_at)} • ${s.source}${s.error ? ` <span class="text-rose-500 font-normal">(${s.error})</span>` : ''}</div>
       </div>
-      <span class="text-[11px] font-black px-2 py-1 rounded-full ${s.sync_status==='SYNCED'?'bg-pink-100 text-pink-700':s.sync_status==='PENDING'?'bg-pink-100 text-pink-700':s.sync_status==='FAILED'?'bg-red-100 text-red-700':s.sync_status==='UNCONFIGURED'?'bg-amber-100 text-amber-700':'bg-purple-100 text-purple-700'}">${s.sync_status}</span>
+      <span class="text-[11px] font-black px-2 py-1 rounded-full ${s.sync_status==='SYNCED'?'bg-emerald-100 text-emerald-700':s.sync_status==='PENDING'?'bg-amber-100 text-amber-700':s.sync_status==='FAILED'?'bg-red-100 text-red-700':s.sync_status==='UNCONFIGURED'?'bg-slate-100 text-slate-600':'bg-purple-100 text-purple-700'}">${s.sync_status==='SYNCED'?'ĐÃ ĐỒNG BỘ':s.sync_status==='PENDING'?'CHỜ':s.sync_status==='FAILED'?'LỖI':s.sync_status==='UNCONFIGURED'?'CHƯA CẤU HÌNH':s.sync_status}</span>
     </div>
   `).join('');
 }
@@ -1418,7 +1426,7 @@ async function openInterviewModal(applicantId) {
   const allInterviews = await api('/api/interviews');
 
   // Default to tomorrow YYYY-MM-DD
-  const tomorrow = new Date();
+  const tomorrow = getVietnamNow();
   tomorrow.setDate(tomorrow.getDate() + 1);
   const defaultDateStr = toVietnamDateStr(tomorrow);
 
@@ -1768,7 +1776,7 @@ function getInterviewTimeState(inv) {
     const endH = parseInt(endParts[0]), endM = parseInt(endParts[1]);
     if (isNaN(startH) || isNaN(startM) || isNaN(endH) || isNaN(endM)) return 'before';
 
-    const now = new Date();
+    const now = getVietnamNow();
     const start = new Date(inv.interviewDate); start.setHours(startH, startM, 0, 0);
     const startWithGrace = new Date(start.getTime() - 10 * 60 * 1000); // 10 mins prior entry allowed
     const end = new Date(inv.interviewDate); end.setHours(endH, endM, 0, 0);
@@ -1784,7 +1792,7 @@ function getInterviewCountdown(inv) {
     const parts = (inv.timeSlot || '').split('-');
     const [startH, startM] = parts[0].trim().split(':').map(Number);
     const start = new Date(inv.interviewDate); start.setHours(startH, startM, 0, 0);
-    const diffMs = start - new Date();
+    const diffMs = start - getVietnamNow();
     if (diffMs <= 0) return 'Sắp bắt đầu';
     const diffMin = Math.floor(diffMs / 60000);
     const diffH = Math.floor(diffMin / 60);
@@ -1821,7 +1829,7 @@ function convertApplicant(id) {
     return showToast('Đang trong quá trình Phỏng vấn — Khóa nút Training (Chỉ tài khoản Admin mới có quyền)', 'error');
   }
 
-  const today = new Date();
+  const today = getVietnamNow();
   const todayStr = toVietnamDateStr(today);
 
   let defaultShift = a.shiftPreference || a.shiftText || 'CA_TRUA';
@@ -2171,10 +2179,10 @@ function getEmployeeTrainingProgress(emp) {
       const allOff = (typeof offRequests!=='undefined' ? offRequests : []);
       const allEmerg = (typeof emergencyRequests!=='undefined' ? emergencyRequests : []);
       // Tìm tuần mục tiêu: ưu tiên lịch có sẵn chứa hôm nay, else tuần sau (nơi AI đã sắp OFF) - realtime đúng lịch web
-      const today = new Date(); today.setHours(0,0,0,0);
+      const today = getVietnamNow(); today.setHours(0,0,0,0);
       const todayStr = toVietnamDateStr(today);
       const curMonStr = toVietnamDateStr(getMonday(today));
-      const nextMonStr = toVietnamDateStr(getMonday(new Date(Date.now()+7*24*60*60*1000)));
+      const nextMonStr = toVietnamDateStr(getMonday(new Date(getVietnamNow().getTime()+7*24*60*60*1000)));
       let targetWeekStr = curMonStr;
       let sched = allSchedules.find(s=>s.employeeId===emp.employeeId && s.weekStart===targetWeekStr);
       // Nếu NV chính thức có ngày bắt đầu tương lai và tuần hiện tại là tuần chờ (partial), chọn tuần đầu tiên đủ 7 ngày làm việc
@@ -2260,13 +2268,13 @@ function getEmployeeOffProgress(emp) {
     try{
       const offList = (typeof offRequests!=='undefined' ? offRequests : []);
       // Đếm OFF tuần sau (next week Mon-Sun) - AI đã sắp lịch
-      const nextMon = toVietnamDateStr(getMonday(new Date(Date.now()+7*24*60*60*1000)));
+      const nextMon = toVietnamDateStr(getMonday(new Date(getVietnamNow().getTime()+7*24*60*60*1000)));
       const nextSun = new Date(new Date(nextMon).getTime()+6*24*60*60*1000);
       const countNextWeek = offList.filter(r=>r.employeeId===emp.employeeId && r.status==='APPROVED' && r.dates.some(d=>d>=nextMon && d<=nextSun)).reduce((s,r)=>s+r.dates.filter(d=>d>=nextMon && d<=nextSun).length,0);
       if(countNextWeek===2) return { count:2, label: '2/2 ngày OFF (tuần sau)', isFull: true };
       if(countNextWeek>0) return { count:countNextWeek, label: `${countNextWeek}/2 ngày OFF`, isFull: false };
       // fallback: đếm OFF trong tháng
-      const monthStr = new Date().toISOString().slice(0,7);
+      const monthStr = getVietnamTodayStr().slice(0,7);
       const countMonth = offList.filter(r=>r.employeeId===emp.employeeId && r.status==='APPROVED').reduce((s,r)=>s+r.dates.filter(d=>d.startsWith(monthStr)).length,0);
       if(countMonth>0) return { count:countMonth, label: `${countMonth} ngày OFF (tháng)`, isFull: countMonth>=2 };
       return { count:0, label: 'Chưa chọn OFF (0/2)', isFull: false };
@@ -2305,9 +2313,9 @@ function getEmployeeTrialWindowInfo(emp) {
 
   const startDateStr = emp.startDate || getVietnamTodayStr();
   const parts = startDateStr.split('T')[0].split('-').map(Number);
-  const startD = (parts.length === 3 && !isNaN(parts[0])) ? new Date(parts[0], parts[1] - 1, parts[2]) : new Date();
+  const startD = (parts.length === 3 && !isNaN(parts[0])) ? new Date(parts[0], parts[1] - 1, parts[2]) : getVietnamNow();
   
-  const today = new Date();
+  const today = getVietnamNow();
   today.setHours(0,0,0,0);
   startD.setHours(0,0,0,0);
 
@@ -2333,13 +2341,13 @@ function switchEmpStoreTab(tab){
   if(tab==='TRAINING'){
     if(btnTraining) btnTraining.className = 'flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-black transition bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow';
     if(btnOfficial) btnOfficial.className = 'flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold transition bg-white border border-pink-200 text-pink-700 hover:bg-pink-50';
-    if(label) label.textContent = 'DANH SÁCH NHÂN VIÊN TRAINING';
-    if(filterEl) filterEl.innerHTML = `<option value="">Tất cả trạng thái Training</option><option value="TRAINING">Training</option><option value="WAITING_TEST">Chờ TEST</option><option value="RETEST">Chờ thi lại</option><option value="PASSED_TEST">Đậu TEST</option><option value="FAILED_TEST">FAILED</option><option value="WAITING_OFFICIAL">Chờ chính thức</option><option value="ARCHIVED">ARCHIVED</option>`;
+    if(label) label.textContent = 'DANH SÁCH NHÂN VIÊN THỬ VIỆC';
+    if(filterEl) filterEl.innerHTML = `<option value="">Tất cả trạng thái Thử việc</option><option value="TRAINING">Thử việc</option><option value="WAITING_TEST">Chờ Kiểm tra</option><option value="RETEST">Chờ thi lại</option><option value="PASSED_TEST">Đậu Kiểm tra</option><option value="FAILED_TEST">Không đạt</option><option value="WAITING_OFFICIAL">Chờ chính thức</option><option value="ARCHIVED">Đã lưu trữ</option>`;
   } else {
     if(btnOfficial) btnOfficial.className = 'flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-black transition bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow';
     if(btnTraining) btnTraining.className = 'flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold transition bg-white border border-pink-200 text-pink-700 hover:bg-pink-50';
     if(label) label.textContent = 'DANH SÁCH NHÂN VIÊN CHÍNH THỨC';
-    if(filterEl) filterEl.innerHTML = `<option value="">Tất cả trạng thái Chính thức</option><option value="OFFICIAL">Chính thức</option><option value="ARCHIVED">ARCHIVED</option>`;
+    if(filterEl) filterEl.innerHTML = `<option value="">Tất cả trạng thái Chính thức</option><option value="OFFICIAL">Chính thức</option><option value="ARCHIVED">Đã lưu trữ</option>`;
   }
   if(filterEl) filterEl.value = '';
   // Toggle import controls visibility (yêu cầu #3: Training import)
@@ -2678,7 +2686,7 @@ function renderEmployeesStore(){
   const paginatedEmp = list.slice(empStart, empStart + empPag.limit);
   // Cập nhật ngày trong chú thích legend realtime (luôn chạy, cả khi có NV hay không)
   try{
-    const nowLegend = new Date();
+    const nowLegend = getVietnamNow();
     const todayL = nowLegend.toLocaleDateString('vi-VN', {timeZone:'Asia/Ho_Chi_Minh'});
     const todayISO = nowLegend.toLocaleDateString('en-CA', {timeZone:'Asia/Ho_Chi_Minh'});
     const elLegend = document.getElementById('legendTodayDate');
@@ -2726,9 +2734,9 @@ function renderEmployeesStore(){
           <!-- Chấm công hôm nay (Realtime) - Ràng buộc với Lịch làm việc -->
           <td class="px-4 py-3.5 align-middle text-center whitespace-nowrap">
             ${(()=>{
-              const nowLocal = new Date();
+              const nowLocal = getVietnamNow();
               const todayLocal = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth()+1).padStart(2,'0')}-${String(nowLocal.getDate()).padStart(2,'0')}`;
-              const todayVN = new Date().toLocaleDateString('en-CA', {timeZone:'Asia/Ho_Chi_Minh'});
+              const todayVN = getVietnamTodayStr();
               const todayUTC = getVietnamTodayStr();
               const candidates = [todayLocal, todayVN, todayUTC];
               let attToday = null;
@@ -3071,7 +3079,7 @@ function openOption2ScheduleModal(employeeId) {
 
   const d = new Date();
   d.setHours(d.getHours() + 2, 0, 0, 0);
-  const defaultIsoStr = new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
+  const defaultIsoStr = new Date().toLocaleString('sv-SE', {timeZone: 'Asia/Ho_Chi_Minh'}).replace(' ', 'T').slice(0,16);
   const defaultMeet = 'https://meet.google.com/ubm-test-' + Math.random().toString(36).substring(7);
 
   openModal('📅 ĐẶT LỊCH PHỎNG VẤN TEST ĐẦU RA (GOOGLE MEET)', `
@@ -3138,7 +3146,7 @@ function openTestInviteModal(employeeId) {
   if (!e) return;
 
   const ts = e.testSchedule || {};
-  const timeStr = ts.scheduledAt ? new Date(ts.scheduledAt).toLocaleString('vi-VN') : 'Chưa xếp';
+  const timeStr = ts.scheduledAt ? new Date(ts.scheduledAt).toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'}) : 'Chưa xếp';
   const meetLink = ts.meetLink || 'https://meet.google.com/ubm-test-meet';
 
   const inviteText = `💌 THƯ MỜI PHỎNG VẤN TEST ĐẦU RA ỤM BÒ MILK\n` +
@@ -3202,7 +3210,7 @@ function openTestEvaluationModal(employeeId) {
 
   const branchName = getBranchDisplay(e.branchId);
   const evaluatorDefault = (currentUser && (currentUser.displayName || currentUser.username)) || 'HR Admin';
-  const nowStr = new Date().toLocaleString('vi-VN');
+  const nowStr = new Date().toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'});
 
   const part1Questions = [
     "Sữa bò váng mới vắt là gì? Nguồn sữa ở đâu?",
@@ -3736,7 +3744,7 @@ function changeScheduleWeek(offsetDays) {
     const parts = currentVal.split('-').map(Number);
     currentDate = new Date(parts[0], parts[1] - 1, parts[2]);
   } else {
-    currentDate = new Date();
+    currentDate = getVietnamNow();
   }
 
   currentDate.setDate(currentDate.getDate() + offsetDays);
@@ -3784,7 +3792,7 @@ async function loadSchedules(){
 function renderSchedules(){
   // Cập nhật ngày trong chú thích legend Lich làm việc (realtime)
   try{
-    const nowLegend = new Date();
+    const nowLegend = getVietnamNow();
     const todayL = nowLegend.toLocaleDateString('vi-VN', {timeZone:'Asia/Ho_Chi_Minh'});
     const todayISO = nowLegend.toLocaleDateString('en-CA', {timeZone:'Asia/Ho_Chi_Minh'});
     const elSchedLegend = document.getElementById('scheduleLegendTodayDate');
@@ -3894,7 +3902,7 @@ function renderSchedules(){
             const shiftInfo = SHIFT_DETAIL[shiftKey] || {label:shiftKey, time:'', hours:''};
             const branchFull2 = getBranchFull(emp.branchId || bid);
 
-            const todayObj = new Date();
+            const todayObj = getVietnamNow();
             const todayY = todayObj.getFullYear();
             const todayM = String(todayObj.getMonth() + 1).padStart(2, '0');
             const todayD = String(todayObj.getDate()).padStart(2, '0');
@@ -3920,7 +3928,7 @@ function renderSchedules(){
             const wParts = targetWeekStart.split('-').map(Number);
             const wDateObj = (wParts.length === 3 && !isNaN(wParts[0])) 
               ? new Date(wParts[0], wParts[1] - 1, wParts[2]) 
-              : new Date();
+              : getVietnamNow();
 
             const displayDays = dayNamesList.map((dName, i) => {
               const currD = new Date(wDateObj);
@@ -4148,7 +4156,7 @@ function renderDeviceRequests(){
     <div class="border ${r.status==='PENDING'?'border-pink-200 bg-pink-50':'border-slate-200 bg-white'} rounded-xl p-3">
       <div class="flex justify-between items-start">
         <div><div class="font-bold text-sm">${r.employeeId}</div><div class="text-xs text-slate-600">Lý do: ${r.reason}</div><div class="text-[11px] text-slate-500">Tạo: ${fmtDMYTime(r.createdAt)} • Hết hạn: ${fmtDMYTime(r.expiresAt)}</div></div>
-        <span class="text-[11px] font-black px-2 py-1 rounded-full ${r.status==='PENDING'?'bg-pink-500 text-white':r.status==='APPROVED'?'bg-pink-500 text-white':r.status==='EXPIRED'?'bg-slate-400 text-white':'bg-red-100 text-red-700'}">${r.status}</span>
+        <span class="text-[11px] font-black px-2 py-1 rounded-full ${r.status==='PENDING'?'bg-pink-500 text-white':r.status==='APPROVED'?'bg-pink-500 text-white':r.status==='EXPIRED'?'bg-slate-400 text-white':'bg-red-100 text-red-700'}">${getStatusVi(r.status)}</span>
       </div>
       ${r.status==='PENDING'?`<div class="mt-2 flex gap-2"><button onclick="handleDevice('${r.id}','approve')" class="flex-1 bg-pink-500 text-white text-xs font-bold py-1.5 rounded-lg">Duyệt</button><button onclick="handleDevice('${r.id}','reject')" class="flex-1 bg-white border border-slate-200 text-xs font-bold py-1.5 rounded-lg">Từ chối</button></div>`:''}
     </div>
@@ -4165,7 +4173,7 @@ function renderEmergencyAdmin(){
   if(emergencyRequests.length===0) return el.innerHTML='<div class="text-xs text-slate-400 text-center py-4">Không có OFF đột xuất</div>';
   el.innerHTML = emergencyRequests.map(r=>`
     <div class="border rounded-xl p-3 ${r.status==='PENDING'?'bg-pink-50 border-pink-200':'bg-white border-slate-200'}">
-      <div class="flex justify-between"><span class="font-bold text-sm">${r.employeeName||r.employeeId}</span><span class="text-[11px] font-black px-2 py-1 rounded-full ${r.status==='PENDING'?'bg-pink-500 text-white':r.status==='APPROVED'?'bg-pink-500 text-white':'bg-red-100 text-red-700'}">${r.status}</span></div>
+      <div class="flex justify-between"><span class="font-bold text-sm">${r.employeeName||r.employeeId}</span><span class="text-[11px] font-black px-2 py-1 rounded-full ${r.status==='PENDING'?'bg-pink-500 text-white':r.status==='APPROVED'?'bg-pink-500 text-white':'bg-red-100 text-red-700'}">${getStatusVi(r.status)}</span></div>
       <div class="text-xs text-slate-600 mt-1">Ngày ${fmtDMY(r.date)} • ${getBranchDisplay(r.branchId)} • ${r.shift} • Lý do: ${r.reason}</div>
       <div class="text-[11px] text-slate-500">Cascade step ${r.cascadeStep} • Timeout ${fmtDMYTime(r.timeoutAt).split(' ')[1] || fmtDMYTime(r.timeoutAt)} • ${r.substituteName?`Thay: ${r.substituteName}`:''}</div>
       ${r.status==='PENDING'?`<div class="mt-2 text-[11px] bg-white border rounded-lg p-2">Đang tìm người thay ca (same CN+ca → 10p → same CN khác ca). Demo timeout 20s.</div>`:''}
@@ -4179,7 +4187,7 @@ function renderOffAdmin(){
   el.innerHTML = offRequests.slice(0,10).map(r=>`
     <div class="flex justify-between items-center border border-slate-200 rounded-xl px-3 py-2 bg-white">
       <div><div class="font-bold text-sm">${r.employeeName||r.employeeId} • ${getBranchDisplay(r.branchId)} • ${r.shift}</div><div class="text-xs text-slate-500">${r.dates.map(d=>fmtDMY(d)).join(', ')} • ${r.autoApproved?'Auto Approve':''}</div></div>
-      <span class="text-[11px] font-black px-2 py-1 rounded-full bg-pink-100 text-pink-700">${r.status}</span>
+      <span class="text-[11px] font-black px-2 py-1 rounded-full bg-pink-100 text-pink-700">${getStatusVi(r.status)}</span>
     </div>
   `).join('');
 }
@@ -4207,7 +4215,7 @@ function renderAttendancesList(){
     <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
       <div class="px-3 py-2 bg-slate-50 border-b flex justify-between items-center">
         <span class="font-bold text-sm">${emp?.name||a.employeeId}</span>
-        <span class="text-[11px] font-black px-2 py-1 rounded-full ${a.status==='COMPLETED'?'bg-pink-100 text-pink-700':a.status==='LATE'?'bg-red-100 text-red-700':a.status==='CHECKED_IN'?'bg-blue-100 text-blue-700':'bg-slate-100 text-slate-600'}">${a.status}</span>
+        <span class="text-[11px] font-black px-2 py-1 rounded-full ${a.status==='COMPLETED'?'bg-emerald-100 text-emerald-700':a.status==='LATE'?'bg-red-100 text-red-700':a.status==='CHECKED_IN'?'bg-blue-100 text-blue-700':'bg-slate-100 text-slate-600'}">${getStatusVi(a.status)}</span>
       </div>
       <div class="p-3 space-y-2 text-xs">
         <div class="flex justify-between"><span class="font-bold text-slate-500">Ngày/Ca</span><span class="font-bold">${fmtDMY(a.date)} • ${a.shift} • ${getBranchDisplay(a.branchId)}</span></div>
@@ -4237,7 +4245,7 @@ function renderZalo(){
       <td class="px-3 py-2 text-center"><span class="text-[11px] font-bold bg-blue-50 text-blue-700 px-2 py-1 rounded-full">${z.type}</span></td>
       <td class="px-3 py-2 text-xs max-w-[300px] truncate" title="${z.content}">${z.content}</td>
       <td class="px-3 py-2 text-center">
-        <span class="text-[11px] font-black px-2 py-1 rounded-full ${z.status==='DELIVERED'?'bg-green-100 text-green-700':z.status==='SENT'?'bg-blue-100 text-blue-700':z.status==='QUEUED'?'bg-amber-100 text-amber-700':'bg-red-100 text-red-700'}">${z.status}</span>
+        <span class="text-[11px] font-black px-2 py-1 rounded-full ${z.status==='DELIVERED'?'bg-green-100 text-green-700':z.status==='SENT'?'bg-blue-100 text-blue-700':z.status==='QUEUED'?'bg-amber-100 text-amber-700':'bg-red-100 text-red-700'}">${z.status==='DELIVERED'?'ĐÃ NHẬN':z.status==='SENT'?'ĐÃ GỬI':z.status==='QUEUED'?'ĐANG CHỜ':z.status==='FAILED'?'LỖI':z.status}</span>
         ${z.error ? `<div class="text-[10px] text-red-600 mt-0.5 truncate max-w-[150px]" title="${z.error}">${z.error}</div>` : ''}
       </td>
     </tr>
@@ -4289,7 +4297,7 @@ async function loadReports(){
   reportData = await api(url);
   renderReportTable();
   // payroll
-  let pUrl='/api/reports/payroll?month='+(month||new Date().toISOString().slice(0,7));
+  let pUrl='/api/reports/payroll?month='+(month||getVietnamTodayStr().slice(0,7));
   if(branch) pUrl+='&branch='+branch;
   payrollData = await api(pUrl);
   renderPayroll();
@@ -4315,13 +4323,13 @@ function renderPayroll(){
   if(payrollData.length===0) return grid.innerHTML='<div class="text-xs text-slate-400">Không có dữ liệu lương</div>';
   grid.innerHTML = payrollData.map(p=>`
     <div class="border border-slate-200 rounded-xl p-3 bg-slate-50">
-      <div class="flex justify-between"><span class="font-black text-sm">${p.name}</span><span class="text-xs font-bold ${p.type==='OFFICIAL'?'bg-pink-100 text-pink-700':'bg-pink-100 text-pink-700'} px-2 py-1 rounded-full">${p.type} • ${p.rate.toLocaleString('vi-VN')}đ/h</span></div>
-      <div class="text-xs text-slate-600 mt-1">Tháng ${fmtMonthYear(p.month)} • ${p.totalHours}h • Gross ${p.gross.toLocaleString('vi-VN')}đ</div>
+      <div class="flex justify-between"><span class="font-black text-sm">${p.name}</span><span class="text-xs font-bold ${p.type==='OFFICIAL'?'bg-pink-100 text-pink-700':'bg-pink-100 text-pink-700'} px-2 py-1 rounded-full">${p.type} • ${p.rate.toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'})}đ/h</span></div>
+      <div class="text-xs text-slate-600 mt-1">Tháng ${fmtMonthYear(p.month)} • ${p.totalHours}h • Gross ${p.gross.toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'})}đ</div>
       <div class="mt-2 space-y-1 max-h-[120px] overflow-auto scrollbar-thin">
-        ${p.breakdown.slice(0,5).map(b=> `<div class="flex justify-between bg-white border rounded-lg px-2 py-1 text-[11px]"><span>${fmtDMY(b.date)} ${b.shift} ${b.hours}h</span><span class="font-bold ${b.penalty?'text-red-600':''}">${b.net.toLocaleString('vi-VN')}đ ${b.penalty?`(-${b.penalty.toLocaleString('vi-VN')})`:''}</span></div>`).join('')}
+        ${p.breakdown.slice(0,5).map(b=> `<div class="flex justify-between bg-white border rounded-lg px-2 py-1 text-[11px]"><span>${fmtDMY(b.date)} ${b.shift} ${b.hours}h</span><span class="font-bold ${b.penalty?'text-red-600':''}">${b.net.toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'})}đ ${b.penalty?`(-${b.penalty.toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'})})`:''}</span></div>`).join('')}
       </div>
-      <div class="mt-2 flex justify-between font-black text-sm border-t pt-2"><span>Thực nhận</span><span class="text-pink-700">${p.net.toLocaleString('vi-VN')}đ</span></div>
-      <div class="text-[11px] text-slate-500">Phạt: ${p.totalPenalty.toLocaleString('vi-VN')}đ</div>
+      <div class="mt-2 flex justify-between font-black text-sm border-t pt-2"><span>Thực nhận</span><span class="text-pink-700">${p.net.toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'})}đ</span></div>
+      <div class="text-[11px] text-slate-500">Phạt: ${p.totalPenalty.toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'})}đ</div>
     </div>
   `).join('');
 }
@@ -4382,7 +4390,7 @@ async function resetReportAll(){
   }catch(e){ showToast(e.message,'error'); }
 }
 async function loadReportAll(){
-  const m=document.getElementById('reportMonth')?.value || new Date().toISOString().slice(0,7);
+  const m=document.getElementById('reportMonth')?.value || getVietnamTodayStr().slice(0,7);
   if(!document.getElementById('reportMonth')?.value) document.getElementById('reportMonth').value=m;
   // Ensure employees loaded for selects
   if(!employees || employees.length===0){
@@ -4409,7 +4417,7 @@ async function loadReportAll(){
   }catch(e){}
 }
 async function loadReportOverview(){
-  const month=document.getElementById('reportMonth')?.value || new Date().toISOString().slice(0,7);
+  const month=document.getElementById('reportMonth')?.value || getVietnamTodayStr().slice(0,7);
   const branch=document.getElementById('reportBranch')?.value || '';
   try{
     const kpi=await api(`/api/reports/overview?month=${month}&branch=${branch}`);
@@ -4438,7 +4446,7 @@ async function loadReportOverview(){
   }catch(e){ console.error('overview',e); }
 }
 async function loadReportMonthly(){
-  const month=document.getElementById('reportMonth')?.value || new Date().toISOString().slice(0,7);
+  const month=document.getElementById('reportMonth')?.value || getVietnamTodayStr().slice(0,7);
   const branch=document.getElementById('reportBranch')?.value || '';
   try{
     const rows=await api(`/api/reports/monthly?month=${month}&branch=${branch}`);
@@ -4461,7 +4469,7 @@ async function loadReportMonthly(){
 }
 async function loadReportDaily(){
   const empId=document.getElementById('reportDailyEmp')?.value;
-  const month=document.getElementById('reportMonth')?.value || new Date().toISOString().slice(0,7);
+  const month=document.getElementById('reportMonth')?.value || getVietnamTodayStr().slice(0,7);
   if(!empId) return;
   try{
     const rows=await api(`/api/reports/daily?employeeId=${empId}&month=${month}`);
@@ -4480,7 +4488,7 @@ async function loadReportDaily(){
   }catch(e){ console.error(e); }
 }
 async function loadAnomalies(){
-  const month=document.getElementById('reportMonth')?.value || new Date().toISOString().slice(0,7);
+  const month=document.getElementById('reportMonth')?.value || getVietnamTodayStr().slice(0,7);
   const branch=document.getElementById('reportBranch')?.value || '';
   try{
     const list=await api(`/api/attendance/anomalies?month=${month}&branch=${branch}`);
@@ -4551,7 +4559,7 @@ async function reopenPeriod(id){
   try{ await api('/api/payroll-periods/'+id+'/reopen', {method:'POST', body:JSON.stringify({reason})}); showToast('Đã mở lại kỳ','success'); loadPeriods(); }catch(e){ showToast(e.message,'error'); }
 }
 async function exportPayrollInput(){
-  const month=document.getElementById('reportMonth')?.value || new Date().toISOString().slice(0,7);
+  const month=document.getElementById('reportMonth')?.value || getVietnamTodayStr().slice(0,7);
   const branch=document.getElementById('reportBranch')?.value || '';
   const token2=localStorage.getItem('admin_token');
   const url=`/api/reports/export/payroll-input?month=${month}&branch=${branch}`;
@@ -4562,7 +4570,7 @@ async function exportPayrollInput(){
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`Du_lieu_tinh_luong_${month.replace('-','_')}.csv`; a.click();
 }
 async function exportAnomalies(){
-  const month=document.getElementById('reportMonth')?.value || new Date().toISOString().slice(0,7);
+  const month=document.getElementById('reportMonth')?.value || getVietnamTodayStr().slice(0,7);
   const branch=document.getElementById('reportBranch')?.value || '';
   const list=await api(`/api/attendance/anomalies?month=${month}&branch=${branch}`);
   if(list.length===0) return showToast('Không có sai lệch','success');
@@ -4710,9 +4718,9 @@ async function loadSettings(){
     loadRenderEnv();
     // sync
     const sync = await api('/api/sync-queue', {headers:{Authorization:'Bearer '+token}});
-    document.getElementById('settingsSync').innerHTML = sync.slice(0,6).map(ss=>`<div class="flex justify-between bg-slate-50 border rounded-lg px-2 py-1 text-xs"><span>${ss.entity} ${ss.operation}</span><span class="font-bold ${ss.sync_status==='SYNCED'?'text-green-600':'text-amber-600'}">${ss.sync_status}</span></div>`).join('');
+    document.getElementById('settingsSync').innerHTML = sync.slice(0,6).map(ss=>`<div class="flex justify-between bg-slate-50 border rounded-lg px-2 py-1 text-xs"><span>${ss.entity} ${ss.operation}</span><span class="font-bold ${ss.sync_status==='SYNCED'?'text-emerald-600':ss.sync_status==='PENDING'?'text-amber-600':ss.sync_status==='FAILED'?'text-red-600':'text-slate-500'}">${ss.sync_status==='SYNCED'?'ĐÃ ĐỒNG BỘ':ss.sync_status==='PENDING'?'CHỜ':ss.sync_status==='FAILED'?'LỖI':ss.sync_status==='UNCONFIGURED'?'CHƯA CẤU HÌNH':ss.sync_status}</span></div>`).join('');
   }catch(e){
-    if(e.message.includes('Forbidden')) showToast('Chỉ Admin mới xem được cài đặt','error');
+    if(e.message.includes('Forbidden') || e.message.includes('Không có quyền')) showToast('Chỉ Admin mới xem được cài đặt','error');
   }
 }
 async function loadRenderEnv(){
@@ -4869,7 +4877,7 @@ async function createUser(){
   const username=document.getElementById('newUserName').value.trim();
   const password=document.getElementById('newUserPass').value.trim();
   const role=document.getElementById('newUserRole').value;
-  if(!username||!password) return showToast('Thiếu username/password','error');
+  if(!username||!password) return showToast('Thiếu tên đăng nhập/mật khẩu','error');
   await api('/api/users', {method:'POST', body:JSON.stringify({username,password,role, branchScope:['CN1','CN2']}), headers:{Authorization:'Bearer '+token}});
   showToast('Đã tạo user','success'); loadUsers();
 }

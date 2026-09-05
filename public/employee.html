@@ -193,7 +193,7 @@ button { min-height:44px; }
     <div class="text-center mb-6">
       <img src="/images/logo.png" alt="Ụm Bò Milk" class="w-16 h-16 rounded-2xl object-contain bg-white p-1 shadow-2xl mx-auto">
       <div class="text-white font-black text-xl mt-3 tracking-wide">ỤM BÒ MILK</div>
-      <div class="text-white/75 text-sm font-medium mt-1">Cổng nhân viên • Device Binding</div>
+      <div class="text-white/75 text-sm font-medium mt-1">Cổng nhân viên • Liên kết thiết bị</div>
     </div>
 
     <!-- Card -->
@@ -257,15 +257,15 @@ button { min-height:44px; }
         <div class="font-black text-pink-900 text-sm leading-none">ỤM BÒ MILK</div>
         <div class="text-[11px] font-bold text-pink-500 flex items-center gap-1.5 mt-0.5">
           <span class="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse inline-block"></span>
-          Realtime •&nbsp;<span id="headerBranch">—</span>
+          Trực tiếp •&nbsp;<span id="headerBranch">—</span>
         </div>
       </div>
     </div>
     <div class="flex items-center gap-2">
       <span id="modeBadge" class="hidden md:inline-flex items-center gap-1.5 bg-green-50 border border-green-200 text-green-700 text-[10px] font-black px-2.5 py-1 rounded-full">
-        <span id="modeDot" class="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span><span id="modeText">ONLINE</span>
+        <span id="modeDot" class="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span><span id="modeText">TRỰC TUYẾN</span>
       </span>
-      <span id="syncBadge" class="hidden md:inline-flex text-[10px] font-black bg-pink-50 text-pink-600 border border-pink-100 px-2.5 py-1 rounded-full">SYNCED</span>
+      <span id="syncBadge" class="hidden md:inline-flex text-[10px] font-black bg-pink-50 text-pink-600 border border-pink-100 px-2.5 py-1 rounded-full">ĐÃ ĐỒNG BỘ</span>
       <button onclick="switchTab('notifs')" class="relative w-10 h-10 rounded-2xl flex items-center justify-center transition-all active:scale-90" style="background:rgba(236,72,153,.08);color:#ec4899;">
         <i class="fa-solid fa-bell text-base"></i>
         <span id="notifCount" class="absolute -top-0.5 -right-0.5 w-5 h-5 bg-rose-500 text-white text-[10px] font-black rounded-full items-center justify-center hidden">0</span>
@@ -358,11 +358,11 @@ button { min-height:44px; }
               <div id="homeSchedule" class="font-black text-sm mt-1 text-pink-900">—</div>
             </div>
             <div class="stat-pill">
-              <div class="text-[9px] font-black text-green-500 uppercase tracking-wide">Check-in</div>
+              <div class="text-[9px] font-black text-green-500 uppercase tracking-wide">Vào ca</div>
               <div id="homeCheckin" class="font-black text-sm mt-1 text-slate-800">—</div>
             </div>
             <div class="stat-pill">
-              <div class="text-[9px] font-black text-rose-400 uppercase tracking-wide">Check-out</div>
+              <div class="text-[9px] font-black text-rose-400 uppercase tracking-wide">Ra ca</div>
               <div id="homeCheckout" class="font-black text-sm mt-1 text-slate-800">—</div>
             </div>
           </div>
@@ -402,7 +402,7 @@ button { min-height:44px; }
               <li>• Mở Check-in <strong>trước ca 30 phút</strong></li>
               <li>• Ảnh chụp trực tiếp – <strong>không upload Gallery</strong></li>
               <li>• GPS + timestamp bắt buộc</li>
-              <li>• 1 ca = CHECK-IN + CHECK-OUT</li>
+              <li>• 1 ca = VÀO CA + RA CA</li>
             </ul>
           </div>
         </div>
@@ -417,7 +417,7 @@ button { min-height:44px; }
             <div class="flex items-center justify-between mb-4">
               <div class="font-black text-pink-900 flex items-center gap-2">
                 <span class="w-7 h-7 rounded-lg flex items-center justify-center text-xs" style="background:rgba(236,72,153,.1);color:#ec4899"><i class="fa-solid fa-right-to-bracket"></i></span>
-                CHECK-IN
+                VÀO CA
               </div>
               <span id="checkinWindow" class="text-[11px] font-black bg-pink-100 text-pink-700 px-2.5 py-1 rounded-full border border-pink-200">—</span>
             </div>
@@ -443,7 +443,7 @@ button { min-height:44px; }
             <button id="btnSubmitCheckin" onclick="submitCheckin()"
                     class="w-full mt-4 text-white font-black py-3.5 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-95"
                     style="background:linear-gradient(135deg,#ec4899,#f43f5e);box-shadow:0 6px 20px rgba(236,72,153,.35)">
-              <i class="fa-solid fa-right-to-bracket"></i> CHECK-IN NGAY
+              <i class="fa-solid fa-right-to-bracket"></i> VÀO CA NGAY
             </button>
             <div id="checkinResult" class="mt-2 hidden text-xs font-bold rounded-xl px-3 py-2"></div>
           </div>
@@ -452,7 +452,7 @@ button { min-height:44px; }
             <div class="flex items-center justify-between mb-4">
               <div class="font-black text-pink-900 flex items-center gap-2">
                 <span class="w-7 h-7 rounded-lg flex items-center justify-center text-xs" style="background:rgba(244,63,94,.1);color:#f43f5e"><i class="fa-solid fa-right-from-bracket"></i></span>
-                CHECK-OUT
+                RA CA
               </div>
               <span class="text-[11px] font-black bg-rose-100 text-rose-600 px-2.5 py-1 rounded-full border border-rose-200">Mở theo giờ kết thúc ca</span>
             </div>
@@ -477,7 +477,7 @@ button { min-height:44px; }
             <button onclick="submitCheckout()"
                     class="w-full mt-4 text-white font-black py-3.5 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-95"
                     style="background:linear-gradient(135deg,#f43f5e,#ec4899);box-shadow:0 6px 20px rgba(244,63,94,.35)">
-              <i class="fa-solid fa-right-from-bracket"></i> CHECK-OUT NGAY
+              <i class="fa-solid fa-right-from-bracket"></i> RA CA NGAY
             </button>
             <div id="checkoutResult" class="mt-2 hidden text-xs font-bold rounded-xl px-3 py-2"></div>
           </div>

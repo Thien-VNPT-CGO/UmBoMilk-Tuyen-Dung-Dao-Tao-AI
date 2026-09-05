@@ -62,13 +62,10 @@ function fmtDMYTime(iso){
   try{
     const dt = new Date(iso);
     if(isNaN(dt)) return iso;
-    const dd=String(dt.getDate()).padStart(2,'0');
-    const mm=String(dt.getMonth()+1).padStart(2,'0');
-    const yyyy=dt.getFullYear();
-    const hh=String(dt.getHours()).padStart(2,'0');
-    const mi=String(dt.getMinutes()).padStart(2,'0');
-    const ss=String(dt.getSeconds()).padStart(2,'0');
-    return `${dd}/${mm}/${yyyy} ${hh}:${mi}:${ss}`;
+    // Vietnam timezone display
+    const vn = new Date(dt.toLocaleString('en-US', {timeZone: 'Asia/Ho_Chi_Minh'}));
+    // Fallback to toLocaleString vi-VN with timezone for correctness
+    return dt.toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh', day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false});
   }catch(e){ return iso;}
 }
 
@@ -90,6 +87,53 @@ function fmtMonthYear(ym){
   const p = String(ym).split('-');
   if(p.length>=2) return `${p[1]}/${p[0]}`;
   return ym;
+}
+// === VI TRANSLATION HELPERS - hiển thị tiếng Việt, giữ giá trị kỹ thuật gốc ===
+function getStatusVi(s){
+  if(!s) return '—';
+  const m={
+    COMPLETED:'Hoàn thành',
+    CHECKED_IN:'Đã vào ca',
+    CHECKED_OUT:'Đã ra ca',
+    LATE:'Trễ',
+    WORKING:'Đang làm',
+    OFF:'Nghỉ',
+    PENDING:'Chờ duyệt',
+    PENDING_TARGET:'Chờ người được mời',
+    PENDING_BROADCAST:'Chờ phổ biến',
+    PENDING_BROADCAST_ACCEPTED:'Đã có người nhận',
+    APPROVED:'Đã duyệt',
+    REJECTED:'Từ chối',
+    EXPIRED:'Hết hạn',
+    FAILED:'Thất bại',
+    SYNCED:'Đã đồng bộ',
+    OFFICIAL:'Chính thức',
+    TRAINING:'Thử việc',
+    WAITING_TEST:'Chờ thi',
+    RETEST:'Thi lại',
+    PASSED_TEST:'Đã đậu',
+    FAILED_TEST:'Không đạt',
+    WAITING_OFFICIAL:'Chờ chính thức',
+    ARCHIVED:'Đã lưu trữ',
+    SUBSTITUTE:'Thay ca',
+    EMERGENCY_OFF:'OFF đột xuất',
+    ABSENT:'Vắng',
+    PRESENT:'Có mặt',
+    NO_CHECKOUT:'Thiếu ra ca',
+    NO_SCHEDULE:'Không có lịch'
+  };
+  return m[s] || s;
+}
+function getViolationVi(v){
+  if(!v) return '';
+  const m={LATE:'Đi trễ', EARLY_LEAVE:'Về sớm', NO_CHECKOUT:'Thiếu ra ca', ABSENT:'Vắng', NO_SCHEDULE:'Không có lịch', MISSING_CHECK_IN:'Thiếu vào ca', MISSING_CHECK_OUT:'Thiếu ra ca'};
+  return m[v] || v;
+}
+function getModeVi(m){
+  if(m==='ONLINE') return 'Trực tuyến';
+  if(m==='DEMO') return 'Dữ liệu mẫu';
+  if(m==='AUTO') return 'Tự động';
+  return m;
 }
 let currentMode = localStorage.getItem('app_mode') || 'AUTO';
 function updateModeBadge(){
@@ -126,7 +170,7 @@ function updateModeBadge(){
     else currentMode='AUTO';
     localStorage.setItem('app_mode', currentMode);
     updateModeBadge();
-    if(typeof showToast==='function') showToast('Chế độ: '+currentMode,'success');
+    if(typeof showToast==='function') showToast('Chế độ: '+getModeVi(currentMode),'success');
   };
 }
 
@@ -234,7 +278,7 @@ function initNav(){
   const isOfficial = employee && (employee.status === 'OFFICIAL' || employee.type === 'OFFICIAL');
   
   // Ràng buộc OFF: T6 nhưng chưa đến giờ thì hiển thị nhưng khóa
-  const now = new Date();
+  const now = getVietnamNow();
   const isFriday = now.getDay() === 5;
   
   const html = visibleNav.map(n=>{
@@ -474,7 +518,7 @@ function connectSocket(){
   const socketUrl = isVercel ? 'https://umbomilk-hr.onrender.com' : undefined;
   socket=io(socketUrl, { auth: { token: empToken || '' }, transports: ['websocket','polling'], timeout: 20000, reconnection: true, reconnectionAttempts: 10, reconnectionDelay: 1000 });
   socket.on('connect', ()=>{
-    document.getElementById('syncBadge').textContent='SYNCED • Socket Connected';
+    document.getElementById('syncBadge').textContent='ĐÃ ĐỒNG BỘ • Đã kết nối';
     document.getElementById('syncBadge').className='hidden md:inline-flex text-[11px] font-bold bg-pink-100 text-pink-700 border border-pink-200 px-2.5 py-1 rounded-full';
     updateModeBadge();
   });
@@ -491,8 +535,8 @@ function connectSocket(){
       // toast drive realtime for employee
       if(data && Array.isArray(data) && data[0]) console.log('Drive realtime', data[0].drivePath);
     }
-    document.getElementById('syncBadge').textContent='LIVE UPDATE';
-    setTimeout(()=>document.getElementById('syncBadge').textContent='SYNCED',1200);
+    document.getElementById('syncBadge').textContent='CẬP NHẬT TRỰC TIẾP';
+    setTimeout(()=>document.getElementById('syncBadge').textContent='ĐÃ ĐỒNG BỘ',1200);
     updateModeBadge();
     // Khi có cập nhật employees, refresh data của nhân viên hiện tại + cập nhật nav (dùng /api/employee/me để tránh branchScope filter)
     if(ev === 'employees:update' && employee){
@@ -597,7 +641,7 @@ async function loadHome(){
   document.getElementById('homeType').className='text-xs font-black px-3 py-1 rounded-full shadow '+(employee.type==='OFFICIAL'?'official-badge':'training-badge');
   document.getElementById('homeBranch').textContent=getBranchFull(employee.branchId);
   document.getElementById('homeShift').textContent=employee.shift;
-  document.getElementById('homeStatus').textContent=employee.status;
+  document.getElementById('homeStatus').textContent=getStatusVi(employee.status);
   document.getElementById('homeStatus').className='mt-2 inline-flex text-xs font-black px-3 py-1 rounded-full '+(employee.status==='OFFICIAL'?'bg-pink-100 text-pink-700':employee.status==='TRAINING'?'bg-blue-100 text-blue-700':employee.status==='FAILED_TEST'?'bg-red-100 text-red-700':'bg-pink-100 text-pink-700');
   document.getElementById('homeDate').textContent=new Date().toLocaleDateString('vi-VN',{weekday:'long', timeZone:'Asia/Ho_Chi_Minh'}) + ' ' + fmtDMY(getVietnamTodayStr());
   // schedule today
@@ -613,9 +657,9 @@ async function loadHome(){
   try{
     const atts = await api('/api/attendances?employeeId='+employee.employeeId+'&date='+getVietnamTodayStr());
     const a=atts[0];
-    document.getElementById('homeCheckin').textContent= a?.checkIn? a.checkIn.time + (a.status==='LATE'?' (TRỄ)':'') : 'Chưa';
+    document.getElementById('homeCheckin').textContent= a?.checkIn? a.checkIn.time + (a.status==='LATE'?' (Trễ)':'') : 'Chưa';
     document.getElementById('homeCheckout').textContent= a?.checkOut? a.checkOut.time : (a?.checkIn?'Chưa':'—');
-    document.getElementById('todayStatus').textContent= a? `${a.status} • IN ${a.checkIn?.time||'—'} • OUT ${a.checkOut?.time||'—'}` : 'Chưa điểm danh';
+    document.getElementById('todayStatus').textContent= a? `${getStatusVi(a.status)} • Vào ${a.checkIn?.time||'—'} • Ra ${a.checkOut?.time||'—'}` : 'Chưa điểm danh';
   }catch(e){}
   // notifs
   try{
@@ -647,7 +691,7 @@ function renderTrainingOffPicker() {
   box.classList.remove('hidden');
   const startDateStr = employee.startDate || getVietnamTodayStr();
   const parts = startDateStr.split('T')[0].split('-').map(Number);
-  const startD = (parts.length === 3 && !isNaN(parts[0])) ? new Date(parts[0], parts[1] - 1, parts[2]) : new Date();
+  const startD = (parts.length === 3 && !isNaN(parts[0])) ? new Date(parts[0], parts[1] - 1, parts[2]) : getVietnamNow();
   const trialDates = [];
   const dayNames = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
   for (let i = 0; i < 12; i++) {
@@ -865,7 +909,7 @@ function getGPS(type){
   }, {enableHighAccuracy:true, timeout:10000, maximumAge:0});
 }
 async function submitCheckin(){
-  if(!capturedCheckin) return showToast('Chưa chụp ảnh Check-in bằng camera sau','error');
+  if(!capturedCheckin) return showToast('Chưa chụp ảnh vào ca bằng camera sau','error');
   const gpsEl=document.getElementById('gpsCheckin');
   const gps=gpsEl.textContent;
   const addr=document.getElementById('addrCheckin').textContent;
@@ -875,7 +919,7 @@ async function submitCheckin(){
   try{
     const res = await api('/api/attendance/checkin', {method:'POST', body:JSON.stringify({employeeId:employee.employeeId, gps, address:addr, image:capturedCheckin, shift:employee.shift, isCameraCapture:true})});
     document.getElementById('checkinResult').className='mt-2 text-xs font-bold rounded-xl px-3 py-2 bg-pink-100 text-pink-700 border border-pink-200';
-    document.getElementById('checkinResult').textContent='Check-in thành công lúc '+res.checkIn.time+' • '+(res.status!=='CHECKED_IN'?'VI PHẠM: '+res.status:'ĐÚNG GIỜ');
+    document.getElementById('checkinResult').textContent='Vào ca thành công lúc '+res.checkIn.time+' • '+(res.status!=='CHECKED_IN'?'Vi phạm: '+getStatusVi(res.status):'Đúng giờ');
     document.getElementById('checkinResult').classList.remove('hidden');
     showToast('Check-in thành công','success');
     loadAttendanceTab(); loadHome();
@@ -887,7 +931,7 @@ async function submitCheckin(){
   }
 }
 async function submitCheckout(){
-  if(!capturedCheckout) return showToast('Chưa chụp ảnh Check-out bằng camera sau','error');
+  if(!capturedCheckout) return showToast('Chưa chụp ảnh ra ca bằng camera sau','error');
   const gpsEl=document.getElementById('gpsCheckout');
   const gps=gpsEl.textContent;
   const addr=document.getElementById('addrCheckout').textContent;
@@ -896,9 +940,9 @@ async function submitCheckout(){
   try{
     const res = await api('/api/attendance/checkout', {method:'POST', body:JSON.stringify({employeeId:employee.employeeId, gps, address:addr, image:capturedCheckout, isCameraCapture:true})});
     document.getElementById('checkoutResult').className='mt-2 text-xs font-bold rounded-xl px-3 py-2 bg-pink-100 text-pink-700 border border-pink-200';
-    document.getElementById('checkoutResult').textContent='Check-out thành công lúc '+res.checkOut.time+' • Ca hoàn thành';
+    document.getElementById('checkoutResult').textContent='Ra ca thành công lúc '+res.checkOut.time+' • Ca hoàn thành';
     document.getElementById('checkoutResult').classList.remove('hidden');
-    showToast('Check-out thành công - Ca hoàn thành','success');
+    showToast('Ra ca thành công - Ca hoàn thành','success');
     loadAttendanceTab(); loadHome();
   }catch(e){
     document.getElementById('checkoutResult').className='mt-2 text-xs font-bold rounded-xl px-3 py-2 bg-red-100 text-red-700 border border-red-200';
@@ -987,8 +1031,8 @@ async function loadAttendanceTab(){
           if(cardCheckout) cardCheckout.classList.add('hidden');
           if(shiftMsg) shiftMsg.classList.add('hidden');
           if(btnIn) btnIn.disabled = false, btnIn.classList.remove('opacity-50','cursor-not-allowed');
-          if(late60) showAiInfo(`<span class=\"text-red-600\">⚠️ Đã trễ ${diffLate} phút — nếu check-in bây giờ sẽ phạt 100% ca (${(sInfo.hours*25500).toLocaleString('vi-VN')}đ) • Còn ${remain} phút trước khi đóng</span>`, 'bg-red-50 border-red-200 text-red-700');
-          else if(late30) showAiInfo(`<span class=\"text-orange-600\">⚠️ Đã trễ ${diffLate} phút — phạt 50% ca (${Math.round(sInfo.hours*25500*0.5).toLocaleString('vi-VN')}đ) • Còn ${remain} phút</span>`, 'bg-orange-50 border-orange-200 text-orange-700');
+          if(late60) showAiInfo(`<span class=\"text-red-600\">⚠️ Đã trễ ${diffLate} phút — nếu check-in bây giờ sẽ phạt 100% ca (${(sInfo.hours*25500).toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'})}đ) • Còn ${remain} phút trước khi đóng</span>`, 'bg-red-50 border-red-200 text-red-700');
+          else if(late30) showAiInfo(`<span class=\"text-orange-600\">⚠️ Đã trễ ${diffLate} phút — phạt 50% ca (${Math.round(sInfo.hours*25500*0.5).toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'})}đ) • Còn ${remain} phút</span>`, 'bg-orange-50 border-orange-200 text-orange-700');
           else if(late5) showAiInfo(`<span class=\"text-amber-600\">⚠️ Trễ ${diffLate} phút — phạt 30.000đ • Còn ${remain} phút trước khi đóng</span>`, 'bg-amber-50 border-amber-200 text-amber-700');
           else showAiInfo(`<span class=\"text-emerald-600\">✔ AI đang mở Check-in • Còn ${remain} phút • Check-in đúng giờ không phạt</span>`, 'bg-emerald-50 border-emerald-200 text-emerald-700');
         } else {
@@ -1068,8 +1112,8 @@ async function loadAttendanceTab(){
     myAttendances = await api('/api/attendances?employeeId='+employee.employeeId);
     document.getElementById('attendanceHistory').innerHTML = myAttendances.map(a=>`
       <div class="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
-        <div><div class="font-bold text-sm">${fmtDMY(a.date)} • ${a.shift} • ${a.status}</div><div class="text-xs text-slate-500">IN ${a.checkIn?.time||'—'} • OUT ${a.checkOut?.time||'—'}</div><div class="text-[11px] font-semibold text-pink-700">${(a.violations||[]).join(', ')||'Không vi phạm'}</div></div>
-        <span class="text-[11px] font-black px-2 py-1 rounded-full ${a.status==='COMPLETED'?'bg-pink-500 text-white':a.status==='LATE'||(a.violations&&a.violations.length)?'bg-red-100 text-red-700':'bg-slate-200 text-slate-600'}">${a.status}</span>
+        <div><div class="font-bold text-sm">${fmtDMY(a.date)} • ${a.shift} • ${getStatusVi(a.status)}</div><div class="text-xs text-slate-500">Vào ${a.checkIn?.time||'—'} • Ra ${a.checkOut?.time||'—'}</div><div class="text-[11px] font-semibold text-pink-700">${(a.violations||[]).map(v=>getViolationVi(v)).join(', ')||'Không vi phạm'}</div></div>
+        <span class="text-[11px] font-black px-2 py-1 rounded-full ${a.status==='COMPLETED'?'bg-pink-500 text-white':a.status==='LATE'||(a.violations&&a.violations.length)?'bg-red-100 text-red-700':'bg-slate-200 text-slate-600'}">${getStatusVi(a.status)}</span>
       </div>
     `).join('') || '<div class="text-xs text-slate-400 text-center py-4">Chưa có lịch sử</div>';
   }catch(e){}
@@ -1087,7 +1131,7 @@ async function loadAttendanceTab(){
       }
     }
     if(isOfficial && monthlyEl){
-      const month = new Date().toISOString().slice(0,7);
+      const month = getVietnamTodayStr().slice(0,7);
       const stats = await api('/api/attendance/official-monthly?employeeId='+employee.employeeId+'&month='+month);
       monthlyEl.innerHTML = `
         <div class="bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl p-3">
@@ -1115,7 +1159,7 @@ async function loadSchedule(){
     const isOfficial = employee.type==='OFFICIAL' || employee.status==='OFFICIAL';
     let displaySchedules = [...mySchedules];
     if(isOfficial){
-      const nextMon = toVietnamDateStr(getMonday(new Date(Date.now()+7*24*60*60*1000)));
+      const nextMon = toVietnamDateStr(getMonday(new Date(getVietnamNow().getTime()+7*24*60*60*1000)));
       const nextWeekSched = mySchedules.find(s=>s.weekStart===nextMon);
       // Fix: kiểm tra OFF theo khoảng ngày tuần sau (T2-CN), không phụ thuộc nextWeekSched đã tồn tại hay chưa — để realtime cập nhật ngay sau khi đăng ký
       const nextWeekDates = [];
@@ -1129,7 +1173,7 @@ async function loadSchedule(){
         }
         // Ẩn các tuần tới xa hơn (chỉ hiện hiện tại và tuần sau)
         const weekDate = new Date(s.weekStart);
-        const curMon = getMonday(new Date());
+        const curMon = getMonday(getVietnamNow());
         const diffWeeks = Math.round((weekDate - curMon)/(7*24*60*60*1000));
         if(diffWeeks>1) return false;
         return true;
@@ -1297,7 +1341,7 @@ async function submitTrainingShift(isAdd){
 }
 
 function isDateInCurrentWeek(date) {
-  const now = new Date();
+  const now = getVietnamNow();
   const startOfWeek = getMonday(now);
   const endOfWeek = new Date(startOfWeek);
   endOfWeek.setDate(startOfWeek.getDate() + 6);
@@ -1308,7 +1352,7 @@ function isDateInCurrentWeek(date) {
 // OFF weekly - Chính thức: AI T6 12:00→T7 15:00 + TH1/TH2
 async function loadOff(){
   // generate dates for next week Mon-Sun
-  const nextMon = getMonday(new Date(Date.now()+7*24*60*60*1000));
+  const nextMon = getMonday(new Date(getVietnamNow().getTime()+7*24*60*60*1000));
   const nextWeekStr = toVietnamDateStr(nextMon);
   const dates=[];
   for(let i=0;i<7;i++){ const d=new Date(nextMon); d.setDate(nextMon.getDate()+i); dates.push(toVietnamDateStr(d)); }
@@ -1323,7 +1367,6 @@ async function loadOff(){
     
     // Check if already registered for NEXT week
     const alreadyRegistered = myOffs.find(r => {
-       // A request is for next week if any of its dates match next week's dates
        return r.dates.some(d => dates.includes(d));
     });
 
@@ -1381,7 +1424,7 @@ async function loadOff(){
       window._offWindowSocketBound=true;
       socket.on('offWindow:update', (data)=>{
         const open = data.isOpen || document.getElementById('bypassWindow')?.checked;
-        statusEl.textContent = open? '🟢 AI đang MỞ đăng ký OFF - Live Update' : '🔴 AI đã ĐÓNG - Live Update';
+        statusEl.textContent = open? '🟢 AI đang MỞ đăng ký OFF - Cập nhật trực tiếp' : '🔴 AI đã ĐÓNG - Cập nhật trực tiếp';
         statusEl.className='mt-3 text-xs font-bold rounded-xl px-3 py-2 '+(open?'bg-emerald-50 text-emerald-700 border border-emerald-200':'bg-red-100 text-red-700 border border-red-200');
       });
     }
@@ -1391,8 +1434,8 @@ async function loadOff(){
   try{
     document.getElementById('myOffList').innerHTML = myOffs.map(r=>`
       <div class="flex justify-between items-center bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
-        <div><div class="font-bold text-sm">${r.dates.map(d=>fmtDMY(d)).join(', ')}</div><div class="text-xs text-slate-500">${fmtDMYTime(r.createdAt)} • ${r.autoApproved?'Auto Approve':''}</div></div>
-        <span class="text-[11px] font-black px-2 py-1 rounded-full ${r.status==='APPROVED'?'bg-pink-500 text-white':r.status==='PENDING'?'bg-pink-100 text-pink-700':'bg-red-100 text-red-700'}">${r.status}</span>
+        <div><div class="font-bold text-sm">${r.dates.map(d=>fmtDMY(d)).join(', ')}</div><div class="text-xs text-slate-500">${fmtDMYTime(r.createdAt)} • ${r.autoApproved?'Tự động duyệt':''}</div></div>
+        <span class="text-[11px] font-black px-2 py-1 rounded-full ${r.status==='APPROVED'?'bg-pink-500 text-white':r.status==='PENDING'?'bg-pink-100 text-pink-700':'bg-red-100 text-red-700'}">${getStatusVi(r.status)}</span>
       </div>
     `).join('') || '<div class="text-xs text-slate-400 text-center py-2">Chưa có OFF</div>';
   }catch(e){}
@@ -1403,7 +1446,7 @@ async function submitOff(){
   const bypass=document.getElementById('bypassWindow').checked;
   try{
     const res = await api('/api/off-requests', {method:'POST', body:JSON.stringify({employeeId:employee.employeeId, dates:checks, bypassWindow:bypass})});
-    showToast('OFF đã Auto Approve: '+res.dates.join(', '),'success');
+    showToast('OFF đã tự động duyệt: '+res.dates.map(d=>fmtDMY(d)).join(', '),'success');
     loadOff(); loadSchedule();
   }catch(e){ showToast(e.message,'error'); }
 }
@@ -1416,7 +1459,7 @@ async function loadEmergency(){
   try{
     // Check if next week's schedule is displayed
     mySchedules = await api('/api/schedules?employeeId='+employee.employeeId);
-    const nextMon = getMonday(new Date(Date.now()+7*24*60*60*1000));
+    const nextMon = getMonday(new Date(getVietnamNow().getTime()+7*24*60*60*1000));
     const nextWeekStr = toVietnamDateStr(nextMon);
     const hasNextWeekSchedule = mySchedules.some(s => s.weekStart === nextWeekStr);
 
@@ -1456,7 +1499,7 @@ async function loadEmergency(){
       const isPending = r.status==='PENDING';
       return `
       <div class="border rounded-xl p-3 ${isPending?'bg-amber-50 border-amber-200':'bg-white'}">
-        <div class="flex justify-between items-start"><span class="font-bold text-sm">${fmtDMY(r.date)} • ${r.shift} • ${getBranchDisplay(r.branchId)}</span><span class="text-[11px] font-black px-2 py-1 rounded-full ${r.status==='PENDING'?'bg-amber-500 text-white':r.status==='APPROVED'?'bg-emerald-500 text-white':'bg-red-100 text-red-700'}">${r.status}</span></div>
+        <div class="flex justify-between items-start"><span class="font-bold text-sm">${fmtDMY(r.date)} • ${r.shift} • ${getBranchDisplay(r.branchId)}</span><span class="text-[11px] font-black px-2 py-1 rounded-full ${r.status==='PENDING'?'bg-amber-500 text-white':r.status==='APPROVED'?'bg-emerald-500 text-white':'bg-red-100 text-red-700'}">${getStatusVi(r.status)}</span></div>
         <div class="text-xs text-slate-600 mt-1">Lý do: ${r.reason}</div>
         <div class="text-[11px] mt-1 flex flex-wrap gap-1.5">
           <span class="bg-white border px-2 py-0.5 rounded-full">${stepText}</span>
@@ -1529,7 +1572,7 @@ async function loadShiftSwap(){
       const statusColor = r.status==='PENDING_TARGET' ? 'bg-amber-500 text-white' : r.status==='PENDING_BROADCAST' ? 'bg-blue-500 text-white' : r.status==='APPROVED' ? 'bg-emerald-500 text-white' : r.status==='REJECTED' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600';
       const thText = r.targetEmployeeId ? `Gửi tới ${r.targetEmployeeName||r.targetEmployeeId}` : 'Gửi toàn chi nhánh';
       return `<div class="border rounded-xl p-3 ${r.status.includes('PENDING')?'bg-amber-50 border-amber-200':'bg-white'}">
-        <div class="flex justify-between items-start"><span class="font-bold text-sm">${fmtDMY(r.date)} • ${r.fromShift} → ${r.toShift}</span><span class="text-[11px] font-black px-2 py-1 rounded-full ${statusColor}">${r.status}</span></div>
+        <div class="flex justify-between items-start"><span class="font-bold text-sm">${fmtDMY(r.date)} • ${r.fromShift} → ${r.toShift}</span><span class="text-[11px] font-black px-2 py-1 rounded-full ${statusColor}">${getStatusVi(r.status)}</span></div>
         <div class="text-xs text-slate-600 mt-1">${thText} • ${getBranchDisplay(r.branchId)}</div>
         <div class="text-xs text-slate-500 mt-1">Lý do: ${r.reason||'—'}</div>
         <div class="text-[11px] text-slate-400 mt-1">Tạo: ${fmtDMYTime(r.createdAt)} • Hết hạn: ${fmtDMYTime(r.expiresAt)}</div>
@@ -1605,7 +1648,7 @@ async function loadDevice(){
     document.getElementById('deviceHistory').innerHTML = mine.map(r=>`
       <div class="flex justify-between items-center bg-slate-50 border rounded-xl px-3 py-2">
         <div><div class="text-xs font-bold">${r.reason}</div><div class="text-[11px] text-slate-500">${fmtDMYTime(r.createdAt)}</div></div>
-        <span class="text-[11px] font-black px-2 py-1 rounded-full ${r.status==='PENDING'?'bg-pink-100 text-pink-700':r.status==='APPROVED'?'bg-pink-500 text-white':r.status==='EXPIRED'?'bg-slate-400 text-white':'bg-red-100 text-red-700'}">${r.status}</span>
+        <span class="text-[11px] font-black px-2 py-1 rounded-full ${r.status==='PENDING'?'bg-pink-100 text-pink-700':r.status==='APPROVED'?'bg-pink-500 text-white':r.status==='EXPIRED'?'bg-slate-400 text-white':'bg-red-100 text-red-700'}">${getStatusVi(r.status)}</span>
       </div>
     `).join('') || '<div class="text-xs text-slate-400 text-center py-2">Chưa có yêu cầu</div>';
   }catch(e){}
@@ -1642,11 +1685,11 @@ async function loadElearning(){
               <div class="text-xs text-slate-500 mt-1">${c.description}</div>
               <div class="mt-2 flex flex-wrap gap-2">
                 <span class="text-xs font-bold bg-purple-100 text-purple-700 px-2 py-1 rounded-full">${c.totalQuestions} câu trắc nghiệm</span>
-                <span class="text-xs font-bold bg-blue-100 text-blue-700 px-2 py-1 rounded-full">Voice Simulation: ${c.voiceSimulations.length} tình huống</span>
-                <span class="text-xs font-bold bg-pink-100 text-pink-700 px-2 py-1 rounded-full">≥${c.minPerQuestion}s/câu = ${c.totalQuestions*c.minPerQuestion}s tối thiểu</span>
+                <span class="text-xs font-bold bg-blue-100 text-blue-700 px-2 py-1 rounded-full">Mô phỏng thoại: ${c.voiceSimulations.length} tình huống</span>
+                <span class="text-xs font-bold bg-pink-100 text-pink-700 px-2 py-1 rounded-full">≥${c.minPerQuestion} giây/câu = ${c.totalQuestions*c.minPerQuestion} giây tối thiểu</span>
               </div>
               <div class="mt-3 grid md:grid-cols-2 gap-2">
-                ${c.voiceSimulations.map(v=>`<div class="bg-purple-50 border border-purple-200 rounded-xl p-2"><div class="text-xs font-bold text-purple-800">${v.scenario}</div><div class="text-[11px] text-purple-700 mt-1">Rubric: ${v.rubric.join(' • ')}</div><textarea placeholder="Câu trả lời voice (demo text)" class="w-full mt-2 px-2 py-1 rounded-lg border border-purple-200 text-xs" rows="2"></textarea></div>`).join('')}
+                ${c.voiceSimulations.map(v=>`<div class="bg-purple-50 border border-purple-200 rounded-xl p-2"><div class="text-xs font-bold text-purple-800">${v.scenario}</div><div class="text-[11px] text-purple-700 mt-1">Tiêu chí: ${v.rubric.join(' • ')}</div><textarea placeholder="Câu trả lời thoại (nhập văn bản demo)" class="w-full mt-2 px-2 py-1 rounded-lg border border-purple-200 text-xs" rows="2"></textarea></div>`).join('')}
               </div>
               <button onclick="startTest('${c.id}')" class="w-full mt-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-black py-2.5 rounded-xl">Bắt đầu làm TEST (${c.totalQuestions} câu)</button>
               ${lastResult?`<div class="mt-3 bg-slate-50 border rounded-xl p-2 text-xs"><div class="font-bold">Kết quả gần nhất: ${lastResult.score}đ • ${lastResult.result} • ${fmtDMYTime(lastResult.createdAt)}</div><div class="text-[11px] text-slate-500">${lastResult.correct}/${lastResult.total} đúng • ${lastResult.timeSpent}s</div></div>`:''}
@@ -1656,9 +1699,9 @@ async function loadElearning(){
         <div class="mt-4 bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs">
           <div class="font-black">Quy tắc kết quả:</div>
           <div class="mt-1 space-y-1">
-            <div class="flex justify-between"><span>Điểm &lt; 5</span><span class="font-bold text-red-600">LOẠI / FAILED → ARCHIVED (giữ lịch sử)</span></div>
-            <div class="flex justify-between"><span>5 ≤ Điểm ≤ 7</span><span class="font-bold text-amber-600">CHƯA ĐỦ ĐIỀU KIỆN → Giữ Training, chờ thi lại</span></div>
-            <div class="flex justify-between"><span>Điểm &gt; 7</span><span class="font-bold text-green-600">ĐẠT → Chuyển Training → Chính thức</span></div>
+            <div class="flex justify-between"><span>Điểm &lt; 5</span><span class="font-bold text-red-600">LOẠI → LƯU TRỮ (giữ lịch sử)</span></div>
+            <div class="flex justify-between"><span>5 ≤ Điểm ≤ 7</span><span class="font-bold text-amber-600">CHƯA ĐỦ ĐIỀU KIỆN → Giữ Thử việc, chờ thi lại</span></div>
+            <div class="flex justify-between"><span>Điểm &gt; 7</span><span class="font-bold text-green-600">ĐẠT → Chuyển Thử việc → Chính thức</span></div>
           </div>
         </div>
       </div>
@@ -1717,8 +1760,8 @@ async function submitTest(){
   try{
     const res = await api('/api/courses/'+currentTest.id+'/submit', {method:'POST', body:JSON.stringify({employeeId:employee.employeeId, answers:testAnswers, timeSpent, voiceAnswers})});
     closeTest();
-    const msg = `Kết quả: ${res.testResult.score}đ • ${res.testResult.result} • Đúng ${res.testResult.correct}/${res.testResult.total}`;
-    alert(msg + (res.employee.status==='OFFICIAL'?' \nĐã chuyển sang Chính thức!': res.employee.status==='FAILED_TEST'?' \nBạn không đạt - sẽ chuyển ARCHIVED sau 2h': ' \nChờ thi lại'));
+    const msg = `Kết quả: ${res.testResult.score}đ • ${getStatusVi(res.testResult.result) || res.testResult.result} • Đúng ${res.testResult.correct}/${res.testResult.total}`;
+    alert(msg + (res.employee.status==='OFFICIAL'?' \nĐã chuyển sang Chính thức!': res.employee.status==='FAILED_TEST'?' \nBạn không đạt - sẽ chuyển lưu trữ sau 2h': ' \nChờ thi lại'));
     showToast(msg, res.testResult.result==='DAT'?'success':'error');
     // refresh employee
     employee = res.employee;
@@ -1756,7 +1799,7 @@ async function loadAccount(){
         <div class="font-mono text-xs text-slate-500 mt-0.5">${employee.employeeId}</div>
         <div class="text-sm text-slate-600 mt-0.5">${employee.phone} • ${getBranchDisplay(employee.branchId)} • ${employee.shift}</div>
         <div class="mt-1.5 inline-flex items-center gap-1.5 text-xs font-black px-3 py-1 rounded-full bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow-sm">
-          <i class="fa-solid fa-circle-check text-[10px]"></i>${employee.type} • ${employee.status}
+          <i class="fa-solid fa-circle-check text-[10px]"></i>${getStatusVi(employee.type)} • ${getStatusVi(employee.status)}
         </div>
       </div>
     </div>
@@ -1810,7 +1853,7 @@ async function loadAccount(){
           <div class="text-xs font-bold text-slate-700">${r.reason}</div>
           <div class="text-[11px] text-slate-400">${fmtDMYTime(r.createdAt)}</div>
         </div>
-        <span class="text-[11px] font-black px-2 py-1 rounded-full ${r.status==='PENDING'?'bg-amber-100 text-amber-700':r.status==='APPROVED'?'bg-green-100 text-green-700':r.status==='EXPIRED'?'bg-slate-200 text-slate-500':'bg-red-100 text-red-700'}">${r.status}</span>
+        <span class="text-[11px] font-black px-2 py-1 rounded-full ${r.status==='PENDING'?'bg-amber-100 text-amber-700':r.status==='APPROVED'?'bg-green-100 text-green-700':r.status==='EXPIRED'?'bg-slate-200 text-slate-500':'bg-red-100 text-red-700'}">${getStatusVi(r.status)}</span>
       </div>
     `).join('') || '<div class="text-xs text-slate-400 text-center py-3"><i class="fa-solid fa-inbox text-slate-300 text-xl block mb-1"></i>Chưa có yêu cầu nào</div>';
   }catch(e){}
@@ -1855,8 +1898,8 @@ async function loadSalaryTab() {
           <td class="py-3 px-3 font-bold text-slate-800">${fmtDMY(a.date)}</td>
           <td class="py-3 px-3"><span class="font-bold text-slate-700">${shiftLabel}</span></td>
           <td class="py-3 px-3 text-center font-bold text-slate-600">${hours}h</td>
-          <td class="py-3 px-3 text-center font-semibold text-slate-500">${hourlyRate.toLocaleString('vi-VN')}đ/h</td>
-          <td class="py-3 px-3 text-right font-black text-emerald-600">${shiftSalary.toLocaleString('vi-VN')}đ</td>
+          <td class="py-3 px-3 text-center font-semibold text-slate-500">${hourlyRate.toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'})}đ/h</td>
+          <td class="py-3 px-3 text-right font-black text-emerald-600">${shiftSalary.toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'})}đ</td>
           <td class="py-3 px-3 text-center"><span class="bg-emerald-100 text-emerald-700 text-[10px] font-black px-2 py-0.5 rounded-full">ĐÃ ĐIỂM DANH</span></td>
         </tr>
       `;
@@ -1885,7 +1928,7 @@ async function loadSalaryTab() {
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div class="bg-white border border-emerald-100 rounded-2xl p-4 shadow-sm text-center">
             <div class="text-[10px] font-black text-emerald-500 uppercase tracking-wide">Tổng thu nhập</div>
-            <div class="font-black text-lg sm:text-base text-emerald-700 mt-1">${totalSalary.toLocaleString('vi-VN')}đ</div>
+            <div class="font-black text-lg sm:text-base text-emerald-700 mt-1">${totalSalary.toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'})}đ</div>
             <div class="text-[10px] text-emerald-600 mt-1">AI tính tự động theo ca</div>
           </div>
           <div class="bg-white border border-blue-100 rounded-2xl p-4 shadow-sm text-center">
