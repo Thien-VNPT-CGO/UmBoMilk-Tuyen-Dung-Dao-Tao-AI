@@ -4620,7 +4620,6 @@ async function loadSettings(){
     if (document.getElementById('setSheetId')) document.getElementById('setSheetId').value = s.googleSheet?.spreadsheetId || '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w';
     if (document.getElementById('setTargetDatabaseSheetId')) document.getElementById('setTargetDatabaseSheetId').value = s.googleSheet?.targetDatabaseSpreadsheetId || '1rcqEKraSRhr-Tn9qwlhADlkQUei8j65bXeHF_Tmkd38';
     if (document.getElementById('setTargetWebhookUrl')) document.getElementById('setTargetWebhookUrl').value = s.googleSheet?.targetWebhookUrl || 'https://script.google.com/macros/s/AKfycbz_umbomilk_apps_script/exec';
-    if (document.getElementById('setTargetWebhookUrl1')) document.getElementById('setTargetWebhookUrl1').value = s.googleSheet?.targetWebhookUrl1 || 'https://script.google.com/macros/s/AKfycbxNfcYVUqqIgZPhXnGeY4aLdnH3ebJFutjGy-VIbxVEc1DV-l93RWo4ic6fc1IvYaM/exec';
     if (document.getElementById('setTargetWebhookUrl2')) document.getElementById('setTargetWebhookUrl2').value = s.finance?.webhookUrl || s.googleSheet?.targetWebhookUrl2 || 'https://script.google.com/macros/s/AKfycbxYZhMjR9riLFQfYEkgLfub33XtWlSP2IokghTt82Lb4SQVL4tKxQyNACr69yC0ACA/exec';
     if (document.getElementById('setSheetEmail')) document.getElementById('setSheetEmail').value = s.googleSheet?.serviceAccountEmail || 'umbomilk-hr@umbomilk-hr.iam.gserviceaccount.com';
     if (document.getElementById('setSheetKey')) document.getElementById('setSheetKey').value = m.googleSheet?.privateKey || s.googleSheet?.privateKey || '••••••••Nrfw';
@@ -4651,7 +4650,6 @@ async function loadSettings(){
       'googleSheet.spreadsheetId': 'setSheetId',
       'googleSheet.targetDatabaseSpreadsheetId': 'setTargetDatabaseSheetId',
       'googleSheet.targetWebhookUrl': 'setTargetWebhookUrl',
-      'googleSheet.targetWebhookUrl1': 'setTargetWebhookUrl1',
       'googleSheet.targetWebhookUrl2': 'setTargetWebhookUrl2',
       'finance.webhookUrl': 'setTargetWebhookUrl2',
       'googleSheet.serviceAccountEmail': 'setSheetEmail',
@@ -4720,7 +4718,6 @@ async function saveSettings(){
       spreadsheetId:document.getElementById('setSheetId').value,
       targetDatabaseSpreadsheetId:document.getElementById('setTargetDatabaseSheetId').value,
       targetWebhookUrl:document.getElementById('setTargetWebhookUrl').value,
-      targetWebhookUrl1:document.getElementById('setTargetWebhookUrl1')?.value||'',
       targetWebhookUrl2:document.getElementById('setTargetWebhookUrl2')?.value||'',
       serviceAccountEmail:document.getElementById('setSheetEmail').value,
       privateKey:document.getElementById('setSheetKey').value,
