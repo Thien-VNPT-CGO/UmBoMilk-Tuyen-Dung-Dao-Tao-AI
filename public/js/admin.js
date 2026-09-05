@@ -647,7 +647,7 @@ setInterval(() => {
 }, 10000);
 
 async function loadBranches(){
-  branches = await api('/branches');
+  branches = await api('/api/branches');
   // populate selects already
   const sel = document.getElementById('scheduleWeek');
   if(sel && !sel.value) sel.value = getVietnamTodayStr();
