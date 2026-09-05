@@ -55,7 +55,6 @@ const NAV = [
   {id:'requests', icon:'fa-clipboard-check', label:'Duyệt phiếu', badge:'Nghỉ/Đặt lại', group:'Vận hành'},
   {id:'attendance', icon:'fa-camera', label:'Bản ghi điểm danh', desc:'GPS/Ảnh', group:'Vận hành'},
   {id:'zalo', icon:'fa-brands fa-viber', label:'Lịch sử Zalo', desc:'Đã gửi/Lỗi', group:'Vận hành'},
-  {id:'report', icon:'fa-file-invoice', label:'Báo cáo chấm công', desc:'Lương', group:'Vận hành'},
   {id:'finance-keys', icon:'fa-coins', label:'Khóa Tài chính', badge:'Kế toán', group:'Hệ thống'},
   {id:'google-sheet-hub', icon:'fa-database', label:'Trung tâm Google Sheet', badge:'Vận hành', group:'Hệ thống', desc:'1rcq/17iXM/Tài chính'},
   {id:'elearning', icon:'fa-graduation-cap', label:'Đào tạo', desc:'Kiểm tra', group:'Hệ thống'},
@@ -354,7 +353,6 @@ function switchTab(id){
   if(id==='requests') loadRequests();
   if(id==='attendance') loadAttendances();
   if(id==='zalo') loadZalo();
-  if(id==='report'){ loadReports(); loadReportAll(); switchReportTab('overview'); }
   if(id==='elearning') loadElearning();
   if(id==='finance-keys') loadFinanceKeys();
   if(id==='google-sheet-hub') loadGoogleSheetHub();
@@ -570,7 +568,6 @@ function connectSocket(){
       if(active==='requests') loadRequests();
       if(active==='attendance') loadAttendances();
       if(active==='zalo') loadZalo();
-      if(active==='report') { if(typeof loadReports==='function') loadReports(); if(typeof loadReportOverview==='function') loadReportOverview(); }
       if(active==='elearning') loadElearning();
       if(active==='finance-keys') loadFinanceKeys();
       if(active==='settings') {/* */}
