@@ -5080,17 +5080,23 @@ async function generateNextWeekDraft(triggerBy='SYSTEM'){
         group.forEach(emp=> empDayStatus[emp.employeeId][dateStr]='OFF');
         continue;
       }
-      // Đã có OFF theo đăng ký thì những người còn lại đều WORKING (không ép chỉ 1 WORKING)
-      // Chỉ khi không ai OFF và cần cân bằng min 12 ngày mới dùng round-robin, nhưng vẫn cho phép nhiều WORKING
-      // Để đơn giản: tất cả available đều WORKING, đồng thời tăng workCount để cân bằng tuần sau
+      if(available.length===1){
+        const sole = available[0];
+        group.forEach(emp=> empDayStatus[emp.employeeId][dateStr] = (emp.employeeId===sole.employeeId) ? 'WORKING' : 'OFF');
+        workCount[sole.employeeId]++;
+        continue;
+      }
+      // Chọn NV ít ngày nhất trong available - đảm bảo cùng CN cùng ca không trùng ngày WORKING
+      let chosen=available[0]; let min=workCount[chosen.employeeId];
+      for(const emp of available){ if(workCount[emp.employeeId] < min){ min=workCount[emp.employeeId]; chosen=emp; } }
       group.forEach(emp=>{
         if(offMap[emp.employeeId] && offMap[emp.employeeId].has(dateStr)){
           empDayStatus[emp.employeeId][dateStr]='OFF';
         } else {
-          empDayStatus[emp.employeeId][dateStr]='WORKING';
-          workCount[emp.employeeId]++;
+          empDayStatus[emp.employeeId][dateStr] = (emp.employeeId===chosen.employeeId) ? 'WORKING' : 'OFF';
         }
       });
+      workCount[chosen.employeeId]++;
     }
   }
   // Nhóm size 1: tôn trọng OFF, còn lại WORKING (trừ CN nếu không OFF thì WORKING)
