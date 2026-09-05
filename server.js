@@ -30,6 +30,17 @@ function toVietnamDateStr(date){
   const d = date instanceof Date ? date : new Date(date);
   return d.toLocaleDateString('en-CA', {timeZone: 'Asia/Ho_Chi_Minh'});
 }
+function getAllWebhookUrls(){
+  const urls=[];
+  const s=db.settings?.googleSheet;
+  if(s?.targetWebhookUrl) urls.push(s.targetWebhookUrl);
+  if(s?.targetWebhookUrl1) urls.push(s.targetWebhookUrl1);
+  if(s?.targetWebhookUrl2) urls.push(s.targetWebhookUrl2);
+  if(process.env.GOOGLE_SHEET_WEBHOOK_URL && !urls.includes(process.env.GOOGLE_SHEET_WEBHOOK_URL)) urls.push(process.env.GOOGLE_SHEET_WEBHOOK_URL);
+  if(process.env.GOOGLE_SHEET_WEBHOOK_URL_1 && !urls.includes(process.env.GOOGLE_SHEET_WEBHOOK_URL_1)) urls.push(process.env.GOOGLE_SHEET_WEBHOOK_URL_1);
+  if(process.env.GOOGLE_SHEET_WEBHOOK_URL_2 && !urls.includes(process.env.GOOGLE_SHEET_WEBHOOK_URL_2)) urls.push(process.env.GOOGLE_SHEET_WEBHOOK_URL_2);
+  return [...new Set(urls)].filter(Boolean);
+}
 
 const CORS_ORIGIN = ALLOWED_ORIGINS.includes('*') ? '*' : ALLOWED_ORIGINS;
 
@@ -89,6 +100,8 @@ const DEFAULT_SETTINGS = {
     formSheetName: 'FROM_NHAN_VIEN',
     targetDatabaseSpreadsheetId: '1rcqEKraSRhr-Tn9qwlhADlkQUei8j65bXeHF_Tmkd38',
     targetWebhookUrl: 'https://script.google.com/macros/s/AKfycbz_umbomilk_apps_script/exec',
+    targetWebhookUrl1: 'https://script.google.com/macros/s/AKfycbxNfcYVUqqIgZPhXnGeY4aLdnH3ebJFutjGy-VIbxVEc1DV-l93RWo4ic6fc1IvYaM/exec',
+    targetWebhookUrl2: 'https://script.google.com/macros/s/AKfycbxYZhMjR9riLFQfYEkgLfub33XtWlSP2IokghTt82Lb4SQVL4tKxQyNACr69yC0ACA/exec',
     secret: 'umbomilk_secret_2026',
     serviceAccountEmail: 'umbomilk-hr@umbomilk-hr.iam.gserviceaccount.com',
     privateKey: '',
@@ -473,6 +486,8 @@ if(process.env.GOOGLE_SHEET_SPREADSHEET_ID) db.settings.googleSheet.spreadsheetI
 if(process.env.GOOGLE_SHEET_FORM_RESPONSES_ID) db.settings.googleSheet.formResponsesSheetId = process.env.GOOGLE_SHEET_FORM_RESPONSES_ID;
 if(process.env.GOOGLE_SHEET_TARGET_DATABASE_ID) db.settings.googleSheet.targetDatabaseSpreadsheetId = process.env.GOOGLE_SHEET_TARGET_DATABASE_ID;
 if(process.env.GOOGLE_SHEET_WEBHOOK_URL) db.settings.googleSheet.targetWebhookUrl = process.env.GOOGLE_SHEET_WEBHOOK_URL;
+if(process.env.GOOGLE_SHEET_WEBHOOK_URL_1) db.settings.googleSheet.targetWebhookUrl1 = process.env.GOOGLE_SHEET_WEBHOOK_URL_1;
+if(process.env.GOOGLE_SHEET_WEBHOOK_URL_2) db.settings.googleSheet.targetWebhookUrl2 = process.env.GOOGLE_SHEET_WEBHOOK_URL_2;
 if(process.env.GOOGLE_SHEET_WEBHOOK_SECRET) db.settings.googleSheet.secret = process.env.GOOGLE_SHEET_WEBHOOK_SECRET;
 if(process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL) db.settings.googleSheet.serviceAccountEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
 if(process.env.GOOGLE_PRIVATE_KEY) {
@@ -485,7 +500,7 @@ if(process.env.GOOGLE_CALENDAR_ID) db.settings.calendar.calendarId = process.env
 if(process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID) db.settings.googleDrive.rootFolderId = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
 if(process.env.GOOGLE_DRIVE_BACKUP_FOLDER_ID) db.settings.googleDrive.backupFolderId = process.env.GOOGLE_DRIVE_BACKUP_FOLDER_ID;
 // Log ràng buộc đã áp dụng
-console.log(`[CONFIG] Google Sheet Hub: Form=${db.settings.googleSheet.formResponsesSheetId.slice(0,8)}... DB=${db.settings.googleSheet.targetDatabaseSpreadsheetId.slice(0,8)}... Webhook=${db.settings.googleSheet.targetWebhookUrl ? 'SET' : 'EMPTY'}`);
+console.log(`[CONFIG] Google Sheet Hub: Form=${db.settings.googleSheet.formResponsesSheetId.slice(0,8)}... DB=${db.settings.googleSheet.targetDatabaseSpreadsheetId.slice(0,8)}... Webhooks=${getAllWebhookUrls().length} [${getAllWebhookUrls().map(u=>u.slice(0,35)+'...').join(', ')}]`);
 console.log(`[CONFIG] Calendar: ${db.settings.calendar.clientId ? 'OAuth SET' : 'EMPTY'} • Drive: ${db.settings.googleDrive.rootFolderId ? db.settings.googleDrive.rootFolderId.slice(0,8)+'...' : 'EMPTY'}`);
 // Fix mock attendance sai ca CA_TOI hiển thị Đang làm buổi sáng - realtime đúng Vietnam
 (function cleanupIncorrectAttendances(){
@@ -577,12 +592,11 @@ async function syncToGoogleSheet(item){
     // Key được đồng bộ qua dòng nhân viên (syncSheetTab) nên coi như SYNCED
     return { success:true, via:'KEY_EMBEDDED_IN_EMPLOYEE' };
   }
-  const webhookUrl = db.settings?.googleSheet?.targetWebhookUrl;
+  const webhookUrls = getAllWebhookUrls();
   const secret = process.env.GOOGLE_SHEET_WEBHOOK_SECRET || db.settings?.googleSheet?.secret || 'umbomilk_secret_2026';
-  if(!webhookUrl) throw new Error('Chưa cấu hình Google Sheet Webhook URL trong Cài đặt');
-  // Nếu webhook là placeholder mặc định (chưa deploy Apps Script) thì không retry vô ích – coi như UNCONFIGURED
-  const isPlaceholder = webhookUrl.includes('AKfycbz_umbomilk_apps_script') || webhookUrl.includes('umbomilk_apps_script');
-  if(isPlaceholder) throw new Error('Webhook placeholder chưa cấu hình - dữ liệu sẽ được đồng bộ qua Sheets API 60s (nếu có ServiceAccount) hoặc lưu local');
+  if(webhookUrls.length===0) throw new Error('Chưa cấu hình Google Sheet Webhook URL trong Cài đặt (cần 1 trong 3: WEBHOOK_URL / _1 / _2)');
+  const allPlaceholder = webhookUrls.every(u=> u.includes('AKfycbz_umbomilk_apps_script') || u.includes('umbomilk_apps_script'));
+  if(allPlaceholder) throw new Error('Webhook placeholder chưa cấu hình - dữ liệu sẽ được đồng bộ qua Sheets API 60s (nếu có ServiceAccount) hoặc lưu local');
 
   const sheetMap = {
     APPLICANT: 'NHAN_VIEN_MOI',
@@ -600,34 +614,41 @@ async function syncToGoogleSheet(item){
   const sheetName = sheetMap[item.entity];
   if(!sheetName) throw new Error(`No Google Sheet mapping for ${item.entity}`);
 
-  const res = await fetch(webhookUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ secret, sheetName, operation: item.operation, payload: item.payload }),
-  });
-  const text = await res.text();
-  let data; try{ data=JSON.parse(text); }catch(e){ data={ success: res.ok, raw: text.slice(0,300)}; }
-  if(!res.ok || !data.success){
-    // Chi tiết lỗi để admin chẩn đoán webhook/secret
-    let msg = data.error || `Webhook HTTP ${res.status}`;
-    if(res.status===401 || (msg && msg.toLowerCase().includes('unauthorized'))){
-      msg = `Unauthorized (401) - Sai GOOGLE_SHEET_WEBHOOK_SECRET. Kiểm tra Apps Script secret vs Settings > Google Sheet > Secret. Hiện dùng secret: ${secret.slice(0,4)}•••• (webhook: ${webhookUrl.slice(0,50)}...)`;
-    }
-    if(res.status===404) msg += ' - Webhook URL không tồn tại (kiểm tra Script deployment)';
-    throw new Error(msg);
+  let lastError=null;
+  for(const webhookUrl of webhookUrls){
+    const isPH = webhookUrl.includes('AKfycbz_umbomilk_apps_script') || webhookUrl.includes('umbomilk_apps_script');
+    if(isPH) continue;
+    try{
+      const res = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ secret, sheetName, operation: item.operation, payload: item.payload }),
+      });
+      const text = await res.text();
+      let data; try{ data=JSON.parse(text); }catch(e){ data={ success: res.ok, raw: text.slice(0,300)}; }
+      if(!res.ok || !data.success){
+        let msg = data.error || `Webhook HTTP ${res.status}`;
+        if(res.status===401 || (msg && msg.toLowerCase().includes('unauthorized'))){
+          msg = `Unauthorized (401) - Sai GOOGLE_SHEET_WEBHOOK_SECRET. Kiểm tra Apps Script secret vs Settings > Google Sheet > Secret. Hiện dùng secret: ${secret.slice(0,4)}•••• (webhook: ${webhookUrl.slice(0,50)}...)`;
+        }
+        if(res.status===404) msg += ' - Webhook URL không tồn tại (kiểm tra Script deployment)';
+        lastError = new Error(msg + ` [${webhookUrl.slice(0,40)}...]`);
+        continue;
+      }
+      return data;
+    }catch(e){ lastError=e; continue; }
   }
-  return data;
+  throw lastError || new Error('Tất cả 3 webhook đều lỗi/placeholder');
 }
 
 function addSyncQueue(entity, operation, payload, actor, source='WEB_HR'){
-  const webhookUrl = db.settings?.googleSheet?.targetWebhookUrl;
+  const webhookUrls = getAllWebhookUrls();
   const secret = process.env.GOOGLE_SHEET_WEBHOOK_SECRET || db.settings?.googleSheet?.secret || 'umbomilk_secret_2026';
-  const isPlaceholder = webhookUrl && (webhookUrl.includes('AKfycbz_umbomilk_apps_script') || webhookUrl.includes('umbomilk_apps_script'));
+  const hasRealWebhook = webhookUrls.some(u=> !u.includes('AKfycbz_umbomilk_apps_script') && !u.includes('umbomilk_apps_script'));
   const isKeyEntity = entity==='KEY';
-  // Key không cần webhook, placeholder không retry
-  let initialStatus = (!webhookUrl) ? 'UNCONFIGURED' : 'PENDING';
+  let initialStatus = (webhookUrls.length===0 || !hasRealWebhook) ? 'UNCONFIGURED' : 'PENDING';
   if(isKeyEntity) initialStatus = 'SYNCED';
-  if(isPlaceholder && !isKeyEntity) initialStatus = 'UNCONFIGURED';
+  if(!hasRealWebhook && !isKeyEntity) initialStatus = 'UNCONFIGURED';
   const item = { 
     id: uuidv4(), 
     entity, 
@@ -641,8 +662,8 @@ function addSyncQueue(entity, operation, payload, actor, source='WEB_HR'){
     retryCount:0 
   };
   if(initialStatus==='UNCONFIGURED'){
-    if(isPlaceholder) item.error = 'Webhook placeholder (chưa deploy Apps Script) - dữ liệu lưu local, sẽ đồng bộ qua Sheets API 60s khi có ServiceAccount';
-    else item.error = !webhookUrl ? 'Chưa cấu hình Google Sheet Webhook URL' : 'Thiếu GOOGLE_SHEET_WEBHOOK_SECRET';
+    if(!hasRealWebhook) item.error = 'Webhook placeholder (chưa deploy Apps Script) - dữ liệu lưu local, sẽ đồng bộ qua Sheets API 60s khi có ServiceAccount';
+    else item.error = webhookUrls.length===0 ? 'Chưa cấu hình Google Sheet Webhook URL (cần 1 trong 3)' : 'Thiếu GOOGLE_SHEET_WEBHOOK_SECRET';
   }
   if(initialStatus==='SYNCED' && isKeyEntity){
     item.error = undefined;
@@ -5700,6 +5721,8 @@ function getEnvLocked(){
   if(process.env.GOOGLE_SHEET_FORM_RESPONSES_ID) locked['googleSheet.formResponsesSheetId']=true;
   if(process.env.GOOGLE_SHEET_TARGET_DATABASE_ID) locked['googleSheet.targetDatabaseSpreadsheetId']=true;
   if(process.env.GOOGLE_SHEET_WEBHOOK_URL) locked['googleSheet.targetWebhookUrl']=true;
+  if(process.env.GOOGLE_SHEET_WEBHOOK_URL_1) locked['googleSheet.targetWebhookUrl1']=true;
+  if(process.env.GOOGLE_SHEET_WEBHOOK_URL_2) locked['googleSheet.targetWebhookUrl2']=true;
   if(process.env.GOOGLE_SHEET_WEBHOOK_SECRET) locked['googleSheet.secret']=true;
   if(process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL) locked['googleSheet.serviceAccountEmail']=true;
   if(process.env.GOOGLE_PRIVATE_KEY) locked['googleSheet.privateKey']=true;

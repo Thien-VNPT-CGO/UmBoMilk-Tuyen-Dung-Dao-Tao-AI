@@ -4617,9 +4617,11 @@ async function loadSettings(){
     const data = await api('/api/settings', {headers:{Authorization:'Bearer '+token}});
     const s = data.settings || {};
     const m = data.masked || {};
-    if (document.getElementById('setSheetId')) document.getElementById('setSheetId').value = s.googleSheet?.spreadsheetId || '1rcqEKraSRhr-Tn9qwlhADlkQUei8j65bXeHF_Tmkd38';
-    if (document.getElementById('setTargetDatabaseSheetId')) document.getElementById('setTargetDatabaseSheetId').value = s.googleSheet?.targetDatabaseSpreadsheetId || '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w';
-    if (document.getElementById('setTargetWebhookUrl')) document.getElementById('setTargetWebhookUrl').value = s.googleSheet?.targetWebhookUrl || 'https://script.google.com/macros/s/AKfycbyh2yuRzV_txN3UCq_llPFK5j74WyoxVvmO1us_H1EGw7ykcBO_fYbZ0lrznHbDY3PE/exec';
+    if (document.getElementById('setSheetId')) document.getElementById('setSheetId').value = s.googleSheet?.spreadsheetId || '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w';
+    if (document.getElementById('setTargetDatabaseSheetId')) document.getElementById('setTargetDatabaseSheetId').value = s.googleSheet?.targetDatabaseSpreadsheetId || '1rcqEKraSRhr-Tn9qwlhADlkQUei8j65bXeHF_Tmkd38';
+    if (document.getElementById('setTargetWebhookUrl')) document.getElementById('setTargetWebhookUrl').value = s.googleSheet?.targetWebhookUrl || 'https://script.google.com/macros/s/AKfycbz_umbomilk_apps_script/exec';
+    if (document.getElementById('setTargetWebhookUrl1')) document.getElementById('setTargetWebhookUrl1').value = s.googleSheet?.targetWebhookUrl1 || 'https://script.google.com/macros/s/AKfycbxNfcYVUqqIgZPhXnGeY4aLdnH3ebJFutjGy-VIbxVEc1DV-l93RWo4ic6fc1IvYaM/exec';
+    if (document.getElementById('setTargetWebhookUrl2')) document.getElementById('setTargetWebhookUrl2').value = s.googleSheet?.targetWebhookUrl2 || 'https://script.google.com/macros/s/AKfycbxYZhMjR9riLFQfYEkgLfub33XtWlSP2IokghTt82Lb4SQVL4tKxQyNACr69yC0ACA/exec';
     if (document.getElementById('setSheetEmail')) document.getElementById('setSheetEmail').value = s.googleSheet?.serviceAccountEmail || 'umbomilk-hr@umbomilk-hr.iam.gserviceaccount.com';
     if (document.getElementById('setSheetKey')) document.getElementById('setSheetKey').value = m.googleSheet?.privateKey || s.googleSheet?.privateKey || '••••••••Nrfw';
     if (document.getElementById('setFormId')) document.getElementById('setFormId').value = s.googleSheet?.formResponsesSheetId || '1rcqEKraSRhr-Tn9qwlhADlkQUei8j65bXeHF_Tmkd38';
@@ -4649,6 +4651,8 @@ async function loadSettings(){
       'googleSheet.spreadsheetId': 'setSheetId',
       'googleSheet.targetDatabaseSpreadsheetId': 'setTargetDatabaseSheetId',
       'googleSheet.targetWebhookUrl': 'setTargetWebhookUrl',
+      'googleSheet.targetWebhookUrl1': 'setTargetWebhookUrl1',
+      'googleSheet.targetWebhookUrl2': 'setTargetWebhookUrl2',
       'googleSheet.serviceAccountEmail': 'setSheetEmail',
       'googleSheet.privateKey': 'setSheetKey',
       'googleSheet.formResponsesSheetId': 'setFormId',
@@ -4715,6 +4719,8 @@ async function saveSettings(){
       spreadsheetId:document.getElementById('setSheetId').value,
       targetDatabaseSpreadsheetId:document.getElementById('setTargetDatabaseSheetId').value,
       targetWebhookUrl:document.getElementById('setTargetWebhookUrl').value,
+      targetWebhookUrl1:document.getElementById('setTargetWebhookUrl1')?.value||'',
+      targetWebhookUrl2:document.getElementById('setTargetWebhookUrl2')?.value||'',
       serviceAccountEmail:document.getElementById('setSheetEmail').value,
       privateKey:document.getElementById('setSheetKey').value,
       formResponsesSheetId:document.getElementById('setFormId')?.value||''

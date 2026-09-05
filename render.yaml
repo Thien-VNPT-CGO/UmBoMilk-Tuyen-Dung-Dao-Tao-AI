@@ -25,6 +25,10 @@ services:
         value: 1rcqEKraSRhr-Tn9qwlhADlkQUei8j65bXeHF_Tmkd38
       - key: GOOGLE_SHEET_WEBHOOK_URL
         value: https://script.google.com/macros/s/AKfycbz_umbomilk_apps_script/exec
+      - key: GOOGLE_SHEET_WEBHOOK_URL_1
+        value: https://script.google.com/macros/s/AKfycbxNfcYVUqqIgZPhXnGeY4aLdnH3ebJFutjGy-VIbxVEc1DV-l93RWo4ic6fc1IvYaM/exec
+      - key: GOOGLE_SHEET_WEBHOOK_URL_2
+        value: https://script.google.com/macros/s/AKfycbxYZhMjR9riLFQfYEkgLfub33XtWlSP2IokghTt82Lb4SQVL4tKxQyNACr69yC0ACA/exec
       - key: GOOGLE_SHEET_WEBHOOK_SECRET
         value: umbomilk_secret_2026
       - key: GOOGLE_SERVICE_ACCOUNT_EMAIL
