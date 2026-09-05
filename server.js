@@ -6420,6 +6420,33 @@ app.get('/api/sync/diagnostic', authMiddleware, roleCheck(['Admin']), (req,res)=
     hint: counts.DEAD ? `${counts.DEAD} mục DEAD (dừng sau 5 lần) - bấm Retry All sau khi sửa webhook/secret` : undefined
   });
 });
+// Admin: Liệt kê tất cả Environment trên Render (dễ quản lý)
+app.get('/api/admin/env', authMiddleware, roleCheck(['Admin']), (req,res)=>{
+  const envList = [
+    { key:'NODE_ENV', value: process.env.NODE_ENV || 'production', desc:'Môi trường', required:true },
+    { key:'PORT', value: process.env.PORT || '10000', desc:'Cổng', required:true },
+    { key:'JWT_SECRET', value: process.env.JWT_SECRET ? '••••••••'+process.env.JWT_SECRET.slice(-4) : 'GENERATED', desc:'JWT', required:true, masked:true },
+    { key:'SECRET_ENCRYPTION_KEY', value: process.env.SECRET_ENCRYPTION_KEY ? '••••••••'+process.env.SECRET_ENCRYPTION_KEY.slice(-4) : 'GENERATED', desc:'Mã hóa', required:true, masked:true },
+    { key:'ALLOWED_ORIGINS', value: process.env.ALLOWED_ORIGINS || '*', desc:'CORS', required:false },
+    { key:'GOOGLE_SHEET_SPREADSHEET_ID', value: process.env.GOOGLE_SHEET_SPREADSHEET_ID || db.settings.googleSheet.spreadsheetId, desc:'Sheet Form (1rcq)', required:true, renderKey:'GOOGLE_SHEET_SPREADSHEET_ID' },
+    { key:'GOOGLE_SHEET_TARGET_DATABASE_ID', value: process.env.GOOGLE_SHEET_TARGET_DATABASE_ID || db.settings.googleSheet.targetDatabaseSpreadsheetId, desc:'Sheet DB 20 cột (17iXM)', required:true, renderKey:'GOOGLE_SHEET_TARGET_DATABASE_ID' },
+    { key:'GOOGLE_SHEET_WEBHOOK_URL', value: process.env.GOOGLE_SHEET_WEBHOOK_URL ? process.env.GOOGLE_SHEET_WEBHOOK_URL.slice(0,50)+'...' : (db.settings.googleSheet.targetWebhookUrl ? db.settings.googleSheet.targetWebhookUrl.slice(0,50)+'...' : 'EMPTY'), desc:'Webhook chính', required:true, masked:true },
+    { key:'GOOGLE_SHEET_WEBHOOK_URL_1', value: process.env.GOOGLE_SHEET_WEBHOOK_URL_1 ? process.env.GOOGLE_SHEET_WEBHOOK_URL_1.slice(0,50)+'...' : (db.settings.googleSheet.targetWebhookUrl1 ? 'SET' : 'EMPTY'), desc:'Webhook 1', required:false, masked:true },
+    { key:'GOOGLE_SHEET_WEBHOOK_URL_2', value: process.env.GOOGLE_SHEET_WEBHOOK_URL_2 ? process.env.GOOGLE_SHEET_WEBHOOK_URL_2.slice(0,50)+'...' : (db.settings.googleSheet.targetWebhookUrl2 ? 'SET' : 'EMPTY'), desc:'Webhook Finance', required:false, masked:true },
+    { key:'FINANCE_WEBHOOK_URL', value: process.env.FINANCE_WEBHOOK_URL ? process.env.FINANCE_WEBHOOK_URL.slice(0,50)+'...' : (db.settings.finance?.webhookUrl ? db.settings.finance.webhookUrl.slice(0,50)+'...' : 'EMPTY'), desc:'Finance 4 sheet', required:true, masked:true },
+    { key:'GOOGLE_SHEET_WEBHOOK_SECRET', value: process.env.GOOGLE_SHEET_WEBHOOK_SECRET ? '••••••••'+process.env.GOOGLE_SHEET_WEBHOOK_SECRET.slice(-4) : 'umbomilk_secret_2026', desc:'Secret', required:true, masked:true },
+    { key:'GOOGLE_SERVICE_ACCOUNT_EMAIL', value: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || db.settings.googleSheet.serviceAccountEmail, desc:'Service Account', required:true },
+    { key:'GOOGLE_PRIVATE_KEY', value: process.env.GOOGLE_PRIVATE_KEY ? '••••••••'+process.env.GOOGLE_PRIVATE_KEY.slice(-20).replace(/\n/g,'') : (db.settings.googleSheet.privateKey ? '••••••••'+db.settings.googleSheet.privateKey.slice(-10) : 'EMPTY'), desc:'Private Key', required:true, masked:true },
+    { key:'GOOGLE_OAUTH_CLIENT_ID', value: process.env.GOOGLE_OAUTH_CLIENT_ID ? '••••••••'+process.env.GOOGLE_OAUTH_CLIENT_ID.slice(-6) : (db.settings.calendar.clientId ? 'SET' : 'EMPTY'), desc:'OAuth Client', required:false, masked:true },
+    { key:'GOOGLE_OAUTH_CLIENT_SECRET', value: process.env.GOOGLE_OAUTH_CLIENT_SECRET ? '••••••••' : (db.settings.calendar.clientSecret ? '••••••••' : 'EMPTY'), desc:'OAuth Secret', required:false, masked:true },
+    { key:'GOOGLE_DRIVE_ROOT_FOLDER_ID', value: process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID || db.settings.googleDrive.rootFolderId, desc:'Drive Root', required:false },
+    { key:'GOOGLE_CALENDAR_ID', value: process.env.GOOGLE_CALENDAR_ID || db.settings.calendar.calendarId, desc:'Calendar', required:false },
+    { key:'DATABASE_URL', value: process.env.DATABASE_URL ? 'SET (Postgres)' : 'EMPTY (db.json)', desc:'DB', required:false, masked:true },
+  ];
+  const total = envList.length;
+  const configured = envList.filter(e=> e.value!=='EMPTY' && !e.value.includes('EMPTY')).length;
+  res.json({ total, configured, missing: total-configured, envList, renderYamlCount: 18, note:'18 Environment trong render.yaml (4 sync:false phải set tay trên Render Dashboard)' });
+});
 app.get('/api/zalo-records', authMiddleware, (req,res)=> res.json(db.zaloRecords));
 app.get('/api/notifications', (req,res)=>{
   const { employeeId } = req.query;

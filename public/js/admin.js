@@ -4702,14 +4702,48 @@ async function loadSettings(){
       }
     } else if(banner) banner.remove();
     updateModeBadge(s);
-    // users
+    // users + Render Env
     loadUsers();
+    loadRenderEnv();
     // sync
     const sync = await api('/api/sync-queue', {headers:{Authorization:'Bearer '+token}});
     document.getElementById('settingsSync').innerHTML = sync.slice(0,6).map(ss=>`<div class="flex justify-between bg-slate-50 border rounded-lg px-2 py-1 text-xs"><span>${ss.entity} ${ss.operation}</span><span class="font-bold ${ss.sync_status==='SYNCED'?'text-green-600':'text-amber-600'}">${ss.sync_status}</span></div>`).join('');
   }catch(e){
     if(e.message.includes('Forbidden')) showToast('Chỉ Admin mới xem được cài đặt','error');
   }
+}
+async function loadRenderEnv(){
+  try{
+    const data = await api('/api/admin/env', {headers:{Authorization:'Bearer '+token}});
+    const listEl=document.getElementById('renderEnvList');
+    const badge=document.getElementById('envCountBadge');
+    if(badge) badge.textContent=`${data.configured} / ${data.total}`;
+    if(!listEl) return;
+    listEl.innerHTML=data.envList.map(e=>{
+      const isOk = e.value!=='EMPTY' && !e.value.includes('EMPTY');
+      const isMasked = e.masked;
+      const statusColor = isOk ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-red-50 border-red-200 text-red-700';
+      const statusIcon = isOk ? 'fa-check' : 'fa-triangle-exclamation';
+      const statusText = isOk ? 'SET' : 'EMPTY';
+      return `<div class="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-xl border ${statusColor} text-xs">
+        <div class="flex-1 min-w-0">
+          <div class="font-bold font-mono text-[11px] truncate">${e.key}</div>
+          <div class="text-[11px] opacity-70 truncate">${e.desc}${e.renderKey?` • ${e.renderKey}`:''}</div>
+        </div>
+        <div class="flex items-center gap-1.5 flex-shrink-0">
+          <span class="font-mono text-[11px] truncate max-w-[180px]">${e.value}</span>
+          <span class="w-6 h-6 rounded-full bg-white border flex items-center justify-center"><i class="fa-solid ${statusIcon} text-[10px]"></i></span>
+          <span class="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-white border">${statusText}</span>
+        </div>
+      </div>`;
+    }).join('');
+    if(data.missing>0){
+      const hint=document.createElement('div');
+      hint.className='mt-2 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-2.5 py-1.5';
+      hint.innerHTML=`<i class="fa-solid fa-circle-info mr-1"></i> Thiếu ${data.missing} vars - ${data.note}`;
+      listEl.appendChild(hint);
+    }
+  }catch(e){ console.error('loadRenderEnv', e); }
 }
 async function saveSettings(){
   if(currentUser.role!=='Admin') return showToast('Chỉ Admin được lưu cài đặt','error');
