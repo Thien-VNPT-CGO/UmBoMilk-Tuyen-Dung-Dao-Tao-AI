@@ -57,6 +57,7 @@ const NAV = [
   {id:'zalo', icon:'fa-brands fa-viber', label:'Record Zalo', desc:'SENT/FAILED', group:'Vận hành'},
   {id:'report', icon:'fa-file-invoice', label:'Báo cáo chấm công', desc:'Lương', group:'Vận hành'},
   {id:'finance-keys', icon:'fa-coins', label:'Finance Keys', badge:'Kế toán', group:'Hệ thống'},
+  {id:'google-sheet-hub', icon:'fa-database', label:'Google Sheet Hub', badge:'Operational', group:'Hệ thống', desc:'1rcq/17iXM/Finance'},
   {id:'elearning', icon:'fa-graduation-cap', label:'E-learning', desc:'TEST', group:'Hệ thống'},
   {id:'settings', icon:'fa-gear', label:'Cài đặt', badge:'Admin', group:'Hệ thống'},
   {id:'audit', icon:'fa-shield-halved', label:'Audit Log', desc:'Security', group:'Hệ thống'},
@@ -346,6 +347,7 @@ function switchTab(id){
   if(id==='report'){ loadReports(); loadReportAll(); switchReportTab('overview'); }
   if(id==='elearning') loadElearning();
   if(id==='finance-keys') loadFinanceKeys();
+  if(id==='google-sheet-hub') loadGoogleSheetHub();
   if(id==='settings') loadSettings();
   if(id==='audit') loadAudit();
   if(window.innerWidth<1024) document.getElementById('sidebar').classList.add('hidden');
@@ -4748,6 +4750,10 @@ async function loadRenderEnv(){
       listEl.appendChild(hint);
     }
   }catch(e){ console.error('loadRenderEnv', e); }
+}
+async function loadGoogleSheetHub(){
+  // Hub dùng chung data với Settings, chỉ khác view
+  await loadSettings();
 }
 async function saveSettings(){
   if(currentUser.role!=='Admin') return showToast('Chỉ Admin được lưu cài đặt','error');

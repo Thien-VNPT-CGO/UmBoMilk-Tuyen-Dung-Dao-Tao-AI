@@ -774,14 +774,14 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
       </section>
 
       <!-- Cài đặt -->
-      <section id="tab-settings" class="tab-section hidden">
+      <section id="tab-google-sheet-hub" class="tab-section hidden">
         <div class="flex items-center justify-between mb-4">
-          <h2 class="text-xl font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-gear text-pink-500"></i> Cài đặt hệ thống</h2>
-          <span class="text-xs font-bold bg-white text-pink-700 border border-pink-200 px-3 py-1 rounded-full"><i class="fa-solid fa-lock text-pink-500"></i> Chỉ Admin • Secret masked</span>
+          <h2 class="text-xl font-black text-sky-900 flex items-center gap-2"><i class="fa-solid fa-database text-sky-500"></i> Google Sheet - Operational Data Hub</h2>
+          <span class="text-xs font-bold bg-sky-50 text-sky-700 border border-sky-200 px-3 py-1 rounded-full">1rcq • 17iXM • Finance</span>
         </div>
         <div class="grid lg:grid-cols-2 gap-4">
-          <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm">
-            <div class="font-bold text-sm text-pink-900">Google Sheet - Operational Data Hub</div>
+          <div class="bg-white rounded-2xl border border-sky-200 p-4 shadow-sm">
+            <div class="font-bold text-sm text-sky-900">Google Sheet - Operational Data Hub</div>
             <div class="mt-3 space-y-3 text-sm">
               <div><label class="text-xs font-bold text-pink-700">Sheet Database chính (Nguồn xuất ra 20 cột)</label><input id="setTargetDatabaseSheetId" class="w-full mt-1 px-3 py-2 rounded-xl border border-pink-200 text-sm font-bold text-pink-900 focus:border-pink-400 focus:ring-2 focus:ring-pink-100 outline-none" placeholder="1rcqEKraSRhr-Tn9qwlhADlkQUei8j65bXeHF_Tmkd38"></div>
               <div><label class="text-xs font-bold text-pink-700">Sheet nộp Form (Nguồn vào)</label><input id="setSheetId" class="w-full mt-1 px-3 py-2 rounded-xl border border-pink-200 text-sm focus:border-pink-400 focus:ring-2 focus:ring-pink-100 outline-none" placeholder="17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w"></div>
@@ -801,6 +801,20 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
             <div id="renderEnvList" class="mt-3 space-y-1.5 max-h-[320px] overflow-auto pr-1"></div>
             <div class="mt-2 text-[11px] text-slate-500">4 vars <code class="bg-slate-100 px-1 rounded">sync:false</code> phải set tay trên Render Dashboard → Environment. Đổi xong Render tự Redeploy.</div>
           </div>
+        </div>
+        <div class="mt-4 flex gap-2">
+          <button onclick="saveSettings()" class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white font-black text-sm shadow"><i class="fa-solid fa-floppy-disk"></i> Lưu cài đặt (Audit Log)</button>
+          <button onclick="loadSettings()" class="px-6 py-2.5 rounded-xl bg-white border border-pink-200 font-bold text-sm text-pink-700">Tải lại</button>
+          <button onclick="resetSystem()" class="ml-auto px-6 py-2.5 rounded-xl bg-white border border-rose-200 hover:bg-rose-50 text-rose-600 font-bold text-sm"><i class="fa-solid fa-triangle-exclamation"></i> Reset hệ thống</button>
+        </div>
+      </section>
+
+      <section id="tab-settings" class="tab-section hidden">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-xl font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-gear text-pink-500"></i> Cài đặt hệ thống</h2>
+          <span class="text-xs font-bold bg-white text-pink-700 border border-pink-200 px-3 py-1 rounded-full"><i class="fa-solid fa-lock text-pink-500"></i> Chỉ Admin • Secret masked</span>
+        </div>
+        <div class="grid lg:grid-cols-2 gap-4">
           <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm">
             <div class="font-bold text-sm text-pink-900">Google Drive & Calendar & Meet</div>
             <div class="mt-3 space-y-3 text-sm">
