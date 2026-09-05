@@ -120,7 +120,11 @@ function getStatusVi(s){
     ABSENT:'Vắng',
     PRESENT:'Có mặt',
     NO_CHECKOUT:'Thiếu ra ca',
-    NO_SCHEDULE:'Không có lịch'
+    NO_SCHEDULE:'Không có lịch',
+    CANCELLED:'Đã hủy',
+    INACTIVE:'Ngừng hoạt động',
+    CANCELLED:'Đã hủy',
+    INACTIVE:'Ngừng hoạt động'
   };
   return m[s] || s;
 }

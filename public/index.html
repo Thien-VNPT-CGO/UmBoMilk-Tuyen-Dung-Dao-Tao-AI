@@ -24,9 +24,9 @@ tailwind.config={theme:{extend:{fontFamily:{sans:['Be Vietnam Pro','sans-serif']
       </div>
     </div>
     <div class="flex items-center gap-2">
-      <span id="modeBadge" class="hidden md:inline-flex items-center gap-2 text-xs font-black bg-green-50 border border-green-200 text-green-700 px-3 py-1.5 rounded-full"><span id="modeDot" class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span><span id="modeText">ONLINE</span></span>
+      <span id="modeBadge" class="hidden md:inline-flex items-center gap-2 text-xs font-black bg-green-50 border border-green-200 text-green-700 px-3 py-1.5 rounded-full"><span id="modeDot" class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span><span id="modeText">TRỰC TUYẾN</span></span>
       <span class="hidden md:inline-flex items-center gap-2 text-xs font-semibold bg-pink-100 text-pink-700 px-3 py-1.5 rounded-full border border-pink-200"><span class="w-2 h-2 bg-pink-500 rounded-full animate-pulse"></span>Realtime Socket.io</span>
-      <span class="text-xs bg-white text-pink-700 px-3 py-1.5 rounded-full font-bold border border-pink-200 shadow-sm">CONFIDENTIAL - INTERNAL</span>
+      <span class="text-xs bg-white text-pink-700 px-3 py-1.5 rounded-full font-bold border border-pink-200 shadow-sm">BẢO MẬT - NỘI BỘ</span>
     </div>
   </div>
 </nav>
@@ -66,11 +66,11 @@ tailwind.config={theme:{extend:{fontFamily:{sans:['Be Vietnam Pro','sans-serif']
             <i class="fa-solid fa-arrow-right group-hover:translate-x-1 transition"></i>
           </div>
           <div class="mt-4 grid grid-cols-3 gap-2 text-center">
-            <div class="bg-white/15 backdrop-blur rounded-xl py-2 border border-white/10"><div class="text-xs font-bold">13 TABS</div><div class="text-[11px] opacity-90">Dashboard→Cài đặt</div></div>
-            <div class="bg-white/15 backdrop-blur rounded-xl py-2 border border-white/10"><div class="text-xs font-bold">RBAC</div><div class="text-[11px] opacity-90">Branch Scope</div></div>
-            <div class="bg-white/15 backdrop-blur rounded-xl py-2 border border-white/10"><div class="text-xs font-bold">SOCKET</div><div class="text-[11px] opacity-90">Live Sync</div></div>
+            <div class="bg-white/15 backdrop-blur rounded-xl py-2 border border-white/10"><div class="text-xs font-bold">13 MỤC</div><div class="text-[11px] opacity-90">Dashboard→Cài đặt</div></div>
+            <div class="bg-white/15 backdrop-blur rounded-xl py-2 border border-white/10"><div class="text-xs font-bold">RBAC</div><div class="text-[11px] opacity-90">Phạm vi chi nhánh</div></div>
+            <div class="bg-white/15 backdrop-blur rounded-xl py-2 border border-white/10"><div class="text-xs font-bold">SOCKET</div><div class="text-[11px] opacity-90">Đồng bộ trực tiếp</div></div>
           </div>
-          <div class="mt-3 text-xs font-medium bg-white text-pink-600 inline-flex px-3 py-1.5 rounded-full gap-2 items-center shadow"><i class="fa-solid fa-right-to-bracket"></i> Đăng nhập HR — demo: admin/admin123</div>
+          <div class="mt-3 text-xs font-medium bg-white text-pink-600 inline-flex px-3 py-1.5 rounded-full gap-2 items-center shadow"><i class="fa-solid fa-right-to-bracket"></i> Đăng nhập HR — demo: admin / admin123</div>
         </div>
       </a>
       <!-- Employee Card -->
@@ -130,7 +130,7 @@ tailwind.config={theme:{extend:{fontFamily:{sans:['Be Vietnam Pro','sans-serif']
     <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-2 mt-4 text-xs font-medium">
       <div class="flex gap-2 bg-pink-50 border border-pink-200 rounded-lg px-3 py-2"><i class="fa-solid fa-check text-pink-500 mt-0.5"></i><span>Google Form → Nhân viên mới không trùng, có AI breakdown</span></div>
       <div class="flex gap-2 bg-pink-50 border border-pink-200 rounded-lg px-3 py-2"><i class="fa-solid fa-check text-pink-500 mt-0.5"></i><span>Mã NV đúng prefix CN, không trùng, CN2 = 261 Tô Hiến Thành</span></div>
-      <div class="flex gap-2 bg-pink-50 border border-pink-200 rounded-lg px-3 py-2"><i class="fa-solid fa-check text-pink-500 mt-0.5"></i><span>RBAC + Branch Scope chặn đúng quyền</span></div>
+      <div class="flex gap-2 bg-pink-50 border border-pink-200 rounded-lg px-3 py-2"><i class="fa-solid fa-check text-pink-500 mt-0.5"></i><span>RBAC + Phạm vi chi nhánh chặn đúng quyền</span></div>
       <div class="flex gap-2 bg-pink-50 border border-pink-200 rounded-lg px-3 py-2"><i class="fa-solid fa-check text-pink-500 mt-0.5"></i><span>Key 1 thiết bị, revoke không mất dữ liệu, EXPIRED 30p</span></div>
       <div class="flex gap-2 bg-pink-50 border border-pink-200 rounded-lg px-3 py-2"><i class="fa-solid fa-check text-pink-500 mt-0.5"></i><span>Check-in/out đủ ảnh/GPS/timestamp, folder Drive chuẩn</span></div>
       <div class="flex gap-2 bg-pink-50 border border-pink-200 rounded-lg px-3 py-2"><i class="fa-solid fa-check text-pink-500 mt-0.5"></i><span>1 ca hợp lệ = CHECK-IN + CHECK-OUT</span></div>
@@ -160,14 +160,14 @@ tailwind.config={theme:{extend:{fontFamily:{sans:['Be Vietnam Pro','sans-serif']
     let isOnline = mode==='ONLINE' ? true : mode==='DEMO' ? false : true;
     // simple: if socket script loaded, assume ONLINE
     if(typeof io!=='undefined'){
-      try{ const s=io(); s.on('connect',()=>{ badge.className='hidden md:inline-flex items-center gap-2 bg-green-50 border border-green-200 text-green-700 text-xs font-black px-3 py-1.5 rounded-full'; dot.className='w-2 h-2 bg-green-500 rounded-full animate-pulse'; text.textContent='ONLINE'; s.disconnect(); }); s.on('connect_error',()=>{ badge.className='hidden md:inline-flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-700 text-xs font-black px-3 py-1.5 rounded-full'; dot.className='w-2 h-2 bg-amber-500 rounded-full'; text.textContent='DEMO'; }); }catch(e){}
+      try{ const s=io(); s.on('connect',()=>{ badge.className='hidden md:inline-flex items-center gap-2 bg-green-50 border border-green-200 text-green-700 text-xs font-black px-3 py-1.5 rounded-full'; dot.className='w-2 h-2 bg-green-500 rounded-full animate-pulse'; text.textContent='TRỰC TUYẾN'; s.disconnect(); }); s.on('connect_error',()=>{ badge.className='hidden md:inline-flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-700 text-xs font-black px-3 py-1.5 rounded-full'; dot.className='w-2 h-2 bg-amber-500 rounded-full'; text.textContent='DỮ LIỆU MẪU'; }); }catch(e){}
     }
     badge.onclick=()=>{
       if(mode==='AUTO') mode='DEMO'; else if(mode==='DEMO') mode='ONLINE'; else mode='AUTO';
       localStorage.setItem('app_mode',mode);
-      if(mode==='ONLINE'){ badge.className='hidden md:inline-flex items-center gap-2 bg-green-50 border border-green-200 text-green-700 text-xs font-black px-3 py-1.5 rounded-full'; dot.className='w-2 h-2 bg-green-500 rounded-full animate-pulse'; text.textContent='ONLINE';}
-      else if(mode==='DEMO'){ badge.className='hidden md:inline-flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-700 text-xs font-black px-3 py-1.5 rounded-full'; dot.className='w-2 h-2 bg-amber-500 rounded-full'; text.textContent='DEMO';}
-      else text.textContent='AUTO';
+      if(mode==='ONLINE'){ badge.className='hidden md:inline-flex items-center gap-2 bg-green-50 border border-green-200 text-green-700 text-xs font-black px-3 py-1.5 rounded-full'; dot.className='w-2 h-2 bg-green-500 rounded-full animate-pulse'; text.textContent='TRỰC TUYẾN';}
+      else if(mode==='DEMO'){ badge.className='hidden md:inline-flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-700 text-xs font-black px-3 py-1.5 rounded-full'; dot.className='w-2 h-2 bg-amber-500 rounded-full'; text.textContent='DỮ LIỆU MẪU';}
+      else text.textContent='TỰ ĐỘNG';
     };
   }
   document.addEventListener('DOMContentLoaded', update);

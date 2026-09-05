@@ -133,31 +133,31 @@ const DEFAULT_SETTINGS = {
 // Mỗi tab HR sẽ tự động tạo 1 sheet với cột tương ứng, realtime 1:1 với db
 const SHEET_DEFINITIONS = {
   // Tab Nhân viên mới - từ Form đăng ký
-  NHAN_VIEN_MOI: { sheetName: 'NHAN_VIEN_MOI', headers: ['ID','Ngày ĐK','Họ tên','Giới tính','Năm sinh','Trình độ','Quê quán','SĐT','Ca đăng ký','Chi nhánh ĐK','Kinh nghiệm','Xử lý đột xuất','Facebook','Nguồn biết tin','Điểm AI','Kết quả','Trạng thái','Source ID','Version','Updated At'] },
+  NHAN_VIEN_MOI: { sheetName: 'NHAN_VIEN_MOI', headers: ['ID','Ngày ĐK','Họ tên','Giới tính','Năm sinh','Trình độ','Quê quán','SĐT','Ca đăng ký','Chi nhánh ĐK','Kinh nghiệm','Xử lý đột xuất','Facebook','Nguồn biết tin','Điểm AI','Kết quả','Trạng thái','Mã nguồn','Phiên bản','Cập nhật lúc'] },
   // Nhân viên cửa hàng - thêm cột Key (yêu cầu #9) – Key đi theo NV đến khi nghỉ
-  NHAN_VIEN_TRAINING: { sheetName: 'NHAN_VIEN_TRAINING', headers: ['ID','Mã NV','Họ tên','SĐT','Key','Chi nhánh','Ca','Ngày bắt đầu','Ngày kết thúc','Số ngày Training','Trạng thái','Điểm TEST','Kết quả TEST','Loại','Category','Version','Updated At','Sync'] },
-  NHAN_VIEN_CHINH_THUC: { sheetName: 'NHAN_VIEN_CHINH_THUC', headers: ['ID','Mã NV','Họ tên','SĐT','Key','Chi nhánh','Ca','Ngày bắt đầu','Trạng thái','Điểm TEST','Loại','Ngày chính thức','Version','Updated At','Sync'] },
-  NHAN_VIEN_XUONG: { sheetName: 'NHAN_VIEN_XUONG', headers: ['ID','Mã NV','Họ tên','SĐT','Branch','Status','Sync'] },
-  NHAN_VIEN_VAN_PHONG: { sheetName: 'NHAN_VIEN_VAN_PHONG', headers: ['ID','Mã NV','Họ tên','SĐT','Branch','Status','Sync'] },
-  NHAN_VIEN_SALE: { sheetName: 'NHAN_VIEN_SALE', headers: ['ID','Mã NV','Họ tên','SĐT','Branch','Status','Sync'] },
+  NHAN_VIEN_TRAINING: { sheetName: 'NHAN_VIEN_TRAINING', headers: ['ID','Mã NV','Họ tên','SĐT','Khóa','Chi nhánh','Ca','Ngày bắt đầu','Ngày kết thúc','Số ngày Thử việc','Trạng thái','Điểm TEST','Kết quả TEST','Loại','Nhóm','Phiên bản','Cập nhật lúc','Đồng bộ'] },
+  NHAN_VIEN_CHINH_THUC: { sheetName: 'NHAN_VIEN_CHINH_THUC', headers: ['ID','Mã NV','Họ tên','SĐT','Khóa','Chi nhánh','Ca','Ngày bắt đầu','Trạng thái','Điểm TEST','Loại','Ngày chính thức','Phiên bản','Cập nhật lúc','Đồng bộ'] },
+  NHAN_VIEN_XUONG: { sheetName: 'NHAN_VIEN_XUONG', headers: ['ID','Mã NV','Họ tên','SĐT','Chi nhánh','Trạng thái','Đồng bộ'] },
+  NHAN_VIEN_VAN_PHONG: { sheetName: 'NHAN_VIEN_VAN_PHONG', headers: ['ID','Mã NV','Họ tên','SĐT','Chi nhánh','Trạng thái','Đồng bộ'] },
+  NHAN_VIEN_SALE: { sheetName: 'NHAN_VIEN_SALE', headers: ['ID','Mã NV','Họ tên','SĐT','Chi nhánh','Trạng thái','Đồng bộ'] },
   // Lịch
-  LICH_LAM_VIEC: { sheetName: 'LICH_LAM_VIEC', headers: ['ID','Mã NV','Họ tên','Chi nhánh','Tuần bắt đầu','Ngày','Thứ','Ca','Trạng thái','Người thay','Version'] },
+  LICH_LAM_VIEC: { sheetName: 'LICH_LAM_VIEC', headers: ['ID','Mã NV','Họ tên','Chi nhánh','Tuần bắt đầu','Ngày','Thứ','Ca','Trạng thái','Người thay','Phiên bản'] },
   // Phiếu
-  PHIEU_OFF_HANG_TUAN: { sheetName: 'PHIEU_OFF_HANG_TUAN', headers: ['ID','Mã NV','Họ tên','Chi nhánh','Ca','Ngày OFF','Loại','Trạng thái','Auto Approve','Ngày tạo'] },
-  PHIEU_OFF_DOT_XUAT: { sheetName: 'PHIEU_OFF_DOT_XUAT', headers: ['ID','Mã NV','Họ tên','Chi nhánh','Ca','Ngày OFF','Lý do','Người thay','Trạng thái','Cascade Step','Ngày tạo'] },
+  PHIEU_OFF_HANG_TUAN: { sheetName: 'PHIEU_OFF_HANG_TUAN', headers: ['ID','Mã NV','Họ tên','Chi nhánh','Ca','Ngày OFF','Loại','Trạng thái','Tự động duyệt','Ngày tạo'] },
+  PHIEU_OFF_DOT_XUAT: { sheetName: 'PHIEU_OFF_DOT_XUAT', headers: ['ID','Mã NV','Họ tên','Chi nhánh','Ca','Ngày OFF','Lý do','Người thay','Trạng thái','Bước liên hoàn','Ngày tạo'] },
   PHIEU_DOI_THIET_BI: { sheetName: 'PHIEU_DOI_THIET_BI', headers: ['ID','Mã NV','Lý do','Thiết bị cũ','Thiết bị mới','Trạng thái','Ngày tạo','Hết hạn'] },
   PHIEU_DOI_CA_TRAINING: { sheetName: 'PHIEU_DOI_CA_TRAINING', headers: ['ID','Mã NV','Họ tên','Ngày','Ca cũ','Ca mới','Lý do','Trạng thái','Ngày tạo','Hết hạn','Người duyệt'] },
   // Điểm danh
-  RECORD_DIEM_DANH: { sheetName: 'RECORD_DIEM_DANH', headers: ['ID','Mã NV','Họ tên','Ngày','Ca','Chi nhánh','Giờ Check-in','GPS In','Ảnh In','Drive In','Giờ Check-out','GPS Out','Ảnh Out','Drive Out','Trạng thái','Vi phạm','Version'] },
+  RECORD_DIEM_DANH: { sheetName: 'RECORD_DIEM_DANH', headers: ['ID','Mã NV','Họ tên','Ngày','Ca','Chi nhánh','Giờ vào ca','GPS vào','Ảnh vào','Drive vào','Giờ ra ca','GPS ra','Ảnh ra','Drive ra','Trạng thái','Vi phạm','Phiên bản'] },
   RECORD_ZALO: { sheetName: 'RECORD_ZALO', headers: ['ID','Thời gian gửi','Người nhận','Loại','Nội dung','Trạng thái','Lỗi'] },
   // Báo cáo
   BAO_CAO_CHAM_CONG: { sheetName: 'BAO_CAO_CHAM_CONG', headers: ['Mã NV','Họ tên','Chi nhánh','Tháng','Ngày tiêu chuẩn','Thực tế','Tính lương','Giờ TC','Giờ TT','Giờ TL','Phép','OT','Trễ','Lỗi','Trạng thái'] },
   KET_QUA_TEST: { sheetName: 'KET_QUA_TEST', headers: ['ID','Mã NV','Họ tên','Khóa','Điểm','Đúng/Tổng','Kết quả','Thời gian làm','Ngày tạo'] },
-  KHOA_TEST: { sheetName: 'KHOA_TEST', headers: ['ID','Tên khóa','Số câu','Min/câu','Ngày tạo'] },
-  TAI_KHOAN: { sheetName: 'TAI_KHOAN', headers: ['ID','Username','Role','Branch Scope','Display Name','Allowed Tabs'] },
-  AUDIT_LOG: { sheetName: 'AUDIT_LOG', headers: ['ID','Actor','Action','Entity','Before','After','Timestamp','IP'] },
-  SYNC_QUEUE: { sheetName: 'SYNC_QUEUE', headers: ['ID','Entity','Operation','Version','Updated At','By','Source','Sync Status'] },
-  DRIVE_FILES: { sheetName: 'DRIVE_FILES', headers: ['ID','Mã NV','Họ tên','Ngày','Loại','File name','Drive Path','URL','Created At'] }
+  KHOA_TEST: { sheetName: 'KHOA_TEST', headers: ['ID','Tên khóa','Số câu','Tối thiểu/câu','Ngày tạo'] },
+  TAI_KHOAN: { sheetName: 'TAI_KHOAN', headers: ['ID','Tên đăng nhập','Vai trò','Phạm vi chi nhánh','Tên hiển thị','Tab được phép'] },
+  AUDIT_LOG: { sheetName: 'AUDIT_LOG', headers: ['ID','Người thực hiện','Hành động','Thực thể','Trước','Sau','Thời gian','IP'] },
+  SYNC_QUEUE: { sheetName: 'SYNC_QUEUE', headers: ['ID','Thực thể','Thao tác','Phiên bản','Cập nhật lúc','Người thực hiện','Nguồn','Trạng thái đồng bộ'] },
+  DRIVE_FILES: { sheetName: 'DRIVE_FILES', headers: ['ID','Mã NV','Họ tên','Ngày','Loại','Tên tệp','Đường dẫn Drive','Liên kết','Ngày tạo'] }
 };
 
 let db = {
@@ -585,11 +585,11 @@ console.log(`[CONFIG] Finance: ${db.settings.finance?.webhookUrl ? db.settings.f
     if(stillDead.length>0 && isPH){
       const cnt = stillDead.length;
       db.syncQueue = db.syncQueue.filter(i=>i.sync_status!=='DEAD');
-      console.log(`[SYNC STARTUP CLEANUP] Xóa thêm ${cnt} DEAD còn lại do placeholder`);
+      console.log(`[ĐỒNG BỘ KHỞI ĐỘNG] Xóa thêm ${cnt} DEAD còn lại do placeholder`);
     }
     if(db.syncQueue.length !== before || beforeDead>0){
       saveDB();
-      console.log(`[SYNC STARTUP CLEANUP] ${before} -> ${db.syncQueue.length} mục (đã xóa ${before - db.syncQueue.length} DEAD placeholder/KEY)`);
+      console.log(`[ĐỒNG BỘ KHỞI ĐỘNG] ${before} -> ${db.syncQueue.length} mục (đã xóa ${before - db.syncQueue.length} DEAD placeholder/KEY)`);
       // Emit để UI cập nhật ngay
       setTimeout(()=>{ try{ io.emit('sync:update', db.syncQueue); }catch(e){} }, 1000);
     }
@@ -638,7 +638,7 @@ async function syncToGoogleSheet(item){
     ZALO: 'RECORD_ZALO'
   };
   const sheetName = sheetMap[item.entity];
-  if(!sheetName) throw new Error(`No Google Sheet mapping for ${item.entity}`);
+  if(!sheetName) throw new Error(`Chưa cấu hình bảng tính cho ${item.entity}`);
 
   let lastError=null;
   for(const webhookUrl of webhookUrls){
@@ -733,7 +733,7 @@ function generateEmployeeId(branchId){
     if(!db.employees.find(e=>e.employeeId===eid)) return eid;
     attempt++;
   }
-  throw new Error('Không th? t?o mô nhôn viôn duy nh?t');
+  throw new Error('Không thể tạo mã nhân viên duy nhất');
 }
 function isOffWindowOpen(){
   // Dùng giờ Việt Nam (Asia/Ho_Chi_Minh, UTC+7) để realtime đúng với client VN
@@ -2476,7 +2476,7 @@ app.post('/api/admin/sync-from-sheet', authMiddleware, roleCheck(['Admin']), asy
     const shift = get('Ca','') || 'CA_SANG';
     const startDate = get('Ngày bắt đầu','') || getVietnamTodayStr();
     const endDate = get('Ngày kết thúc','') || null;
-    const trainingDays = parseInt(get('Số ngày Training','')) || 7;
+    const trainingDays = parseInt(get('Số ngày Thử việc','')) || 7;
     const status = get('Trạng thái','') || (foundSheet==='NHAN_VIEN_CHINH_THUC' ? 'OFFICIAL' : 'TRAINING');
     const testScore = get('Điểm TEST','') ? Number(get('Điểm TEST','')) : null;
     const testResult = get('Kết quả TEST','') || null;
@@ -3287,7 +3287,7 @@ function realtimeAutomationPoller(){
       if(isPlaceholderNow && i.error?.includes('placeholder') && i.sync_status==='FAILED'){ i.sync_status='UNCONFIGURED'; i.error='Webhook placeholder - dữ liệu lưu local, Sheets API sẽ đồng bộ khi có ServiceAccount'; }
       if(i.error?.includes('No Google Sheet mapping for KEY')){ i.sync_status='SYNCED'; delete i.error; }
     });
-    if(beforeDead>0) console.log(`[SYNC CLEANUP] Đã dọn ${beforeDead} mục DEAD do placeholder/KEY`);
+    if(beforeDead>0) console.log(`[ĐỒNG BỘ DỌN DẸP] Đã dọn ${beforeDead} mục DEAD do placeholder/KEY`);
     saveDB(); io.emit('sync:update', db.syncQueue);
   }
   // 4. Sync queue auto-retry (exponential backoff, realtime) - không retry nếu là placeholder hoặc KEY
@@ -3710,7 +3710,7 @@ async function syncSheetTab(sheetKey){
         body: JSON.stringify({ values: rows })
       });
     }
-    console.log(`[SHEET] Synced ${def.sheetName}: ${rows.length} rows - Realtime 1:1`);
+    console.log(`[SHEET] Đã đồng bộ ${def.sheetName}: ${rows.length} rows - Realtime 1:1`);
   }catch(e){ console.error(`syncSheetTab ${sheetKey} error`, e.message); }
 }
 async function syncAllTabsToSheetsRealtime(){
@@ -5843,7 +5843,7 @@ app.put('/api/settings', authMiddleware, roleCheck(['Admin']), (req,res)=>{
 app.get('/api/users', authMiddleware, roleCheck(['Admin']), (req,res)=> res.json(db.users.map(u=>({id:u.id, username:u.username, role:u.role, branchScope:u.branchScope, displayName:u.displayName, allowedTabs: u.allowedTabs}))));
 app.post('/api/users', authMiddleware, roleCheck(['Admin']), (req,res)=>{
   const { username, password, role, branchScope, displayName, allowedTabs } = req.body;
-  if(db.users.find(u=>u.username===username)) return res.status(409).json({error:'Username exists'});
+  if(db.users.find(u=>u.username===username)) return res.status(409).json({error:'Tên đăng nhập đã tồn tại'});
   const hashed = bcrypt.hashSync(password,10);
   const defaultTabs = ['dashboard','applicants','interviews','employees-store','keys','attendance','schedule','test-management','requests','zalo-records','audit-logs','settings'];
   const user = { id: uuidv4(), username, password:hashed, role, branchScope: branchScope||[], displayName: displayName||username, allowedTabs: allowedTabs || (role==='Admin'? defaultTabs : ['dashboard','applicants','employees-store']) };

@@ -153,7 +153,9 @@ function getStatusVi(status) {
     COMPLETED: 'Hoàn thành',
     CHECKED_IN: 'Đã check-in',
     LATE: 'Trễ',
-    NO_SCHEDULE: 'Không có lịch'
+    NO_SCHEDULE: 'Không có lịch',
+    CANCELLED: 'Đã hủy',
+    INACTIVE: 'Ngừng hoạt động'
   };
   return map[status] || status;
 }
@@ -175,17 +177,17 @@ function updateModeBadge(){
     badge.className='hidden md:flex items-center gap-2 bg-slate-100 border border-slate-200 text-slate-600 text-xs font-black px-3 py-1.5 rounded-full';
     dot.className='w-2 h-2 bg-slate-400 rounded-full';
     text.textContent='NGOẠI TUYẾN';
-    badge.title='Mất kết nối Socket.io - đang DỮ LIỆU MẪU/ngoại tuyến';
+    badge.title='Mất kết nối Socket.io - đang dùng dữ liệu mẫu/ngoại tuyến';
   }else if(isOnline){
     badge.className='hidden md:flex items-center gap-2 bg-green-50 border border-green-200 text-green-700 text-xs font-black px-3 py-1.5 rounded-full';
     dot.className='w-2 h-2 bg-green-500 rounded-full animate-pulse';
     text.textContent='TRỰC TUYẾN';
-    badge.title='TRỰC TUYẾN: dữ liệu thật + realtime';
+    badge.title='Trực tuyến: dữ liệu thực + realtime';
   }else{
     badge.className='hidden md:flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-700 text-xs font-black px-3 py-1.5 rounded-full';
     dot.className='w-2 h-2 bg-amber-500 rounded-full';
     text.textContent='DỮ LIỆU MẪU';
-    badge.title='DỮ LIỆU MẪU: thử nghiệm giao diện';
+    badge.title='Dữ liệu mẫu: giao diện thử nghiệm';
   }
   badge.onclick=()=>{
     if(currentMode==='AUTO') currentMode='DEMO';
@@ -193,7 +195,7 @@ function updateModeBadge(){
     else currentMode='AUTO';
     localStorage.setItem('app_mode', currentMode);
     updateModeBadge();
-    if(typeof showToast==='function') showToast('Chế độ: '+currentMode,'success');
+    if(typeof showToast==='function') showToast('Chế độ: '+(currentMode==='ONLINE'?'Trực tuyến':currentMode==='DEMO'?'Dữ liệu mẫu':'Tự động'),'success');
   };
 }
 
@@ -457,7 +459,7 @@ function updateModeBadge(settings) {
   if (onlineEl) {
     const isConn = socket && socket.connected;
     onlineEl.className = `flex items-center gap-1.5 ${isConn ? 'bg-emerald-500' : 'bg-red-500'} text-white text-[11px] font-black px-2.5 py-1 rounded-full shadow-xs`;
-    onlineEl.innerHTML = `<span class="w-2 h-2 bg-white rounded-full ${isConn ? 'animate-ping' : ''}"></span><i class="fa-solid fa-wifi"></i><span>${isConn ? 'ONLINE' : 'OFFLINE'}</span>`;
+    onlineEl.innerHTML = `<span class="w-2 h-2 bg-white rounded-full ${isConn ? 'animate-ping' : ''}"></span><i class="fa-solid fa-wifi"></i><span>${isConn ? 'TRỰC TUYẾN' : 'NGOẠI TUYẾN'}</span>`;
   }
 
   if (!settings && token) {
@@ -477,7 +479,7 @@ function updateSystemStatusIndicators(s) {
   if (dbEl) {
     const hasDb = s.googleSheet?.targetDatabaseSpreadsheetId || s.googleSheet?.serviceAccountEmail;
     dbEl.className = `flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-black shadow-2xs ${hasDb ? 'bg-emerald-50 border border-emerald-300 text-emerald-800' : 'bg-slate-100 border border-slate-300 text-slate-500'}`;
-    dbEl.innerHTML = `<span class="w-2 h-2 ${hasDb ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'} rounded-full"></span><i class="fa-solid fa-database ${hasDb ? 'text-emerald-600' : 'text-slate-400'}"></i><span>DB CHÍNH: ${hasDb ? 'LIVE' : 'MOCK'}</span>`;
+    dbEl.innerHTML = `<span class="w-2 h-2 ${hasDb ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'} rounded-full"></span><i class="fa-solid fa-database ${hasDb ? 'text-emerald-600' : 'text-slate-400'}"></i><span>CSDL CHÍNH: ${hasDb ? 'TRỰC TUYẾN' : 'DỮ LIỆU MẪU'}</span>`;
   }
 
   // 2. GG Sheet Đăng ký (Sheet ID: 1rcqEKra...)
@@ -485,7 +487,7 @@ function updateSystemStatusIndicators(s) {
   if (formEl) {
     const hasForm = s.googleSheet?.spreadsheetId;
     formEl.className = `flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-black shadow-2xs ${hasForm ? 'bg-emerald-50 border border-emerald-300 text-emerald-800' : 'bg-slate-100 border border-slate-300 text-slate-500'}`;
-    formEl.innerHTML = `<span class="w-2 h-2 ${hasForm ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'} rounded-full"></span><i class="fa-solid fa-file-excel ${hasForm ? 'text-emerald-600' : 'text-slate-400'}"></i><span>SHEET FORM: ${hasForm ? 'LIVE' : 'MOCK'}</span>`;
+    formEl.innerHTML = `<span class="w-2 h-2 ${hasForm ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'} rounded-full"></span><i class="fa-solid fa-file-excel ${hasForm ? 'text-emerald-600' : 'text-slate-400'}"></i><span>SHEET FORM: ${hasForm ? 'TRỰC TUYẾN' : 'DỮ LIỆU MẪU'}</span>`;
   }
 
   // 3. AI Scoring Engine
@@ -493,14 +495,14 @@ function updateSystemStatusIndicators(s) {
   if (aiEl) {
     const hasAiKey = s.ai?.apiKey;
     aiEl.className = `flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-black shadow-2xs bg-emerald-50 border border-emerald-300 text-emerald-800`;
-    aiEl.innerHTML = `<span class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span><i class="fa-solid fa-brain text-emerald-600"></i><span>AI: ${hasAiKey ? 'LIVE OPENAI' : 'LIVE (14-RUBRIC)'}</span>`;
+    aiEl.innerHTML = `<span class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span><i class="fa-solid fa-brain text-emerald-600"></i><span>AI: ${hasAiKey ? 'TRỰC TUYẾN (OpenAI)' : 'TRỰC TUYẾN (14 tiêu chí)'}</span>`;
   }
 
   // 4. Google Meet
   const meetEl = document.getElementById('statusMeet');
   if (meetEl) {
     meetEl.className = `flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-black shadow-2xs bg-emerald-50 border border-emerald-300 text-emerald-800`;
-    meetEl.innerHTML = `<span class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span><i class="fa-solid fa-video text-emerald-600"></i><span>GG MEET: LIVE</span>`;
+    meetEl.innerHTML = `<span class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span><i class="fa-solid fa-video text-emerald-600"></i><span>GOOGLE MEET: TRỰC TUYẾN</span>`;
   }
 
   // 5. Zalo Bot
@@ -508,7 +510,7 @@ function updateSystemStatusIndicators(s) {
   if (zaloEl) {
     const hasZalo = s.zalo?.accessToken || s.zalo?.botWebhookUrl || s.zalo?.oaId;
     zaloEl.className = `flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-black shadow-2xs ${hasZalo ? 'bg-emerald-50 border border-emerald-300 text-emerald-800' : 'bg-blue-50 border border-blue-200 text-blue-800'}`;
-    zaloEl.innerHTML = `<span class="w-2 h-2 ${hasZalo ? 'bg-emerald-500 animate-pulse' : 'bg-blue-500 animate-pulse'} rounded-full"></span><i class="fa-solid fa-paper-plane ${hasZalo ? 'text-emerald-600' : 'text-blue-600'}"></i><span>ZALO: ${hasZalo ? 'LIVE BOT API' : 'LIVE DISPATCH'}</span>`;
+    zaloEl.innerHTML = `<span class="w-2 h-2 ${hasZalo ? 'bg-emerald-500 animate-pulse' : 'bg-blue-500 animate-pulse'} rounded-full"></span><i class="fa-solid fa-paper-plane ${hasZalo ? 'text-emerald-600' : 'text-blue-600'}"></i><span>ZALO: ${hasZalo ? 'TRỰC TUYẾN (Bot API)' : 'TRỰC TUYẾN (Điều phối)'}</span>`;
   }
 }
 
@@ -538,7 +540,7 @@ function connectSocket(){
         syncEl.classList.add('bg-emerald-500','animate-pulse');
         setTimeout(() => { if (syncEl) { syncEl.textContent = 'ĐÃ ĐỒNG BỘ'; syncEl.classList.remove('animate-pulse'); } }, 1200);
       }
-      // === REALTIME RÀNG BUỘC: Chấm công -> Lịch + Nhân viên Training/Chính thức ===
+      // === REALTIME RÀNG BUỘC: Chấm công -> Lịch + Nhân viên Thử việc/Chính thức ===
       // Cập nhật local ngay để render tức thì (không chờ fetch), rồi vẫn fetch nền để đồng bộ
       try{
         if(ev==='attendances:update' && Array.isArray(data)){
@@ -603,10 +605,10 @@ function connectSocket(){
     const countKey = `${retrying}_${failed}_${unconfigured}_${dead}`;
     if(window._lastSyncToastCount !== countKey){
       window._lastSyncToastCount = countKey;
-      if(retrying>0) showToast(`Sync realtime: ${retrying} mục đang retry`, 'info');
+      if(retrying>0) showToast(`Đồng bộ realtime: ${retrying} mục đang thử lại`, 'info');
       // Bỏ cảnh báo "chờ lượt retry" theo yêu cầu
-      else if(unconfigured>0) showToast(`ℹ️ Sync realtime: ${unconfigured} mục chưa cấu hình Google Sheet Webhook`, 'warning');
-      if(dead>0) showToast(`⛔ Sync realtime: ${dead} mục dừng sau 5 lần lỗi. Kiểm tra webhook/secret.`, 'error');
+      else if(unconfigured>0) showToast(`ℹ️ Đồng bộ realtime: ${unconfigured} mục chưa cấu hình Webhook Google Sheet`, 'warning');
+      if(dead>0) showToast(`⛔ Đồng bộ realtime: ${dead} mục đã dừng sau 5 lần lỗi. Vui lòng kiểm tra webhook/secret.`, 'error');
     }
   });
 
@@ -682,7 +684,7 @@ function renderKPI(kpi){
     {label:'Hồ sơ PV Đậu', value:kpi.passedInterview||0, icon:'fa-user-check', color:'bg-emerald-500'},
     {label:'Hồ sơ PV Loại', value:kpi.failedInterview||0, icon:'fa-user-xmark', color:'bg-rose-500'},
     {label:'Chờ chấm Hồ sơ PV', value:kpi.waitingScore||0, icon:'fa-wand-magic-sparkles', color:'bg-purple-600'},
-    {label:'Training hiện tại', value:kpi.trainingNow||0, icon:'fa-person-chalkboard', color:'bg-pink-500'},
+    {label:'Thử việc hiện tại', value:kpi.trainingNow||0, icon:'fa-person-chalkboard', color:'bg-pink-500'},
     {label:'Chờ TEST', value:kpi.waitingTest||0, icon:'fa-clipboard-question', color:'bg-purple-500'},
     {label:'TEST Đầu Ra Đậu', value:kpi.passedTest||0, icon:'fa-award', color:'bg-green-600'},
     {label:'TEST Đầu Ra Loại', value:kpi.failedTest||0, icon:'fa-circle-xmark', color:'bg-red-600'},
@@ -704,7 +706,7 @@ function renderKPI(kpi){
 }
 function renderCharts(charts){
   if(typeof Chart==='undefined'){
-    console.warn('Chart.js not loaded - check CDN');
+    console.warn('Chart.js chưa tải - kiểm tra CDN');
     ['branchChart','testChart','lateChart'].forEach(id=>{
       const c=document.getElementById(id);
       if(c && c.parentElement) c.parentElement.innerHTML = `<div class="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-xl p-3 text-center">Chart.js chưa tải (CDN bị chặn)<br><a href="https://cdn.jsdelivr.net/npm/chart.js" target="_blank" class="underline text-blue-600">Kiểm tra CDN</a></div>`;
@@ -948,13 +950,13 @@ function renderApplicants(){
           ` : ''}
           ${a.status === 'PASS' && !a.isDisqualified ? `
             ${(a.evaluationResult || (currentUser && (currentUser.role === 'Admin' || currentUser.username === 'admin'))) ? `
-              <button onclick="convertApplicant('${a.id}')" class="text-[11px] font-bold bg-pink-500 hover:bg-pink-600 text-white px-2.5 py-1 rounded-lg shadow-sm">→ Training</button>
+              <button onclick="convertApplicant('${a.id}')" class="text-[11px] font-bold bg-pink-500 hover:bg-pink-600 text-white px-2.5 py-1 rounded-lg shadow-sm">→ Thử việc</button>
             ` : ''}
           ` : (a.status === 'INTERVIEW' && !a.isDisqualified ? `
             ${(currentUser && (currentUser.role === 'Admin' || currentUser.username === 'admin')) ? `
-              <button onclick="convertApplicant('${a.id}')" class="text-[11px] font-bold bg-pink-500 hover:bg-pink-600 text-white px-2.5 py-1 rounded-lg shadow-sm" title="Admin chuyển sang Training">→ Training</button>
+              <button onclick="convertApplicant('${a.id}')" class="text-[11px] font-bold bg-pink-500 hover:bg-pink-600 text-white px-2.5 py-1 rounded-lg shadow-sm" title="Admin chuyển sang Thử việc">→ Thử việc</button>
             ` : `
-              <button disabled class="text-[11px] font-bold bg-slate-100 text-slate-400 border border-slate-200 px-2 py-1 rounded-lg cursor-not-allowed shadow-none" title="Đang trong quá trình Phỏng vấn — Khóa nút Training (Chỉ Admin mới có quyền)"><i class="fa-solid fa-lock text-slate-400"></i> → Training</button>
+              <button disabled class="text-[11px] font-bold bg-slate-100 text-slate-400 border border-slate-200 px-2 py-1 rounded-lg cursor-not-allowed shadow-none" title="Đang trong quá trình Phỏng vấn — Khóa nút Thử việc (Chỉ Admin mới có quyền)"><i class="fa-solid fa-lock text-slate-400"></i> → Thử việc</button>
             `}
           ` : '')}
           <button onclick="deleteApplicant('${a.id}')" class="text-[11px] font-bold bg-white border border-red-200 text-red-600 px-2 py-1 rounded-lg hover:bg-red-50" title="Xóa hồ sơ"><i class="fa-solid fa-trash"></i> Xóa</button>
@@ -1826,7 +1828,7 @@ function convertApplicant(id) {
 
   const isAdmin = currentUser && (currentUser.role === 'Admin' || currentUser.username === 'admin');
   if (a.status === 'INTERVIEW' && !isAdmin) {
-    return showToast('Đang trong quá trình Phỏng vấn — Khóa nút Training (Chỉ tài khoản Admin mới có quyền)', 'error');
+    return showToast('Đang trong quá trình Phỏng vấn — Khóa nút Thử việc (Chỉ tài khoản Admin mới có quyền)', 'error');
   }
 
   const today = getVietnamNow();
@@ -1862,7 +1864,7 @@ function convertApplicant(id) {
       <div class="space-y-3 bg-white border border-pink-200 rounded-2xl p-4">
         <div>
           <label class="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
-            <i class="fa-solid fa-calendar-day text-pink-500"></i> Ngày Bắt Đầu Training:
+            <i class="fa-solid fa-calendar-day text-pink-500"></i> Ngày Bắt Đầu Thử việc:
           </label>
           <input type="date" id="convertStartDateInput" value="${todayStr}" class="w-full px-3 py-2.5 rounded-xl border border-pink-200 text-sm font-bold text-slate-800 outline-none focus:border-pink-500">
         </div>
@@ -1903,7 +1905,7 @@ function convertApplicant(id) {
           Hủy
         </button>
         <button onclick="confirmConvertApplicant('${id}')" class="flex-2 bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white font-black py-3 rounded-xl shadow-md transition flex items-center justify-center gap-2">
-          <i class="fa-solid fa-calendar-check"></i> Xác Nhận Training & Tạo Lịch
+          <i class="fa-solid fa-calendar-check"></i> Xác Nhận Thử việc & Tạo Lịch
         </button>
       </div>
     </div>
@@ -1941,13 +1943,13 @@ async function confirmConvertApplicant(id) {
     ]);
 
     // Show credential & schedule confirmation modal
-    openModal('🎉 Khởi Tạo Lịch & Nhân Viên Training Thành Công!', `
+    openModal('🎉 Khởi Tạo Lịch & Nhân Viên Thử việc Thành Công!', `
       <div class="space-y-4">
         <!-- Header banner -->
         <div class="bg-gradient-to-r from-pink-500 to-rose-500 rounded-2xl p-4 text-white text-center">
           <div class="text-2xl mb-1">🥛</div>
           <div class="font-black text-lg">Chào mừng ${emp.name}!</div>
-          <div class="text-xs opacity-90 mt-1">Nhân viên Training mới • ${getBranchFull(emp.branchId)} • ${emp.shift}</div>
+          <div class="text-xs opacity-90 mt-1">Nhân viên Thử việc mới • ${getBranchFull(emp.branchId)} • ${emp.shift}</div>
         </div>
 
         <!-- Schedule created notification -->
@@ -1955,7 +1957,7 @@ async function confirmConvertApplicant(id) {
           <div class="w-9 h-9 rounded-lg bg-green-500 text-white flex items-center justify-center text-base"><i class="fa-solid fa-calendar-circle-check"></i></div>
           <div class="text-xs text-green-900">
             <div class="font-black">Đã Cập Nhật Lịch Làm Việc Vào Tab Lịch Làm Việc!</div>
-            <div class="mt-0.5 text-green-700">Lịch Training từ <b>${fmtDMY(res.startDate)}</b> đến <b>${fmtDMY(res.endDate)}</b> (${emp.trainingDays} ngày).</div>
+            <div class="mt-0.5 text-green-700">Lịch Thử việc từ <b>${fmtDMY(res.startDate)}</b> đến <b>${fmtDMY(res.endDate)}</b> (${emp.trainingDays} ngày).</div>
           </div>
         </div>
 
@@ -1999,10 +2001,10 @@ async function confirmConvertApplicant(id) {
         <i class="fa-solid fa-copy"></i> Copy Thông Tin Đăng Nhập (Gửi cho NV)
       </button>
 
-      <!-- Thư mời Training (mẫu chuẩn) -->
+      <!-- Thư mời Thử việc (mẫu chuẩn) -->
       <div class="bg-gradient-to-br from-amber-50 to-orange-50 border-2 border-amber-300 rounded-2xl p-4">
         <div class="font-black text-amber-900 flex items-center justify-between gap-2">
-          <span class="flex items-center gap-2"><i class="fa-solid fa-envelope-open-text text-amber-600"></i> Thư mời Training (mẫu chuẩn)</span>
+          <span class="flex items-center gap-2"><i class="fa-solid fa-envelope-open-text text-amber-600"></i> Thư mời Thử việc (mẫu chuẩn)</span>
           <button onclick="copyTrainingInvite('${emp.employeeId}')" class="text-xs font-black bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-xl shadow flex items-center gap-1.5"><i class="fa-solid fa-copy"></i> Copy thư mời</button>
         </div>
         <div id="trainingInviteText-${emp.employeeId}" class="mt-3 bg-white border border-amber-200 rounded-xl p-3 text-xs leading-relaxed whitespace-pre-wrap font-medium text-slate-800 max-h-[260px] overflow-auto">${generateTrainingInviteText(emp, key)}</div>
@@ -2050,7 +2052,7 @@ function generateTrainingInviteText(emp, key){
   const shiftText = shiftMap[emp.shift] || emp.shift || 'Ca chiều: 12h00 - 18h00';
   const startDate = fmtDMY(emp.startDate) || '25/08/2026';
   const nameUpper = (emp.name || '').toUpperCase();
-  return `🐮 [UMBO MILK] – THÔNG BÁO LỊCH TRAINING & NHẬN VIỆC 🎉\n\nChào ${nameUpper} ❤️\nChúc mừng bạn đã trúng tuyển! UMBO MILK xin thông báo lịch nhận việc và đào tạo (Training) của bạn như sau:\n\n📌 THÔNG TIN NHẬN VIỆC & ĐÀO TẠO CHÍNH THỨC:\n• 🏢 Chi nhánh làm việc chính thức: ${branchFull}\n• ⏱️ Ca làm việc chính thức: ${shiftText}\n• 📅 Ngày bắt đầu đi làm / training: ${startDate}\n\n📌 GIẤY TỜ HỒ SƠ CẦN CHUẨN BỊ KHI ĐI NHẬN CA:\n1. Mang theo form training 7 ngày học việc\n2. Giấy khám sức khỏe kèm bill thanh toán (khám theo thông tư 25 để đi làm, giá từ 120.000đ tới 160.000đ Công Ty chỉ hoàn trả trong mức giá trên)\n\n👉 Vui lòng có mặt đúng giờ và giữ liên lạc với Quản lý chi nhánh nhé!\n❗ỨNG VIÊN VUI LÒNG GỬI THỜI GIAN ĐẾN KÝ HỢP ĐỒNG THỬ VIỆC TẠI CÔNG TY: 10 ĐẶNG THAI MAI. PHƯỜNG CẦU KIỆU. HCM\n\n---\n📛 Mã NV: ${emp.employeeId}\n🔑 Key: ${key.key || key}\n🌐 Link: ${window.location.origin}/employee`;
+  return `🐮 [UMBO MILK] – THÔNG BÁO LỊCH TRAINING & NHẬN VIỆC 🎉\n\nChào ${nameUpper} ❤️\nChúc mừng bạn đã trúng tuyển! UMBO MILK xin thông báo lịch nhận việc và đào tạo (Thử việc) của bạn như sau:\n\n📌 THÔNG TIN NHẬN VIỆC & ĐÀO TẠO CHÍNH THỨC:\n• 🏢 Chi nhánh làm việc chính thức: ${branchFull}\n• ⏱️ Ca làm việc chính thức: ${shiftText}\n• 📅 Ngày bắt đầu đi làm / training: ${startDate}\n\n📌 GIẤY TỜ HỒ SƠ CẦN CHUẨN BỊ KHI ĐI NHẬN CA:\n1. Mang theo form training 7 ngày học việc\n2. Giấy khám sức khỏe kèm bill thanh toán (khám theo thông tư 25 để đi làm, giá từ 120.000đ tới 160.000đ Công Ty chỉ hoàn trả trong mức giá trên)\n\n👉 Vui lòng có mặt đúng giờ và giữ liên lạc với Quản lý chi nhánh nhé!\n❗ỨNG VIÊN VUI LÒNG GỬI THỜI GIAN ĐẾN KÝ HỢP ĐỒNG THỬ VIỆC TẠI CÔNG TY: 10 ĐẶNG THAI MAI. PHƯỜNG CẦU KIỆU. HCM\n\n---\n📛 Mã NV: ${emp.employeeId}\n🔑 Key: ${key.key || key}\n🌐 Link: ${window.location.origin}/employee`;
 }
 function copyTrainingInvite(employeeId){
   // Tìm emp và key từ dữ liệu hiện tại hoặc từ DOM
@@ -2066,7 +2068,7 @@ function copyTrainingInvite(employeeId){
   }
   if(!text) return showToast('Không tìm thấy thư mời','error');
   navigator.clipboard.writeText(text).then(()=>{
-    showToast('✅ Đã copy thư mời Training - sẵn sàng gửi cho nhân viên','success');
+    showToast('✅ Đã copy thư mời Thử việc - sẵn sàng gửi cho nhân viên','success');
   }).catch(()=>{
     // Fallback: tạo textarea tạm
     const ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
@@ -2078,10 +2080,10 @@ function showTrainingInvite(employeeId){
   if(!emp) return showToast('Không tìm thấy nhân viên','error');
   const keyObj = (typeof dbKeysFind==='function' ? dbKeysFind(employeeId) : null) || {key: 'KEY-UNKNOWN'};
   const inviteText = generateTrainingInviteText(emp, keyObj);
-  openModal('📨 Thư mời Training - ' + emp.name, `
+  openModal('📨 Thư mời Thử việc - ' + emp.name, `
     <div class="space-y-4">
       <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800">
-        <div class="font-black flex items-center gap-2"><i class="fa-solid fa-circle-info text-amber-600"></i> HR bấm nút Training xong, copy thư mời này gửi cho nhân viên</div>
+        <div class="font-black flex items-center gap-2"><i class="fa-solid fa-circle-info text-amber-600"></i> HR bấm nút Thử việc xong, copy thư mời này gửi cho nhân viên</div>
       </div>
       <div class="bg-white border-2 border-amber-300 rounded-2xl p-4 max-h-[400px] overflow-auto">
         <pre class="whitespace-pre-wrap text-xs leading-relaxed font-medium text-slate-800" id="modalInviteText">${inviteText}</pre>
@@ -2253,7 +2255,7 @@ function getEmployeeTrainingProgress(emp) {
     }
   }
 
-  // Training: Count attendances for this employee that are check-ins or completed
+  // Thử việc: Count attendances for this employee that are check-ins or completed
   const empAtts = (attendances || []).filter(a => a.employeeId === emp.employeeId && (a.checkIn || a.status === 'COMPLETED' || a.status === 'CHECKED_IN' || (a.violations && a.violations.length)));
   const uniqueAttDates = new Set(empAtts.map(a => a.date));
   const completed = Math.min(uniqueAttDates.size, 7);
@@ -2350,7 +2352,7 @@ function switchEmpStoreTab(tab){
     if(filterEl) filterEl.innerHTML = `<option value="">Tất cả trạng thái Chính thức</option><option value="OFFICIAL">Chính thức</option><option value="ARCHIVED">Đã lưu trữ</option>`;
   }
   if(filterEl) filterEl.value = '';
-  // Toggle import controls visibility (yêu cầu #3: Training import)
+  // Toggle import controls visibility (yêu cầu #3: Thử việc import)
   const importCtrl = document.getElementById('importOfficialControls');
   const importTrainingCtrl = document.getElementById('importTrainingControls');
   if(importCtrl){
@@ -2368,7 +2370,7 @@ function switchEmpStoreTab(tab){
   const thTest = document.getElementById('thTest');
   const thEmpId = document.getElementById('thEmpId');
   if(tab==='TRAINING'){
-    if(thProgress) thProgress.textContent = 'Tiến độ Training (Realtime)';
+    if(thProgress) thProgress.textContent = 'Tiến độ Thử việc (Realtime)';
     if(thOff) thOff.textContent = 'Số ngày OFF đã chọn';
     if(thStatus) thStatus.textContent = 'Trạng thái Thử việc';
     if(thEmpId) thEmpId.textContent = 'Mã NV & Ngày thử việc';
@@ -2531,7 +2533,7 @@ async function handleOfficialImport(event){
 function downloadTrainingTemplate(){
   const header = ['Họ tên','SĐT','Chi nhánh','Ca','Ngày bắt đầu','Mã NV (để trống tự sinh)','Trạng thái','Ghi chú'];
   const sample = [
-    ['Nguyễn Văn Training','0901112222','CN2','CA_SANG','2024-01-15','','TRAINING',''],
+    ['Nguyễn Văn Thử việc','0901112222','CN2','CA_SANG','2024-01-15','','TRAINING',''],
     ['Trần Thị Train','0903334444','CN1 - 130 Vạn kiếp','Ca Chiều','15/01/2024','CN130_UBM15012024_NV0001','TRAINING',''],
   ];
   const csvHeader = header.join(',') + '\n';
@@ -2543,7 +2545,7 @@ function downloadTrainingTemplate(){
   const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a'); a.href=url; a.download='mau_import_nhan_vien_training.csv'; a.click(); URL.revokeObjectURL(url);
-  showToast('Đã tải file mẫu Training CSV','success');
+  showToast('Đã tải file mẫu Thử việc CSV','success');
 }
 async function handleTrainingImport(event){
   const file = event.target.files[0];
@@ -2584,10 +2586,10 @@ async function handleTrainingImport(event){
     }
     if(rows.length===0){ showToast('Không đọc được dữ liệu','error'); return; }
     const previewRows = rows.slice(0,20);
-    openModal(`Xác nhận Import/Cập nhật ${rows.length} NV Training`, `
+    openModal(`Xác nhận Import/Cập nhật ${rows.length} NV Thử việc`, `
       <div class="space-y-3 max-h-[65vh] overflow-auto">
         <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs">
-          <div class="font-black text-blue-800">Lưu ý Training:</div>
+          <div class="font-black text-blue-800">Lưu ý Thử việc:</div>
           <div class="text-blue-700 mt-1">• SĐT/Mã NV đã tồn tại sẽ được <b>CẬP NHẬT</b> (không bỏ qua) • Mới sẽ <b>tự sinh Mã NV & Key</b></div>
           <div class="text-blue-700">• Trạng thái mặc định <b>TRAINING</b> • 12 ngày thử việc (có thể 1 ngày 2 ca)</div>
         </div>
@@ -2599,19 +2601,19 @@ async function handleTrainingImport(event){
           ${rows.length>20?`<div class="text-center text-xs text-slate-500 py-2">... và ${rows.length-20} dòng nữa</div>`:''}
         </div>
         <div class="flex gap-2">
-          <button id="confirmTrainingImportBtn" class="flex-1 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-black py-3 rounded-xl">✅ Xác nhận ${rows.length} NV Training</button>
+          <button id="confirmTrainingImportBtn" class="flex-1 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-black py-3 rounded-xl">✅ Xác nhận ${rows.length} NV Thử việc</button>
           <button onclick="closeModal()" class="px-6 bg-white border font-bold py-3 rounded-xl">Hủy</button>
         </div>
       </div>
     `);
     document.getElementById('confirmTrainingImportBtn').onclick = async ()=>{
-      closeModal(); showToast('Đang import Training...','success');
+      closeModal(); showToast('Đang import Thử việc...','success');
       try{
         const res = await api('/api/employees/import-training', {method:'POST', body:JSON.stringify({employees: rows}), headers:{Authorization:'Bearer '+token}});
-        showToast(`✅ Training: ${res.imported} mới, ${res.updated} cập nhật, ${res.skipped.length} bỏ qua`, 'success');
+        showToast(`✅ Thử việc: ${res.imported} mới, ${res.updated} cập nhật, ${res.skipped.length} bỏ qua`, 'success');
         loadEmployees();
         if(res.skipped.length||res.errors.length){
-          openModal('Kết quả Import Training', `
+          openModal('Kết quả Import Thử việc', `
             <div class="space-y-2 text-sm">
               <div class="bg-blue-50 border border-blue-200 rounded-xl p-3"><span class="font-black text-blue-700">${res.imported} mới • ${res.updated} cập nhật</span></div>
               ${res.skipped.length?'<div class="bg-amber-50 border border-amber-200 rounded-xl p-2 max-h-[120px] overflow-auto"><div class="font-bold text-amber-800 text-xs">Bỏ qua ('+res.skipped.length+')</div>'+res.skipped.slice(0,10).map(s=>'<div class=text-xs>'+s.reason+'</div>').join('')+'</div>':''}
@@ -2620,7 +2622,7 @@ async function handleTrainingImport(event){
             </div>
           `);
         }
-      }catch(e){ showToast('Import Training lỗi: '+e.message,'error'); }
+      }catch(e){ showToast('Import Thử việc lỗi: '+e.message,'error'); }
     };
   }catch(e){ showToast('Lỗi đọc file: '+e.message,'error'); console.error(e); }
 }
@@ -2697,7 +2699,7 @@ function renderEmployeesStore(){
   if (tableEl) {
     if(totalEmp===0){
       const emptyMsg = currentEmpStoreTab==='TRAINING' 
-        ? `<div class="text-pink-600 font-bold">Chưa có nhân viên Training</div><div class="text-slate-500 text-xs mt-1">Nhân viên mới từ Form sau khi duyệt sẽ vào tab này (7 ngày Training) • Lọc: ${branchF||'Tất cả CN'}</div>`
+        ? `<div class="text-pink-600 font-bold">Chưa có nhân viên Thử việc</div><div class="text-slate-500 text-xs mt-1">Nhân viên mới từ Form sau khi duyệt sẽ vào tab này (7 ngày Thử việc) • Lọc: ${branchF||'Tất cả CN'}</div>`
         : `<div class="text-emerald-600 font-bold">Chưa có nhân viên Chính thức</div><div class="text-slate-500 text-xs mt-1">Chỉ 2 ngày OFF/tuần (T6 12:00→T7 15:00) • AI sắp lịch T2→CN • Lọc: ${branchF||'Tất cả CN'}</div>`;
       const colspan = currentEmpStoreTab==='OFFICIAL' ? 8 : 9;
       tableEl.innerHTML = `<tr><td colspan="${colspan}" class="px-4 py-10 text-center bg-white"><div class="w-12 h-12 bg-pink-100 text-pink-600 rounded-xl flex items-center justify-center mx-auto"><i class="fa-solid ${currentEmpStoreTab==='TRAINING'?'fa-graduation-cap':'fa-user-check'}"></i></div><div class="mt-3 text-sm">${emptyMsg}</div></td></tr>`;
@@ -2815,7 +2817,7 @@ function renderEmployeesStore(){
             })()}
           </td>
 
-          <!-- Tiến độ ca làm / Training -->
+          <!-- Tiến độ ca làm / Thử việc -->
           <td class="px-4 py-3.5 align-middle text-center whitespace-nowrap">
             ${currentEmpStoreTab==='OFFICIAL' ? `
               <div class="inline-flex flex-col items-center gap-1">
@@ -2925,7 +2927,7 @@ function renderEmployeesStore(){
                     if (trainProgress.completed >= 7 || (currentUser && (currentUser.role === 'Admin' || currentUser.username === 'admin'))) {
                       btns += `<button onclick="openTestOptionModal('${e.employeeId}')" class="text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded-xl shadow-xs transition">Mở TEST</button>`;
                     } else {
-                      btns += `<button disabled class="text-xs font-bold bg-slate-100 text-slate-400 border border-slate-200 px-3 py-1.5 rounded-xl cursor-not-allowed shadow-none" title="Khóa Mở TEST: NV chưa hoàn thành đủ 7 ngày điểm danh Training (${trainProgress.completed}/7) - Chỉ Admin mới mở được trước">🔒 Mở TEST</button>`;
+                      btns += `<button disabled class="text-xs font-bold bg-slate-100 text-slate-400 border border-slate-200 px-3 py-1.5 rounded-xl cursor-not-allowed shadow-none" title="Khóa Mở TEST: NV chưa hoàn thành đủ 7 ngày điểm danh Thử việc (${trainProgress.completed}/7) - Chỉ Admin mới mở được trước">🔒 Mở TEST</button>`;
                     }
                   } else if (e.status === 'RETEST') {
                     btns += `<button onclick="openTestOptionModal('${e.employeeId}')" class="text-xs font-bold bg-pink-500 hover:bg-pink-600 text-white px-3 py-1.5 rounded-xl shadow-xs transition">Thi lại</button>`;
@@ -2935,8 +2937,8 @@ function renderEmployeesStore(){
                 return btns;
               })()}
 
-              ${currentEmpStoreTab==='TRAINING' && (currentUser && (currentUser.role === 'Admin' || currentUser.username === 'admin') && e.status !== 'OFFICIAL') ? `<button onclick="simulate7DaysTraining('${e.employeeId}')" class="text-xs font-black bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl shadow-xs transition" title="Giả lập hoàn thành 7 ngày điểm danh cho Admin Test">⚡ 7/7 Training</button>` : ''}
-              ${currentEmpStoreTab==='TRAINING' ? `<button onclick="showTrainingInvite('${e.employeeId}')" class="text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-xl shadow-xs flex items-center gap-1" title="Xem và copy thư mời Training cho NV này"><i class="fa-solid fa-envelope"></i> Thư mời</button>` : ''}
+              ${currentEmpStoreTab==='TRAINING' && (currentUser && (currentUser.role === 'Admin' || currentUser.username === 'admin') && e.status !== 'OFFICIAL') ? `<button onclick="simulate7DaysTraining('${e.employeeId}')" class="text-xs font-black bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl shadow-xs transition" title="Giả lập hoàn thành 7 ngày điểm danh cho Admin Test">⚡ 7/7 Thử việc</button>` : ''}
+              ${currentEmpStoreTab==='TRAINING' ? `<button onclick="showTrainingInvite('${e.employeeId}')" class="text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-xl shadow-xs flex items-center gap-1" title="Xem và copy thư mời Thử việc cho NV này"><i class="fa-solid fa-envelope"></i> Thư mời</button>` : ''}
               
               <!-- OFFICIAL BUTTON - Admin: luôn bấm được | HR: chỉ khi Mở TEST đã hiển thị (completed >= 7) -->
               ${currentEmpStoreTab==='TRAINING' && e.status !== 'OFFICIAL' ? (() => {
@@ -2948,7 +2950,7 @@ function renderEmployeesStore(){
                 } else if (isHR && testUnlocked) {
                   return `<button onclick="transitionOfficial('${e.employeeId}')" class="text-xs font-black bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white px-3 py-1.5 rounded-xl shadow-xs transition flex items-center gap-1">🎓 → Chính thức</button>`;
                 } else if (isHR && !testUnlocked) {
-                  return `<button disabled class="text-xs font-bold bg-slate-100 text-slate-400 border border-slate-200 px-3 py-1.5 rounded-xl cursor-not-allowed shadow-none" title="Chức năng Mở TEST chưa được kích hoạt (NV cần đủ 7 ngày điểm danh Training). HR không thể chuyển Chính thức khi Mở TEST chưa hiển thị.">🔒 → Chính thức</button>`;
+                  return `<button disabled class="text-xs font-bold bg-slate-100 text-slate-400 border border-slate-200 px-3 py-1.5 rounded-xl cursor-not-allowed shadow-none" title="Chức năng Mở TEST chưa được kích hoạt (NV cần đủ 7 ngày điểm danh Thử việc). HR không thể chuyển Chính thức khi Mở TEST chưa hiển thị.">🔒 → Chính thức</button>`;
                 } else {
                   return `<button disabled class="text-xs font-bold bg-slate-100 text-slate-400 border border-slate-200 px-3 py-1.5 rounded-xl cursor-not-allowed shadow-none" title="Chỉ Admin/HR mới được chuyển Chính thức">🔒 → Chính thức</button>`;
                 }
@@ -2957,7 +2959,7 @@ function renderEmployeesStore(){
               <button onclick="openKey('${e.employeeId}')" class="text-xs font-bold bg-rose-950 hover:bg-rose-900 text-rose-100 border border-rose-800/80 px-2.5 py-1.5 rounded-xl transition shadow-2xs">Key</button>
               <button onclick="deleteEmp('${e.id}')" class="text-xs font-bold bg-red-50 hover:bg-red-100 text-red-600 border border-red-200/80 px-2.5 py-1.5 rounded-xl transition">Archive</button>
               ${(currentEmpStoreTab==='OFFICIAL' && currentUser && (currentUser.role==='Admin' || currentUser.username==='admin')) ? `<button onclick="hardDeleteOfficial('${e.id}','${e.employeeId}','${e.name.replace(/'/g,`\\'`)}')" class="text-xs font-bold bg-red-600 hover:bg-red-700 text-white border border-red-700 px-2.5 py-1.5 rounded-xl shadow-xs" title="Xoá cứng (chỉ Admin) - dùng cho dữ liệu import">Xoá</button>` : ''}
-              ${(currentEmpStoreTab==='TRAINING' && currentUser && (currentUser.role==='Admin' || currentUser.username==='admin')) ? `<button onclick="deleteEmp('${e.id}')" class="text-xs font-bold bg-red-600 hover:bg-red-700 text-white border border-red-700 px-2.5 py-1.5 rounded-xl shadow-xs" title="Xoá NV Training (chỉ Admin)">Xoá</button>` : ''}
+              ${(currentEmpStoreTab==='TRAINING' && currentUser && (currentUser.role==='Admin' || currentUser.username==='admin')) ? `<button onclick="deleteEmp('${e.id}')" class="text-xs font-bold bg-red-600 hover:bg-red-700 text-white border border-red-700 px-2.5 py-1.5 rounded-xl shadow-xs" title="Xoá NV Thử việc (chỉ Admin)">Xoá</button>` : ''}
 
             </div>
           </td>
@@ -2989,7 +2991,7 @@ async function updateEmpStatus(employeeId, status){
       const trainProgress = getEmployeeTrainingProgress(e);
       const isAdmin = currentUser && (currentUser.role === 'Admin' || currentUser.username === 'admin');
       if (trainProgress.completed < 7 && !isAdmin) {
-        return showToast(`Khóa Mở TEST — NV chưa hoàn thành đủ 7 ngày điểm danh Training (${trainProgress.completed}/7 ngày)!`, 'error');
+        return showToast(`Khóa Mở TEST — NV chưa hoàn thành đủ 7 ngày điểm danh Thử việc (${trainProgress.completed}/7 ngày)!`, 'error');
       }
     }
   }
@@ -3496,14 +3498,14 @@ async function confirmSubmitEvaluation(employeeId) {
   }
 }
 async function simulate7DaysTraining(employeeId) {
-  if (!confirm(`[ADMIN TEST] Tự động hoàn thành đủ 7 ngày Training cho NV ${employeeId}?`)) return;
+  if (!confirm(`[ADMIN TEST] Tự động hoàn thành đủ 7 ngày Thử việc cho NV ${employeeId}?`)) return;
   try {
     const res = await api(`/api/employees/${employeeId}/simulate-7days-training`, {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + token }
     });
     if (res.success) {
-      showToast(`⚡ ADMIN TEST: Đã tự động hoàn thành đủ 7 ngày Training cho NV ${employeeId}!`, 'success');
+      showToast(`⚡ ADMIN TEST: Đã tự động hoàn thành đủ 7 ngày Thử việc cho NV ${employeeId}!`, 'success');
       loadEmployees();
     } else {
       showToast(res.error || 'Có lỗi xảy ra', 'error');
@@ -3698,7 +3700,7 @@ function switchScheduleCategory(cat){
       btn.className = 'flex-1 min-w-[140px] flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold transition bg-white border border-pink-200 text-pink-700 hover:bg-pink-50';
     }
   });
-  const labels = {TRAINING:'Lịch Nhân viên Training', OFFICIAL:'Lịch Nhân viên Chính thức', WORKSHOP:'Lịch Nhân viên Xưởng', OFFICE:'Lịch Nhân viên Văn phòng', SALE:'Lịch Nhân viên Sale'};
+  const labels = {TRAINING:'Lịch Nhân viên Thử việc', OFFICIAL:'Lịch Nhân viên Chính thức', WORKSHOP:'Lịch Nhân viên Xưởng', OFFICE:'Lịch Nhân viên Văn phòng', SALE:'Lịch Nhân viên Sale'};
   const lbl = document.getElementById('scheduleCategoryLabel');
   if(lbl) lbl.textContent = (labels[cat]||cat) + ' • T2→CN';
   renderSchedules();
@@ -3816,7 +3818,7 @@ function renderSchedules(){
   if(countEl) countEl.textContent = filtered.length + ' lịch • ' + currentScheduleCategory;
   if(filtered.length===0){
     const emptyMsg = {
-      TRAINING: 'Chưa có lịch Training - nhân viên đang trong 7 ngày đào tạo',
+      TRAINING: 'Chưa có lịch Thử việc - nhân viên đang trong 7 ngày đào tạo',
       OFFICIAL: 'Chưa có lịch Chính thức - nhân viên đã đạt TEST >7',
       WORKSHOP: 'Chưa có lịch Xưởng (Beta) - schema sẵn sàng',
       OFFICE: 'Chưa có lịch Văn phòng (Beta) - schema sẵn sàng',
@@ -3968,7 +3970,7 @@ function renderSchedules(){
                   </div>
                   <div class="flex flex-wrap items-center gap-2">
                     <span class="text-sm font-black px-3 py-1.5 rounded-full ${emp.type==='OFFICIAL'?'bg-pink-500 text-white':'bg-blue-100 text-blue-700 border border-blue-200'}">${(emp.type==='OFFICIAL' ? (emp.officialStartDate && getVietnamTodayStr() < emp.officialStartDate ? 'Chưa chính thức' : 'Chính thức') : getStatusVi(emp.type||'')+' '+getStatusVi(emp.status||''))}</span>
-                    ${(emp.type==='TRAINING' && (emp.status === 'WAITING_OFFICIAL' || (emp.status === 'TRAINING' && typeof getTrainingCompletedDays === 'function' && getTrainingCompletedDays(emp) >= 7))) ? `<span class="text-sm font-black px-3 py-1.5 rounded-full bg-amber-500 text-white shadow-xs animate-pulse flex items-center gap-1" title="Khóa lịch: NV đã hoàn thành đủ 7 ngày Training — Chờ HR duyệt Chính thức"><i class="fa-solid fa-lock"></i> 🔒 Đã 7/7 Training (Khóa lịch)</span>` : ''}
+                    ${(emp.type==='TRAINING' && (emp.status === 'WAITING_OFFICIAL' || (emp.status === 'TRAINING' && typeof getTrainingCompletedDays === 'function' && getTrainingCompletedDays(emp) >= 7))) ? `<span class="text-sm font-black px-3 py-1.5 rounded-full bg-amber-500 text-white shadow-xs animate-pulse flex items-center gap-1" title="Khóa lịch: NV đã hoàn thành đủ 7 ngày Thử việc — Chờ HR duyệt Chính thức"><i class="fa-solid fa-lock"></i> 🔒 Đã 7/7 Thử việc (Khóa lịch)</span>` : ''}
                     <span class="text-sm font-bold bg-white border border-pink-200 text-pink-700 px-3 py-1.5 rounded-full"><i class="fa-solid fa-calendar-week text-pink-500"></i> ${startDateRange}</span>
                   </div>
                 </div>

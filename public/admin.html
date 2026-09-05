@@ -46,7 +46,7 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
       <div class="absolute -right-10 -top-10 w-32 h-32 bg-white/20 rounded-full blur-2xl"></div>
       <img src="/images/logo.png" alt="Ụm Bò Milk" class="w-14 h-14 rounded-2xl object-contain bg-white p-1 shadow-lg mx-auto">
       <div class="font-black text-xl mt-3">ĐĂNG NHẬP QUẢN TRỊ</div>
-      <div class="text-xs font600 opacity-90 mt-1">Web App Quản trị HR • RBAC • Branch Scope</div>
+      <div class="text-xs font600 opacity-90 mt-1">Web App Quản trị HR • Phân quyền RBAC • Phạm vi chi nhánh</div>
     </div>
     <form id="loginForm" class="p-8 space-y-4">
       <div>
@@ -73,7 +73,7 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
       <div class="hidden sm:block">
         <div class="font-black text-pink-900 leading-none text-sm">ỤM BÒ MILK • HR ADMIN</div>
         <div class="text-[9px] font-bold text-pink-500 leading-none mt-0.5">Số 10 Đặng Thai Mai, Phường Phú Nhuận, TP. Hồ Chí Minh</div>
-        <div class="hidden text-[11px] font-semibold text-pink-600 flex items-center gap-2"><span class="w-2 h-2 bg-pink-500 rounded-full animate-pulse inline-block"></span>Realtime • <span id="headerBranch">CN2 - 261 Tô Hiến Thành</span></div>
+        <div class="hidden text-[11px] font-semibold text-pink-600 flex items-center gap-2"><span class="w-2 h-2 bg-pink-500 rounded-full animate-pulse inline-block"></span>Trực tiếp • <span id="headerBranch">CN2 - 261 Tô Hiến Thành</span></div>
       </div>
     </div>
     <!-- Realtime Live System Status Indicators (6 Services) - Ẩn trên mobile để không vỡ layout, chỉ hiện lg+ -->
@@ -100,7 +100,7 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
       </div>
 
       <!-- 4. Google Meet -->
-      <div id="statusMeet" class="flex flex-shrink-0 items-center gap-1.5 bg-emerald-50 border border-emerald-300 text-emerald-800 text-[11px] font-black px-2 py-1 rounded-full shadow-2xs whitespace-nowrap" title="Tự động tạo Link Google Meet Phỏng Vấn & Khóa Lịch 30 phút">
+      <div id="statusMeet" class="flex flex-shrink-0 items-center gap-1.5 bg-emerald-50 border border-emerald-300 text-emerald-800 text-[11px] font-black px-2 py-1 rounded-full shadow-2xs whitespace-nowrap" title="Tự động tạo Liên kết Google Meet Phỏng Vấn & Khóa Lịch 30 phút">
         <span class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
         <i class="fa-solid fa-video text-emerald-600"></i>
         <span>LỊCH MEET: TRỰC TUYẾN</span>
@@ -137,7 +137,7 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
         <span class="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center shadow"><i class="fa-solid fa-server text-xs"></i></span>
         <div>
           <div class="text-xs font-black text-slate-900">Trạng thái hệ thống Realtime</div>
-          <div class="text-[11px] text-slate-500">6 dịch vụ • Đồng bộ 15s • Socket.io • Rule Engine</div>
+          <div class="text-[11px] text-slate-500">6 dịch vụ • Đồng bộ 15s • Socket.io • Bộ Quy Tắc</div>
         </div>
       </div>
       <div class="flex items-center gap-2">
@@ -172,9 +172,9 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
         <div id="zaloDetailText" class="text-[11px] text-emerald-700 font-bold mt-1">TRỰC TUYẾN</div>
       </div>
       <div class="bg-gradient-to-br from-pink-500 to-rose-500 text-white rounded-xl p-3 shadow">
-        <div class="text-[11px] font-black flex items-center gap-1.5"><i class="fa-solid fa-wifi"></i> Socket.io Realtime <span class="ml-auto w-2 h-2 bg-white rounded-full animate-ping"></span></div>
+        <div class="text-[11px] font-black flex items-center gap-1.5"><i class="fa-solid fa-wifi"></i> Socket.io Thời gian thực <span class="ml-auto w-2 h-2 bg-white rounded-full animate-ping"></span></div>
         <div id="socketDetailText" class="text-[11px] font-bold mt-1">TRỰC TUYẾN • 0 clients</div>
-        <div id="automationHeartbeat" class="text-[10px] opacity-90 mt-1">AUTO --:--:--</div>
+        <div id="automationHeartbeat" class="text-[10px] opacity-90 mt-1">TỰ ĐỘNG --:--:--</div>
       </div>
     </div>
   </div>
@@ -185,8 +185,8 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
     <aside id="sidebar" class="w-[300px] max-w-[85vw] bg-white border-r border-pink-200 flex-shrink-0 hidden lg:flex lg:flex-col fixed lg:sticky top-[64px] left-0 z-30 shadow-2xl lg:shadow-none h-full lg:h-full overflow-y-auto overflow-x-hidden scrollbar-thin p-3 space-y-1 pt-4 lg:pt-3" style="max-height:calc(100vh - 64px - 72px)">
       <div class="space-y-1" id="navMenu"></div>
       <div class="mt-4 p-3 bg-gradient-to-br from-pink-50 to-rose-50 border border-pink-200 rounded-2xl">
-        <div class="text-xs font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-bolt text-pink-500"></i> Rule Engine</div>
-        <div class="text-[11px] font-medium text-pink-700 mt-1">Lương, OFF, chấm công, key đều qua Rule Engine — AI chỉ chấm CV & voice.</div>
+        <div class="text-xs font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-bolt text-pink-500"></i> Bộ Quy Tắc</div>
+        <div class="text-[11px] font-medium text-pink-700 mt-1">Lương, OFF, chấm công, key đều qua Bộ Quy Tắc — AI chỉ chấm CV & voice.</div>
         <div class="mt-2 flex gap-1">
           <span class="text-[10px] font-bold bg-white border border-pink-200 rounded-full px-2 py-0.5 text-pink-700">OFF 2 ngày</span>
           <span class="text-[10px] font-bold bg-white border border-pink-200 rounded-full px-2 py-0.5 text-pink-700">21k / 25.5k</span>
@@ -208,7 +208,7 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
         <div id="kpiGrid" class="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-3"></div>
         <div class="grid lg:grid-cols-3 gap-4 mt-4">
           <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm"><div class="font-bold text-pink-900 text-sm mb-3">Nhân sự theo chi nhánh</div><canvas id="branchChart" height="180"></canvas></div>
-          <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm"><div class="font-bold text-pink-900 text-sm mb-3">Tỷ lệ Training → Chính thức</div><canvas id="testChart" height="180"></canvas></div>
+          <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm"><div class="font-bold text-pink-900 text-sm mb-3">Tỷ lệ Thử việc → Chính thức</div><canvas id="testChart" height="180"></canvas></div>
           <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm"><div class="font-bold text-pink-900 text-sm mb-3">Đi trễ theo tháng (2026)</div><canvas id="lateChart" height="180"></canvas></div>
         </div>
         <div class="grid lg:grid-cols-2 gap-4 mt-4">
@@ -242,11 +242,11 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
         <div class="bg-white rounded-2xl border border-pink-200 overflow-hidden shadow-sm">
           <div class="p-3 border-b border-pink-100 flex gap-2">
             <input id="searchApplicant" placeholder="Tìm tên, SĐT, email..." class="flex-1 px-3 py-2 rounded-xl border border-pink-200 text-sm outline-none focus:border-pink-400 focus:ring-2 focus:ring-pink-100" oninput="pagination.applicants.page=1; renderApplicants()">
-            <select id="filterApplicantStatus" class="px-3 py-2 rounded-xl border border-pink-200 text-sm" onchange="pagination.applicants.page=1; renderApplicants()"><option value="">Tất cả trạng thái</option><option>NEW_APPLICANT</option><option>INTERVIEW</option><option>PASS</option><option>CONVERTED</option></select>
+            <select id="filterApplicantStatus" class="px-3 py-2 rounded-xl border border-pink-200 text-sm" onchange="pagination.applicants.page=1; renderApplicants()"><option value="">Tất cả trạng thái</option><option value="NEW_APPLICANT">Ứng viên mới</option><option value="INTERVIEW">Đã hẹn phỏng vấn</option><option value="PASS">Đạt phỏng vấn</option><option value="CONVERTED">Đã chuyển thử việc</option></select>
           </div>
           <div class="overflow-auto max-h-[55vh] scrollbar-thin">
             <table class="w-full text-sm">
-              <thead class="bg-gradient-to-r from-rose-500 via-pink-600 to-rose-600 text-white text-[11px] font-black uppercase tracking-wider sticky top-0 border-b-2 border-rose-500/50 shadow-sm"><tr><th class="px-3.5 py-3 text-left">Ứng viên</th><th class="px-3.5 py-3">Chi nhánh</th><th class="px-3.5 py-3">AI Score</th><th class="px-3.5 py-3">Điểm Hồ Sơ PV</th><th class="px-3.5 py-3">Trạng thái</th><th class="px-3.5 py-3 text-right">Hành động</th></tr></thead>
+              <thead class="bg-gradient-to-r from-rose-500 via-pink-600 to-rose-600 text-white text-[11px] font-black uppercase tracking-wider sticky top-0 border-b-2 border-rose-500/50 shadow-sm"><tr><th class="px-3.5 py-3 text-left">Ứng viên</th><th class="px-3.5 py-3">Chi nhánh</th><th class="px-3.5 py-3">Điểm AI</th><th class="px-3.5 py-3">Điểm Hồ Sơ PV</th><th class="px-3.5 py-3">Trạng thái</th><th class="px-3.5 py-3 text-right">Hành động</th></tr></thead>
               <tbody id="applicantsTbody" class="divide-y divide-pink-100"></tbody>
             </table>
           </div>
@@ -298,7 +298,7 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
                   <th class="px-3.5 py-3 text-left">Thời gian Phỏng vấn</th>
                   <th class="px-3.5 py-3 text-left">Ứng viên & SĐT</th>
                   <th class="px-3.5 py-3 text-left">Chi nhánh PV</th>
-                  <th class="px-3.5 py-3 text-left">Link Google Meet</th>
+                  <th class="px-3.5 py-3 text-left">Liên kết Google Meet</th>
                   <th class="px-3.5 py-3 text-center">Điểm Hồ Sơ PV</th>
                   <th class="px-3.5 py-3 text-right">Thao tác Phỏng vấn</th>
                 </tr>
@@ -323,7 +323,7 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
               </span>
               Nhân viên Cửa hàng
             </h2>
-            <p class="text-xs text-rose-100 mt-1 font-medium">Quản lý lộ trình 12 ngày thử việc, tiến độ Training (7/7 ngày) & chuyển nhân viên chính thức</p>
+            <p class="text-xs text-rose-100 mt-1 font-medium">Quản lý lộ trình 12 ngày thử việc, tiến độ Thử việc (7/7 ngày) & chuyển nhân viên chính thức</p>
           </div>
           <div class="flex items-center gap-2.5 relative z-10">
             <select id="empBranchFilter" class="px-3.5 py-2.5 rounded-2xl bg-white/20 hover:bg-white/25 border border-white/35 text-white font-bold text-xs backdrop-blur-md focus:bg-rose-950 focus:outline-none transition shadow-xs" onchange="pagination.employees.page=1; renderEmployeesStore()">
@@ -339,24 +339,24 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
         <!-- Sub Tabs: Training / Chính thức -->
         <div class="flex gap-2 bg-white border border-pink-200 rounded-2xl p-2 shadow-sm mb-4">
           <button onclick="switchEmpStoreTab('TRAINING')" id="empSubTab-TRAINING" class="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-black transition bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow">
-            <i class="fa-solid fa-graduation-cap"></i> Nhân viên Training <span id="countEmpTrainingTab" class="bg-white text-pink-600 px-2 py-0.5 rounded-full text-xs">0</span>
+            <i class="fa-solid fa-graduation-cap"></i> Nhân viên Thử việc <span id="countEmpTrainingTab" class="bg-white text-pink-600 px-2 py-0.5 rounded-full text-xs">0</span>
           </button>
           <button onclick="switchEmpStoreTab('OFFICIAL')" id="empSubTab-OFFICIAL" class="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold transition bg-white border border-pink-200 text-pink-700 hover:bg-pink-50">
             <i class="fa-solid fa-user-check"></i> Nhân viên Chính thức <span id="countEmpOfficialTab" class="bg-pink-100 text-pink-700 px-2 py-0.5 rounded-full text-xs">0</span>
           </button>
         </div>
-        <!-- Import Training Controls - visible on TRAINING tab (yêu cầu #3) -->
+        <!-- Nhập dữ liệu Thử việc Controls - visible on TRAINING tab (yêu cầu #3) -->
         <div id="importTrainingControls" class="hidden bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-3 mb-4 flex flex-wrap items-center justify-between gap-3 shadow-sm">
           <div class="flex items-center gap-2">
             <span class="w-8 h-8 rounded-xl bg-blue-500 text-white flex items-center justify-center"><i class="fa-solid fa-user-graduate"></i></span>
             <div>
-              <div class="text-sm font-black text-blue-900">Import / Cập nhật nhân viên Training</div>
+              <div class="text-sm font-black text-blue-900">Nhập / Cập nhật nhân viên Thử việc</div>
               <div class="text-xs text-blue-700">Hỗ trợ CSV/XLSX • Tự sinh Mã NV & Key • Cập nhật nếu SĐT/Mã NV đã tồn tại</div>
             </div>
           </div>
           <div class="flex items-center gap-2">
             <button onclick="downloadTrainingTemplate()" class="px-4 py-2 rounded-xl bg-white border border-blue-200 text-blue-700 font-bold text-xs hover:bg-blue-50 flex items-center gap-1.5 shadow-2xs"><i class="fa-solid fa-download"></i> File mẫu</button>
-            <button onclick="document.getElementById('importTrainingFile').click()" class="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-black text-xs shadow flex items-center gap-1.5"><i class="fa-solid fa-upload"></i> Import Training</button>
+            <button onclick="document.getElementById('importTrainingFile').click()" class="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-black text-xs shadow flex items-center gap-1.5"><i class="fa-solid fa-upload"></i> Nhập dữ liệu Thử việc</button>
             <input type="file" id="importTrainingFile" accept=".csv,.xlsx,.xls" class="hidden" onchange="handleTrainingImport(event)">
           </div>
         </div>
@@ -387,7 +387,7 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
                   <div class="text-[11px] text-slate-600"><span class="font-bold text-emerald-600">Tự động cập nhật khi NV chấm công</span> • Không cần tải lại trang • Độ trễ ~1-2s qua Socket.io • Hôm nay: <span id="legendTodayDate" class="font-mono font-bold text-pink-700">--/--/----</span> <span id="legendTodayVN" class="hidden"></span></div>
                 </div>
               </div>
-              <span class="text-[11px] font-black bg-emerald-500 text-white px-3 py-1 rounded-full animate-pulse flex items-center gap-1.5 flex-shrink-0"><span class="w-2 h-2 bg-white rounded-full animate-pulse"></span> REALTIME</span>
+              <span class="text-[11px] font-black bg-emerald-500 text-white px-3 py-1 rounded-full animate-pulse flex items-center gap-1.5 flex-shrink-0"><span class="w-2 h-2 bg-white rounded-full animate-pulse"></span> THỜI GIAN THỰC</span>
             </div>
             <div class="mt-3 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 text-[11px]">
               <span class="flex items-center gap-1.5 bg-emerald-500 text-white px-2.5 py-1.5 rounded-full font-bold shadow-2xs justify-center"><i class="fa-solid fa-check"></i> ✔ Hoàn thành — IN & OUT đủ</span>
@@ -401,7 +401,7 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
             </div>
             <div class="mt-2 text-[11px] text-slate-600 bg-white border border-pink-100 rounded-xl px-3 py-2 flex items-start gap-2">
               <i class="fa-solid fa-lightbulb text-amber-500 mt-0.5"></i>
-              <span><b class="text-pink-700">HR nhìn cột “Chấm công hôm nay”</b> là biết ngay NV có đi làm không — <b class="text-emerald-600">Lịch làm việc</b> (tab <i class="fa-solid fa-calendar-days"></i> Lịch làm việc) cũng tự đổi màu theo cùng dữ liệu chấm công. Training chấm trước ca 30 phút, Official tính trễ sau 5 phút.</span>
+              <span><b class="text-pink-700">HR nhìn cột “Chấm công hôm nay”</b> là biết ngay NV có đi làm không — <b class="text-emerald-600">Lịch làm việc</b> (tab <i class="fa-solid fa-calendar-days"></i> Lịch làm việc) cũng tự đổi màu theo cùng dữ liệu chấm công. Thử việc chấm trước ca 30 phút, Official tính trễ sau 5 phút.</span>
             </div>
           </div>
           <div class="px-5 py-3 bg-pink-50/60 border-b border-pink-100 flex items-center justify-between">
@@ -429,8 +429,8 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
                   <th id="thEmpId" class="px-4 py-3.5 whitespace-nowrap">Mã NV & Ngày thử việc</th>
                   <th class="px-4 py-3.5 whitespace-nowrap">Họ tên / SĐT</th>
                   <th class="px-4 py-3.5 text-center whitespace-nowrap">CN / Ca làm</th>
-                  <th id="thAttendanceToday" class="px-4 py-3.5 text-center whitespace-nowrap">Chấm công hôm nay<br><span class="text-[9px] normal-case font-bold opacity-90">Realtime • Tự động</span></th>
-                  <th id="thProgress" class="px-4 py-3.5 text-center whitespace-nowrap">Tiến độ Training (Realtime)</th>
+                  <th id="thAttendanceToday" class="px-4 py-3.5 text-center whitespace-nowrap">Chấm công hôm nay<br><span class="text-[9px] normal-case font-bold opacity-90">Trực tiếp • Tự động</span></th>
+                  <th id="thProgress" class="px-4 py-3.5 text-center whitespace-nowrap">Tiến độ Thử việc (Thời gian thực)</th>
                   <th id="thOff" class="px-4 py-3.5 text-center whitespace-nowrap">Số ngày OFF đã chọn</th>
                   <th id="thStatus" class="px-4 py-3.5 text-center whitespace-nowrap">Trạng thái Thử việc</th>
                   <th id="thTest" class="px-4 py-3.5 text-center whitespace-nowrap">TEST</th>
@@ -488,14 +488,14 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
         </div>
         <!-- Sub tabs 5 loại -->
         <div class="flex flex-wrap gap-2 mb-4 bg-white border border-pink-200 rounded-2xl p-2 shadow-sm">
-          <button onclick="switchScheduleCategory('TRAINING')" id="schedTab-TRAINING" class="flex-1 min-w-[140px] flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-black transition bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow"><i class="fa-solid fa-graduation-cap"></i> Training <span id="countTraining" class="bg-white text-pink-600 px-2 py-0.5 rounded-full text-[11px]">0</span></button>
+          <button onclick="switchScheduleCategory('TRAINING')" id="schedTab-TRAINING" class="flex-1 min-w-[140px] flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-black transition bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow"><i class="fa-solid fa-graduation-cap"></i> Thử việc <span id="countTraining" class="bg-white text-pink-600 px-2 py-0.5 rounded-full text-[11px]">0</span></button>
           <button onclick="switchScheduleCategory('OFFICIAL')" id="schedTab-OFFICIAL" class="flex-1 min-w-[140px] flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold transition bg-white border border-pink-200 text-pink-700 hover:bg-pink-50"><i class="fa-solid fa-user-check"></i> Chính thức <span id="countOfficial" class="bg-pink-100 text-pink-700 px-2 py-0.5 rounded-full text-[11px]">0</span></button>
           <button onclick="switchScheduleCategory('WORKSHOP')" id="schedTab-WORKSHOP" class="flex-1 min-w-[140px] flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold transition bg-white border border-pink-200 text-pink-700 hover:bg-pink-50"><i class="fa-solid fa-industry"></i> Xưởng <span id="countWorkshop" class="bg-pink-100 text-pink-700 px-2 py-0.5 rounded-full text-[11px]">0</span></button>
           <button onclick="switchScheduleCategory('OFFICE')" id="schedTab-OFFICE" class="flex-1 min-w-[140px] flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold transition bg-white border border-pink-200 text-pink-700 hover:bg-pink-50"><i class="fa-solid fa-building"></i> Văn phòng <span id="countOffice" class="bg-pink-100 text-pink-700 px-2 py-0.5 rounded-full text-[11px]">0</span></button>
           <button onclick="switchScheduleCategory('SALE')" id="schedTab-SALE" class="flex-1 min-w-[140px] flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold transition bg-white border border-pink-200 text-pink-700 hover:bg-pink-50"><i class="fa-solid fa-bullhorn"></i> Sale <span id="countSale" class="bg-pink-100 text-pink-700 px-2 py-0.5 rounded-full text-[11px]">0</span></button>
         </div>
         <div class="flex items-center gap-2 mb-3">
-          <span class="text-xs font-bold text-pink-700 bg-pink-50 border border-pink-200 px-3 py-1 rounded-full" id="scheduleCategoryLabel">Lịch Nhân viên Training • T2→CN</span>
+          <span class="text-xs font-bold text-pink-700 bg-pink-50 border border-pink-200 px-3 py-1 rounded-full" id="scheduleCategoryLabel">Lịch Nhân viên Thử việc • T2→CN</span>
           <span class="text-xs font-bold bg-white border border-pink-200 px-3 py-1 rounded-full text-pink-600" id="scheduleCategoryCount">0 lịch</span>
           <button onclick="renderSchedules()" class="ml-auto text-xs font-bold bg-white border border-pink-200 text-pink-700 px-3 py-1 rounded-full hover:bg-pink-50"><i class="fa-solid fa-rotate"></i> Tải lại</button>
         </div>
@@ -509,7 +509,7 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
                 <div class="text-[11px] text-slate-600"><span class="font-bold text-emerald-600">Tự động cập nhật khi NV chấm công</span> • Không cần tải lại trang • Độ trễ ~1-2s qua Socket.io • Hôm nay: <span id="scheduleLegendTodayDate" class="font-mono font-bold text-pink-700">--/--/----</span></div>
               </div>
             </div>
-            <span class="text-[11px] font-black bg-emerald-500 text-white px-3 py-1 rounded-full animate-pulse flex items-center gap-1.5 flex-shrink-0"><span class="w-2 h-2 bg-white rounded-full animate-pulse"></span> REALTIME</span>
+            <span class="text-[11px] font-black bg-emerald-500 text-white px-3 py-1 rounded-full animate-pulse flex items-center gap-1.5 flex-shrink-0"><span class="w-2 h-2 bg-white rounded-full animate-pulse"></span> THỜI GIAN THỰC</span>
           </div>
           <div class="mt-3 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 text-[11px]">
             <span class="flex items-center gap-1.5 bg-emerald-500 text-white px-2.5 py-1.5 rounded-full font-bold shadow-2xs justify-center"><i class="fa-solid fa-check"></i> ✔ Hoàn thành — IN & OUT đủ</span>
@@ -523,7 +523,7 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
           </div>
           <div class="mt-2 text-[11px] text-slate-600 bg-white border border-pink-100 rounded-xl px-3 py-2 flex items-start gap-2">
             <i class="fa-solid fa-lightbulb text-amber-500 mt-0.5"></i>
-            <span><b class="text-pink-700">HR nhìn ô lịch hôm nay</b> là biết ngay NV có đi làm không — màu ô tự đổi theo <b class="text-emerald-600">chấm công realtime</b> (cùng dữ liệu với cột “Chấm công hôm nay” ở tab Nhân viên). Training chấm trước ca 30 phút, Official tính trễ sau 5 phút.</span>
+            <span><b class="text-pink-700">HR nhìn ô lịch hôm nay</b> là biết ngay NV có đi làm không — màu ô tự đổi theo <b class="text-emerald-600">chấm công realtime</b> (cùng dữ liệu với cột “Chấm công hôm nay” ở tab Nhân viên). Thử việc chấm trước ca 30 phút, Official tính trễ sau 5 phút.</span>
           </div>
         </div>
         <div id="scheduleGrid" class="grid gap-3"></div>
@@ -542,7 +542,7 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
       <!-- Đổi ca (Official 24h) -->
       <section id="tab-shiftSwap" class="tab-section hidden">
         <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
-          <h2 class="text-xl font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-people-arrows text-blue-500"></i> Đổi ca <span class="text-xs font-bold bg-blue-100 text-blue-700 px-2 py-1 rounded-full border border-blue-200">24h AI</span></h2>
+          <h2 class="text-xl font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-people-arrows text-blue-500"></i> Đổi ca <span class="text-xs font-bold bg-blue-100 text-blue-700 px-2 py-1 rounded-full border border-blue-200">AI 24h</span></h2>
           <button onclick="loadShiftSwapAdmin()" class="text-xs font-bold bg-white border border-pink-200 text-pink-700 px-3 py-1.5 rounded-xl hover:bg-pink-50"><i class="fa-solid fa-rotate"></i> Tải lại</button>
         </div>
         <!-- HR tạo yêu cầu <24h -->
@@ -710,7 +710,7 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
               <div class="mt-2 flex flex-wrap gap-2">
                 <button onclick="exportReport()" class="px-3 py-2 rounded-xl bg-white border text-xs font-bold">Chấm công chi tiết (CSV)</button>
                 <button onclick="exportAnomalies()" class="px-3 py-2 rounded-xl bg-white border text-xs font-bold">Sai lệch (CSV)</button>
-                <button onclick="loadReports()" class="px-3 py-2 rounded-xl bg-white border text-xs font-bold">Bảng lương Rule Engine</button>
+                <button onclick="loadReports()" class="px-3 py-2 rounded-xl bg-white border text-xs font-bold">Bảng lương Bộ Quy Tắc</button>
               </div>
               <div id="payrollGrid" class="mt-3 grid md:grid-cols-1 gap-3 max-h-[40vh] overflow-auto"></div>
             </div>
@@ -786,19 +786,19 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
               <div><label class="text-xs font-bold text-pink-700">Sheet Database chính (Nguồn xuất ra 20 cột)</label><input id="setTargetDatabaseSheetId" class="w-full mt-1 px-3 py-2 rounded-xl border border-pink-200 text-sm font-bold text-pink-900 focus:border-pink-400 focus:ring-2 focus:ring-pink-100 outline-none" placeholder="1rcqEKraSRhr-Tn9qwlhADlkQUei8j65bXeHF_Tmkd38"></div>
               <div><label class="text-xs font-bold text-pink-700">Sheet nộp Form (Nguồn vào)</label><input id="setSheetId" class="w-full mt-1 px-3 py-2 rounded-xl border border-pink-200 text-sm focus:border-pink-400 focus:ring-2 focus:ring-pink-100 outline-none" placeholder="17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w"></div>
               <div><label class="text-xs font-bold text-pink-700">Webhook URL chính (Apps Script URL)</label><input id="setTargetWebhookUrl" class="w-full mt-1 px-3 py-2 rounded-xl border border-pink-200 text-xs font-mono" placeholder="https://script.google.com/macros/s/AKfycbz_umbomilk_apps_script/exec"></div>
-              <div><label class="text-xs font-bold text-pink-700">Service Account Email</label><input id="setSheetEmail" class="w-full mt-1 px-3 py-2 rounded-xl border border-pink-200 text-sm focus:border-pink-400 focus:ring-2 focus:ring-pink-100 outline-none"></div>
-              <div><label class="text-xs font-bold text-pink-700">Private Key (masked)</label><input id="setSheetKey" class="w-full mt-1 px-3 py-2 rounded-xl border border-pink-200 text-sm font-mono text-xs"></div>
-              <div><label class="text-xs font-bold text-sky-700">FINANCE_MASTER_ID (Finance 13Y4...)</label><input id="setFinanceMasterId" class="w-full mt-1 px-3 py-2 rounded-xl border border-sky-200 text-xs font-mono bg-sky-50" placeholder="13Y4rycVMq2-HXGySjaJJBl2YZswKEaK5WkSLWVkLjuY"></div>
+              <div><label class="text-xs font-bold text-pink-700">Email Tài khoản Dịch vụ</label><input id="setSheetEmail" class="w-full mt-1 px-3 py-2 rounded-xl border border-pink-200 text-sm focus:border-pink-400 focus:ring-2 focus:ring-pink-100 outline-none"></div>
+              <div><label class="text-xs font-bold text-pink-700">Khóa riêng (đã ẩn)</label><input id="setSheetKey" class="w-full mt-1 px-3 py-2 rounded-xl border border-pink-200 text-sm font-mono text-xs"></div>
+              <div><label class="text-xs font-bold text-sky-700">FINANCE_MASTER_ID (Tài chính 13Y4...)</label><input id="setFinanceMasterId" class="w-full mt-1 px-3 py-2 rounded-xl border border-sky-200 text-xs font-mono bg-sky-50" placeholder="13Y4rycVMq2-HXGySjaJJBl2YZswKEaK5WkSLWVkLjuY"></div>
               <div><label class="text-xs font-bold text-slate-700">DATABASE_URL (Neon Postgres)</label><input id="setDatabaseUrl" class="w-full mt-1 px-3 py-2 rounded-xl border border-slate-200 text-xs font-mono bg-slate-50" placeholder="postgresql://neondb_owner:...@ep-curly-bird.../neondb?sslmode=require"></div>
             </div>
           </div>
           <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm">
             <div class="font-bold text-sm text-slate-900 flex items-center justify-between">
-              <span class="flex items-center gap-1.5"><i class="fa-solid fa-server text-slate-600"></i> Render Environment (18 vars)</span>
+              <span class="flex items-center gap-1.5"><i class="fa-solid fa-server text-slate-600"></i> Môi trường Render (18 biến)</span>
               <span id="envCountBadge" class="text-xs bg-slate-900 text-white px-2.5 py-1 rounded-full">— / 18</span>
             </div>
             <div id="renderEnvList" class="mt-3 space-y-1.5 max-h-[320px] overflow-auto pr-1"></div>
-            <div class="mt-2 text-[11px] text-slate-500">4 vars <code class="bg-slate-100 px-1 rounded">sync:false</code> phải set tay trên Render Dashboard → Environment. Đổi xong Render tự Redeploy.</div>
+            <div class="mt-2 text-[11px] text-slate-500">4 biến <code class="bg-slate-100 px-1 rounded">sync:false</code> phải set tay trên Render Dashboard → Environment. Đổi xong Render tự Redeploy.</div>
           </div>
         </div>
         <div class="mt-4 flex gap-2">
@@ -815,28 +815,28 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
         </div>
         <div class="grid lg:grid-cols-2 gap-4">
           <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm">
-            <div class="font-bold text-sm text-pink-900">Google Drive & Calendar & Meet</div>
+            <div class="font-bold text-sm text-pink-900">Google Drive & Lịch & Meet</div>
             <div class="mt-3 space-y-3 text-sm">
-              <div><label class="text-xs font-bold text-pink-700">Drive Root Folder ID</label><input id="setDriveId" class="w-full mt-1 px-3 py-2 rounded-xl border border-pink-200 text-sm"></div>
+              <div><label class="text-xs font-bold text-pink-700">ID Thư mục Gốc Drive</label><input id="setDriveId" class="w-full mt-1 px-3 py-2 rounded-xl border border-pink-200 text-sm"></div>
               <div class="grid grid-cols-2 gap-3">
-                <div><label class="text-xs font-bold text-pink-700">OAuth Client ID</label><input id="setCalId" class="w-full mt-1 px-3 py-2 rounded-xl border border-pink-200 text-xs"></div>
-                <div><label class="text-xs font-bold text-pink-700">OAuth Secret (masked)</label><input id="setCalSecret" class="w-full mt-1 px-3 py-2 rounded-xl border border-pink-200 text-xs"></div>
+                <div><label class="text-xs font-bold text-pink-700">ID OAuth Client</label><input id="setCalId" class="w-full mt-1 px-3 py-2 rounded-xl border border-pink-200 text-xs"></div>
+                <div><label class="text-xs font-bold text-pink-700">Mã bí mật OAuth (đã ẩn)</label><input id="setCalSecret" class="w-full mt-1 px-3 py-2 rounded-xl border border-pink-200 text-xs"></div>
               </div>
-              <div><label class="text-xs font-bold text-pink-700">Calendar ID</label><input id="setCalCalId" class="w-full mt-1 px-3 py-2 rounded-xl border border-pink-200 text-sm"></div>
+              <div><label class="text-xs font-bold text-pink-700">ID Lịch</label><input id="setCalCalId" class="w-full mt-1 px-3 py-2 rounded-xl border border-pink-200 text-sm"></div>
             </div>
           </div>
 
           <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm">
             <div class="flex justify-between items-center border-b border-pink-100 pb-2">
-              <div class="font-bold text-sm text-pink-900 flex items-center gap-1.5"><i class="fa-solid fa-robot text-blue-600"></i> AI Provider (Gemini / OpenAI)</div>
+              <div class="font-bold text-sm text-pink-900 flex items-center gap-1.5"><i class="fa-solid fa-robot text-blue-600"></i> Nhà cung cấp AI (Gemini / OpenAI)</div>
               <span class="text-[10px] bg-blue-100 text-blue-700 font-bold px-2 py-0.5 rounded-full">Active</span>
             </div>
             <div class="mt-3 space-y-3 text-sm">
               <div class="grid grid-cols-2 gap-3">
-                <div><label class="text-xs font-bold text-pink-700">AI Provider</label><select id="setAiProvider" class="w-full mt-1 px-3 py-2 rounded-xl border border-pink-200 text-sm"><option>gemini</option><option>openai</option><option>anthropic</option></select></div>
+                <div><label class="text-xs font-bold text-pink-700">Nhà cung cấp AI</label><select id="setAiProvider" class="w-full mt-1 px-3 py-2 rounded-xl border border-pink-200 text-sm"><option>gemini</option><option>openai</option><option>anthropic</option></select></div>
                 <div><label class="text-xs font-bold text-pink-700">Model</label><input id="setAiModel" class="w-full mt-1 px-3 py-2 rounded-xl border border-pink-200 text-sm"></div>
               </div>
-              <div><label class="text-xs font-bold text-pink-700">AI API Key (masked)</label><input id="setAiKey" class="w-full mt-1 px-3 py-2 rounded-xl border border-pink-200 text-sm"></div>
+              <div><label class="text-xs font-bold text-pink-700">Khóa API AI (đã ẩn)</label><input id="setAiKey" class="w-full mt-1 px-3 py-2 rounded-xl border border-pink-200 text-sm"></div>
             </div>
           </div>
           <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm">
@@ -844,7 +844,7 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
             <div class="mt-3 space-y-3 text-sm">
               <div class="grid grid-cols-3 gap-2">
                 <div><label class="text-[11px] font-bold text-pink-700">Late Thresh (phút)</label><input id="setLateTh" type="number" class="w-full mt-1 px-2 py-2 rounded-xl border border-pink-200 text-sm"></div>
-                <div><label class="text-[11px] font-bold text-pink-700">Training (đ/h)</label><input id="setTrainRate" type="number" class="w-full mt-1 px-2 py-2 rounded-xl border border-pink-200 text-sm"></div>
+                <div><label class="text-[11px] font-bold text-pink-700">Thử việc (đ/giờ)</label><input id="setTrainRate" type="number" class="w-full mt-1 px-2 py-2 rounded-xl border border-pink-200 text-sm"></div>
                 <div><label class="text-[11px] font-bold text-pink-700">Official (đ/h)</label><input id="setOffRate" type="number" class="w-full mt-1 px-2 py-2 rounded-xl border border-pink-200 text-sm"></div>
               </div>
               <div class="grid grid-cols-3 gap-2">
@@ -879,7 +879,7 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
             <div class="font-bold text-sm text-pink-900">Trạng thái Đồng bộ & Nhật ký</div>
             <div class="mt-2 flex gap-2">
               <button onclick="document.getElementById('tab-audit').scrollIntoView()" class="text-xs font-bold bg-pink-500 text-white px-3 py-1.5 rounded-full">Xem Nhật ký hệ thống</button>
-              <span class="text-xs bg-pink-50 text-pink-700 px-3 py-1.5 rounded-full font-bold border border-pink-200">Version + updated_at + source</span>
+              <span class="text-xs bg-pink-50 text-pink-700 px-3 py-1.5 rounded-full font-bold border border-pink-200">Phiên bản + cập nhật lúc + nguồn</span>
             </div>
             <div id="settingsSync" class="mt-3 space-y-2 max-h-[240px] overflow-auto scrollbar-thin"></div>
           </div>
