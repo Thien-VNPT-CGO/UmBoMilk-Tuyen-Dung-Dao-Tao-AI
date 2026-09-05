@@ -735,6 +735,18 @@ async function syncToGoogleSheet(item){
   };
   const sheetName = sheetMap[item.entity];
   if(!sheetName) throw new Error(`Chưa cấu hình bảng tính cho ${item.entity}`);
+  // RÀNG BUỘC CHỐNG TRÙNG web→Sheet: CREATE nhưng Sheet đã có dòng cùng ID
+  // thì chuyển thành UPDATE (GAS upsert theo ID) - không tạo dòng trùng.
+  if(item.operation==='CREATE'){
+    try{
+      const canonicalId = db.settings?.googleSheet?.spreadsheetId || '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w';
+      const rowId = item.payload?.id || item.payload?.employeeId || item.payload?.source_id;
+      if(rowId && await sheetHasRowId(canonicalId, sheetName, rowId)){
+        console.log(`[CHỐNG TRÙNG] ${item.entity} ${rowId} đã có trên Sheet ${sheetName} -> chuyển CREATE thành UPDATE`);
+        item.operation = 'UPDATE';
+      }
+    }catch(e){}
+  }
 
   let lastError=null;
   for(const webhookUrl of webhookUrls){
@@ -763,7 +775,35 @@ async function syncToGoogleSheet(item){
   throw lastError || new Error('Tất cả 3 webhook đều lỗi/placeholder');
 }
 
+// Kiểm tra ID đã tồn tại trên Sheet chưa (chống trùng web→Sheet)
+async function sheetHasRowId(spreadsheetId, sheetName, id){
+  try{
+    const token = await getGoogleAccessToken();
+    if(!token || !spreadsheetId || !id) return null; // không xác định được -> để GAS upsert xử lý
+    const resp = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A2:A5000`, { headers:{ Authorization:`Bearer ${token}` }});
+    if(!resp.ok) return null;
+    const j = await resp.json();
+    const vals = j.values || [];
+    return vals.some(r=> (r[0]||'').toString()===id.toString());
+  }catch(e){ return null; }
+}
 function addSyncQueue(entity, operation, payload, actor, source='WEB_HR'){
+  // RÀNG BUỘC CHỐNG TRÙNG trong hàng đợi: cùng entity+operation+ID đang PENDING
+  // thì gộp (cập nhật payload mới vào mục cũ) thay vì tạo mục trùng.
+  try{
+    const dupKey = payload?.id || payload?.employeeId || payload?.source_id;
+    if(dupKey){
+      const existing = db.syncQueue.find(q=> q.entity===entity && q.operation===operation && q.sync_status==='PENDING' && ((q.payload?.id||q.payload?.employeeId||q.payload?.source_id)===dupKey));
+      if(existing){
+        existing.payload = payload;
+        existing.version = payload.version||existing.version||1;
+        existing.updated_at = getVietnamISOString();
+        existing.updated_by = actor;
+        console.log(`[CHỐNG TRÙNG] Gộp queue ${entity}/${operation} cho ${dupKey} (không tạo mục trùng)`);
+        return existing;
+      }
+    }
+  }catch(e){}
   const webhookUrls = getAllWebhookUrls();
   const secret = process.env.GOOGLE_SHEET_WEBHOOK_SECRET || db.settings?.googleSheet?.secret || 'umbomilk_secret_2026';
   const hasRealWebhook = webhookUrls.some(u=> !u.includes('AKfycbz_umbomilk_apps_script') && !u.includes('umbomilk_apps_script'));
@@ -1768,6 +1808,21 @@ async function syncOutboundToMasterDatabaseSheet(applicant) {
     computeDataHash(applicant)
   ];
 
+  // RÀNG BUỘC CHỐNG TRÙNG web→Sheet (APPEND):
+  // - Dữ liệu không đổi so với lần gửi thành công trước -> bỏ qua (không ghi lại).
+  // - Sheet đã có dòng cùng ID -> bỏ qua APPEND (bản hợp nhất 60s sẽ cập nhật dòng đó).
+  const rowHash = computeDataHash(applicant);
+  if(applicant.outboundRowHash && applicant.outboundRowHash===rowHash){
+    return;
+  }
+  try{
+    if(await sheetHasRowId(targetId, 'NHAN_VIEN_MOI', applicant.id)){
+      console.log(`[CHỐNG TRÙNG] Ứng viên ${applicant.id} đã có trên Sheet Database -> bỏ qua APPEND (merge 60s sẽ cập nhật)`);
+      applicant.outboundRowHash = rowHash;
+      return;
+    }
+  }catch(e){}
+
   const syncItem = {
     id: uuidv4(),
     entity: 'APPLICANT',
@@ -1781,6 +1836,7 @@ async function syncOutboundToMasterDatabaseSheet(applicant) {
   };
   db.syncQueue.unshift(syncItem);
 
+  let sentOk = false;
   if (cfg.targetWebhookUrl) {
     try {
       await fetch(cfg.targetWebhookUrl, {
@@ -1788,6 +1844,7 @@ async function syncOutboundToMasterDatabaseSheet(applicant) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'APPEND_ROW', spreadsheetId: targetId, row })
       });
+      sentOk = true;
     } catch (e) {
       console.error('Outbound Webhook Push Error:', e.message);
     }
@@ -1818,11 +1875,14 @@ async function syncOutboundToMasterDatabaseSheet(applicant) {
           },
           body: JSON.stringify({ values: [row] })
         });
+        sentOk = true;
       }
     } catch (e) {
       console.error('Outbound Service Account Push Error:', e.message);
     }
   }
+  // Chỉ đánh dấu đã gửi khi thành công -> gửi lỗi sẽ thử lại lần sau, không mất dữ liệu
+  if(sentOk) applicant.outboundRowHash = rowHash;
 }
 
 app.get('/api/applicants', authMiddleware, (req,res)=>{
