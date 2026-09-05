@@ -7,6 +7,12 @@ services:
     dockerfilePath: ./Dockerfile
     healthCheckPath: /health
     autoDeploy: true
+    # RÀNG BUỘC: disk persistent để mã NV + key giữ nguyên qua mọi lần cập nhật/redeploy.
+    # Không có disk, Render xóa data/db.json mỗi lần deploy -> mất toàn bộ mã NV/key.
+    disk:
+      name: umbmilk-data
+      mountPath: /app/data
+      sizeGB: 1
     envVars:
       - key: NODE_ENV
         value: production

@@ -518,6 +518,74 @@ console.log(`[CONFIG] Finance: ${db.settings.finance?.webhookUrl ? db.settings.f
     }
   }catch(e){ console.error('cleanupOldSyncQueue error', e.message); }
 })();
+// RÀNG BUỘC: mã NV + key bất biến theo nhân viên đó luôn qua mọi lần cập nhật tính năng/redeploy.
+console.log(`[DB ỔN ĐỊNH] Giữ nguyên ${db.employees.length} NV + ${db.keys.length} key (mã NV/key không đổi khi cập nhật code)`);
+// Tự hồi phục từ Sheet 17iXM khi boot rỗng (VD: Render chưa gắn disk persistent).
+// Chỉ chạy khi local KHÔNG còn NV nào nhưng Sheet vẫn có dữ liệu -> dựng lại đúng mã NV + key cũ.
+async function rehydrateFromSheet(){
+  try{
+    if(db.employees.length>0) return;
+    const spreadsheetId = db.settings?.googleSheet?.spreadsheetId || '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w';
+    const token = await getGoogleAccessToken();
+    if(!token || !spreadsheetId) { console.log('[HỒI PHỤC] Bỏ qua (chưa cấu hình ServiceAccount/Sheet)'); return; }
+    const sheets = [
+      { name:'NHAN_VIEN_TRAINING', defType:'TRAINING' },
+      { name:'NHAN_VIEN_CHINH_THUC', defType:'OFFICIAL' }
+    ];
+    let restoredEmps = 0, restoredKeys = 0;
+    for(const { name: sheetName, defType } of sheets){
+      let values = [];
+      try{
+        const resp = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A1:Z2000`, { headers:{ Authorization:`Bearer ${token}` }});
+        if(!resp.ok) continue;
+        const j = await resp.json();
+        values = j.values || [];
+      }catch(e){ console.error(`[HỒI PHỤC] Đọc ${sheetName} lỗi`, e.message); continue; }
+      if(values.length<2) continue;
+      for(let i=1;i<values.length;i++){
+        const row = values[i];
+        const maNV = (row[1]||'').toString().trim();
+        if(!maNV || db.employees.find(e=>e.employeeId===maNV)) continue;
+        const shift = ['CA_SANG','CA_CHIEU','CA_TOI'].includes(row[6]) ? row[6] : 'CA_SANG';
+        const branchId = db.branches.find(b=>b.id===(row[5]||'').toString().trim()) ? row[5].toString().trim() : 'CN2';
+        const type = row[13]==='OFFICIAL' || defType==='OFFICIAL' ? 'OFFICIAL' : 'TRAINING';
+        const emp = {
+          id: (row[0]||'').toString().trim() || uuidv4(),
+          employeeId: maNV,
+          name: (row[2]||'').toString().trim() || maNV,
+          phone: (row[3]||'').toString().trim(),
+          branchId, shift,
+          startDate: (row[7]||'').toString().trim() || getVietnamTodayStr(),
+          endDate: type==='TRAINING' ? ((row[8]||'').toString().trim() || null) : null,
+          trainingDays: type==='TRAINING' ? (parseInt(row[9])||7) : null,
+          status: (row[10]||'').toString().trim() || type,
+          testScore: row[11]!==undefined && row[11]!=='' ? Number(row[11]) : null,
+          testResult: (row[12]||'').toString().trim() || null,
+          type, category: (row[14]||'').toString().trim() || 'STORE',
+          avatar: '', checkHistory: [],
+          version: 1, updated_at: getVietnamISOString(),
+          updated_by: 'REHYDRATE_BOOT', source: 'SHEET_17iXM', sync_status: 'SYNCED'
+        };
+        db.employees.push(emp); restoredEmps++;
+        // Giữ nguyên key cũ từ Sheet (cột Khóa index 4)
+        const sheetKey = (row[4]||'').toString().trim();
+        if(sheetKey && !db.keys.find(k=>k.employeeId===maNV)){
+          db.keys.push({ id: uuidv4(), employeeId: maNV, key: sheetKey, deviceId: null, boundAt: null, status: 'ACTIVE', version: 1, updated_at: getVietnamISOString(), sync_status: 'SYNCED' });
+          restoredKeys++;
+        }
+      }
+    }
+    if(restoredEmps>0){
+      saveDB();
+      io.emit('employees:update', db.employees);
+      io.emit('keys:update', db.keys);
+      console.log(`[HỒI PHỤC] Dựng lại ${restoredEmps} NV + ${restoredKeys} key từ Sheet 17iXM (giữ nguyên mã NV/key cũ)`);
+    } else {
+      console.log('[HỒI PHỤC] Sheet 17iXM không có dữ liệu NV để hồi phục');
+    }
+  }catch(e){ console.error('[HỒI PHỤC] Lỗi', e.message); }
+}
+setTimeout(()=>{ rehydrateFromSheet().catch(()=>{}); }, 20000);
 
 // ============ HELPERS ============
 function audit(actor, action, entity, before, after, ip='127.0.0.1'){
@@ -1180,7 +1248,11 @@ app.put('/api/employees/:id', authMiddleware, roleCheck(['Admin','HR','Manager']
   const emp = db.employees.find(e=>e.id===req.params.id || e.employeeId===req.params.id);
   if(!emp) return res.status(404).json({error:'Không tìm thấy'});
   const before = {...emp};
-  Object.assign(emp, req.body);
+  // RÀNG BUỘC: mã NV + id nội bộ là bất biến theo nhân viên đó luôn.
+  // Mọi cập nhật tính năng/code không được đổi mã; chỉ cấp mới khi xóa rồi đăng ký/import lại.
+  const { employeeId: _eid, id: _id, ...safeBody } = req.body || {};
+  if(_eid && _eid!==emp.employeeId) console.log(`[BẢO VỆ MÃ NV] Chặn đổi mã ${emp.employeeId} -> ${_eid} bởi ${req.user.username}`);
+  Object.assign(emp, safeBody);
   emp.version = (emp.version||1)+1;
   emp.updated_at = getVietnamISOString();
   emp.updated_by = req.user.username;
