@@ -93,6 +93,10 @@
       <button onclick="switchTab('monthly')" id="tabBtn-monthly" class="flex-1 min-w-[120px] px-3 py-2 rounded-xl text-sm font-bold bg-white border border-sky-100">Bảng chốt công</button>
       <button onclick="switchTab('daily')" id="tabBtn-daily" class="flex-1 min-w-[120px] px-3 py-2 rounded-xl text-sm font-bold bg-white border border-sky-100">Chi tiết ngày</button>
       <button onclick="switchTab('anomalies')" id="tabBtn-anomalies" class="flex-1 min-w-[120px] px-3 py-2 rounded-xl text-sm font-bold bg-white border border-sky-100">Sai lệch</button>
+      <button onclick="switchTab('master')" id="tabBtn-master" class="flex-1 min-w-[120px] px-3 py-2 rounded-xl text-sm font-bold bg-white border border-sky-100">MASTER_DATA</button>
+      <button onclick="switchTab('template')" id="tabBtn-template" class="flex-1 min-w-[120px] px-3 py-2 rounded-xl text-sm font-bold bg-white border border-sky-100">_TEMPLATE_LUONG</button>
+      <button onclick="switchTab('dongphuc')" id="tabBtn-dongphuc" class="flex-1 min-w-[120px] px-3 py-2 rounded-xl text-sm font-bold bg-white border border-sky-100">DONG_PHUC</button>
+      <button onclick="switchTab('khamsk')" id="tabBtn-khamsk" class="flex-1 min-w-[120px] px-3 py-2 rounded-xl text-sm font-bold bg-white border border-sky-100">KHAM_SUC_KHOE</button>
     </div>
 
     <!-- Overview -->
@@ -131,6 +135,92 @@
     <!-- Anomalies -->
     <div id="tab-anomalies" class="tab-section hidden">
       <div id="anomalyList" class="space-y-2"></div>
+    </div>
+
+    <!-- MASTER_DATA -->
+    <div id="tab-master" class="tab-section hidden">
+      <div class="card overflow-hidden p-0">
+        <div class="p-3 bg-sky-50 border-b border-sky-100 flex justify-between items-center">
+          <div class="font-black text-sky-900">MASTER_DATA</div>
+          <span class="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full">Single Source of Truth</span>
+        </div>
+        <div class="p-3 bg-sky-50 border-b border-sky-100">
+          <div class="grid grid-cols-2 md:grid-cols-6 gap-2">
+            <input id="masterBh" placeholder="BH_Code" class="px-2 py-1.5 rounded-xl border border-sky-200 text-xs">
+            <input id="masterHoTen" placeholder="HoTen" class="px-2 py-1.5 rounded-xl border border-sky-200 text-xs">
+            <input id="masterBranch" placeholder="BranchGoc" class="px-2 py-1.5 rounded-xl border border-sky-200 text-xs">
+            <select id="masterStatus" class="px-2 py-1.5 rounded-xl border border-sky-200 text-xs"><option>Training</option><option>Official</option></select>
+            <input id="masterNgay" type="date" class="px-2 py-1.5 rounded-xl border border-sky-200 text-xs">
+            <button onclick="saveMaster()" class="px-3 py-1.5 rounded-xl bg-sky-500 text-white text-xs font-black">Lưu → Sheet</button>
+          </div>
+          <div class="text-[11px] text-slate-500 mt-1">Sửa trên web → đồng bộ realtime về Google Sheets MASTER_DATA (1:1)</div>
+        </div>
+        <div class="overflow-auto max-h-[60vh]">
+          <table class="w-full text-xs">
+            <thead class="bg-sky-600 text-white font-black sticky top-0"><tr><th class="px-2 py-2">BH_Code</th><th class="px-2 py-2">HoTen</th><th class="px-2 py-2">BranchGoc</th><th class="px-2 py-2">Status</th><th class="px-2 py-2">Ngày Lên Chính Thức</th><th class="px-2 py-2">Đơn Giá</th><th class="px-2 py-2">Sửa</th></tr></thead>
+            <tbody id="masterTbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TEMPLATE -->
+    <div id="tab-template" class="tab-section hidden">
+      <div class="card">
+        <div class="font-black text-sky-900 mb-2">_TEMPLATE_LUONG (ẩn) - Công thức</div>
+        <div class="text-xs text-slate-600 mb-3">Sheet ẩn chứa công thức Tổng giờ, Ngày công, Lương Training/Official, Hoàn cọc. Khi tạo LUONG_THANG_MM_YYYY sẽ copy nguyên mẫu.</div>
+        <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 font-mono text-xs overflow-auto max-h-[60vh]" id="templateInfo"></div>
+      </div>
+    </div>
+
+    <!-- DONG_PHUC -->
+    <div id="tab-dongphuc" class="tab-section hidden">
+      <div class="card overflow-hidden p-0">
+        <div class="p-3 bg-amber-50 border-b border-amber-200 flex justify-between items-center">
+          <div class="font-black text-amber-900">DONG_PHUC</div>
+          <span class="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-full">Hoàn/Khấu trừ 1 lần</span>
+        </div>
+        <div class="p-3 bg-amber-50 border-b border-amber-100">
+          <div class="grid grid-cols-2 md:grid-cols-5 gap-2">
+            <input id="dongBh" placeholder="BH_Code" class="px-2 py-1.5 rounded-xl border border-amber-200 text-xs">
+            <input id="dongHoTen" placeholder="HoTen" class="px-2 py-1.5 rounded-xl border border-amber-200 text-xs">
+            <input id="dongTien" type="number" placeholder="Số tiền" class="px-2 py-1.5 rounded-xl border border-amber-200 text-xs">
+            <input id="dongNgay" type="date" class="px-2 py-1.5 rounded-xl border border-amber-200 text-xs">
+            <button onclick="saveDongPhuc()" class="px-3 py-1.5 rounded-xl bg-amber-500 text-white text-xs font-black">Lưu → Sheet</button>
+          </div>
+        </div>
+        <div class="overflow-auto max-h-[60vh]">
+          <table class="w-full text-xs">
+            <thead class="bg-amber-600 text-white font-black sticky top-0"><tr><th class="px-2 py-2">BH_Code</th><th class="px-2 py-2">HoTen</th><th class="px-2 py-2">Số Tiền</th><th class="px-2 py-2">Ngày</th><th class="px-2 py-2">Sửa</th></tr></thead>
+            <tbody id="dongphucTbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- KHAM_SUC_KHOE -->
+    <div id="tab-khamsk" class="tab-section hidden">
+      <div class="card overflow-hidden p-0">
+        <div class="p-3 bg-emerald-50 border-b border-emerald-200 flex justify-between items-center">
+          <div class="font-black text-emerald-900">KHAM_SUC_KHOE</div>
+          <span class="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full">Hoàn 1 lần</span>
+        </div>
+        <div class="p-3 bg-emerald-50 border-b border-emerald-100">
+          <div class="grid grid-cols-2 md:grid-cols-5 gap-2">
+            <input id="khamBh" placeholder="BH_Code" class="px-2 py-1.5 rounded-xl border border-emerald-200 text-xs">
+            <input id="khamHoTen" placeholder="HoTen" class="px-2 py-1.5 rounded-xl border border-emerald-200 text-xs">
+            <input id="khamTien" type="number" placeholder="Số tiền" class="px-2 py-1.5 rounded-xl border border-emerald-200 text-xs">
+            <input id="khamNgay" type="date" class="px-2 py-1.5 rounded-xl border border-emerald-200 text-xs">
+            <button onclick="saveKhamSK()" class="px-3 py-1.5 rounded-xl bg-emerald-500 text-white text-xs font-black">Lưu → Sheet</button>
+          </div>
+        </div>
+        <div class="overflow-auto max-h-[60vh]">
+          <table class="w-full text-xs">
+            <thead class="bg-emerald-600 text-white font-black sticky top-0"><tr><th class="px-2 py-2">BH_Code</th><th class="px-2 py-2">HoTen</th><th class="px-2 py-2">Số Tiền</th><th class="px-2 py-2">Ngày</th><th class="px-2 py-2">Sửa</th></tr></thead>
+            <tbody id="khamskTbody"></tbody>
+          </table>
+        </div>
+      </div>
     </div>
   </main>
 </div>

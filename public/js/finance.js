@@ -111,6 +111,10 @@ function switchTab(id){
   if(id==='monthly') loadMonthly();
   if(id==='daily') loadDaily();
   if(id==='anomalies') loadAnomalies();
+  if(id==='master') loadMaster();
+  if(id==='template') loadTemplate();
+  if(id==='dongphuc') loadDongPhuc();
+  if(id==='khamsk') loadKhamSK();
 }
 
 async function loadAll(){
@@ -200,6 +204,69 @@ async function loadAnomalies(){
         <span class="text-[11px] font-black px-2 py-1 rounded-full bg-amber-100 text-amber-700">${a.type}</span>
       </div>
     `).join('');
+  }catch(e){ console.error(e); }
+}
+async function loadMaster(){
+  try{
+    const data=await api('/api/finance/sheets/master-data');
+    const tbody=document.getElementById('masterTbody');
+    if(!tbody) return;
+    if(!data.rows.length) return tbody.innerHTML='<tr><td colspan="7" class="text-center py-8 text-slate-400">Chưa có dữ liệu MASTER_DATA</td></tr>';
+    tbody.innerHTML=data.rows.map(r=>`<tr class="border-b hover:bg-sky-50/30 text-xs"><td class="px-2 py-2 font-mono font-bold text-sky-700">${r.bhCode}</td><td class="px-2 py-2">${r.hoTen}</td><td class="px-2 py-2">${r.branchGoc}</td><td class="px-2 py-2"><span class="px-2 py-0.5 rounded-full text-[11px] font-bold ${r.status==='OFFICIAL'?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}">${r.status}</span></td><td class="px-2 py-2">${r.ngayLenChinhThuc?fmtDMY(r.ngayLenChinhThuc):'—'}</td><td class="px-2 py-2 font-bold">${r.donGia.toLocaleString('vi-VN')}đ</td><td class="px-2 py-2"><button onclick="editMaster('${r.bhCode}')" class="text-xs bg-white border border-sky-200 text-sky-700 px-2 py-1 rounded-lg">Sửa</button></td></tr>`).join('');
+  }catch(e){ console.error(e); }
+}
+function editMaster(bhCode){ document.getElementById('masterBh').value=bhCode; document.getElementById('masterBh').focus(); }
+async function saveMaster(){
+  const bhCode=document.getElementById('masterBh').value.trim();
+  const hoTen=document.getElementById('masterHoTen').value.trim();
+  const branchGoc=document.getElementById('masterBranch').value.trim();
+  const status=document.getElementById('masterStatus').value;
+  const ngayLenChinhThuc=document.getElementById('masterNgay').value;
+  if(!bhCode) return alert('Thiếu BH_Code');
+  try{ await api('/api/finance/sheets/master-data', {method:'POST', body:JSON.stringify({bhCode, hoTen, branchGoc, status, ngayLenChinhThuc})}); alert('Đã lưu MASTER_DATA → Sheet'); loadMaster(); }catch(e){ alert(e.message); }
+}
+async function loadDongPhuc(){
+  try{
+    const data=await api('/api/finance/sheets/dong-phuc');
+    const tbody=document.getElementById('dongphucTbody');
+    if(!tbody) return;
+    if(!data.rows.length) return tbody.innerHTML='<tr><td colspan="5" class="text-center py-8 text-slate-400">Chưa có dữ liệu DONG_PHUC</td></tr>';
+    tbody.innerHTML=data.rows.map(r=>`<tr class="border-b hover:bg-amber-50/30 text-xs"><td class="px-2 py-2 font-mono">${r.bhCode}</td><td class="px-2 py-2">${r.hoTen}</td><td class="px-2 py-2 font-bold text-amber-700">${r.soTien.toLocaleString('vi-VN')}đ</td><td class="px-2 py-2">${r.ngay?fmtDMY(r.ngay):'—'}</td><td class="px-2 py-2"><button onclick="editDong('${r.bhCode}','${r.hoTen}',${r.soTien},'${r.ngay}')" class="text-xs bg-white border border-amber-200 text-amber-700 px-2 py-1 rounded-lg">Sửa</button></td></tr>`).join('');
+  }catch(e){ console.error(e); }
+}
+function editDong(bhCode,hoTen,soTien,ngay){ document.getElementById('dongBh').value=bhCode; document.getElementById('dongHoTen').value=hoTen; document.getElementById('dongTien').value=soTien; document.getElementById('dongNgay').value=ngay?ngay.split('T')[0]:''; }
+async function saveDongPhuc(){
+  const bhCode=document.getElementById('dongBh').value.trim();
+  const hoTen=document.getElementById('dongHoTen').value.trim();
+  const soTien=document.getElementById('dongTien').value;
+  const ngay=document.getElementById('dongNgay').value;
+  if(!bhCode) return alert('Thiếu BH_Code');
+  try{ await api('/api/finance/sheets/dong-phuc', {method:'POST', body:JSON.stringify({bhCode, hoTen, soTien, ngay})}); alert('Đã lưu DONG_PHUC → Sheet'); loadDongPhuc(); }catch(e){ alert(e.message); }
+}
+async function loadKhamSK(){
+  try{
+    const data=await api('/api/finance/sheets/kham-suc-khoe');
+    const tbody=document.getElementById('khamskTbody');
+    if(!tbody) return;
+    if(!data.rows.length) return tbody.innerHTML='<tr><td colspan="5" class="text-center py-8 text-slate-400">Chưa có dữ liệu KHAM_SUC_KHOE</td></tr>';
+    tbody.innerHTML=data.rows.map(r=>`<tr class="border-b hover:bg-emerald-50/30 text-xs"><td class="px-2 py-2 font-mono">${r.bhCode}</td><td class="px-2 py-2">${r.hoTen}</td><td class="px-2 py-2 font-bold text-emerald-700">${r.soTien.toLocaleString('vi-VN')}đ</td><td class="px-2 py-2">${r.ngay?fmtDMY(r.ngay):'—'}</td><td class="px-2 py-2"><button onclick="editKham('${r.bhCode}','${r.hoTen}',${r.soTien},'${r.ngay}')" class="text-xs bg-white border border-emerald-200 text-emerald-700 px-2 py-1 rounded-lg">Sửa</button></td></tr>`).join('');
+  }catch(e){ console.error(e); }
+}
+function editKham(bhCode,hoTen,soTien,ngay){ document.getElementById('khamBh').value=bhCode; document.getElementById('khamHoTen').value=hoTen; document.getElementById('khamTien').value=soTien; document.getElementById('khamNgay').value=ngay?ngay.split('T')[0]:''; }
+async function saveKhamSK(){
+  const bhCode=document.getElementById('khamBh').value.trim();
+  const hoTen=document.getElementById('khamHoTen').value.trim();
+  const soTien=document.getElementById('khamTien').value;
+  const ngay=document.getElementById('khamNgay').value;
+  if(!bhCode) return alert('Thiếu BH_Code');
+  try{ await api('/api/finance/sheets/kham-suc-khoe', {method:'POST', body:JSON.stringify({bhCode, hoTen, soTien, ngay})}); alert('Đã lưu KHAM_SUC_KHOE → Sheet'); loadKhamSK(); }catch(e){ alert(e.message); }
+}
+async function loadTemplate(){
+  try{
+    const data=await api('/api/finance/sheets/template-info');
+    const el=document.getElementById('templateInfo');
+    if(!el) return;
+    el.innerHTML=`<div class="font-bold text-sky-700">Sheet ẩn: ${data.sheet} ${data.hidden?'(ẩn)':''}</div><div class="mt-2 space-y-1">${Object.entries(data.formulas).map(([k,v])=>`<div><span class="font-bold">${k}:</span> <span class="font-mono bg-white px-1 rounded">${v}</span></div>`).join('')}<div class="mt-2 text-slate-500">${data.note}</div></div>`;
   }catch(e){ console.error(e); }
 }
 async function exportFinance(){

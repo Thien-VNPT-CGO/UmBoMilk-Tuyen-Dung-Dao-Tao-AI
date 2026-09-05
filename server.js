@@ -6698,6 +6698,92 @@ app.get('/api/finance/export/payroll-input', financeAuthMiddleware, (req,res)=>{
   res.setHeader('Content-Disposition',`attachment; filename="Du_lieu_tinh_luong_${m.replace('-','_')}_FINANCE.csv"`);
   return res.send('\uFEFF'+header+rows);
 });
+// Finance 4 sheets - hiển thị trên web finance
+app.get('/api/finance/sheets/master-data', financeAuthMiddleware, async (req,res)=>{
+  // Thử lấy từ Google Sheets Finance nếu cấu hình, fallback DB
+  const financeId = process.env.FINANCE_MASTER_ID || db.settings.finance?.spreadsheetId || 'FINANCE_MASTER_ID';
+  let rows=[];
+  // Fallback: lấy từ MASTER_DATA local (db.employees)
+  rows = db.employees.filter(e=> e.status!=='ARCHIVED').map(e=> ({
+    bhCode: e.employeeId, hoTen: e.name, branchGoc: e.branchId, status: e.status, ngayLenChinhThuc: e.officialStartDate || e.startDate || '', donGia: e.status==='OFFICIAL'?25500:21000
+  }));
+  res.json({ sheet:'MASTER_DATA', rows, source:'DB_FALLBACK' });
+});
+app.get('/api/finance/sheets/dong-phuc', financeAuthMiddleware, (req,res)=>{
+  // DONG_PHUC: hoàn cọc đồng phục, mock từ DB hoặc Google Sheets
+  const rows = (db.financeDongPhuc||[]).map(r=> ({ bhCode:r.bhCode, hoTen:r.hoTen, soTien:r.soTien, ngay:r.ngay }));
+  res.json({ sheet:'DONG_PHUC', rows });
+});
+app.get('/api/finance/sheets/kham-suc-khoe', financeAuthMiddleware, (req,res)=>{
+  const rows = (db.financeKhamSK||[]).map(r=> ({ bhCode:r.bhCode, hoTen:r.hoTen, soTien:r.soTien, ngay:r.ngay }));
+  res.json({ sheet:'KHAM_SUC_KHOE', rows });
+});
+app.get('/api/finance/sheets/template-info', financeAuthMiddleware, (req,res)=>{
+  res.json({
+    sheet: TEMPLATE_NAME,
+    hidden: true,
+    formulas: {
+      tongGio: '=SUM(E6:AI6)',
+      ngayCong: '=AJ6/8',
+      luongTraining: '=SUMPRODUCT((E$3:AI$3 < TEXT($H6,"yyyy-mm-dd"))*E6:AI6)*21000',
+      luongOfficial: '=SUMPRODUCT((E$3:AI$3 >= TEXT($H6,"yyyy-mm-dd"))*E6:AI6)*25500',
+      hoanCoc: '=XLOOKUP(A6, DONG_PHUC!A:A, DONG_PHUC!C:C, 0)+XLOOKUP(A6, KHAM_SUC_KHOE!A:A, KHAM_SUC_KHOE!C:C, 0)',
+      tongLuong: '=AL6+AM6+AN6'
+    },
+    note: 'Sheet ẩn _TEMPLATE_LUONG chứa công thức, khi tạo LUONG_THANG_MM_YYYY sẽ copy nguyên mẫu'
+  });
+});
+// Finance 4 sheets - đồng bộ 2 chiều khi kế toán sửa trên web
+app.post('/api/finance/sheets/master-data', financeAuthMiddleware, async (req,res)=>{
+  const { bhCode, hoTen, branchGoc, status, ngayLenChinhThuc } = req.body;
+  if(!bhCode) return res.status(400).json({ error:'Thiếu BH_Code' });
+  // Cập nhật local DB (MASTER_DATA)
+  let emp = db.employees.find(e=> e.employeeId===bhCode);
+  if(emp){
+    const before={...emp};
+    if(hoTen) emp.name=hoTen;
+    if(branchGoc) emp.branchId=branchGoc;
+    if(status) emp.status=status;
+    if(ngayLenChinhThuc!==undefined) emp.officialStartDate=ngayLenChinhThuc;
+    emp.updated_at=new Date().toISOString();
+    audit(req.finance.key,'UPDATE_MASTER_DATA','MASTER_DATA', before, emp, req.ip);
+  }
+  // Đồng bộ lên Google Sheets Finance MASTER_DATA
+  const financeId = db.settings.finance?.spreadsheetId || process.env.FINANCE_MASTER_ID || 'FINANCE_MASTER_ID';
+  const webhookUrl = db.settings.finance?.webhookUrl || process.env.FINANCE_WEBHOOK_URL;
+  const secret = db.settings.finance?.secret || process.env.FINANCE_WEBHOOK_SECRET || 'umbomilk_secret_2026';
+  if(webhookUrl){
+    try{ await fetch(webhookUrl, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ secret, action:'UPSERT_EMPLOYEE', payload:{ bhCode, hoTen, branchGoc, status, ngayLenChinhThuc } }) }); }catch(e){ console.error('Finance MASTER_DATA sync error', e.message); }
+  }
+  saveDB(); io.emit('finance:masterData:update', db.employees);
+  res.json({ success:true, bhCode });
+});
+app.post('/api/finance/sheets/dong-phuc', financeAuthMiddleware, async (req,res)=>{
+  const { bhCode, hoTen, soTien, ngay, ghiChu } = req.body;
+  if(!bhCode) return res.status(400).json({ error:'Thiếu BH_Code' });
+  if(!db.financeDongPhuc) db.financeDongPhuc=[];
+  let row = db.financeDongPhuc.find(r=> r.bhCode===bhCode);
+  if(row){ Object.assign(row, { hoTen: hoTen||row.hoTen, soTien: soTien!=null?Number(soTien):row.soTien, ngay: ngay||row.ngay, ghiChu: ghiChu||row.ghiChu, updatedAt: new Date().toISOString() }); }
+  else { row={ bhCode, hoTen: hoTen||'', soTien: Number(soTien)||0, ngay: ngay||new Date().toISOString().split('T')[0], ghiChu: ghiChu||'', createdAt: new Date().toISOString() }; db.financeDongPhuc.push(row); }
+  const webhookUrl = db.settings.finance?.webhookUrl || process.env.FINANCE_WEBHOOK_URL;
+  const secret = db.settings.finance?.secret || process.env.FINANCE_WEBHOOK_SECRET || 'umbomilk_secret_2026';
+  if(webhookUrl){ try{ await fetch(webhookUrl, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ secret, action:'UPSERT_DONGPHUC', payload: row }) }); }catch(e){} }
+  saveDB(); io.emit('finance:dongPhuc:update', db.financeDongPhuc);
+  res.json({ success:true, row });
+});
+app.post('/api/finance/sheets/kham-suc-khoe', financeAuthMiddleware, async (req,res)=>{
+  const { bhCode, hoTen, soTien, ngay, ghiChu } = req.body;
+  if(!bhCode) return res.status(400).json({ error:'Thiếu BH_Code' });
+  if(!db.financeKhamSK) db.financeKhamSK=[];
+  let row = db.financeKhamSK.find(r=> r.bhCode===bhCode);
+  if(row){ Object.assign(row, { hoTen: hoTen||row.hoTen, soTien: soTien!=null?Number(soTien):row.soTien, ngay: ngay||row.ngay, ghiChu: ghiChu||row.ghiChu, updatedAt: new Date().toISOString() }); }
+  else { row={ bhCode, hoTen: hoTen||'', soTien: Number(soTien)||0, ngay: ngay||new Date().toISOString().split('T')[0], ghiChu: ghiChu||'', createdAt: new Date().toISOString() }; db.financeKhamSK.push(row); }
+  const webhookUrl = db.settings.finance?.webhookUrl || process.env.FINANCE_WEBHOOK_URL;
+  const secret = db.settings.finance?.secret || process.env.FINANCE_WEBHOOK_SECRET || 'umbomilk_secret_2026';
+  if(webhookUrl){ try{ await fetch(webhookUrl, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ secret, action:'UPSERT_KHAMSUC', payload: row }) }); }catch(e){} }
+  saveDB(); io.emit('finance:khamSK:update', db.financeKhamSK);
+  res.json({ success:true, row });
+});
 
 // Serve frontend
 app.get('/', (req,res)=> res.sendFile(path.join(__dirname,'public','index.html')));
