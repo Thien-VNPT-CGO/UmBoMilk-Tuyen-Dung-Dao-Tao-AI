@@ -8,6 +8,7 @@ const API_BASE = location.hostname.includes('vercel.app') ? 'https://umbomilk-hr
 let branches=[];
 // === VIETNAM TIMEZONE REALTIME ===
 function getVietnamTodayStr(){ return new Date().toLocaleDateString('en-CA', {timeZone: 'Asia/Ho_Chi_Minh'}); }
+function getVietnamNow(){ return new Date(new Date().toLocaleString('en-US', {timeZone: 'Asia/Ho_Chi_Minh'})); }
 function toVietnamDateStr(d){ const date = d instanceof Date ? d : new Date(d); return date.toLocaleDateString('en-CA', {timeZone: 'Asia/Ho_Chi_Minh'}); }
 
 
@@ -317,7 +318,7 @@ function switchTab(id){
     return;
   }
   // Ràng buộc OFF: T6 < 12:00
-  if(isOfficial && id === 'off' && new Date().getDay() === 5 && new Date().getHours() < 12){
+  if(isOfficial && id === 'off' && getVietnamNow().getDay() === 5 && getVietnamNow().getHours() < 12){
     showToast('🔒 Chức năng Nghỉ OFF sẽ mở vào lúc 12:00 trưa nay (Thứ 6).', 'info');
     return;
   }
@@ -483,7 +484,7 @@ function connectSocket(){
   evs.forEach(ev=> socket.on(ev, async (data)=>{
     if(ev==='automation:heartbeat' && data){
       const hb=document.getElementById('heartbeatInfo');
-      if(hb) hb.textContent = `AUTO ${new Date(data.now).toLocaleTimeString('vi-VN')}`;
+      if(hb) hb.textContent = `AUTO ${new Date(data.now).toLocaleTimeString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'})}`;
     }
     if(ev==='drive:update'){
       // toast drive realtime for employee
@@ -597,7 +598,7 @@ async function loadHome(){
   document.getElementById('homeShift').textContent=employee.shift;
   document.getElementById('homeStatus').textContent=employee.status;
   document.getElementById('homeStatus').className='mt-2 inline-flex text-xs font-black px-3 py-1 rounded-full '+(employee.status==='OFFICIAL'?'bg-pink-100 text-pink-700':employee.status==='TRAINING'?'bg-blue-100 text-blue-700':employee.status==='FAILED_TEST'?'bg-red-100 text-red-700':'bg-pink-100 text-pink-700');
-  document.getElementById('homeDate').textContent=new Date().toLocaleDateString('vi-VN',{weekday:'long'}) + ' ' + fmtDMY(new Date());
+  document.getElementById('homeDate').textContent=new Date().toLocaleDateString('vi-VN',{weekday:'long', timeZone:'Asia/Ho_Chi_Minh'}) + ' ' + fmtDMY(getVietnamTodayStr());
   // schedule today
   try{
     const scheds = await api('/api/schedules?employeeId='+employee.employeeId);
@@ -774,7 +775,7 @@ function applyTrainingOffState(offDates) {
 
 function updateClock(){
   const el=document.getElementById('homeClock');
-  if(el) el.textContent=new Date().toLocaleTimeString('vi-VN');
+  if(el) el.textContent=new Date().toLocaleTimeString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'});
   const t1=document.getElementById('timeCheckin');
   if(t1) t1.textContent=fmtDMYTime(new Date());
   const t2=document.getElementById('timeCheckout');
@@ -788,7 +789,7 @@ function updateClock(){
   }
 }
 function isOffWindowOpen(){
-  const now=new Date(); const day=now.getDay(); const hour=now.getHours()+now.getMinutes()/60;
+  const now=getVietnamNow(); const day=now.getDay(); const hour=now.getHours()+now.getMinutes()/60;
   if(day===5 && hour>=12) return true;
   if(day===6 && hour<15) return true;
   return false;
@@ -936,7 +937,7 @@ async function loadAttendanceTab(){
     const btnIn = document.getElementById('btnSubmitCheckin');
     const btnOut = document.querySelector('#cardCheckout button[onclick="submitCheckout()"]') || document.getElementById('btnSubmitCheckout');
 
-    const now = new Date();
+    const now = getVietnamNow();
     const nowMins = now.getHours()*60 + now.getMinutes();
     const diffLate = nowMins - startMins; // phút trễ
 
@@ -1202,7 +1203,7 @@ async function loadSchedule(){
         </div>
         <div class="px-5 py-3 bg-slate-50 border-t flex justify-between items-center text-sm text-slate-600">
            <span><i class="fa-solid fa-building-user mr-1"></i> ${getBranchDisplay(employee.branchId)}</span>
-           <span class="italic">Cập nhật bởi AI lúc ${new Date().toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit'})}</span>
+            <span class="italic">Cập nhật bởi AI lúc ${new Date().toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit', timeZone: 'Asia/Ho_Chi_Minh'})}</span>
         </div>
         ${(() => {
           // Chú thích chi tiết lịch làm việc (hiển thị cho cả Training và Official) — chữ to cho NV dễ đọc

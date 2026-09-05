@@ -5,6 +5,7 @@ let socket = null;
 let branches = [];
 // === VIETNAM TIMEZONE REALTIME ===
 function getVietnamTodayStr(){ return new Date().toLocaleDateString('en-CA', {timeZone: 'Asia/Ho_Chi_Minh'}); }
+function getVietnamNow(){ return new Date(new Date().toLocaleString('en-US', {timeZone: 'Asia/Ho_Chi_Minh'})); }
 function toVietnamDateStr(d){ const date = d instanceof Date ? d : new Date(d); return date.toLocaleDateString('en-CA', {timeZone: 'Asia/Ho_Chi_Minh'}); }
 
 
@@ -194,7 +195,7 @@ function toggleSystemStatusDetail(){
 }
 setInterval(()=>{
   const el=document.getElementById('systemStatusTime');
-  if(el) el.textContent = new Date().toLocaleTimeString('vi-VN');
+  if(el) el.textContent = new Date().toLocaleTimeString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'});
   const sEl=document.getElementById('socketDetailText');
   if(sEl && socket) sEl.textContent = socket.connected ? `TRỰC TUYẾN • ${socket.id.slice(0,4)}` : 'NGOẠI TUYẾN';
 },1000);
@@ -572,7 +573,7 @@ function connectSocket(){
   // Automation heartbeat realtime
   socket.on('automation:heartbeat', (data)=>{
     const hb = document.getElementById('automationHeartbeat');
-    if(hb) hb.textContent = `AUTO ${new Date(data.now).toLocaleTimeString('vi-VN')} | DEV:${data.pendingDevices} EMR:${data.pendingEmerg} SYNC:${data.syncPending||0}`;
+    if(hb) hb.textContent = `AUTO ${new Date(data.now).toLocaleTimeString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'})} | DEV:${data.pendingDevices} EMR:${data.pendingEmerg} SYNC:${data.syncPending||0}`;
     const dot = document.getElementById('realtimeDot');
     if(dot){ dot.classList.remove('bg-gray-400'); dot.classList.add('bg-emerald-500','animate-pulse'); }
   });

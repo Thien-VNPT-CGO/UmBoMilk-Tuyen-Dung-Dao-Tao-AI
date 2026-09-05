@@ -1868,7 +1868,7 @@ app.post('/api/zalo/send', authMiddleware, async (req, res) => {
 app.post('/api/zalo/test', authMiddleware, roleCheck(['Admin']), async (req, res) => {
   const { phone, message } = req.body;
   const targetPhone = phone || '0901234567';
-  const testMsg = message || `[ỤM BÒ MILK ZALO BOT TEST] Xin chào! Đây là tin nhắn kiểm tra tự động gửi từ hệ thống Ụm Bò Milk HR lúc ${new Date().toLocaleTimeString('vi-VN')}.`;
+  const testMsg = message || `[ỤM BÒ MILK ZALO BOT TEST] Xin chào! Đây là tin nhắn kiểm tra tự động gửi từ hệ thống Ụm Bò Milk HR lúc ${new Date().toLocaleTimeString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'})}.`;
 
   const record = await sendZaloBotNotification({
     phone: targetPhone,
