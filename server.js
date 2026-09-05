@@ -279,11 +279,11 @@ function loadDB() {
       if (!db.overtimeRequests) db.overtimeRequests = [];
       if (!db.leaveRequests) db.leaveRequests = [];
     } else {
-      initSeed();
+      initEmpty();
     }
   } catch (e) {
     console.error('Load DB error', e);
-    initSeed();
+    initEmpty();
   }
 }
 function saveDB() {
@@ -332,7 +332,11 @@ function saveDB() {
     io.emit('db:update', { timestamp: getVietnamISOString() });
   } catch (e) { console.error('Save DB error', e); }
 }
-function initSeed() {
+// KHỞI TẠO RỖNG - 100% DỮ LIỆU THẬT, KHÔNG MOCK
+// Ràng buộc tuyệt đối: mọi dữ liệu vận hành (nhân viên, ứng viên, chấm công, lịch...)
+// chỉ lấy từ Google Sheet thật (Form 1rcq / Database 17iXM) hoặc do HR import.
+// Không tự sinh bất kỳ bản ghi nghiệp vụ mẫu nào.
+function initEmpty() {
   const hashed = bcrypt.hashSync('Master@@2027', 10);
   db.users = [
     { id: uuidv4(), username: 'admin', password: hashed, role: 'Admin', branchScope: ['CN1','CN2','CN3','CN4'], displayName: 'Administrator' },
@@ -340,38 +344,19 @@ function initSeed() {
     { id: uuidv4(), username: 'manager', password: bcrypt.hashSync('manager123',10), role: 'Manager', branchScope: ['CN2'], displayName: 'Manager CN2' },
     { id: uuidv4(), username: 'umbomilk', password: bcrypt.hashSync('view123',10), role: 'Umbomilk', branchScope: ['CN1','CN2','CN3','CN4'], displayName: 'Umbomilk Viewer' }
   ];
-  // Seed employees
-  const today = getVietnamNow();
-  const dd = String(today.getDate()).padStart(2,'0');
-  const mm = String(today.getMonth()+1).padStart(2,'0');
-  const yyyy = today.getFullYear();
-  const dateStr = `${dd}${mm}${yyyy}`;
-  function genId(prefix){
-    const rnd = String(Math.floor(1000+Math.random()*9000));
-    return `${prefix}_UBM${dateStr}_NV${rnd}`;
-  }
-  db.employees = [
-    { id: uuidv4(), employeeId: genId('CN130'), name: 'Nguyễn Văn An', phone: '0901234567', branchId: 'CN1', shift: 'CA_SANG', startDate: '2026-08-10', endDate: '2026-08-17', trainingDays: 7, status: 'TRAINING', testScore: null, testResult: null, type: 'TRAINING', category: 'STORE', avatar: '', checkHistory: [], version:1, updated_at: getVietnamISOString(), updated_by:'SYSTEM', source:'WEB_HR', sync_status:'SYNCED' },
-    { id: uuidv4(), employeeId: genId('CN261'), name: 'Trần Thị Bích', phone: '0907654321', branchId: 'CN2', shift: 'CA_CHIEU', startDate: '2026-08-12', endDate: '2026-08-19', trainingDays: 7, status: 'WAITING_TEST', testScore: null, testResult: null, type: 'TRAINING', category: 'STORE', avatar: '', checkHistory: [], version:1, updated_at: getVietnamISOString(), updated_by:'SYSTEM', source:'WEB_HR', sync_status:'SYNCED' },
-    { id: uuidv4(), employeeId: genId('CN261'), name: 'Lê Văn Cường', phone: '0909998888', branchId: 'CN2', shift: 'CA_TOI', startDate: '2026-07-01', endDate: null, trainingDays: null, status: 'OFFICIAL', testScore: 8.5, testResult: 'DAT', type: 'OFFICIAL', category: 'STORE', avatar: '', checkHistory: [], version:2, updated_at: getVietnamISOString(), updated_by:'SYSTEM', source:'WEB_HR', sync_status:'SYNCED' },
-    { id: uuidv4(), employeeId: genId('CN120'), name: 'Phạm Thị Dung', phone: '0912345678', branchId: 'CN3', shift: 'CA_SANG', startDate: '2026-06-15', endDate: null, trainingDays: null, status: 'OFFICIAL', testScore: 9, testResult: 'DAT', type: 'OFFICIAL', category: 'STORE', avatar: '', checkHistory: [], version:2, updated_at: getVietnamISOString(), updated_by:'SYSTEM', source:'WEB_HR', sync_status:'SYNCED' },
-    { id: uuidv4(), employeeId: genId('CN111'), name: 'Hoàng Văn Em', phone: '0923456789', branchId: 'CN4', shift: 'CA_CHIEU', startDate: '2026-08-20', endDate: '2026-08-27', trainingDays: 7, status: 'TRAINING', testScore: 6, testResult: 'CHUA_DU_DK', type: 'TRAINING', category: 'STORE', avatar: '', checkHistory: [], version:1, updated_at: getVietnamISOString(), updated_by:'SYSTEM', source:'WEB_HR', sync_status:'SYNCED' }
-  ];
-  // Keys for official
-  db.keys = db.employees.filter(e=>e.status==='OFFICIAL').map(e=>({
-    id: uuidv4(), employeeId: e.employeeId, key: 'KEY-'+Math.random().toString(36).substring(2,10).toUpperCase(), deviceId: null, boundAt: null, status: 'ACTIVE', version:1, updated_at: getVietnamISOString(), sync_status:'SYNCED'
-  }));
-  // also keys for training waiting
-  db.employees.filter(e=>e.type==='TRAINING').forEach(e=>{
-    db.keys.push({ id: uuidv4(), employeeId: e.employeeId, key: 'KEY-'+Math.random().toString(36).substring(2,10).toUpperCase(), deviceId: null, boundAt: null, status: 'ACTIVE', version:1, updated_at: getVietnamISOString(), sync_status:'SYNCED' });
-  });
-  // Applicants
-  db.applicants = [
-    { id: uuidv4(), name: 'Vũ Thị F', phone: '0931112222', email:'vu.f@gmail.com', branchPreference:'CN2', cvData:'Có kinh nghiệm pha chế 1 năm, giao tiếp tốt, sẵn sàng làm ca tối', aiScore: 85, aiBreakdown: [{criteria:'Kinh nghiệm',score:28, reason:'Có 1 năm pha chế'},{criteria:'Giao tiếp',score:22, reason:'Mô tả tốt'},{criteria:'Thái độ',score:20, reason:'Nhiệt tình'},{criteria:'Sẵn sàng ca',score:15, reason:'Chỉ ca tối'}], status:'NEW_APPLICANT', source_id:'form_'+uuidv4(), createdAt: getVietnamISOString(), version:1, sync_status:'SYNCED' },
-    { id: uuidv4(), name: 'Ngô Văn G', phone: '0933334444', email:'ngo.g@gmail.com', branchPreference:'CN1', cvData:'Sinh viên, chưa có kinh nghiệm, rảnh ca sáng', aiScore: 62, aiBreakdown: [{criteria:'Kinh nghiệm',score:15, reason:'Chưa có KN'},{criteria:'Giao tiếp',score:18, reason:'TB'},{criteria:'Thái độ',score:19, reason:'Tốt'},{criteria:'Sẵn sàng ca',score:10, reason:'Chỉ sáng'}], status:'INTERVIEW', source_id:'form_'+uuidv4(), createdAt: getVietnamISOString(), version:1, sync_status:'SYNCED' },
-    { id: uuidv4(), name: 'Đặng Thị H', phone: '0935556666', email:'dang.h@gmail.com', branchPreference:'CN3', cvData:'2 năm kinh nghiệm sales, giao tiếp xuất sắc', aiScore: 92, aiBreakdown: [{criteria:'Kinh nghiệm',score:30, reason:'Xuất sắc'},{criteria:'Giao tiếp',score:24, reason:'Rất tốt'},{criteria:'Thái độ',score:22, reason:'Tốt'},{criteria:'Sẵn sàng ca',score:16, reason:'Linh hoạt'}], status:'NEW_APPLICANT', source_id:'form_'+uuidv4(), createdAt: getVietnamISOString(), version:1, sync_status:'SYNCED' }
-  ];
-  // Test course
+  // Toàn bộ dữ liệu nghiệp vụ để trống - chờ đồng bộ từ Google Sheet thật
+  db.employees = [];
+  db.applicants = [];
+  db.keys = [];
+  db.attendances = [];
+  db.schedules = [];
+  db.offRequests = [];
+  db.emergencyRequests = [];
+  db.deviceRequests = [];
+  db.trainingShiftRequests = [];
+  db.shiftSwapRequests = [];
+  // Ngân hàng câu hỏi kiểm tra đầu ra (cấu hình vận hành, không phải mock nghiệp vụ).
+  // Không có UI tạo khóa học nên giữ 1 khóa mặc định để E-learning hoạt động với dữ liệu thật.
   db.testCourses = [
     {
       id: 'course_001',
@@ -381,7 +366,7 @@ function initSeed() {
       minPerQuestion: 5,
       questions: Array.from({length:20}, (_,i)=>({
         id: `q${i+1}`,
-        question: `Câu ${i+1}: Thành phần chính của món Trà Sữa Ụm Bò Truyền Thống là gì? (Demo Q${i+1})`,
+        question: `Câu ${i+1}: Thành phần chính của món Trà Sữa Ụm Bò Truyền Thống là gì?`,
         options: ['Trà đen + Sữa tươi + Trân châu', 'Trà xanh + Sữa đặc', 'Cà phê + Sữa', 'Nước lọc + Đường'],
         correct: 0,
         explanation: 'Đáp án đúng là Trà đen + Sữa tươi'
@@ -393,50 +378,19 @@ function initSeed() {
       createdAt: getVietnamISOString()
     }
   ];
-  // Schedules example: generate for current week Mon-Sun
-  const weekStart = getMonday(getVietnamNow());
-  db.employees.filter(e=>e.status==='OFFICIAL').forEach(emp=>{
-    const days = [];
-    for(let i=0;i<7;i++){
-      const d = new Date(weekStart); d.setDate(weekStart.getDate()+i);
-      const dateStr = toVietnamDateStr(d);
-      // random OFF 1 day
-      const isOff = Math.random()<0.15;
-      days.push({ date: dateStr, dayName: ['T2','T3','T4','T5','T6','T7','CN'][i], shift: emp.shift, status: isOff?'OFF':'WORKING', substituteFor: null });
-    }
-    db.schedules.push({ id: uuidv4(), employeeId: emp.employeeId, weekStart: toVietnamDateStr(weekStart), days, version:1, updated_at: getVietnamISOString() });
-  });
-  // Attendance mock cho NV chính thức - realtime đúng ca Vietnam (không tạo CA_TOI vào buổi sáng)
-  const todayStr = getVietnamTodayStr();
-  const nowVN = getVietnamNow();
-  const nowMinsVN = nowVN.getHours()*60+nowVN.getMinutes();
-  db.employees.filter(e=>e.status==='OFFICIAL').slice(0,2).forEach(emp=>{
-    const sMap = DEFAULT_SHIFTS[emp.shift] || DEFAULT_SHIFTS['CA_SANG'];
-    const [sh, sm] = sMap.start.split(':').map(Number);
-    const startMins = sh*60+sm;
-    const openMins = startMins - 30;
-    const closeMins = startMins + 60;
-    // Chỉ tạo mock nếu đang trong cửa sổ check-in Vietnam (tránh CA_TOI hiện Đang làm buổi sáng)
-    const isInWindow = nowMinsVN >= openMins && nowMinsVN <= closeMins;
-    if(!isInWindow){
-      // Ngoài giờ ca, không tạo mock Đang làm - để HR thấy đúng Vắng/Sắp tới
-      return;
-    }
-    const checkTime = `${String(sh).padStart(2,'0')}:${String(sm+2).padStart(2,'0')}`;
-    const branch = db.branches.find(b=>b.id===emp.branchId);
-    const branchFolder = `${branch?.prefix||emp.branchId} - ${branch?.name||emp.branchId}`;
-    const drivePath = `NHAN_VIEN_CHINH_THUC/${branchFolder}/${emp.shift}/${emp.name} - ${emp.phone} - ${emp.employeeId}/${todayStr.split('-').reverse().join('-')}/CHECK_IN`;
-    db.attendances.push({
-      id: uuidv4(), employeeId: emp.employeeId, date: todayStr, shift: emp.shift,
-      checkIn: { time: checkTime, gps: '10.762622,106.660172', address: branch?.address||'130 Vạn Kiếp', image: '', drivePath, timestamp: getVietnamISOString() },
-      checkOut: null, status: 'CHECKED_IN', violations: [], branchId: emp.branchId, version:1, updated_at: getVietnamISOString(), sync_status:'SYNCED'
-    });
-  });
-  // Zalo records
-  db.zaloRecords = [
-    { id: uuidv4(), sent_at: getVietnamISOString(), receiver: '0901234567', type: 'INTERVIEW_INVITE', content: 'Mời phỏng vấn tại CN2 261 Tô Hiến Thành lúc 09:00 29/08', status:'SENT', error:'' },
-    { id: uuidv4(), sent_at: getVietnamISOString(), receiver: '0907654321', type: 'TEST_RESULT', content: 'Chúc mừng bạn đạt 8.5 điểm', status:'DELIVERED', error:'' }
-  ];
+  db.testResults = [];
+  db.zaloRecords = [];
+  db.syncQueue = [];
+  db.notifications = [];
+  db.payrollPeriods = [];
+  db.attendanceAdjustments = [];
+  db.overtimeRequests = [];
+  db.leaveRequests = [];
+  db.driveFiles = [];
+  db.payrollSnapshots = [];
+  db.financeKeys = [];
+  db.penalties = [];
+  console.log('[DB] Khởi tạo rỗng - chờ dữ liệu thật từ Google Sheet (Form/Sync/Import)');
   saveDB();
 }
 function getMonday(d){
@@ -528,39 +482,8 @@ if(process.env.GOOGLE_DRIVE_BACKUP_FOLDER_ID) db.settings.googleDrive.backupFold
 // Log ràng buộc đã áp dụng
 console.log(`[CONFIG] Google Sheet Hub: Form=${db.settings.googleSheet.formResponsesSheetId.slice(0,8)}... DB=${db.settings.googleSheet.targetDatabaseSpreadsheetId.slice(0,8)}... Webhooks=${getAllWebhookUrls().length} [${getAllWebhookUrls().map(u=>u.slice(0,35)+'...').join(', ')}]`);
 console.log(`[CONFIG] Finance: ${db.settings.finance?.webhookUrl ? db.settings.finance.webhookUrl.slice(0,35)+'...' : 'EMPTY'} • Calendar: ${db.settings.calendar.clientId ? 'OAuth SET' : 'EMPTY'} • Drive: ${db.settings.googleDrive.rootFolderId ? db.settings.googleDrive.rootFolderId.slice(0,8)+'...' : 'EMPTY'}`);
-// Fix mock attendance sai ca CA_TOI hiển thị Đang làm buổi sáng - realtime đúng Vietnam
-(function cleanupIncorrectAttendances(){
-  try{
-    const todayVN = getVietnamTodayStr();
-    const nowVN = getVietnamNow();
-    const nowMins = nowVN.getHours()*60+nowVN.getMinutes();
-    let removed=0;
-    const beforeLen = db.attendances.length;
-    db.attendances = db.attendances.filter(a=>{
-      if(a.date===todayVN && a.shift==='CA_TOI' && a.checkIn && a.checkIn.time==='07:02'){
-        // CA_TOI ca tối 18-23h mà check-in 07:02 buổi sáng là sai - xóa để HR không thấy Đang làm sai
-        if(a.checkIn.drivePath && a.checkIn.drivePath.includes('CA_SANG')){
-          removed++; return false;
-        }
-        // Nếu đang buổi sáng (<12h) mà đã có check-in CA_TOI thì sai
-        if(nowMins < 12*60){
-          removed++; return false;
-        }
-      }
-      // Cũng xóa các mock CA_CHIEU/CA_SANG sai giờ tương tự
-      if(a.date===todayVN && a.checkIn && a.checkIn.time==='07:02' && a.shift!=='CA_SANG'){
-        // Chỉ CA_SANG mới được 07:02
-        removed++; return false;
-      }
-      return true;
-    });
-    if(removed>0 || db.attendances.length!==beforeLen){
-      saveDB();
-      console.log(`[ATTENDANCE FIX] Đã xóa ${removed} mock sai ca (CA_TOI 07:02 buổi sáng) - realtime Vietnam`);
-      try{ io.emit('attendances:update', db.attendances); }catch(e){}
-    }
-  }catch(e){ console.error('cleanupIncorrectAttendances', e.message); }
-})();
+// ĐÃ LOẠI BỎ cleanupIncorrectAttendances: dữ liệu 100% thật, server không được
+// tự ý xóa bản ghi chấm công (trước đây xóa các bản ghi 07:02, có thể trúng dữ liệu thật).
 // Cleanup old syncQueue DEAD do placeholder/KEY (fix 23 DEAD - triệt để)
 (function cleanupOldSyncQueue(){
   try{
@@ -617,6 +540,12 @@ async function syncToGoogleSheet(item){
   if(item.entity==='KEY'){
     // Key được đồng bộ qua dòng nhân viên (syncSheetTab) nên coi như SYNCED
     return { success:true, via:'KEY_EMBEDDED_IN_EMPLOYEE' };
+  }
+  // RÀNG BUỘC TUYỆT ĐỐI: không bao giờ gửi lệnh xóa lên Google Sheet.
+  // Web xóa local -> Sheet 17iXM GIỮ NGUYÊN dữ liệu vĩnh viễn (kể cả import rồi xóa).
+  if(/DELETE/.test(item.operation||'')){
+    console.log(`[SYNC BẢO VỆ] Chặn lệnh xóa ${item.entity}/${item.operation} - Google Sheet giữ dữ liệu`);
+    return { success:true, via:'DELETE_BLOCKED_SHEET_PROTECTED', note:'Google Sheet 17iXM không bao giờ bị xóa dòng' };
   }
   const webhookUrls = getAllWebhookUrls();
   const secret = process.env.GOOGLE_SHEET_WEBHOOK_SECRET || db.settings?.googleSheet?.secret || 'umbomilk_secret_2026';
@@ -1302,7 +1231,7 @@ app.delete('/api/employees/:id', authMiddleware, roleCheck(['Admin','HR']), (req
     db.emergencyRequests = db.emergencyRequests.filter(r=>r.employeeId!==empId && r.substituteId!==empId);
     db.testResults = db.testResults.filter(t=>t.employeeId!==empId);
     audit(req.user.username,'HARD_DELETE','EMPLOYEE',before,null, req.ip);
-    addSyncQueue('EMPLOYEE','HARD_DELETE', {employeeId: empId, name: before.name}, req.user.username, 'WEB_HR');
+    // RÀNG BUỘC TUYỆT ĐỐI: xóa cứng local nhưng KHÔNG đồng bộ xóa lên Google Sheet 17iXM (Sheet giữ dữ liệu vĩnh viễn)
     saveDB();
     io.emit('employees:update', db.employees);
     io.emit('keys:update', db.keys);
@@ -2160,7 +2089,7 @@ app.post('/api/applicants/:id/status', authMiddleware, (req,res)=>{
   appRec.version = (appRec.version||1)+1;
   appRec.updated_at = getVietnamISOString();
   if(status==='PASS'){
-    // Create calendar event mock + zalo
+    // Create calendar event + zalo
     const zr = { id: uuidv4(), sent_at: getVietnamISOString(), receiver: appRec.phone, type:'INTERVIEW_INVITE', content:`Mời ${appRec.name} phỏng vấn tại ${db.branches.find(b=>b.id===appRec.branchPreference)?.address||'CN2'} - Meet link: https://meet.google.com/${Math.random().toString(36).substring(2,10)}`, status:'QUEUED', error:'' };
     db.zaloRecords.unshift(zr);
     setTimeout(()=>{ zr.status='SENT'; io.emit('zalo:update', db.zaloRecords); saveDB(); }, 1500);
@@ -2543,8 +2472,19 @@ function normalizePhone(phone) {
   return p;
 }
 
+// Danh sách Sheet được bảo vệ tuyệt đối - không bao giờ xóa dòng (dù web đã xóa)
+function isSheetDeleteProtected(spreadsheetId){
+  const master = db.settings?.googleSheet?.targetDatabaseSpreadsheetId || '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w';
+  const form = db.settings?.googleSheet?.spreadsheetId || '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w';
+  return spreadsheetId===master || spreadsheetId===form || spreadsheetId==='17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w';
+}
 async function deleteRowFromSpreadsheet(spreadsheetId, accessToken, applicant) {
   if (!spreadsheetId || !accessToken || !applicant) return;
+  // RÀNG BUỘC TUYỆT ĐỐI: từ chối xóa dòng trên Sheet được bảo vệ (17iXM)
+  if(isSheetDeleteProtected(spreadsheetId)){
+    console.log(`[SYNC BẢO VỆ] Từ chối xóa dòng trên Sheet được bảo vệ ${spreadsheetId} cho "${applicant.name}" - Sheet giữ dữ liệu vĩnh viễn`);
+    return;
+  }
   const normPhone = normalizePhone(applicant.phone);
   const appNameClean = (applicant.name || '').trim().toLowerCase();
 
@@ -2612,6 +2552,9 @@ async function deleteRowFromSpreadsheet(spreadsheetId, accessToken, applicant) {
 
 async function deleteOutboundFromMasterDatabaseSheet(applicant) {
   if (!applicant) return;
+  // RÀNG BUỘC TUYỆT ĐỐI: hàm xóa Sheet đã bị vô hiệu hóa - Google Sheet giữ dữ liệu vĩnh viễn dù web đã xóa.
+  console.log(`[SYNC BẢO VỆ] Bỏ qua xóa Sheet cho "${applicant.name}" - Sheet giữ dữ liệu vĩnh viễn`);
+  return;
   const targetId = (db.settings && db.settings.googleSheet && db.settings.googleSheet.targetDatabaseSpreadsheetId)
     ? db.settings.googleSheet.targetDatabaseSpreadsheetId
     : '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w';
@@ -2792,7 +2735,7 @@ function syncLiveGoogleSheetCSV(spreadsheetId, sheetName) {
 }
 
 // Background auto-polling: CHỈ ĐỌC Sheet nộp Form (1rcq - nguồn vào), KHÔNG đọc Database (17iXM - nguồn xuất 20 cột)
-// Luồng: Form (1rcq) --CSV--> HR Web App (mock) --AI scoring--> Database (17iXM) 20 cột
+// Luồng dữ liệu thật: Form (1rcq) --CSV--> HR Web App --AI scoring--> Database (17iXM) 20 cột
 setInterval(async () => {
   const formSid = db.settings.googleSheet.formResponsesSheetId || db.settings.googleSheet.spreadsheetId;
   if(formSid) await syncLiveGoogleSheetCSV(formSid);
@@ -2810,7 +2753,7 @@ app.post('/api/recruitment/sync-form', authMiddleware, async (req,res)=>{
   saveDB();
   io.emit('applicants:update', db.applicants);
   io.emit('sync:update', db.syncQueue);
-  res.json({ added, addedForm:0, total: db.applicants.length, source:'SHEET_FORM_LIVE', spreadsheetId: formSid, targetDatabaseSpreadsheetId: targetDbId, note: 'Form Sheet (1rcq) là nguồn vào, HR mock lên web, sau đó xuất 20 cột ra Database Sheet (17iXM) qua webhook' });
+  res.json({ added, addedForm:0, total: db.applicants.length, source:'SHEET_FORM_LIVE', spreadsheetId: formSid, targetDatabaseSpreadsheetId: targetDbId, note: 'Form Sheet (1rcq) là nguồn vào, HR lấy dữ liệu thật lên web, sau đó xuất 20 cột ra Database Sheet (17iXM) qua webhook' });
 });
 
 // Ràng buộc: Xóa tất cả sheet còn lại trong file Form (1rcq), chỉ giữ FROM_NHAN_VIEN
@@ -3700,17 +3643,36 @@ async function syncSheetTab(sheetKey){
       default:
         return;
     }
-    // Clear and rewrite sheet (realtime 1:1)
+    // RÀNG BUỘC TUYỆT ĐỐI: Google Sheet (đặc biệt 17iXM) KHÔNG BAO GIỜ bị xóa dòng.
+    // Web xóa local -> Sheet GIỮ NGUYÊN. Chỉ hợp nhất: giữ dòng cũ + cập nhật dòng trùng key + thêm dòng mới.
+    const getRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(def.sheetName)}!A2:Z`, { headers:{ Authorization:`Bearer ${token}` }});
+    const getData = await getRes.json().catch(()=>({}));
+    const existing = getData.values || [];
+    const idxByKey = new Map();
+    existing.forEach((r,i)=>{ const k=(r[0]||'').toString(); if(k && !idxByKey.has(k)) idxByKey.set(k, i); });
+    const merged = existing.map(r=>[...r]);
+    let appended = 0, updated = 0;
+    rows.forEach(r=>{
+      const k=(r[0]||'').toString();
+      if(k && idxByKey.has(k)){
+        const ei = idxByKey.get(k);
+        const old = merged[ei];
+        const len = Math.max(old.length, r.length);
+        const nr = [];
+        for(let c=0;c<len;c++) nr[c] = (c<r.length && r[c]!==undefined && r[c]!=='') ? r[c] : old[c];
+        merged[ei]=nr; updated++;
+      } else { merged.push(r); appended++; }
+    });
     await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(def.sheetName)}!A2:Z:clear`, {
       method:'POST', headers:{ Authorization:`Bearer ${token}` }
     });
-    if(rows.length>0){
+    if(merged.length>0){
       await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(def.sheetName)}!A2:append?valueInputOption=RAW`, {
         method:'POST', headers:{ Authorization:`Bearer ${token}`, 'Content-Type':'application/json'},
-        body: JSON.stringify({ values: rows })
+        body: JSON.stringify({ values: merged })
       });
     }
-    console.log(`[SHEET] Đã đồng bộ ${def.sheetName}: ${rows.length} rows - Realtime 1:1`);
+    console.log(`[SHEET] Đã đồng bộ ${def.sheetName}: giữ ${existing.length} dòng cũ + cập nhật ${updated} + thêm ${appended} (không xóa dòng nào) - Realtime 1:1`);
   }catch(e){ console.error(`syncSheetTab ${sheetKey} error`, e.message); }
 }
 async function syncAllTabsToSheetsRealtime(){
@@ -3728,62 +3690,8 @@ setTimeout(()=>{ syncAllTabsToSheetsRealtime().catch(()=>{}); }, 15000);
 
 // Drive realtime status vars
 
-// ============ ADMIN TEST: SIMULATE 7 DAYS TRAINING ============
-app.post('/api/employees/:id/simulate-7days-training', authMiddleware, roleCheck(['Admin']), (req, res) => {
-  const empId = req.params.id;
-  const emp = db.employees.find(e => e.id === empId || e.employeeId === empId);
-  if (!emp) return res.status(404).json({ error: 'Không tìm thấy nhân viên' });
-
-  const startDateStr = emp.startDate || getVietnamTodayStr();
-  const parts = startDateStr.split('T')[0].split('-').map(Number);
-  const startD = (parts.length === 3 && !isNaN(parts[0])) ? new Date(parts[0], parts[1] - 1, parts[2]) : getVietnamNow();
-
-  const offSet = new Set(emp.registeredOffDates || []);
-  const createdDates = [];
-
-  for (let i = 0; i < 12; i++) {
-    const d = new Date(startD);
-    d.setDate(startD.getDate() + i);
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    const dateStr = `${y}-${m}-${day}`;
-
-    // Skip OFF dates
-    if (offSet.has(dateStr)) continue;
-
-    // Check if attendance already exists
-    let existingAtt = db.attendances.find(a => a.employeeId === emp.employeeId && a.date === dateStr);
-    if (!existingAtt) {
-      db.attendances.push({
-        id: uuidv4(),
-        employeeId: emp.employeeId,
-        date: dateStr,
-        shift: emp.shift || 'CA_SANG',
-        branchId: emp.branchId || 'CN1',
-        checkIn: { time: '07:00', gps: '10.762622,106.660172', address: 'CN Test Admin', timestamp: getVietnamISOString() },
-        checkOut: { time: '12:00', gps: '10.762622,106.660172', address: 'CN Test Admin', timestamp: getVietnamISOString() },
-        status: 'COMPLETED',
-        violations: [],
-        version: 1,
-        updated_at: getVietnamISOString()
-      });
-    } else {
-      existingAtt.status = 'COMPLETED';
-      existingAtt.checkIn = existingAtt.checkIn || { time: '07:00', gps: '10.762622,106.660172', address: 'CN Test Admin', timestamp: getVietnamISOString() };
-      existingAtt.checkOut = existingAtt.checkOut || { time: '12:00', gps: '10.762622,106.660172', address: 'CN Test Admin', timestamp: getVietnamISOString() };
-    }
-    createdDates.push(dateStr);
-    if (createdDates.length >= 7) break;
-  }
-
-  saveDB();
-  io.emit('attendances:update', db.attendances);
-  io.emit('employees:update', db.employees);
-
-  res.json({ success: true, employeeId: emp.employeeId, completedDates: createdDates, count: createdDates.length });
-});
-
+// ĐÃ LOẠI BỎ endpoint giả lập điểm danh (simulate-7days-training):
+// dữ liệu 100% thật, điểm danh chỉ từ check-in/out thật hoặc auto theo lịch HR duyệt.
 // ============ TRIGGER ONLINE APP TEST (OPTION 1) ============
 app.post('/api/employees/:id/trigger-online-test', authMiddleware, (req, res) => {
   const empId = req.params.id;
@@ -4022,7 +3930,7 @@ app.post('/api/attendance/checkin', (req,res)=>{
   const drivePath = generateDrivePath(emp, today, 'CHECK_IN');
   const newRec = {
     id: uuidv4(), employeeId, date: today, shift: shift||emp.shift, branchId: emp.branchId,
-    checkIn: { time: now.toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit', timeZone:'Asia/Ho_Chi_Minh'}), gps: gps||'10.762622,106.660172', address: address||db.branches.find(b=>b.id===emp.branchId)?.address, image: safeImage, timestamp: now.toISOString(), content: 'Điểm danh Vào ca UBM', drivePath },
+    checkIn: { time: now.toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit', timeZone:'Asia/Ho_Chi_Minh'}), gps, address: address||db.branches.find(b=>b.id===emp.branchId)?.address, image: safeImage, timestamp: now.toISOString(), content: 'Điểm danh Vào ca UBM', drivePath },
     checkOut: null, status: violations.length ? violations[0] : 'CHECKED_IN', violations, penalty: penaltyObj, version:1, updated_at: now.toISOString(), sync_status:'PENDING'
   };
   db.attendances.push(newRec);
@@ -4079,7 +3987,7 @@ app.post('/api/attendance/checkout', (req,res)=>{
   let safeOutImage = image||'';
   if(safeOutImage && safeOutImage.length>500*1024) safeOutImage = safeOutImage.slice(0,500*1024);
   const outDrivePath = generateDrivePath(emp, today, 'CHECK_OUT');
-  record.checkOut = { time: now.toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit', timeZone:'Asia/Ho_Chi_Minh'}), gps: gps||'10.762622,106.660172', address: address||db.branches.find(b=>b.id===emp.branchId)?.address, image: safeOutImage, timestamp: now.toISOString(), content:'Điểm danh Ra ca UBM', drivePath: outDrivePath };
+  record.checkOut = { time: now.toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit', timeZone:'Asia/Ho_Chi_Minh'}), gps, address: address||db.branches.find(b=>b.id===emp.branchId)?.address, image: safeOutImage, timestamp: now.toISOString(), content:'Điểm danh Ra ca UBM', drivePath: outDrivePath };
   record.status = 'COMPLETED';
   record.updated_at = now.toISOString();
   record.sync_status = 'PENDING';
@@ -6751,7 +6659,7 @@ app.get('/api/finance/sheets/master-data', financeAuthMiddleware, async (req,res
   res.json({ sheet:'MASTER_DATA', rows, source:'DB_FALLBACK' });
 });
 app.get('/api/finance/sheets/dong-phuc', financeAuthMiddleware, (req,res)=>{
-  // DONG_PHUC: hoàn cọc đồng phục, mock từ DB hoặc Google Sheets
+  // DONG_PHUC: hoàn cọc đồng phục, lấy từ DB hoặc Google Sheets thật
   const rows = (db.financeDongPhuc||[]).map(r=> ({ bhCode:r.bhCode, hoTen:r.hoTen, soTien:r.soTien, ngay:r.ngay }));
   res.json({ sheet:'DONG_PHUC', rows });
 });

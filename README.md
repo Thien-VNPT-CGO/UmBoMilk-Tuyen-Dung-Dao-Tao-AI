@@ -52,7 +52,7 @@ Vào **Admin → Nhân viên Cửa hàng → nút Key** để lấy KEY. Demo s�
 
 ### 10. Web App Quản trị (13 tabs)
 1. **Tổng quan** - KPI 12 chỉ số, 3 chart (Chart.js), sync queue, audit
-2. **Nhân viên mới** - Google Form sync (mock), AI chấm breakdown, PASS → Calendar+Meet+Zalo, → Training
+2. **Nhân viên mới** - Google Form sync dữ liệu thật, AI chấm breakdown, PASS → Calendar+Meet+Zalo, → Training
 3. **NV Cửa hàng** - Training/Chính thức grid+table, chuyển trạng thái, Key
 4. **NV Xưởng** - Beta schema sẵn
 5. **NV Văn phòng** - Beta
@@ -86,7 +86,7 @@ Vào **Admin → Nhân viên Cửa hàng → nút Key** để lấy KEY. Demo s�
 - Indicator "LIVE UPDATE" + "Socket Connected" ở header
 
 ### Bảo mật & Đồng bộ
-- bcrypt password, JWT, RBAC, Branch Scope, Device Binding, Rate limit mock, Input validation
+- bcrypt password, JWT, RBAC, Branch Scope, Device Binding, Rate limit thật, Input validation
 - Secret masking (••••), Audit Log actor/action/entity/before/after/timestamp
 - Sync queue với version, updated_at, source, sync_status, retry/CONFLICT
 
@@ -145,7 +145,8 @@ Mọi thay đổi có Audit Log.
 
 ## 📞 Ghi chú
 
-- Google Sheet/Drive/Calendar/Zalo là mock (không cần key thật vẫn chạy demo realtime)
+- 100% dữ liệu thật: không mock nghiệp vụ; Google Sheet/Drive/Calendar/Zalo dùng key thật, dữ liệu lấy từ Sheet thật
+- Ràng buộc tuyệt đối: Google Sheet 17iXM không bao giờ bị xóa dòng (web xóa local -> Sheet giữ nguyên vĩnh viễn); import mặc định đồng bộ lên Sheet
 - Ảnh camera lưu base64 trong JSON (thay cho Drive upload)
 - Schedule tự sinh tuần hiện tại, cập nhật khi OFF/TEST chuyển trạng thái
 - Để test TEST: dùng nhân viên Training → E-learning → Bắt đầu TEST

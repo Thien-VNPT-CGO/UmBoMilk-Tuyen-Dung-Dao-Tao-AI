@@ -83,10 +83,9 @@ function syncRow(sheet, operation, payload) {
     }
   }
   
-  if (operation === 'DELETE') {
-    if (targetRowIndex > 0) {
-      sheet.deleteRow(targetRowIndex);
-    }
+  // RÀNG BUỘC TUYỆT ĐỐI (09/2026): Google Sheet KHÔNG BAO GIỜ bị xóa dòng.
+  // Web xóa local -> Sheet GIỮ NGUYÊN vĩnh viễn. Mọi lệnh DELETE/HARD_DELETE từ webhook đều bị bỏ qua.
+  if (operation === 'DELETE' || operation === 'HARD_DELETE' || operation === 'DELETE_ROW') {
     return;
   }
   

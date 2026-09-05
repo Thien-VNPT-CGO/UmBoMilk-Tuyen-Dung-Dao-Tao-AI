@@ -2937,7 +2937,6 @@ function renderEmployeesStore(){
                 return btns;
               })()}
 
-              ${currentEmpStoreTab==='TRAINING' && (currentUser && (currentUser.role === 'Admin' || currentUser.username === 'admin') && e.status !== 'OFFICIAL') ? `<button onclick="simulate7DaysTraining('${e.employeeId}')" class="text-xs font-black bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl shadow-xs transition" title="Giả lập hoàn thành 7 ngày điểm danh cho Admin Test">⚡ 7/7 Thử việc</button>` : ''}
               ${currentEmpStoreTab==='TRAINING' ? `<button onclick="showTrainingInvite('${e.employeeId}')" class="text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-xl shadow-xs flex items-center gap-1" title="Xem và copy thư mời Thử việc cho NV này"><i class="fa-solid fa-envelope"></i> Thư mời</button>` : ''}
               
               <!-- OFFICIAL BUTTON - Admin: luôn bấm được | HR: chỉ khi Mở TEST đã hiển thị (completed >= 7) -->
@@ -3495,23 +3494,6 @@ async function confirmSubmitEvaluation(employeeId) {
     }
   } catch (err) {
     showToast(err.message || 'Lỗi chấm điểm', 'error');
-  }
-}
-async function simulate7DaysTraining(employeeId) {
-  if (!confirm(`[ADMIN TEST] Tự động hoàn thành đủ 7 ngày Thử việc cho NV ${employeeId}?`)) return;
-  try {
-    const res = await api(`/api/employees/${employeeId}/simulate-7days-training`, {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + token }
-    });
-    if (res.success) {
-      showToast(`⚡ ADMIN TEST: Đã tự động hoàn thành đủ 7 ngày Thử việc cho NV ${employeeId}!`, 'success');
-      loadEmployees();
-    } else {
-      showToast(res.error || 'Có lỗi xảy ra', 'error');
-    }
-  } catch (err) {
-    showToast(err.message || 'Lỗi kết nối', 'error');
   }
 }
 function transitionOfficial(employeeId){
