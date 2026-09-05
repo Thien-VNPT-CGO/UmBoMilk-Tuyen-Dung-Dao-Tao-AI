@@ -3069,7 +3069,7 @@ function realtimeAutomationPoller(){
       } else {
         r.status='REJECTED';
         r.reasonReject='[TH3 Poller] Không có nhân viên cùng CN khác ca';
-        const ws = getMonday(new toVietnamDateStr(Date(r.date)));
+        const ws = toVietnamDateStr(getMonday(new Date(r.date)));
         const sched = db.schedules.find(s=>s.employeeId===r.employeeId && s.weekStart===ws);
         if(sched){ const day=sched.days.find(d=>d.date===r.date); if(day && day.status==='EMERGENCY_PENDING'){ day.status='WORKING'; } }
         io.emit('emergencyRequests:update', db.emergencyRequests);
@@ -3080,7 +3080,7 @@ function realtimeAutomationPoller(){
     } else if(r.cascadeStep===2){
       r.status='REJECTED';
       r.reasonReject='[TH3 Poller] Không có nhân viên thay ca sau 2 bước (2p+30p)';
-      const ws = getMonday(new toVietnamDateStr(Date(r.date)));
+      const ws = toVietnamDateStr(getMonday(new Date(r.date)));
       const sched = db.schedules.find(s=>s.employeeId===r.employeeId && s.weekStart===ws);
       if(sched){ const day=sched.days.find(d=>d.date===r.date); if(day && day.status==='EMERGENCY_PENDING'){ day.status='WORKING'; day.shift = db.employees.find(e=>e.employeeId===r.employeeId)?.shift || 'CA_SANG'; } }
       const zr = { id: uuidv4(), sent_at: new Date().toISOString(), receiver: db.employees.find(e=>e.employeeId===r.employeeId)?.phone, type:'EMERGENCY_REJECTED', content:`[TH3 Poller] OFF đột xuất ngày ${r.date} bị HỦY do không có người thay`, status:'SENT', error:'' };
@@ -5223,7 +5223,7 @@ app.post('/api/off-requests', (req,res)=>{
       // AI: nếu ngày trong dates => OFF, còn lại WORKING theo ca
       days.push({ date: ds, dayName:['T2','T3','T4','T5','T6','T7','CN'][i], shift: emp.shift, status: dates.includes(ds)?'OFF':'WORKING', substituteFor:null });
     }
-    sched = { id: uuidv4(), employeeId, weekStart: weekStr, days, version:1, updated_at: new Date().toISOString() };
+    sched = { id: uuidv4(), employeeId, weekStart: weekStr, days, version:1, updated_at: new Date().toISOString(), approvalStatus:'APPROVED' };
     db.schedules.push(sched);
   } else {
     sched.days.forEach(d=>{
@@ -5247,6 +5247,8 @@ app.post('/api/off-requests', (req,res)=>{
     }
     sched.version = (sched.version||1)+1;
     sched.updated_at = new Date().toISOString();
+    // Đảm bảo lịch tuần sau hiển thị ngay cho NV sau khi đăng ký OFF (realtime) - gỡ trạng thái chờ duyệt
+    sched.approvalStatus = 'APPROVED';
   }
   // AI also ensures next week's schedule respects TH1 (no duplicate OFF same shift already checked)
   audit(employeeId,'OFF_WEEKLY_AI_AUTO','OFF_REQUEST',null,newReq, req.ip);
@@ -5417,7 +5419,7 @@ function handleEmergencyCascade(request){
             r2.reasonReject='[TH3] Không có nhân viên thay ca sau 2 bước (2 phút cùng ca + 30 phút khác ca)';
             // Hủy lịch tạm EMERGENCY_PENDING → trả về WORKING
             try{
-              const ws = getMonday(new toVietnamDateStr(Date(r2.date)));
+              const ws = toVietnamDateStr(getMonday(new Date(r2.date)));
               const sched = db.schedules.find(s=>s.employeeId===r2.employeeId && s.weekStart===ws);
               if(sched){ const day=sched.days.find(d=>d.date===r2.date); if(day && day.status==='EMERGENCY_PENDING'){ day.status='WORKING'; day.shift = db.employees.find(e=>e.employeeId===r2.employeeId)?.shift || 'CA_SANG'; io.emit('schedules:update', db.schedules); }}
             }catch(e){}
@@ -5436,7 +5438,7 @@ function handleEmergencyCascade(request){
         r.reasonReject='[TH3] Không có nhân viên cùng CN khác ca để thay';
         // Hủy tạm
         try{
-          const ws = getMonday(new toVietnamDateStr(Date(r.date)));
+          const ws = toVietnamDateStr(getMonday(new Date(r.date)));
           const sched = db.schedules.find(s=>s.employeeId===r.employeeId && s.weekStart===ws);
           if(sched){ const day=sched.days.find(d=>d.date===r.date); if(day && day.status==='EMERGENCY_PENDING'){ day.status='WORKING'; io.emit('schedules:update', db.schedules); }}
         }catch(e){}
@@ -5468,7 +5470,7 @@ function handleEmergencyCascade(request){
         if(r2 && r2.status==='PENDING'){
           r2.status='REJECTED';
           r2.reasonReject='[TH3] Không tìm được người thay ca (khác ca) sau 30 phút';
-          try{ const ws=getMonday(new toVietnamDateStr(Date(r2.date))); const sched=db.schedules.find(s=>s.employeeId===r2.employeeId && s.weekStart===ws); if(sched){ const day=sched.days.find(d=>d.date===r2.date); if(day && day.status==='EMERGENCY_PENDING'){ day.status='WORKING'; io.emit('schedules:update', db.schedules); }}}catch(e){}
+          try{ const ws=toVietnamDateStr(getMonday(new Date(r2.date))); const sched=db.schedules.find(s=>s.employeeId===r2.employeeId && s.weekStart===ws); if(sched){ const day=sched.days.find(d=>d.date===r2.date); if(day && day.status==='EMERGENCY_PENDING'){ day.status='WORKING'; io.emit('schedules:update', db.schedules); }}}catch(e){}
           saveDB(); io.emit('emergencyRequests:update', db.emergencyRequests);
           const zr = { id: uuidv4(), sent_at: new Date().toISOString(), receiver: db.employees.find(e=>e.employeeId===r2.employeeId)?.phone, type:'EMERGENCY_REJECTED', content:`OFF đột xuất ngày ${r2.date} bị hủy do không có người thay`, status:'SENT', error:'' };
           db.zaloRecords.unshift(zr); io.emit('zalo:update', db.zaloRecords);
@@ -5477,7 +5479,7 @@ function handleEmergencyCascade(request){
     } else {
       request.status='REJECTED';
       request.reasonReject='[TH3] Không có ứng viên thay ca (cùng CN)';
-      try{ const ws=getMonday(new toVietnamDateStr(Date(request.date))); const sched=db.schedules.find(s=>s.employeeId===request.employeeId && s.weekStart===ws); if(sched){ const day=sched.days.find(d=>d.date===request.date); if(day) {day.status='WORKING'; io.emit('schedules:update', db.schedules);}}}catch(e){}
+      try{ const ws=toVietnamDateStr(getMonday(new Date(request.date))); const sched=db.schedules.find(s=>s.employeeId===request.employeeId && s.weekStart===ws); if(sched){ const day=sched.days.find(d=>d.date===request.date); if(day) {day.status='WORKING'; io.emit('schedules:update', db.schedules);}}}catch(e){}
       saveDB(); io.emit('emergencyRequests:update', db.emergencyRequests);
     }
   }
@@ -5934,7 +5936,7 @@ app.get('/api/reports/daily', authMiddleware, (req,res)=>{
   db.schedules.filter(s=>s.employeeId===employeeId).forEach(s=> s.days.forEach(d=>{ if(d.date>=start&&d.date<=end) schedMap[d.date]=d; }));
   const dates = [];
   let cur = new Date(start); const endD = new Date(end);
-  while(cur<=endD){ toVietnamDateStr(dates.push(cur)); cur.setDate(cur.getDate()+1); }
+  while(cur<=endD){ dates.push(toVietnamDateStr(cur)); cur.setDate(cur.getDate()+1); }
   const details = dates.map(date=>{
     const sched = schedMap[date];
     const att = db.attendances.find(a=>a.employeeId===employeeId && a.date===date);

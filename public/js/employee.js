@@ -1112,16 +1112,17 @@ async function loadSchedule(){
     const isOfficial = employee.type==='OFFICIAL' || employee.status==='OFFICIAL';
     let displaySchedules = [...mySchedules];
     if(isOfficial){
-      const nextMon = getMonday(new Date(Date.now()+7*24*60*60*toVietnamDateStr(1000)));
+      const nextMon = toVietnamDateStr(getMonday(new Date(Date.now()+7*24*60*60*1000)));
       const nextWeekSched = mySchedules.find(s=>s.weekStart===nextMon);
-      const hasOffForNextWeek = (await api('/api/off-requests?employeeId='+employee.employeeId).catch(()=>[])).some(r=>r.status==='APPROVED' && r.dates && r.dates.some(d=> nextWeekSched && nextWeekSched.days.some(day=>day.date===d)));
-      // Nếu chưa đăng ký OFF 2 ngày cho tuần sau thì chỉ hiện lịch tuần hiện tại, không hiện tuần tới (dù có draft)
-      // Nếu đã đăng ký OFF nhưng tuần sau chưa được HR duyệt (approvalStatus !== 'APPROVED') thì hiện trạng thái chờ duyệt
+      // Fix: kiểm tra OFF theo khoảng ngày tuần sau (T2-CN), không phụ thuộc nextWeekSched đã tồn tại hay chưa — để realtime cập nhật ngay sau khi đăng ký
+      const nextWeekDates = [];
+      for(let _i=0; _i<7; _i++){ const _d=new Date(nextMon); _d.setDate(new Date(nextMon).getDate()+_i); nextWeekDates.push(toVietnamDateStr(_d)); }
+      const hasOffForNextWeek = (await api('/api/off-requests?employeeId='+employee.employeeId).catch(()=>[])).some(r=>r.status==='APPROVED' && r.dates && r.dates.some(d=> nextWeekDates.includes(d)));
+      // Fix: hiển thị lịch tuần sau ngay khi NV đã đăng ký OFF 2 ngày (realtime), không chờ HR duyệt draft
       displaySchedules = mySchedules.filter(s=>{
         if(s.weekStart===nextMon){
-          // Chỉ hiện tuần sau nếu đã đăng ký OFF đủ 2 ngày và đã được duyệt (hoặc không có draft)
+          // Chỉ ẩn tuần sau nếu chưa đăng ký OFF; nếu đã có OFF phê duyệt thì hiển thị luôn kể cả draft PENDING (để NV thấy OFF ngay)
           if(!hasOffForNextWeek) return false;
-          if(s.approvalStatus && s.approvalStatus!=='APPROVED') return false;
         }
         // Ẩn các tuần tới xa hơn (chỉ hiện hiện tại và tuần sau)
         const weekDate = new Date(s.weekStart);
@@ -1131,15 +1132,6 @@ async function loadSchedule(){
         return true;
       });
       if(displaySchedules.length===0){
-        // Kiểm tra nếu đã đăng ký OFF nhưng chưa duyệt thì hiện thông báo chờ
-        const offPending = hasOffForNextWeek && nextWeekSched && nextWeekSched.approvalStatus==='PENDING_APPROVAL';
-        if(offPending){
-          return el.innerHTML=`<div class="bg-amber-50 border border-amber-200 rounded-2xl p-5 text-center">
-            <i class="fa-solid fa-clock text-amber-500 text-3xl mb-3 block"></i>
-            <div class="font-black text-amber-900">LỊCH TUẦN SAU ĐANG CHỜ HR DUYỆT</div>
-            <div class="text-xs text-amber-700 mt-2">Bạn đã đăng ký OFF 2 ngày/tuần cho tuần sau (${fmtDMY(nextMon)}). AI đã tự động sắp lịch, HR đang xem xét và sẽ duyệt sớm. Lịch sẽ hiển thị sau khi HR bấm Duyệt.</div>
-          </div>`;
-        }
         return el.innerHTML='<div class="bg-white rounded-2xl border border-slate-200 p-8 text-center text-sm text-slate-400">Chưa có lịch tuần sau - vui lòng đăng ký OFF 2 ngày (T6 12:00 - T7 15:00) để AI sắp lịch</div>';
       }
     }
@@ -1316,7 +1308,7 @@ async function loadOff(){
   const nextMon = getMonday(new Date(Date.now()+7*24*60*60*1000));
   const nextWeekStr = toVietnamDateStr(nextMon);
   const dates=[];
-  for(let i=0;i<7;i++){ const d=new Date(nextMon); d.setDate(nextMon.getDate()+i); toVietnamDateStr(dates.push(d)); }
+  for(let i=0;i<7;i++){ const d=new Date(nextMon); d.setDate(nextMon.getDate()+i); dates.push(toVietnamDateStr(d)); }
 
   try{
     const win = await api('/api/off-window');

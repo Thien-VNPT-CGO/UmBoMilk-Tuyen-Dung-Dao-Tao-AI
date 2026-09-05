@@ -2167,12 +2167,12 @@ function getEmployeeTrainingProgress(emp) {
       const today = new Date(); today.setHours(0,0,0,0);
       const todayStr = toVietnamDateStr(today);
       const curMonStr = toVietnamDateStr(getMonday(today));
-      const nextMonStr = getMonday(new Date(Date.now()+7*24*60*60*toVietnamDateStr(1000)));
+      const nextMonStr = toVietnamDateStr(getMonday(new Date(Date.now()+7*24*60*60*1000)));
       let targetWeekStr = curMonStr;
       let sched = allSchedules.find(s=>s.employeeId===emp.employeeId && s.weekStart===targetWeekStr);
       // Nếu NV chính thức có ngày bắt đầu tương lai và tuần hiện tại là tuần chờ (partial), chọn tuần đầu tiên đủ 7 ngày làm việc
       if(emp.officialStartDate && todayStr < emp.officialStartDate){
-        const startMon = getMonday(new toVietnamDateStr(Date(emp.officialStartDate)));
+        const startMon = toVietnamDateStr(getMonday(new Date(emp.officialStartDate)));
         let candidate = new Date(startMon);
         if(emp.officialStartDate !== startMon){
           candidate.setDate(candidate.getDate()+7); // tuần đầu tiên đủ 7 ngày sau start
@@ -2207,7 +2207,7 @@ function getEmployeeTrainingProgress(emp) {
         // Nếu schedule chưa đủ 7 ngày (do mới tạo), bổ sung từ offRequests
         if(sched.days.length<7){
           const weekDates = [];
-          for(let i=0;i<7;i++){ const cur=new Date(wDate); cur.setDate(wDate.getDate()+i); toVietnamDateStr(weekDates.push(cur)); }
+          for(let i=0;i<7;i++){ const cur=new Date(wDate); cur.setDate(wDate.getDate()+i); weekDates.push(toVietnamDateStr(cur)); }
           // Nếu schedule thiếu, ước tính (không tính OFF đột xuất trên HR)
           if(working+off <7){
             const remaining = 7 - (working+off);
@@ -2217,7 +2217,7 @@ function getEmployeeTrainingProgress(emp) {
       } else {
         // Không có schedule: tính từ offRequests cho tuần target (không tính OFF đột xuất trên HR)
         const weekDates = [];
-        for(let i=0;i<7;i++){ const cur=new Date(wDate); cur.setDate(wDate.getDate()+i); toVietnamDateStr(weekDates.push(cur)); }
+        for(let i=0;i<7;i++){ const cur=new Date(wDate); cur.setDate(wDate.getDate()+i); weekDates.push(toVietnamDateStr(cur)); }
         off = allOff.filter(r=>r.employeeId===emp.employeeId && r.status==='APPROVED').reduce((s,r)=> s + r.dates.filter(d=> weekDates.includes(d)).length,0);
         working = 7 - off;
         if(working<0) working=0;
@@ -2253,8 +2253,8 @@ function getEmployeeOffProgress(emp) {
     try{
       const offList = (typeof offRequests!=='undefined' ? offRequests : []);
       // Đếm OFF tuần sau (next week Mon-Sun) - AI đã sắp lịch
-      const nextMon = getMonday(new Date(Date.now()+7*24*60*60*toVietnamDateStr(1000)));
-      const nextSun = new Date(new Date(nextMon).getTime()+6*24*60*60*toVietnamDateStr(1000));
+      const nextMon = toVietnamDateStr(getMonday(new Date(Date.now()+7*24*60*60*1000)));
+      const nextSun = new Date(new Date(nextMon).getTime()+6*24*60*60*1000);
       const countNextWeek = offList.filter(r=>r.employeeId===emp.employeeId && r.status==='APPROVED' && r.dates.some(d=>d>=nextMon && d<=nextSun)).reduce((s,r)=>s+r.dates.filter(d=>d>=nextMon && d<=nextSun).length,0);
       if(countNextWeek===2) return { count:2, label: '2/2 ngày OFF (tuần sau)', isFull: true };
       if(countNextWeek>0) return { count:countNextWeek, label: `${countNextWeek}/2 ngày OFF`, isFull: false };
