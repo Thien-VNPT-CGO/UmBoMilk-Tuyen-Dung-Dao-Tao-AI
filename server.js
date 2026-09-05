@@ -110,6 +110,7 @@ const DEFAULT_SETTINGS = {
   },
   googleDrive: { rootFolderId: '1-Wy-Di6KvfeGCKoTV7TSuFQpY_yKNy-1', backupFolderId: '1-Wy-Di6KvfeGCKoTV7TSuFQpY_yKNy-1', driveUrl: 'https://drive.google.com/drive/folders/1-Wy-Di6KvfeGCKoTV7TSuFQpY_yKNy-1' },
   googleForm: { formUrl: 'https://docs.google.com/forms/d/e/1FAIpQLSd9rRG4QLvmLclPseVVmpgPdizij1XYwiSTCgc6x2BPMfA_AA/viewform', mapping: {} },
+  finance: { webhookUrl: 'https://script.google.com/macros/s/AKfycbxYZhMjR9riLFQfYEkgLfub33XtWlSP2IokghTt82Lb4SQVL4tKxQyNACr69yC0ACA/exec', secret: 'umbomilk_secret_2026' },
   ai: { provider: 'openai', baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o', temperature: 0.7 },
   zalo: { oaId: '', accessToken: '', template: '', reminderEnabled: true },
   calendar: { clientId: '', clientSecret: '', calendarId: 'primary', duration: 30, reminderOnce: true },
@@ -494,6 +495,17 @@ if(process.env.GOOGLE_PRIVATE_KEY) {
   const pk = process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n');
   if(pk.includes('BEGIN PRIVATE KEY')) db.settings.googleSheet.privateKey = pk;
 }
+// Finance Webhook - đồng bộ sang Google Sheets Finance (4 sheet)
+if(process.env.FINANCE_WEBHOOK_URL){
+  if(!db.settings.finance) db.settings.finance={ webhookUrl: process.env.FINANCE_WEBHOOK_URL, secret: process.env.FINANCE_WEBHOOK_SECRET || 'umbomilk_secret_2026' };
+  else db.settings.finance.webhookUrl = process.env.FINANCE_WEBHOOK_URL;
+  // Đồng bộ ngược để tương thích cũ
+  db.settings.googleSheet.targetWebhookUrl2 = process.env.FINANCE_WEBHOOK_URL;
+  if(process.env.FINANCE_WEBHOOK_SECRET) db.settings.finance.secret = process.env.FINANCE_WEBHOOK_SECRET;
+}
+if(process.env.FINANCE_WEBHOOK_SECRET && db.settings.finance){
+  db.settings.finance.secret = process.env.FINANCE_WEBHOOK_SECRET;
+}
 if(process.env.GOOGLE_OAUTH_CLIENT_ID) db.settings.calendar.clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
 if(process.env.GOOGLE_OAUTH_CLIENT_SECRET) db.settings.calendar.clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
 if(process.env.GOOGLE_CALENDAR_ID) db.settings.calendar.calendarId = process.env.GOOGLE_CALENDAR_ID;
@@ -501,7 +513,7 @@ if(process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID) db.settings.googleDrive.rootFolderId
 if(process.env.GOOGLE_DRIVE_BACKUP_FOLDER_ID) db.settings.googleDrive.backupFolderId = process.env.GOOGLE_DRIVE_BACKUP_FOLDER_ID;
 // Log ràng buộc đã áp dụng
 console.log(`[CONFIG] Google Sheet Hub: Form=${db.settings.googleSheet.formResponsesSheetId.slice(0,8)}... DB=${db.settings.googleSheet.targetDatabaseSpreadsheetId.slice(0,8)}... Webhooks=${getAllWebhookUrls().length} [${getAllWebhookUrls().map(u=>u.slice(0,35)+'...').join(', ')}]`);
-console.log(`[CONFIG] Calendar: ${db.settings.calendar.clientId ? 'OAuth SET' : 'EMPTY'} • Drive: ${db.settings.googleDrive.rootFolderId ? db.settings.googleDrive.rootFolderId.slice(0,8)+'...' : 'EMPTY'}`);
+console.log(`[CONFIG] Finance: ${db.settings.finance?.webhookUrl ? db.settings.finance.webhookUrl.slice(0,35)+'...' : 'EMPTY'} • Calendar: ${db.settings.calendar.clientId ? 'OAuth SET' : 'EMPTY'} • Drive: ${db.settings.googleDrive.rootFolderId ? db.settings.googleDrive.rootFolderId.slice(0,8)+'...' : 'EMPTY'}`);
 // Fix mock attendance sai ca CA_TOI hiển thị Đang làm buổi sáng - realtime đúng Vietnam
 (function cleanupIncorrectAttendances(){
   try{
@@ -5721,6 +5733,8 @@ function getEnvLocked(){
   if(process.env.GOOGLE_SHEET_WEBHOOK_URL) locked['googleSheet.targetWebhookUrl']=true;
   if(process.env.GOOGLE_SHEET_WEBHOOK_URL_1) locked['googleSheet.targetWebhookUrl1']=true;
   if(process.env.GOOGLE_SHEET_WEBHOOK_URL_2) locked['googleSheet.targetWebhookUrl2']=true;
+  if(process.env.FINANCE_WEBHOOK_URL) locked['finance.webhookUrl']=true;
+  if(process.env.FINANCE_WEBHOOK_SECRET) locked['finance.secret']=true;
   if(process.env.GOOGLE_SHEET_WEBHOOK_SECRET) locked['googleSheet.secret']=true;
   if(process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL) locked['googleSheet.serviceAccountEmail']=true;
   if(process.env.GOOGLE_PRIVATE_KEY) locked['googleSheet.privateKey']=true;
