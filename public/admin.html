@@ -720,6 +720,34 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
         <div class="hidden"><table><tbody id="reportTbody"></tbody></table></div>
       </section>
 
+      <!-- Finance Keys - Kế toán -->
+      <section id="tab-finance-keys" class="tab-section hidden">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <h2 class="text-xl font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-coins text-sky-500"></i> Finance Keys <span class="text-xs font-bold bg-sky-100 text-sky-700 px-2 py-1 rounded-full border border-sky-200">Kế toán • WEEK/MONTH/YEAR</span></h2>
+          <div class="flex gap-2 flex-wrap">
+            <button onclick="generateFinanceKey('WEEK')" class="px-4 py-2 rounded-xl bg-blue-500 hover:bg-blue-600 text-white text-xs font-black shadow"><i class="fa-solid fa-plus"></i> Key Tuần (7 ngày)</button>
+            <button onclick="generateFinanceKey('MONTH')" class="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-black shadow"><i class="fa-solid fa-plus"></i> Key Tháng</button>
+            <button onclick="generateFinanceKey('YEAR')" class="px-4 py-2 rounded-xl bg-purple-500 hover:bg-purple-600 text-white text-xs font-black shadow"><i class="fa-solid fa-plus"></i> Key Năm</button>
+            <a href="/finance" target="_blank" class="px-4 py-2 rounded-xl bg-white border border-sky-200 text-sky-700 text-xs font-bold hover:bg-sky-50 flex items-center gap-1"><i class="fa-solid fa-arrow-up-right-from-square"></i> Mở Finance Web</a>
+          </div>
+        </div>
+        <div class="bg-amber-50 border border-amber-200 rounded-2xl p-3 text-xs text-amber-800 mb-3">
+          <i class="fa-solid fa-key text-amber-600"></i> Admin tạo Key theo <b>tuần / tháng / năm</b>, gửi cho kế toán. Kế toán chỉ cần nhập Key trên <b>/finance</b>, hết hạn tự động văng ra, phải xin key mới. Key lưu realtime, tự hết hạn đúng Vietnam.
+        </div>
+        <div class="bg-white rounded-2xl border border-pink-200 overflow-hidden shadow-sm">
+          <div class="p-3 border-b border-pink-100 flex justify-between items-center">
+            <span class="font-bold text-sm text-pink-900">Danh sách Finance Keys</span>
+            <span id="financeKeysCount" class="text-xs bg-sky-100 text-sky-700 px-2 py-1 rounded-full">0 keys</span>
+          </div>
+          <div class="overflow-auto max-h-[60vh]">
+            <table class="w-full text-sm">
+              <thead class="bg-sky-600 text-white text-xs font-black sticky top-0"><tr><th class="px-3 py-2 text-left">Key</th><th class="px-3 py-2">Loại</th><th class="px-3 py-2">Ghi chú</th><th class="px-3 py-2">Hết hạn</th><th class="px-3 py-2">Trạng thái</th><th class="px-3 py-2 text-right">Thao tác</th></tr></thead>
+              <tbody id="financeKeysTbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
       <!-- E-learning -->
       <section id="tab-elearning" class="tab-section hidden">
         <div class="flex items-center justify-between mb-4">

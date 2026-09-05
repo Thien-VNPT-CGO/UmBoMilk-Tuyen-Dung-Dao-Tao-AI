@@ -56,6 +56,7 @@ const NAV = [
   {id:'attendance', icon:'fa-camera', label:'Record điểm danh', desc:'GPS/Ảnh', group:'Vận hành'},
   {id:'zalo', icon:'fa-brands fa-viber', label:'Record Zalo', desc:'SENT/FAILED', group:'Vận hành'},
   {id:'report', icon:'fa-file-invoice', label:'Báo cáo chấm công', desc:'Lương', group:'Vận hành'},
+  {id:'finance-keys', icon:'fa-coins', label:'Finance Keys', badge:'Kế toán', group:'Hệ thống'},
   {id:'elearning', icon:'fa-graduation-cap', label:'E-learning', desc:'TEST', group:'Hệ thống'},
   {id:'settings', icon:'fa-gear', label:'Cài đặt', badge:'Admin', group:'Hệ thống'},
   {id:'audit', icon:'fa-shield-halved', label:'Audit Log', desc:'Security', group:'Hệ thống'},
@@ -344,6 +345,7 @@ function switchTab(id){
   if(id==='zalo') loadZalo();
   if(id==='report'){ loadReports(); loadReportAll(); switchReportTab('overview'); }
   if(id==='elearning') loadElearning();
+  if(id==='finance-keys') loadFinanceKeys();
   if(id==='settings') loadSettings();
   if(id==='audit') loadAudit();
   if(window.innerWidth<1024) document.getElementById('sidebar').classList.add('hidden');
@@ -515,7 +517,7 @@ function connectSocket(){
     console.error('Socket connect_error (Vercel→Render proxy):', err.message);
     updateModeBadge();
   });
-  const refreshEvents = ['employees:update','applicants:update','attendances:update','schedules:update','offRequests:update','emergencyRequests:update','deviceRequests:update','zalo:update','audit:new','sync:update','keys:update','notifications:update','testResults:update','settings:update','interviews:update','drive:update','overtime:update','leave:update','payrollPeriods:update','payrollSnapshots:update'];
+  const refreshEvents = ['employees:update','applicants:update','attendances:update','schedules:update','offRequests:update','emergencyRequests:update','deviceRequests:update','zalo:update','audit:new','sync:update','keys:update','notifications:update','testResults:update','settings:update','interviews:update','drive:update','overtime:update','leave:update','payrollPeriods:update','payrollSnapshots:update','financeKeys:update'];
   refreshEvents.forEach(ev=>{
     socket.on(ev, (data)=>{
       // debounce refresh current tab
@@ -558,6 +560,7 @@ function connectSocket(){
       if(active==='zalo') loadZalo();
       if(active==='report') { if(typeof loadReports==='function') loadReports(); if(typeof loadReportOverview==='function') loadReportOverview(); }
       if(active==='elearning') loadElearning();
+      if(active==='finance-keys') loadFinanceKeys();
       if(active==='settings') {/* */}
       if(active==='audit') loadAudit();
       // realtime drive / OT / leave toasts
@@ -565,6 +568,7 @@ function connectSocket(){
       if(ev==='overtime:update') showToast('⏱ OT realtime cập nhật', 'info');
       if(ev==='leave:update') showToast('🏖 Nghỉ phép realtime cập nhật', 'info');
       if(ev==='payrollSnapshots:update') showToast('💰 Payroll snapshot đã khóa - dữ liệu lương đóng băng', 'success');
+      if(ev==='financeKeys:update') { if(active==='finance-keys') loadFinanceKeys(); showToast('🔑 Finance Keys realtime cập nhật', 'info'); }
       // also update global badges
       updatePendingCount();
       updateModeBadge();
@@ -4852,6 +4856,45 @@ async function loadAudit(){
     </tr>
   `).join('');
 }
+
+// Finance Keys - Kế toán (WEEK/MONTH/YEAR)
+let financeKeysCache=[];
+async function loadFinanceKeys(){
+  try{
+    const list = await api('/api/finance-keys', {headers:{Authorization:'Bearer '+token}});
+    financeKeysCache = list;
+    const tbody=document.getElementById('financeKeysTbody');
+    const countEl=document.getElementById('financeKeysCount');
+    if(countEl) countEl.textContent=list.length+' keys';
+    if(!tbody) return;
+    if(list.length===0) return tbody.innerHTML='<tr><td colspan="6" class="text-center py-8 text-sm text-slate-400">Chưa có Finance Key nào - bấm Tạo Key</td></tr>';
+    tbody.innerHTML=list.map(k=>`
+      <tr class="hover:bg-slate-50">
+        <td class="px-3 py-2 font-mono text-xs font-bold">${k.key}</td>
+        <td class="px-3 py-2 text-center"><span class="text-[11px] font-black px-2 py-1 rounded-full ${k.type==='WEEK'?'bg-blue-100 text-blue-700':k.type==='MONTH'?'bg-emerald-100 text-emerald-700':'bg-purple-100 text-purple-700'}">${k.type}</span></td>
+        <td class="px-3 py-2 text-xs">${k.label||''}</td>
+        <td class="px-3 py-2 text-xs">${fmtDMYTime(k.expiresAt)}<div class="text-[11px] ${new Date(k.expiresAt).getTime()<=Date.now()?'text-red-600 font-bold': new Date(k.expiresAt).getTime()-Date.now()<86400000?'text-amber-600':''}">${k.status}${k.status==='ACTIVE'?' • còn '+Math.ceil((new Date(k.expiresAt).getTime()-Date.now())/86400000)+' ngày':''}</div></td>
+        <td class="px-3 py-2 text-center"><span class="text-[11px] font-black px-2 py-1 rounded-full ${k.status==='ACTIVE'?'bg-emerald-500 text-white':k.status==='EXPIRED'?'bg-slate-400 text-white':'bg-red-100 text-red-700'}">${k.status}</span></td>
+        <td class="px-3 py-2 text-right flex gap-1 justify-end">
+          <button onclick="copyFinanceKey('${k.key}')" class="text-xs bg-white border border-sky-200 text-sky-700 px-2 py-1 rounded-lg hover:bg-sky-50"><i class="fa-solid fa-copy"></i> Copy</button>
+          ${k.status==='ACTIVE'?`<button onclick="revokeFinanceKey('${k.id}')" class="text-xs bg-red-50 border border-red-200 text-red-600 px-2 py-1 rounded-lg hover:bg-red-100">Thu hồi</button>`:''}
+        </td>
+      </tr>
+    `).join('');
+  }catch(e){ console.error('loadFinanceKeys',e); }
+}
+async function generateFinanceKey(type){
+  try{
+    const key = await api('/api/finance-keys/generate', {method:'POST', headers:{Authorization:'Bearer '+token}, body:JSON.stringify({type})});
+    showToast(`Đã tạo Finance Key ${key.key} (${key.type}) hết hạn ${fmtDMYTime(key.expiresAt)}`,'success');
+    loadFinanceKeys();
+  }catch(e){ showToast(e.message,'error'); }
+}
+async function revokeFinanceKey(id){
+  if(!confirm('Thu hồi Finance Key này? Kế toán đang dùng sẽ bị văng ra ngay.')) return;
+  try{ await api('/api/finance-keys/'+id+'/revoke', {method:'POST', headers:{Authorization:'Bearer '+token}}); showToast('Đã thu hồi','success'); loadFinanceKeys(); }catch(e){ showToast(e.message,'error'); }
+}
+function copyFinanceKey(key){ navigator.clipboard.writeText(key).then(()=>showToast('Đã copy '+key,'success')); }
 
 // ShiftSwap HR (<24h)
 async function loadShiftSwapAdmin(){

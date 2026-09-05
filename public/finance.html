@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0ea5e9">
+<title>Ụm Bò Milk - Finance</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="/socket.io/socket.io.js"></script>
+<script>tailwind.config={theme:{extend:{fontFamily:{sans:['Be Vietnam Pro','sans-serif']}}}}</script>
+<style>body{font-family:'Be Vietnam Pro',sans-serif;background:#f0f9ff} .card{background:white;border:1px solid #e0f2fe;border-radius:20px;box-shadow:0 2px 16px rgba(14,165,233,.06);padding:18px}</style>
+</head>
+<body class="min-h-screen">
+<!-- Login overlay -->
+<div id="loginOverlay" class="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-auto" style="background:linear-gradient(140deg,#0c4a6e 0%,#0ea5e9 45%,#38bdf8 100%)">
+  <div class="absolute top-0 left-0 w-72 h-72 rounded-full pointer-events-none" style="background:radial-gradient(circle,rgba(255,255,255,.15),transparent 70%);transform:translate(-45%,-45%)"></div>
+  <div class="w-full max-w-md relative">
+    <div class="text-center mb-6">
+      <img src="/images/logo.png" alt="Ụm Bò Milk" class="w-16 h-16 rounded-2xl object-contain bg-white p-1 shadow-2xl mx-auto">
+      <div class="text-white font-black text-xl mt-3 tracking-wide">ỤM BÒ MILK • FINANCE</div>
+      <div class="text-white/80 text-sm font-medium mt-1">Kế toán • Tổng hợp báo cáo chấm công</div>
+      <div class="text-white/60 text-xs mt-1">Đăng nhập bằng Key do Admin cấp (WEEK/MONTH/YEAR)</div>
+    </div>
+    <div class="bg-white rounded-3xl overflow-hidden" style="box-shadow:0 24px 80px rgba(0,0,0,.28)">
+      <form id="loginForm" class="p-6 space-y-4">
+        <div>
+          <label class="text-[11px] font-black text-sky-600 uppercase tracking-widest">Key kích hoạt Finance</label>
+          <input id="financeKey" placeholder="FIN-W-XXXX-XXXX hoặc FIN-M-... / FIN-Y-..." class="w-full mt-2 px-4 py-3.5 rounded-2xl border-2 border-sky-100 bg-sky-50/40 focus:border-sky-400 focus:ring-4 focus:ring-sky-50 outline-none font-mono text-sm transition-all">
+        </div>
+        <div class="bg-amber-50 border border-amber-200 rounded-2xl p-3 flex gap-2">
+          <i class="fa-solid fa-key text-amber-500 mt-0.5 text-sm"></i>
+          <div class="text-xs font-semibold text-amber-700">Key do Admin cấp theo <strong>tuần / tháng / năm</strong>. Hết hạn tự động văng ra, phải xin key mới.</div>
+        </div>
+        <div id="loginError" class="hidden text-xs font-bold bg-red-50 text-red-700 border border-red-200 rounded-2xl px-4 py-3"></div>
+        <div id="keyInfo" class="hidden text-xs bg-sky-50 border border-sky-200 rounded-2xl p-3"></div>
+        <button type="submit" class="w-full font-black py-4 rounded-2xl text-white text-sm transition-all active:scale-95" style="background:linear-gradient(135deg,#0ea5e9,#0284c7);box-shadow:0 8px 24px rgba(14,165,233,.4)">
+          <i class="fa-solid fa-right-to-bracket mr-2"></i>ĐĂNG NHẬP FINANCE
+        </button>
+        <div class="text-center text-[11px] text-slate-400">
+          <a href="/admin" class="text-sky-600 font-bold">Cổng Admin</a> <span class="mx-1">•</span> <a href="/employee" class="text-sky-600 font-bold">Cổng Nhân viên</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- App -->
+<div id="app" class="hidden">
+  <header class="h-[64px] bg-white border-b border-sky-100 flex items-center justify-between px-4 sticky top-0 z-40 shadow-sm">
+    <div class="flex items-center gap-3">
+      <img src="/images/logo.png" alt="logo" class="w-10 h-10 rounded-xl object-contain bg-white p-1 shadow">
+      <div>
+        <div class="font-black text-sky-900 leading-none">ỤM BÒ MILK • FINANCE</div>
+        <div class="text-[11px] font-bold text-sky-600 flex items-center gap-1.5 mt-0.5">
+          <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+          Kế toán • <span id="keyLabel">—</span> • Hết hạn: <span id="keyExpiry">—</span>
+        </div>
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <span id="countdown" class="hidden text-xs font-black bg-amber-100 text-amber-700 border border-amber-200 px-3 py-1 rounded-full"></span>
+      <button onclick="logout()" class="w-10 h-10 rounded-xl bg-white border border-sky-100 text-sky-600 flex items-center justify-center hover:bg-sky-50"><i class="fa-solid fa-right-from-bracket"></i></button>
+    </div>
+  </header>
+
+  <main class="p-4 lg:p-6 max-w-7xl mx-auto space-y-4">
+    <!-- Controls -->
+    <div class="card flex flex-wrap items-center gap-3">
+      <div class="flex items-center gap-2">
+        <label class="text-xs font-bold text-slate-700">Tháng</label>
+        <input id="reportMonth" type="month" class="px-3 py-2 rounded-xl border border-sky-200 text-sm font-bold">
+      </div>
+      <div class="flex items-center gap-2">
+        <label class="text-xs font-bold text-slate-700">Chi nhánh</label>
+        <select id="reportBranch" class="px-3 py-2 rounded-xl border border-sky-200 text-sm font-bold">
+          <option value="">Tất cả CN</option>
+          <option value="CN1">CN1 - 130 Vạn kiếp</option>
+          <option value="CN2">CN2 - 261 Tô Hiến Thành</option>
+          <option value="CN3">CN3 - 120 Hoàng Diệu 2</option>
+          <option value="CN4">CN4 - 111 Tôn Đản</option>
+        </select>
+      </div>
+      <button onclick="loadAll()" class="ml-auto px-4 py-2 rounded-xl bg-sky-500 hover:bg-sky-600 text-white text-sm font-black shadow"><i class="fa-solid fa-rotate mr-1"></i> Tải lại</button>
+      <button onclick="exportFinance()" class="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-black shadow"><i class="fa-solid fa-file-csv mr-1"></i> Xuất CSV</button>
+    </div>
+
+    <!-- Tabs -->
+    <div class="flex flex-wrap gap-2 bg-white border border-sky-100 rounded-2xl p-2">
+      <button onclick="switchTab('overview')" id="tabBtn-overview" class="flex-1 min-w-[120px] px-3 py-2 rounded-xl text-sm font-black bg-sky-500 text-white">Tổng quan</button>
+      <button onclick="switchTab('monthly')" id="tabBtn-monthly" class="flex-1 min-w-[120px] px-3 py-2 rounded-xl text-sm font-bold bg-white border border-sky-100">Bảng chốt công</button>
+      <button onclick="switchTab('daily')" id="tabBtn-daily" class="flex-1 min-w-[120px] px-3 py-2 rounded-xl text-sm font-bold bg-white border border-sky-100">Chi tiết ngày</button>
+      <button onclick="switchTab('anomalies')" id="tabBtn-anomalies" class="flex-1 min-w-[120px] px-3 py-2 rounded-xl text-sm font-bold bg-white border border-sky-100">Sai lệch</button>
+    </div>
+
+    <!-- Overview -->
+    <div id="tab-overview" class="tab-section">
+      <div id="kpiGrid" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3"></div>
+    </div>
+
+    <!-- Monthly -->
+    <div id="tab-monthly" class="tab-section hidden">
+      <div class="card overflow-hidden p-0">
+        <div class="overflow-auto max-h-[60vh]">
+          <table class="w-full text-sm">
+            <thead class="bg-sky-600 text-white text-xs font-black sticky top-0"><tr><th class="px-3 py-2 text-left">NV</th><th class="px-2 py-2">Tiêu chuẩn</th><th class="px-2 py-2">Thực tế</th><th class="px-2 py-2">Tính lương</th><th class="px-2 py-2">Trễ</th><th class="px-2 py-2">Thiếu</th></tr></thead>
+            <tbody id="monthlyTbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Daily -->
+    <div id="tab-daily" class="tab-section hidden">
+      <div class="card">
+        <div class="flex items-center gap-2 mb-3">
+          <select id="dailyEmp" class="flex-1 px-3 py-2 rounded-xl border border-sky-200 text-sm font-bold"></select>
+          <button onclick="loadDaily()" class="px-4 py-2 rounded-xl bg-sky-500 text-white text-sm font-bold">Xem</button>
+        </div>
+        <div class="overflow-auto max-h-[60vh]">
+          <table class="w-full text-xs">
+            <thead class="bg-sky-600 text-white font-black sticky top-0"><tr><th class="px-2 py-2">Ngày</th><th class="px-2 py-2">Ca</th><th class="px-2 py-2">IN</th><th class="px-2 py-2">OUT</th><th class="px-2 py-2">Trạng thái</th></tr></thead>
+            <tbody id="dailyTbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Anomalies -->
+    <div id="tab-anomalies" class="tab-section hidden">
+      <div id="anomalyList" class="space-y-2"></div>
+    </div>
+  </main>
+</div>
+
+<script src="/js/finance.js"></script>
+</body>
+</html>

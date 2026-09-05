@@ -164,7 +164,8 @@ let db = {
   overtimeRequests: [],
   leaveRequests: [],
   driveFiles: [],
-  payrollSnapshots: []
+  payrollSnapshots: [],
+  financeKeys: []
 };
 
 // === SECRET ENCRYPTION HELPERS (Realtime automation needs secure storage) ===
@@ -253,6 +254,7 @@ function loadDB() {
       if (!db.penalties) db.penalties = [];
       if (!db.driveFiles) db.driveFiles = [];
       if (!db.payrollSnapshots) db.payrollSnapshots = [];
+      if (!db.financeKeys) db.financeKeys = [];
       if (!db.overtimeRequests) db.overtimeRequests = [];
       if (!db.leaveRequests) db.leaveRequests = [];
     } else {
@@ -3144,6 +3146,20 @@ function realtimeAutomationPoller(){
     }
   });
   if(changed) saveDB();
+  // 2b. Finance keys auto-expire (WEEK/MONTH/YEAR) - het han tu vang ra
+  if(db.financeKeys){
+    let financeChanged=false;
+    db.financeKeys.forEach(k=>{
+      if(k.status==='ACTIVE' && k.expiresAt && new Date(k.expiresAt).getTime() <= now){
+        k.status='EXPIRED';
+        financeChanged=true;
+        console.log(`[AUTO] FinanceKey ${k.key} EXPIRED (${k.type})`);
+        // emit force logout for finance clients
+        io.emit('finance:forceLogout', { key: k.key, reason: `Key ${k.key} đã hết hạn (${k.type}) - ${k.expiresAt}` });
+      }
+    });
+    if(financeChanged){ saveDB(); io.emit('financeKeys:update', db.financeKeys); changed=true; }
+  }
   // 3. Training shift change auto-approve sau 15 phút (HR không tác động)
   let trainingChanged=false;
   db.trainingShiftRequests.forEach(r=>{
@@ -6432,7 +6448,7 @@ app.post('/api/system/reset', authMiddleware, roleCheck(['Admin']), (req,res)=>{
   if(scope==='ALL'){
     const keepSettings = db.settings;
     db.employees=[]; db.applicants=[]; db.interviews=[]; db.attendances=[]; db.schedules=[]; db.offRequests=[]; db.emergencyRequests=[]; db.deviceRequests=[]; db.trainingShiftRequests=[]; db.shiftSwapRequests=[]; db.testResults=[]; db.keys=[]; db.zaloRecords=[]; db.notifications=[]; db.syncQueue=[]; db.auditLogs=[];
-    db.driveFiles=[]; db.payrollSnapshots=[]; db.overtimeRequests=[]; db.leaveRequests=[]; db.payrollPeriods=[]; db.attendanceAdjustments=[]; db.penalties=[];
+    db.driveFiles=[]; db.payrollSnapshots=[]; db.overtimeRequests=[]; db.leaveRequests=[]; db.payrollPeriods=[]; db.attendanceAdjustments=[]; db.penalties=[]; db.financeKeys=[];
     db.settings = keepSettings || DEFAULT_SETTINGS;
   } else if(scope==='EMPLOYEES'){
     db.employees=[]; db.keys=[]; db.attendances=[]; db.schedules=[];
@@ -6475,11 +6491,184 @@ app.post('/api/interviews/clear-all', authMiddleware, roleCheck(['Admin']), (req
 });
 // ponytail: giữ nguyên settings để không làm gãy webhook/secret; nếu cần reset riêng cấu hình thì thêm scope SETTINGS sau.
 
+// ============ FINANCE WEB APP - Kế toán tổng hợp báo cáo chấm công ============
+if(!db.financeKeys) db.financeKeys = [];
+function generateFinanceKey(type){
+  const prefix = type==='WEEK' ? 'FIN-W' : type==='MONTH' ? 'FIN-M' : 'FIN-Y';
+  const rnd = Math.random().toString(36).substring(2,10).toUpperCase();
+  return `${prefix}-${rnd}-${Date.now().toString(36).toUpperCase().slice(-4)}`;
+}
+function getFinanceExpiry(type){
+  const now = new Date();
+  if(type==='WEEK'){ const d=new Date(now); d.setDate(now.getDate()+7); return d; }
+  if(type==='YEAR'){ const d=new Date(now); d.setFullYear(now.getFullYear()+1); return d; }
+  // MONTH default
+  const d=new Date(now); d.setMonth(now.getMonth()+1); return d;
+}
+// Admin tạo key Finance theo tuần/tháng/năm
+app.post('/api/finance-keys/generate', authMiddleware, roleCheck(['Admin']), (req,res)=>{
+  const { type, label } = req.body; // WEEK, MONTH, YEAR
+  const t = (type||'MONTH').toUpperCase();
+  if(!['WEEK','MONTH','YEAR'].includes(t)) return res.status(400).json({error:'type phải là WEEK/MONTH/YEAR'});
+  const key = generateFinanceKey(t);
+  const expiresAt = getFinanceExpiry(t).toISOString();
+  const rec = { id: uuidv4(), key, type: t, label: label||`Kế toán ${t} ${new Date().toLocaleDateString('vi-VN', {timeZone:'Asia/Ho_Chi_Minh'})}`, expiresAt, createdAt: new Date().toISOString(), createdBy: req.user.username, status:'ACTIVE', version:1 };
+  db.financeKeys.unshift(rec);
+  if(db.financeKeys.length>100) db.financeKeys.pop();
+  audit(req.user.username,'CREATE_FINANCE_KEY','FINANCE_KEY',null,rec, req.ip);
+  saveDB();
+  io.emit('financeKeys:update', db.financeKeys);
+  res.json(rec);
+});
+app.get('/api/finance-keys', authMiddleware, roleCheck(['Admin']), (req,res)=>{
+  // auto-expire check
+  const now = Date.now();
+  let changed=false;
+  db.financeKeys.forEach(k=>{ if(k.status==='ACTIVE' && new Date(k.expiresAt).getTime() <= now){ k.status='EXPIRED'; changed=true; } });
+  if(changed){ saveDB(); io.emit('financeKeys:update', db.financeKeys); }
+  res.json(db.financeKeys);
+});
+app.post('/api/finance-keys/:id/revoke', authMiddleware, roleCheck(['Admin']), (req,res)=>{
+  const rec = db.financeKeys.find(k=>k.id===req.params.id);
+  if(!rec) return res.status(404).json({error:'Not found'});
+  const before={...rec};
+  rec.status='REVOKED'; rec.revokedBy=req.user.username; rec.revokedAt=new Date().toISOString();
+  audit(req.user.username,'REVOKE_FINANCE_KEY','FINANCE_KEY',before,rec, req.ip);
+  saveDB(); io.emit('financeKeys:update', db.financeKeys);
+  res.json(rec);
+});
+// Finance login bằng key (không cần username/password)
+app.post('/api/auth/finance-login', (req,res)=>{
+  const { key } = req.body;
+  if(!key) return res.status(400).json({error:'Thiếu key'});
+  const rec = db.financeKeys.find(k=>k.key===key);
+  if(!rec) return res.status(401).json({error:'Key không hợp lệ'});
+  if(rec.status!=='ACTIVE') return res.status(403).json({error:`Key đã ${rec.status} (${rec.status==='EXPIRED'?'hết hạn':'bị thu hồi'})`});
+  if(new Date(rec.expiresAt).getTime() <= Date.now()){
+    rec.status='EXPIRED'; saveDB(); io.emit('financeKeys:update', db.financeKeys);
+    return res.status(403).json({error:'Key đã hết hạn', expired:true});
+  }
+  const expSec = Math.floor((new Date(rec.expiresAt).getTime() - Date.now())/1000);
+  if(expSec <=0) return res.status(403).json({error:'Key đã hết hạn'});
+  const token = jwt.sign({ financeKeyId: rec.id, key: rec.key, role:'Finance', type: rec.type, label: rec.label }, JWT_SECRET, {expiresIn: expSec});
+  audit('FINANCE_KEY','FINANCE_LOGIN','FINANCE_KEY',null,{key: rec.key, type: rec.type}, req.ip);
+  res.json({ token, key: rec, expiresAt: rec.expiresAt, expSec });
+});
+// Middleware cho Finance
+function financeAuthMiddleware(req,res,next){
+  const token = req.headers.authorization?.replace('Bearer ','');
+  if(!token) return res.status(401).json({error:'No token', needLogin:true});
+  try{
+    const decoded = jwt.verify(token, JWT_SECRET);
+    if(decoded.role!=='Finance') return res.status(403).json({error:'Not Finance role'});
+    // check key still active
+    const rec = db.financeKeys.find(k=>k.id===decoded.financeKeyId || k.key===decoded.key);
+    if(!rec) return res.status(401).json({error:'Key không tồn tại', needLogin:true});
+    if(rec.status!=='ACTIVE') return res.status(403).json({error:`Key đã ${rec.status}`, needLogin:true, expired: rec.status==='EXPIRED'});
+    if(new Date(rec.expiresAt).getTime() <= Date.now()){
+      rec.status='EXPIRED'; saveDB(); io.emit('financeKeys:update', db.financeKeys);
+      return res.status(403).json({error:'Key đã hết hạn', needLogin:true, expired:true});
+    }
+    req.finance = decoded;
+    req.financeKey = rec;
+    next();
+  }catch(e){ return res.status(401).json({error:'Invalid/Expired token', needLogin:true, expired:true}); }
+}
+// Finance reports - chỉ đọc báo cáo chấm công (reuse logic)
+app.get('/api/finance/reports/overview', financeAuthMiddleware, (req,res)=>{
+  const { month, branch } = req.query;
+  const m = month || new Date().toLocaleDateString('en-CA', {timeZone:'Asia/Ho_Chi_Minh'}).slice(0,7);
+  // reuse overview logic (copy from /api/reports/overview)
+  const start = m+'-01'; const end = m+'-31';
+  let emps = [...db.employees].filter(e=>e.status!=='ARCHIVED');
+  if(branch) emps = emps.filter(e=>e.branchId===branch);
+  const activeEmps = emps.filter(e=>e.status!=='ARCHIVED');
+  let totalScheduledDays=0, totalScheduledHours=0;
+  activeEmps.forEach(emp=>{
+    const scheds = db.schedules.filter(s=>s.employeeId===emp.employeeId);
+    scheds.forEach(s=> s.days.forEach(d=>{ if(d.date>=start&&d.date<=end && (d.status==='WORKING'||d.status==='SUBSTITUTE')){ totalScheduledDays++; totalScheduledHours+= (db.settings.payroll.shifts[emp.shift]?.hours||5); }}));
+  });
+  if(totalScheduledDays===0){ const daysInMonth=new Date(parseInt(m.split('-')[0]), parseInt(m.split('-')[1]),0).getDate(); const avgScheduled=Math.max(0,daysInMonth-4); totalScheduledDays=activeEmps.length*avgScheduled; totalScheduledHours=totalScheduledDays*5.5; }
+  const attsInMonth=db.attendances.filter(a=>a.date>=start&&a.date<=end&&a.checkIn);
+  const totalActualDays=attsInMonth.filter(a=>a.checkIn).length;
+  const totalActualHours=attsInMonth.reduce((s,a)=>{ const emp=db.employees.find(e=>e.employeeId===a.employeeId); const h=(db.settings.payroll.shifts[emp?.shift||a.shift]?.hours)||5; return s+(a.checkIn&&a.checkOut?h:0); },0);
+  const offApproved=db.offRequests.filter(r=>r.status==='APPROVED'&&r.dates.some(d=>d>=start&&d<=end)).reduce((s,r)=>s+r.dates.filter(d=>d>=start&&d<=end).length,0);
+  const emergApproved=db.emergencyRequests.filter(r=>r.status==='APPROVED'&&r.date>=start&&r.date<=end).length;
+  const paidLeave=offApproved; const totalPayableDays=totalActualDays+paidLeave+emergApproved; const totalPayableHours=totalActualHours+(paidLeave*5.5);
+  const otHours=(db.overtimeRequests||[]).filter(r=>r.status==='APPROVED'&&r.date>=start&&r.date<=end).reduce((s,r)=>s+(r.hours||0),0);
+  let lateCount=0, lateMinutes=0, earlyCount=0, earlyMinutes=0, missingIn=0, missingOut=0;
+  attsInMonth.forEach(a=>{ if(a.violations){ if(a.violations.includes('LATE')){lateCount++; lateMinutes+=15;} if(a.violations.includes('EARLY_LEAVE')){earlyCount++; earlyMinutes+=15;} if(a.violations.includes('NO_CHECKOUT')) missingOut++; } if(!a.checkIn) missingIn++; else if(!a.checkOut) missingOut++; });
+  let absentNoCheckIn=0; activeEmps.forEach(emp=>{ const scheds=db.schedules.filter(s=>s.employeeId===emp.employeeId); const scheduledDates=new Set(); scheds.forEach(s=> s.days.forEach(d=>{ if(d.date>=start&&d.date<=end && (d.status==='WORKING'||d.status==='SUBSTITUTE')) scheduledDates.add(d.date); })); scheduledDates.forEach(date=>{ if(!db.attendances.find(a=>a.employeeId===emp.employeeId&&a.date===date&&a.checkIn)) absentNoCheckIn++; }); }); missingIn=Math.max(missingIn, absentNoCheckIn);
+  const pendingAdjust=(db.attendanceAdjustments||[]).filter(r=>r.status==='PENDING').length;
+  const period=db.payrollPeriods.find(p=>p.month===m); const status=period?period.status:'DRAFT';
+  res.json({ month:m, start, end, branch: branch||'ALL', totalEmployees:activeEmps.length, totalScheduledDays, totalScheduledHours:Math.round(totalScheduledHours*10)/10, totalActualDays, totalActualHours:Math.round(totalActualHours*10)/10, totalPayableDays, totalPayableHours:Math.round(totalPayableHours*10)/10, totalOT:otHours, paidLeave, unpaidLeave:0, lateCount, lateMinutes, earlyCount, earlyMinutes, missingCheckIn:missingIn, missingCheckOut:missingOut, pendingAdjust, locked:status==='LOCKED'?1:0, pending:status!=='LOCKED'?1:0, status, financeKey: req.financeKey.key, expiresAt: req.financeKey.expiresAt });
+});
+app.get('/api/finance/reports/monthly', financeAuthMiddleware, (req,res)=>{
+  const { month, branch } = req.query; const m = month || new Date().toLocaleDateString('en-CA', {timeZone:'Asia/Ho_Chi_Minh'}).slice(0,7); const start=m+'-01'; const end=m+'-31';
+  let emps=[...db.employees].filter(e=>e.status!=='ARCHIVED'); if(branch) emps=emps.filter(e=>e.branchId===branch);
+  const rows=emps.map(emp=>{
+    const scheds=db.schedules.filter(s=>s.employeeId===emp.employeeId); let scheduledDays=0, scheduledHours=0;
+    scheds.forEach(s=> s.days.forEach(d=>{ if(d.date>=start&&d.date<=end && (d.status==='WORKING'||d.status==='SUBSTITUTE')){ scheduledDays++; scheduledHours+= (db.settings.payroll.shifts[emp.shift]?.hours||5); }}));
+    const atts=db.attendances.filter(a=>a.employeeId===emp.employeeId&&a.date>=start&&a.date<=end&&a.checkIn);
+    const actualDays=atts.filter(a=>a.checkIn).length; const actualHours=atts.filter(a=>a.checkIn&&a.checkOut).length*((db.settings.payroll.shifts[emp.shift]?.hours)||5);
+    const offApproved=db.offRequests.filter(r=>r.employeeId===emp.employeeId&&r.status==='APPROVED'&&r.dates.some(d=>d>=start&&d<=end)).reduce((s,r)=>s+r.dates.filter(d=>d>=start&&d<=end).length,0);
+    const payableDays=actualDays+offApproved; const payableHours=actualHours+offApproved*5.5;
+    let lateCount=0, lateMin=0, earlyCount=0, earlyMin=0, missIn=0, missOut=0;
+    atts.forEach(a=>{ if(a.violations){ if(a.violations.includes('LATE')){lateCount++; lateMin+=15;} if(a.violations.includes('EARLY_LEAVE')){earlyCount++; earlyMin+=15;} if(a.violations.includes('NO_CHECKOUT')) missOut++; } if(!a.checkIn) missIn++; else if(!a.checkOut) missOut++; });
+    const scheduledDates=new Set(); scheds.forEach(s=> s.days.forEach(d=>{ if(d.date>=start&&d.date<=end && (d.status==='WORKING'||d.status==='SUBSTITUTE')) scheduledDates.add(d.date); }));
+    let absent=0; scheduledDates.forEach(date=>{ if(!atts.find(a=>a.date===date)) absent++; }); missIn=Math.max(missIn, absent);
+    const period=db.payrollPeriods.find(p=>p.month===m);
+    return { employeeId:emp.employeeId, name:emp.name, branchId:emp.branchId, branchName:(db.branches.find(b=>b.id===emp.branchId)?.name||emp.branchId), type:emp.type, shift:emp.shift, startDate:emp.startDate, standardDays:scheduledDays, scheduledDays, actualDays, payableDays, standardHours:scheduledHours, actualHours, payableHours:Math.round(payableHours*10)/10, paidLeave:offApproved, unpaidLeave:0, otHours:0, lateCount, lateMin, earlyCount, earlyMin, missingIn:missIn, missingOut:missOut, status:period?period.status:'DRAFT' };
+  });
+  res.json(rows);
+});
+app.get('/api/finance/reports/daily', financeAuthMiddleware, (req,res)=>{
+  const { employeeId, month } = req.query; if(!employeeId) return res.status(400).json({error:'Thiếu employeeId'}); const m = month || new Date().toLocaleDateString('en-CA', {timeZone:'Asia/Ho_Chi_Minh'}).slice(0,7); const start=m+'-01'; const end=m+'-31';
+  const emp=db.employees.find(e=>e.employeeId===employeeId); if(!emp) return res.status(404).json({error:'Not found'});
+  const schedMap={}; db.schedules.filter(s=>s.employeeId===employeeId).forEach(s=> s.days.forEach(d=>{ if(d.date>=start&&d.date<=end) schedMap[d.date]=d; }));
+  const dates=[]; let cur=new Date(start); const endD=new Date(end); while(cur<=endD){ dates.push(cur.toLocaleDateString('en-CA', {timeZone:'Asia/Ho_Chi_Minh'})); cur.setDate(cur.getDate()+1); }
+  const details=dates.map(date=>{
+    const sched=schedMap[date]; const att=db.attendances.find(a=>a.employeeId===employeeId&&a.date===date);
+    const shift=sched?sched.shift:emp.shift; const shiftHours=(db.settings.payroll.shifts[shift]?.hours)||5;
+    let actualHours=0, lateMin=0, earlyMin=0, ot=0, status='—';
+    if(sched&&sched.status==='OFF') status='OFF'; else if(!att||!att.checkIn){ status=sched&&sched.status==='WORKING'?'ABSENT':'—'; } else if(att.checkIn&&!att.checkOut){ status='MISSING_CHECKOUT'; } else if(att.violations&&att.violations.includes('LATE')){ status='LATE'; lateMin=15; actualHours=shiftHours-0.25; } else if(att.status==='COMPLETED'){ status='PRESENT'; actualHours=shiftHours; } else status=att.status||'PRESENT';
+    return { date, dayName:['CN','T2','T3','T4','T5','T6','T7'][new Date(date).getDay()], shift, shiftHours, checkIn:att?.checkIn?.time||'', checkOut:att?.checkOut?.time||'', actualHours, lateMin, earlyMin, ot, status, schedStatus:sched?.status||'', violations:att?.violations||[] };
+  });
+  res.json(details);
+});
+app.get('/api/finance/reports/anomalies', financeAuthMiddleware, (req,res)=>{
+  const { month, branch } = req.query; const m = month || new Date().toLocaleDateString('en-CA', {timeZone:'Asia/Ho_Chi_Minh'}).slice(0,7); const start=m+'-01', end=m+'-31';
+  let emps=[...db.employees].filter(e=>e.status!=='ARCHIVED'); if(branch) emps=emps.filter(e=>e.branchId===branch);
+  const anomalies=[]; emps.forEach(emp=>{
+    const scheds=db.schedules.filter(s=>s.employeeId===emp.employeeId); const schedDates=new Set();
+    scheds.forEach(s=> s.days.forEach(d=>{ if(d.date>=start&&d.date<=end && (d.status==='WORKING'||d.status==='SUBSTITUTE')) schedDates.add(d.date); }));
+    schedDates.forEach(date=>{ const att=db.attendances.find(a=>a.employeeId===emp.employeeId&&a.date===date); if(!att||!att.checkIn) anomalies.push({ employeeId:emp.employeeId, name:emp.name, branchId:emp.branchId, date, type:'MISSING_CHECK_IN', desc:'Có lịch làm nhưng không chấm công', schedStatus:'WORKING' }); else if(att.checkIn&&!att.checkOut) anomalies.push({ employeeId:emp.employeeId, name:emp.name, branchId:emp.branchId, date, type:'MISSING_CHECK_OUT', desc:'Thiếu Check-out', checkIn:att.checkIn.time }); });
+    db.attendances.filter(a=>a.employeeId===emp.employeeId&&a.date>=start&&a.date<=end&&a.checkIn).forEach(att=>{ if(!schedDates.has(att.date)) anomalies.push({ employeeId:emp.employeeId, name:emp.name, branchId:emp.branchId, date:att.date, type:'NO_SCHEDULE', desc:'Có chấm công nhưng không có lịch', checkIn:att.checkIn.time }); });
+  });
+  (db.overtimeRequests||[]).filter(r=>r.status==='PENDING'&&r.date>=start&&r.date<=end).forEach(r=>{ const emp=db.employees.find(e=>e.employeeId===r.employeeId); anomalies.push({ employeeId:r.employeeId, name:emp?.name||r.employeeId, branchId:emp?.branchId, date:r.date, type:'OT_PENDING', desc:'OT chưa duyệt' }); });
+  res.json(anomalies);
+});
+app.get('/api/finance/export/payroll-input', financeAuthMiddleware, (req,res)=>{
+  const { month, branch } = req.query; const m = month || new Date().toLocaleDateString('en-CA', {timeZone:'Asia/Ho_Chi_Minh'}).slice(0,7);
+  let emps=[...db.employees].filter(e=>e.status!=='ARCHIVED'); if(branch) emps=emps.filter(e=>e.branchId===branch);
+  const header='MaNV,Thang,NgayTieuChuan,NgayThucTe,NghiPhep,NgayTinhLuong,GioTieuChuan,GioThucTe,GioTinhLuong,TangCa,SoLanTre,SoPhutTre,SoLanVeSom,SoPhutVeSom\n';
+  const rows=emps.map(emp=>{
+    const scheds=db.schedules.filter(s=>s.employeeId===emp.employeeId); let stdDays=0; scheds.forEach(s=> s.days.forEach(d=>{ if(d.date.startsWith(m) && (d.status==='WORKING'||d.status==='SUBSTITUTE')) stdDays++; }));
+    const atts=db.attendances.filter(a=>a.employeeId===emp.employeeId&&a.date.startsWith(m)&&a.checkIn);
+    const actual=atts.length; const paid=db.offRequests.filter(r=>r.employeeId===emp.employeeId&&r.status==='APPROVED'&&r.dates.some(d=>d.startsWith(m))).reduce((s,r)=>s+r.dates.filter(d=>d.startsWith(m)).length,0);
+    const payable=actual+paid; const stdH=stdDays*5.5, actualH=actual*5.5, payableH=payable*5.5;
+    return `${emp.employeeId},${m},${stdDays},${actual},${paid},${payable},${stdH},${actualH},${payableH},0,0,0,0,0`;
+  }).join('\n');
+  res.setHeader('Content-Type','text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition',`attachment; filename="Du_lieu_tinh_luong_${m.replace('-','_')}_FINANCE.csv"`);
+  return res.send('\uFEFF'+header+rows);
+});
 
 // Serve frontend
 app.get('/', (req,res)=> res.sendFile(path.join(__dirname,'public','index.html')));
 app.get('/admin', (req,res)=> res.sendFile(path.join(__dirname,'public','admin.html')));
 app.get('/employee', (req,res)=> res.sendFile(path.join(__dirname,'public','employee.html')));
+app.get('/finance', (req,res)=> res.sendFile(path.join(__dirname,'public','finance.html')));
 
 // Socket - Realtime with optional auth + heartbeat
 io.use((socket, next)=>{
