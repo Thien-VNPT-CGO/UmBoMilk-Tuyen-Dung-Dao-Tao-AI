@@ -2735,15 +2735,48 @@ function renderEmployeesStore(){
               }catch(_){}
               const isOffSchedule = schedToday && schedToday.status==='OFF';
               const isWaiting = schedToday && schedToday.status==='WAITING_OFFICIAL';
+              // Realtime đúng giờ Vietnam theo ca: CA_TOI buổi sáng phải hiện Sắp tới, không phải Đang làm
+              const nowVN = getVietnamNow();
+              const nowMins = nowVN.getHours()*60+nowVN.getMinutes();
+              const normTodayShift = (typeof normalizeShift==='function' ? normalizeShift(schedToday?.shift || e.shift) : (schedToday?.shift || e.shift));
+              const shiftTimeMap = {CA_SANG:'07:00-12:00', CA_CHIEU:'12:00-18:00', CA_TRUA:'12:00-18:00', CA_TOI:'18:00-23:00'};
+              const timeStrToday = shiftTimeMap[normTodayShift] || '07:00-12:00';
+              const [shStrToday] = timeStrToday.split('-');
+              const [shT, smT] = shStrToday.split(':').map(Number);
+              const startMinsToday = shT*60+smT;
+              const openMinsToday = startMinsToday - 30;
+              const closeMinsToday = startMinsToday + 60;
+              const isBeforeWindow = nowMins < openMinsToday;
+              const isAfterWindow = nowMins > closeMinsToday;
               let badge='', cls='', timeInfo='', gpsInfo='';
               if(isOffSchedule){
                 badge='OFF'; cls='bg-slate-100 text-slate-600 border border-slate-200'; timeInfo='Nghỉ theo lịch'; 
               } else if(isWaiting){
                 badge='CHỜ'; cls='bg-slate-200 text-slate-500 border'; timeInfo='Chưa chính thức';
+              } else if(isBeforeWindow){
+                // Chưa đến giờ mở check-in Vietnam (VD CA_TOI 18:00 mà đang 09:00 sáng)
+                if(!attToday || !attToday.checkIn){
+                  badge='SẮP TỚI'; cls='bg-blue-50 text-blue-700 border border-blue-200'; timeInfo=`Ca ${normTodayShift.replace('CA_','')} ${timeStrToday} • Mở ${String(Math.floor(openMinsToday/60)).padStart(2,'0')}:${String(openMinsToday%60).padStart(2,'0')}`;
+                } else {
+                  // Có check-in nhưng trước giờ mở -> sai ca, hiển thị cảnh báo
+                  badge='⚠ Sai ca'; cls='bg-amber-400 text-white'; timeInfo=`IN ${attToday.checkIn.time} (trước giờ)`;
+                }
               } else if(!attToday || !attToday.checkIn){
-                badge='✗ Vắng'; cls='bg-red-500 text-white shadow-2xs'; timeInfo='Không đi làm';
+                // Trong hoặc sau cửa sổ mà chưa check-in
+                if(isAfterWindow){
+                  badge='✗ Vắng'; cls='bg-red-500 text-white shadow-2xs'; timeInfo='Không đi làm (quá giờ)';
+                } else {
+                  badge='● Chưa IN'; cls='bg-amber-100 text-amber-700 border border-amber-200'; timeInfo='Chưa điểm danh';
+                }
               } else if(attToday.checkIn && !attToday.checkOut){
-                badge='● Đang làm'; cls='bg-blue-500 text-white shadow-2xs animate-pulse'; timeInfo=`IN ${attToday.checkIn.time}`; gpsInfo=attToday.checkIn.gps?`📍 ${String(attToday.checkIn.gps).split(',')[0]}`:'';
+                // Đã check-in, kiểm tra có đúng ca không (tránh CA_TOI 07:02 buổi sáng)
+                const checkInMins = (()=>{ const [h,m]=attToday.checkIn.time.split(':').map(Number); return h*60+m; })();
+                const isCheckInBeforeWindow = checkInMins < openMinsToday -5; // cho phép 5p lệch
+                if(isCheckInBeforeWindow && !isBeforeWindow){
+                  badge='⚠ Sai ca'; cls='bg-amber-400 text-white'; timeInfo=`IN ${attToday.checkIn.time} (sai ca ${normTodayShift})`;
+                } else {
+                  badge='● Đang làm'; cls='bg-blue-500 text-white shadow-2xs animate-pulse'; timeInfo=`IN ${attToday.checkIn.time}`; gpsInfo=attToday.checkIn.gps?`📍 ${String(attToday.checkIn.gps).split(',')[0]}`:'';
+                }
               } else if(attToday.violations && attToday.violations.includes('LATE') && attToday.violations.includes('EARLY_LEAVE')){
                 badge='⚠ Trễ + Sớm'; cls='bg-orange-500 text-white'; timeInfo=`IN ${attToday.checkIn.time} • OUT ${attToday.checkOut.time}`; 
               } else if(attToday.violations && attToday.violations.includes('LATE')){
@@ -3949,16 +3982,48 @@ function renderSchedules(){
                       detailText=normShiftFuture + (SHIFT_DETAIL[normShiftFuture]?.time ? ' • ' + SHIFT_DETAIL[normShiftFuture].time : '');
                       detailClass='text-blue-700';
                     } else {
-                      if(!att || !att.checkIn){
+                      // Realtime đúng giờ Vietnam: CA_TOI buổi sáng phải hiện Sắp tới, không phải Vắng/Đang làm
+                      const nowVN2 = getVietnamNow();
+                      const nowMins2 = nowVN2.getHours()*60+nowVN2.getMinutes();
+                      const isToday = d.date === todayStr;
+                      let isBeforeWindowToday = false;
+                      let openStrToday = '';
+                      if(isToday){
+                        const normTodayShift = normalizeShift(d.shift);
+                        const timeStrToday = (SHIFT_DETAIL[normTodayShift]?.time || '07:00-12:00');
+                        const [shStrToday] = timeStrToday.split('-');
+                        const [shT, smT] = shStrToday.split(':').map(Number);
+                        const openMinsToday = shT*60+smT -30;
+                        isBeforeWindowToday = nowMins2 < openMinsToday;
+                        openStrToday = `${String(Math.floor(openMinsToday/60)).padStart(2,'0')}:${String(openMinsToday%60).padStart(2,'0')}`;
+                      }
+                      if(isToday && isBeforeWindowToday && (!att || !att.checkIn)){
+                        badgeText='SẮP TỚI';
+                        badgeClass='bg-blue-50 text-blue-700 border border-blue-200';
+                        detailText=`Ca ${normalizeShift(d.shift).replace('CA_','')} • Mở ${openStrToday}`;
+                        detailClass='text-blue-700';
+                      } else if(!att || !att.checkIn){
                         badgeText='✗ VẮNG';
                         badgeClass='bg-red-500 text-white';
                         detailText='Không đi làm';
                         detailClass='text-red-600 font-bold';
                       } else if(att.checkIn && !att.checkOut){
-                        badgeText='⚠ THIẾU OUT';
-                        badgeClass='bg-amber-400 text-white';
-                        detailText=`IN ${att.checkIn.time} • Thiếu OUT`;
-                        detailClass='text-amber-700';
+                        // Kiểm tra sai ca: CA_TOI mà check-in 07:02 buổi sáng -> cảnh báo
+                        const checkInMins = att.checkIn.time ? (()=>{ const [h,m]=att.checkIn.time.split(':').map(Number); return h*60+m; })() : null;
+                        if(isToday && checkInMins !== null){
+                          const normShiftAtt = normalizeShift(d.shift);
+                          const timeStrAtt = (SHIFT_DETAIL[normShiftAtt]?.time || '07:00-12:00');
+                          const [shStrAtt] = timeStrAtt.split('-');
+                          const [shA, smA] = shStrAtt.split(':').map(Number);
+                          const openAtt = shA*60+smA -30;
+                          if(checkInMins < openAtt -5){
+                            badgeText='⚠ Sai ca'; badgeClass='bg-amber-400 text-white'; detailText=`IN ${att.checkIn.time} (sai ca)`; detailClass='text-amber-700';
+                          } else {
+                            badgeText='⚠ THIẾU OUT'; badgeClass='bg-amber-400 text-white'; detailText=`IN ${att.checkIn.time} • Thiếu OUT`; detailClass='text-amber-700';
+                          }
+                        } else {
+                          badgeText='⚠ THIẾU OUT'; badgeClass='bg-amber-400 text-white'; detailText=`IN ${att.checkIn.time} • Thiếu OUT`; detailClass='text-amber-700';
+                        }
                       } else if(att.violations && att.violations.includes('LATE') && att.violations.includes('EARLY_LEAVE')){
                         badgeText='⚠ TRỄ + VỀ SỚM';
                         badgeClass='bg-orange-500 text-white';

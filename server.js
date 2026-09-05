@@ -383,12 +383,29 @@ function initSeed() {
     }
     db.schedules.push({ id: uuidv4(), employeeId: emp.employeeId, weekStart: toVietnamDateStr(weekStart), days, version:1, updated_at: new Date().toISOString() });
   });
-  // Attendance mock for today
+  // Attendance mock cho NV chính thức - realtime đúng ca Vietnam (không tạo CA_TOI vào buổi sáng)
   const todayStr = getVietnamTodayStr();
+  const nowVN = getVietnamNow();
+  const nowMinsVN = nowVN.getHours()*60+nowVN.getMinutes();
   db.employees.filter(e=>e.status==='OFFICIAL').slice(0,2).forEach(emp=>{
+    const sMap = DEFAULT_SHIFTS[emp.shift] || DEFAULT_SHIFTS['CA_SANG'];
+    const [sh, sm] = sMap.start.split(':').map(Number);
+    const startMins = sh*60+sm;
+    const openMins = startMins - 30;
+    const closeMins = startMins + 60;
+    // Chỉ tạo mock nếu đang trong cửa sổ check-in Vietnam (tránh CA_TOI hiện Đang làm buổi sáng)
+    const isInWindow = nowMinsVN >= openMins && nowMinsVN <= closeMins;
+    if(!isInWindow){
+      // Ngoài giờ ca, không tạo mock Đang làm - để HR thấy đúng Vắng/Sắp tới
+      return;
+    }
+    const checkTime = `${String(sh).padStart(2,'0')}:${String(sm+2).padStart(2,'0')}`;
+    const branch = db.branches.find(b=>b.id===emp.branchId);
+    const branchFolder = `${branch?.prefix||emp.branchId} - ${branch?.name||emp.branchId}`;
+    const drivePath = `NHAN_VIEN_CHINH_THUC/${branchFolder}/${emp.shift}/${emp.name} - ${emp.phone} - ${emp.employeeId}/${todayStr.split('-').reverse().join('-')}/CHECK_IN`;
     db.attendances.push({
       id: uuidv4(), employeeId: emp.employeeId, date: todayStr, shift: emp.shift,
-      checkIn: { time: '07:02', gps: '10.762622,106.660172', address: '130 Vạn Kiếp', image: '', drivePath: `NHAN_VIEN_CHINH_THUC/CN130 - CN1/CA_SANG/${emp.name} - ${emp.phone}/${todayStr}/CHECK_IN`, timestamp: new Date().toISOString() },
+      checkIn: { time: checkTime, gps: '10.762622,106.660172', address: branch?.address||'130 Vạn Kiếp', image: '', drivePath, timestamp: new Date().toISOString() },
       checkOut: null, status: 'CHECKED_IN', violations: [], branchId: emp.branchId, version:1, updated_at: new Date().toISOString(), sync_status:'SYNCED'
     });
   });
@@ -468,6 +485,39 @@ if(process.env.GOOGLE_DRIVE_BACKUP_FOLDER_ID) db.settings.googleDrive.backupFold
 // Log ràng buộc đã áp dụng
 console.log(`[CONFIG] Google Sheet Hub: Form=${db.settings.googleSheet.formResponsesSheetId.slice(0,8)}... DB=${db.settings.googleSheet.targetDatabaseSpreadsheetId.slice(0,8)}... Webhook=${db.settings.googleSheet.targetWebhookUrl ? 'SET' : 'EMPTY'}`);
 console.log(`[CONFIG] Calendar: ${db.settings.calendar.clientId ? 'OAuth SET' : 'EMPTY'} • Drive: ${db.settings.googleDrive.rootFolderId ? db.settings.googleDrive.rootFolderId.slice(0,8)+'...' : 'EMPTY'}`);
+// Fix mock attendance sai ca CA_TOI hiển thị Đang làm buổi sáng - realtime đúng Vietnam
+(function cleanupIncorrectAttendances(){
+  try{
+    const todayVN = getVietnamTodayStr();
+    const nowVN = getVietnamNow();
+    const nowMins = nowVN.getHours()*60+nowVN.getMinutes();
+    let removed=0;
+    const beforeLen = db.attendances.length;
+    db.attendances = db.attendances.filter(a=>{
+      if(a.date===todayVN && a.shift==='CA_TOI' && a.checkIn && a.checkIn.time==='07:02'){
+        // CA_TOI ca tối 18-23h mà check-in 07:02 buổi sáng là sai - xóa để HR không thấy Đang làm sai
+        if(a.checkIn.drivePath && a.checkIn.drivePath.includes('CA_SANG')){
+          removed++; return false;
+        }
+        // Nếu đang buổi sáng (<12h) mà đã có check-in CA_TOI thì sai
+        if(nowMins < 12*60){
+          removed++; return false;
+        }
+      }
+      // Cũng xóa các mock CA_CHIEU/CA_SANG sai giờ tương tự
+      if(a.date===todayVN && a.checkIn && a.checkIn.time==='07:02' && a.shift!=='CA_SANG'){
+        // Chỉ CA_SANG mới được 07:02
+        removed++; return false;
+      }
+      return true;
+    });
+    if(removed>0 || db.attendances.length!==beforeLen){
+      saveDB();
+      console.log(`[ATTENDANCE FIX] Đã xóa ${removed} mock sai ca (CA_TOI 07:02 buổi sáng) - realtime Vietnam`);
+      try{ io.emit('attendances:update', db.attendances); }catch(e){}
+    }
+  }catch(e){ console.error('cleanupIncorrectAttendances', e.message); }
+})();
 // Cleanup old syncQueue DEAD do placeholder/KEY (fix 23 DEAD - triệt để)
 (function cleanupOldSyncQueue(){
   try{
