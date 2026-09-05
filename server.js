@@ -3807,24 +3807,25 @@ async function ensureSheetsExist(){
       });
       console.log(`[SHEET] Auto-created ${requests.length} sheets per HR tabs`);
     }
-    // Ensure headers for each sheet – cập nhật nếu thiếu cột Key (yêu cầu #9)
+    // Ensure headers cho từng sheet - RÀNG BUỘC TUYỆT ĐỐI: không bao giờ xóa/sửa
+    // dòng đã có dữ liệu. Chỉ ghi header khi dòng 1 trống hoặc đã đúng header.
     for(const key in SHEET_DEFINITIONS){
       const def = SHEET_DEFINITIONS[key];
       const headerRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(def.sheetName)}!A1:Z1`, { headers:{ Authorization:`Bearer ${token}` }});
       const headerData = await headerRes.json();
       const existingHeader = headerData.values?.[0] || [];
       const hasHeader = existingHeader[0]===def.headers[0] && existingHeader.length===def.headers.length && def.headers.every((h,i)=> existingHeader[i]===h);
-      const missingKey = def.headers.includes('Key') && !existingHeader.includes('Key');
-      if(!hasHeader || missingKey){
-        // Clear header row and rewrite để thêm cột Key
-        await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(def.sheetName)}!A1:Z1:clear`, {
-          method:'POST', headers:{ Authorization:`Bearer ${token}` }
-        });
+      if(hasHeader) continue;
+      if(existingHeader.length===0){
         await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(def.sheetName)}!A1:append?valueInputOption=RAW`, {
           method:'POST', headers:{ Authorization:`Bearer ${token}`, 'Content-Type':'application/json'},
           body: JSON.stringify({ values:[def.headers] })
         });
-        console.log(`[SHEET] Updated header for ${def.sheetName} (added Key)`);
+        console.log(`[SHEET] Ghi header mới cho ${def.sheetName}`);
+      } else {
+        // Dòng 1 đang chứa dữ liệu/header cũ -> KHÔNG đụng vào (giữ tuyệt đối),
+        // Admin dùng POST /api/admin/rebuild-sheet-tab để sửa thủ công khi cần.
+        console.log(`[SHEET BẢO VỆ] Giữ nguyên dòng 1 của ${def.sheetName} (không khớp header chuẩn nhưng có dữ liệu)`);
       }
     }
     return true;
@@ -3886,40 +3887,44 @@ async function syncSheetTab(sheetKey){
     const getRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(def.sheetName)}!A2:Z`, { headers:{ Authorization:`Bearer ${token}` }});
     const getData = await getRes.json().catch(()=>({}));
     const existing = getData.values || [];
-    // Bỏ qua dòng lỗi: key chứa khoảng trắng (VD: header lỗi dồn nhiều ID) hoặc chính chữ 'ID' (header lọt xuống vùng dữ liệu) - không lan truyền rác
+    // RÀNG BUỘC TUYỆT ĐỐI: giữ lại TOÀN BỘ dòng đang có trên Sheet (kể cả dòng lỗi/dòng lạ).
+    // Chỉ Admin dọn thủ công qua POST /api/admin/rebuild-sheet-tab. Web không tự xóa bất cứ dòng nào.
     const isBadKey = (k)=> !k || /\s/.test(k) || k==='ID';
-    // Chỉ giữ dòng cũ có key hợp lệ (loại dòng lỗi khỏi Sheet dần dần)
     const merged = [];
     const oldIndexMap = new Map();
     existing.forEach((r)=>{
       const k=(r[0]||'').toString();
-      if(isBadKey(k)) return;
-      if(!oldIndexMap.has(k)){ oldIndexMap.set(k, merged.length); merged.push([...r]); }
+      if(!isBadKey(k)){
+        if(!oldIndexMap.has(k)) oldIndexMap.set(k, []);
+        oldIndexMap.get(k).push(merged.length);
+      }
+      merged.push([...r]);
     });
-    const droppedBad = existing.length - merged.length;
     let appended = 0, updated = 0;
     rows.forEach(r=>{
       const k=(r[0]||'').toString();
       if(isBadKey(k)) return;
       if(oldIndexMap.has(k)){
-        const ei = oldIndexMap.get(k);
-        const old = merged[ei];
-        const len = Math.max(old.length, r.length);
-        const nr = [];
-        for(let c=0;c<len;c++) nr[c] = (c<r.length && r[c]!==undefined && r[c]!=='') ? r[c] : old[c];
-        merged[ei]=nr; updated++;
-      } else { merged.push(r); appended++; }
+        // Cập nhật TẤT CẢ dòng cùng key (kể cả dòng trùng cũ) để Sheet tự nhất quán - không xóa dòng nào
+        oldIndexMap.get(k).forEach(ei=>{
+          const old = merged[ei];
+          const len = Math.max(old.length, r.length);
+          const nr = [];
+          for(let c=0;c<len;c++) nr[c] = (c<r.length && r[c]!==undefined && r[c]!=='') ? r[c] : old[c];
+          merged[ei]=nr; updated++;
+        });
+      } else { oldIndexMap.set(k, [merged.length]); merged.push(r); appended++; }
     });
-    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(def.sheetName)}!A2:Z:clear`, {
-      method:'POST', headers:{ Authorization:`Bearer ${token}` }
-    });
+    // Ghi đè đúng vùng (update, KHÔNG clear) - merged luôn >= existing nên không còn ô thừa,
+    // và không có khoảng trống mất dữ liệu nếu lỗi giữa chừng (clear+append cũ đã bỏ).
     if(merged.length>0){
-      await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(def.sheetName)}!A2:append?valueInputOption=RAW`, {
-        method:'POST', headers:{ Authorization:`Bearer ${token}`, 'Content-Type':'application/json'},
+      const endRow = 1 + merged.length;
+      await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(def.sheetName)}!A2:Z${endRow}?valueInputOption=RAW`, {
+        method:'PUT', headers:{ Authorization:`Bearer ${token}`, 'Content-Type':'application/json'},
         body: JSON.stringify({ values: merged })
       });
     }
-    console.log(`[SHEET] Đã đồng bộ ${def.sheetName}: giữ ${merged.length - appended} dòng cũ (loại ${droppedBad} dòng lỗi) + cập nhật ${updated} + thêm ${appended} (không xóa dữ liệu thật) - Realtime 1:1`);
+    console.log(`[SHEET] Đã đồng bộ ${def.sheetName}: giữ ${existing.length} dòng cũ + cập nhật ${updated} + thêm ${appended} (không xóa dòng nào) - Realtime 1:1`);
   }catch(e){ console.error(`syncSheetTab ${sheetKey} error`, e.message); }
 }
 async function syncAllTabsToSheetsRealtime(){
