@@ -3886,14 +3886,23 @@ async function syncSheetTab(sheetKey){
     const getRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(def.sheetName)}!A2:Z`, { headers:{ Authorization:`Bearer ${token}` }});
     const getData = await getRes.json().catch(()=>({}));
     const existing = getData.values || [];
-    const idxByKey = new Map();
-    existing.forEach((r,i)=>{ const k=(r[0]||'').toString(); if(k && !idxByKey.has(k)) idxByKey.set(k, i); });
-    const merged = existing.map(r=>[...r]);
+    // Bỏ qua dòng lỗi: key chứa khoảng trắng (VD: header lỗi dồn nhiều ID) hoặc chính chữ 'ID' (header lọt xuống vùng dữ liệu) - không lan truyền rác
+    const isBadKey = (k)=> !k || /\s/.test(k) || k==='ID';
+    // Chỉ giữ dòng cũ có key hợp lệ (loại dòng lỗi khỏi Sheet dần dần)
+    const merged = [];
+    const oldIndexMap = new Map();
+    existing.forEach((r)=>{
+      const k=(r[0]||'').toString();
+      if(isBadKey(k)) return;
+      if(!oldIndexMap.has(k)){ oldIndexMap.set(k, merged.length); merged.push([...r]); }
+    });
+    const droppedBad = existing.length - merged.length;
     let appended = 0, updated = 0;
     rows.forEach(r=>{
       const k=(r[0]||'').toString();
-      if(k && idxByKey.has(k)){
-        const ei = idxByKey.get(k);
+      if(isBadKey(k)) return;
+      if(oldIndexMap.has(k)){
+        const ei = oldIndexMap.get(k);
         const old = merged[ei];
         const len = Math.max(old.length, r.length);
         const nr = [];
@@ -3910,7 +3919,7 @@ async function syncSheetTab(sheetKey){
         body: JSON.stringify({ values: merged })
       });
     }
-    console.log(`[SHEET] Đã đồng bộ ${def.sheetName}: giữ ${existing.length} dòng cũ + cập nhật ${updated} + thêm ${appended} (không xóa dòng nào) - Realtime 1:1`);
+    console.log(`[SHEET] Đã đồng bộ ${def.sheetName}: giữ ${merged.length - appended} dòng cũ (loại ${droppedBad} dòng lỗi) + cập nhật ${updated} + thêm ${appended} (không xóa dữ liệu thật) - Realtime 1:1`);
   }catch(e){ console.error(`syncSheetTab ${sheetKey} error`, e.message); }
 }
 async function syncAllTabsToSheetsRealtime(){
@@ -6483,6 +6492,102 @@ app.post('/api/reports/reset', authMiddleware, roleCheck(['Admin']), (req,res)=>
   res.json({success:true, cleared: beforeCounts});
 });
 
+// Admin: kiểm tra trùng lặp trên 1 tab Google Sheet (chỉ đọc, không sửa)
+app.get('/api/admin/inspect-sheet', authMiddleware, roleCheck(['Admin']), async (req,res)=>{
+  const spreadsheetId = req.query.spreadsheetId || db.settings?.googleSheet?.spreadsheetId || '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w';
+  const sheetName = req.query.sheet || 'NHAN_VIEN_MOI';
+  const token = await getGoogleAccessToken();
+  if(!token) return res.status(500).json({ error:'Chưa cấu hình ServiceAccount để đọc Sheet' });
+  try{
+    const resp = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A1:Z5000`, { headers:{ Authorization:`Bearer ${token}` }});
+    if(!resp.ok) return res.status(502).json({ error:`Đọc Sheet lỗi HTTP ${resp.status}` });
+    const j = await resp.json();
+    const values = j.values || [];
+    if(values.length<2) return res.json({ sheet: sheetName, totalRows: 0, dupGroups: [] });
+    const headers = values[0];
+    const iPhone = headers.findIndex(h=> h==='SĐT');
+    const byId = {}, byPhone = {};
+    for(let i=1;i<values.length;i++){
+      const id = (values[i][0]||'').toString().trim();
+      const phone = iPhone!==-1 ? (values[i][iPhone]||'').toString().trim() : '';
+      if(id){ (byId[id]=byId[id]||[]).push(i+1); }
+      if(phone){ (byPhone[phone]=byPhone[phone]||[]).push(i+1); }
+    }
+    const dupById = Object.entries(byId).filter(([k,v])=>v.length>1).map(([k,v])=>({ key:k, rows:v }));
+    const dupByPhone = Object.entries(byPhone).filter(([k,v])=>{
+      const ids = new Set(v.map(r=> (values[r-1][0]||'').toString().trim()));
+      return v.length>1 && ids.size>1;
+    }).map(([k,v])=>({ key:k, rows:v }));
+    res.json({ sheet: sheetName, headerRows: 1, totalRows: values.length-1, dupByIdCount: dupById.length, dupByPhoneCount: dupByPhone.length, dupById: dupById.slice(0,20), dupByPhone: dupByPhone.slice(0,20), sample: values.slice(1,4) });
+  }catch(e){ res.status(500).json({ error: e.message }); }
+});
+// Admin: dựng lại 1 tab Sheet cho sạch (xóa dòng trùng + dòng lỗi, giữ dữ liệu thật duy nhất).
+// dryRun=true (mặc định) chỉ báo cáo; dryRun=false mới ghi. Không bao giờ xóa dòng duy nhất.
+app.post('/api/admin/rebuild-sheet-tab', authMiddleware, roleCheck(['Admin']), async (req,res)=>{
+  const spreadsheetId = req.body.spreadsheetId || db.settings?.googleSheet?.spreadsheetId || '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w';
+  const sheetName = req.body.sheet || 'NHAN_VIEN_MOI';
+  const dryRun = req.body.dryRun !== false;
+  const token = await getGoogleAccessToken();
+  if(!token) return res.status(500).json({ error:'Chưa cấu hình ServiceAccount để ghi Sheet' });
+  try{
+    const resp = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A1:Z5000`, { headers:{ Authorization:`Bearer ${token}` }});
+    if(!resp.ok) return res.status(502).json({ error:`Đọc Sheet lỗi HTTP ${resp.status}` });
+    const j = await resp.json();
+    const values = j.values || [];
+    if(values.length<2) return res.json({ sheet: sheetName, dryRun, totalRows: 0, kept: 0, dropped: 0, note:'Sheet trống' });
+    const def = Object.values(SHEET_DEFINITIONS).find(d=>d.sheetName===sheetName);
+    const properHeader = def ? def.headers : values[0];
+    const curHeader = values[0];
+    const iPhone = curHeader.findIndex(h=> h==='SĐT');
+    const localPhones = new Set(db.applicants.map(a=> normalizePhone(a.phone)).filter(Boolean));
+    const localIds = new Set([...db.applicants.map(a=>a.id), ...db.employees.map(e=>e.id), ...db.employees.map(e=>e.employeeId)]);
+    const isBadKey = (k)=> !k || /\s/.test(k) || k==='ID';
+    // Pass 1: loại dòng lỗi + dedupe theo ID (giữ dòng CUỐI = mới nhất)
+    const lastById = new Map();
+    let badRows = 0;
+    for(let i=1;i<values.length;i++){
+      const k=(values[i][0]||'').toString();
+      if(isBadKey(k)){ badRows++; continue; }
+      lastById.set(k, values[i]);
+    }
+    // Pass 2: dedupe theo SĐT (cùng người, khác ID) - giữ dòng có ID local, else dòng cuối
+    const rowsById = [...lastById.entries()];
+    const phoneGroups = new Map();
+    rowsById.forEach(([id,row])=>{
+      const ph = iPhone!==-1 ? normalizePhone((row[iPhone]||'').toString()) : '';
+      const key = ph || `__nophone__${id}`;
+      if(!phoneGroups.has(key)) phoneGroups.set(key, []);
+      phoneGroups.get(key).push([id,row]);
+    });
+    const kept = [], dropped = [];
+    phoneGroups.forEach((group,ph)=>{
+      if(group.length===1){ kept.push(group[0][1]); return; }
+      // Ưu tiên dòng có ID tồn tại local (dữ liệu thật đang dùng), else dòng cuối
+      group.sort((a,b)=>{
+        const aLocal = localIds.has(a[0]) ? 0 : 1;
+        const bLocal = localIds.has(b[0]) ? 0 : 1;
+        return aLocal - bLocal;
+      });
+      kept.push(group[0][1]);
+      group.slice(1).forEach(([id])=> dropped.push(id));
+    });
+    // Chuẩn hóa độ dài cột theo header chuẩn
+    const finalRows = kept.map(r=>{
+      const nr = [];
+      for(let c=0;c<properHeader.length;c++) nr[c] = c<r.length ? (r[c]||'') : '';
+      return nr;
+    });
+    const plan = { sheet: sheetName, dryRun, totalRows: values.length-1, badRows, dupDropped: dropped.length, kept: finalRows.length, droppedIds: dropped.slice(0,30), headerFixed: JSON.stringify(curHeader)!==JSON.stringify(properHeader) };
+    if(dryRun) return res.json({ success:true, ...plan, note:'Chế độ xem trước - chưa ghi. Gửi dryRun:false để thực hiện.' });
+    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A1:Z:clear`, { method:'POST', headers:{ Authorization:`Bearer ${token}` }});
+    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A1:append?valueInputOption=RAW`, {
+      method:'POST', headers:{ Authorization:`Bearer ${token}`, 'Content-Type':'application/json'},
+      body: JSON.stringify({ values: [properHeader, ...finalRows] })
+    });
+    audit(req.user.username,'REBUILD_SHEET_TAB','SHEET', { sheet: sheetName, totalRows: plan.totalRows }, { kept: plan.kept, dropped: plan.dupDropped, badRows: plan.badRows }, req.ip);
+    res.json({ success:true, ...plan, dryRun:false });
+  }catch(e){ res.status(500).json({ error: e.message }); }
+});
 // ============ AUDIT / SYNC / ZALO / NOTIF ============
 app.get('/api/audit-logs', authMiddleware, (req,res)=> res.json(db.auditLogs));
 app.get('/api/sync-queue', authMiddleware, (req,res)=> res.json(db.syncQueue));
