@@ -1048,17 +1048,17 @@ async function loadSchedule(){
       <div class="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm">
         <div class="px-5 py-4 bg-gradient-to-r from-indigo-50 to-blue-50 border-b flex flex-wrap justify-between items-center gap-3">
           <div class="flex items-center gap-3">
-            <span class="font-black text-base text-indigo-900">Tuần ${fmtDMY(s.weekStart)}</span>
-            ${isCurrentWeek ? '<span class="text-sm font-black bg-indigo-600 text-white px-3 py-1 rounded-full">TUẦN NÀY</span>' : '<span class="text-sm font-black bg-slate-400 text-white px-3 py-1 rounded-full">TUẦN TỚI</span>'}
-            <span class="text-sm font-bold bg-white border border-indigo-100 px-3 py-1 rounded-full">${workingDays} ngày làm</span>
-            <span class="hidden sm:inline-flex text-sm font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-1 rounded-full" title="AI tự động xếp lịch T2→CN dựa trên 5 ngày OFF và quy định ≥12 ngày/tháng"><i class="fa-solid fa-robot mr-1"></i>AI Auto</span>
+            <span class="font-black text-lg text-indigo-900">Tuần ${fmtDMY(s.weekStart)}</span>
+            ${isCurrentWeek ? '<span class="text-base font-black bg-indigo-600 text-white px-4 py-1.5 rounded-full">TUẦN NÀY</span>' : '<span class="text-base font-black bg-slate-400 text-white px-4 py-1.5 rounded-full">TUẦN TỚI</span>'}
+            <span class="text-base font-bold bg-white border border-indigo-100 px-4 py-1.5 rounded-full">${workingDays} ngày làm</span>
+            <span class="hidden sm:inline-flex text-base font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-4 py-1.5 rounded-full" title="AI tự động xếp lịch T2→CN dựa trên 5 ngày OFF và quy định ≥12 ngày/tháng"><i class="fa-solid fa-robot mr-1"></i>AI Auto</span>
           </div>
           <div class="flex items-center gap-2">
-            ${isTraining ? `<button onclick="openTrainingShiftModal('${s.weekStart}')" class="text-sm font-black bg-gradient-to-r from-pink-500 to-rose-500 text-white px-4 py-2 rounded-xl shadow hover:from-pink-600 hover:to-rose-600 flex items-center gap-1.5"><i class="fa-solid fa-rotate"></i> Đổi ca</button><button onclick="openTrainingAddShiftModal('${s.weekStart}')" class="text-sm font-black bg-white border border-pink-200 text-pink-700 px-3 py-2 rounded-xl hover:bg-pink-50"><i class="fa-solid fa-plus"></i> Thêm ca</button>` : ''}
-            <span class="text-sm font-bold text-slate-600 hidden md:inline">${getBranchDisplay(employee.branchId)}</span>
+            ${isTraining ? `<button onclick="openTrainingShiftModal('${s.weekStart}')" class="text-base font-black bg-gradient-to-r from-pink-500 to-rose-500 text-white px-5 py-2.5 rounded-xl shadow hover:from-pink-600 hover:to-rose-600 flex items-center gap-1.5"><i class="fa-solid fa-rotate"></i> Đổi ca</button><button onclick="openTrainingAddShiftModal('${s.weekStart}')" class="text-base font-black bg-white border border-pink-200 text-pink-700 px-4 py-2.5 rounded-xl hover:bg-pink-50"><i class="fa-solid fa-plus"></i> Thêm ca</button>` : ''}
+            <span class="text-base font-bold text-slate-600 hidden md:inline">${getBranchDisplay(employee.branchId)}</span>
           </div>
         </div>
-        <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-3 p-3 bg-slate-50/50">
+        <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-4 p-4 bg-slate-50/50">
           ${s.days.map(d=>{
             const isToday = d.date === today;
             let bgColor = 'bg-white';
@@ -1088,17 +1088,17 @@ async function loadSchedule(){
             }
 
             return `
-            <div class="rounded-2xl border-2 ${borderColor} p-3 text-center transition-all ${bgColor} ${isToday ? 'ring-2 ring-pink-300 scale-[1.02] z-10 shadow-md' : ''}">
-              <div class="text-sm font-black ${isToday?'text-pink-600':'text-slate-400'} uppercase tracking-wider">${d.dayName}</div>
-              <div class="text-lg font-mono font-black ${isToday?'text-pink-900':'text-slate-800'}">${fmtDMYShort(d.date)}</div>
-              <div class="text-xs font-medium text-slate-500">${fmtDMY(d.date)}</div>
-              <div class="mt-2 flex flex-col items-center gap-1.5">
-                <span class="text-xs font-black px-3 py-1 rounded-full ${statusClass}">${statusText}</span>
-                <div class="text-sm font-black text-slate-700 leading-tight min-h-[28px] flex items-center justify-center">
+            <div class="rounded-2xl border-2 ${borderColor} p-4 text-center transition-all ${bgColor} ${isToday ? 'ring-4 ring-pink-300 scale-[1.03] z-10 shadow-lg' : ''}">
+              <div class="text-base font-black ${isToday?'text-pink-600':'text-slate-400'} uppercase tracking-widest">${d.dayName}</div>
+              <div class="text-2xl font-mono font-black ${isToday?'text-pink-900':'text-slate-800'} leading-none mt-1">${fmtDMYShort(d.date)}</div>
+              <div class="text-sm font-bold text-slate-500 mt-1">${fmtDMY(d.date)}</div>
+              <div class="mt-3 flex flex-col items-center gap-2">
+                <span class="text-sm font-black px-4 py-1.5 rounded-full ${statusClass}">${statusText}</span>
+                <div class="text-lg font-black text-slate-800 leading-tight min-h-[32px] flex items-center justify-center">
                   ${(d.status === 'WORKING' || d.status === 'SUBSTITUTE') ? d.shift.replace('CA_', '') : '—'}
                 </div>
               </div>
-              ${isToday ? '<div class="text-xs font-black text-pink-600 mt-1.5 uppercase tracking-widest">● Hôm nay</div>' : ''}
+              ${isToday ? '<div class="text-sm font-black text-pink-600 mt-2 uppercase tracking-widest">● Hôm nay</div>' : ''}
             </div>
             `;
           }).join('')}
