@@ -1473,7 +1473,7 @@ app.delete('/api/employees/:id', authMiddleware, roleCheck(['Admin','HR']), (req
       // Dùng cascade để xóa toàn bộ (applicants, interviews, keys, schedules...)
       // Nhưng cascade đã gọi saveDB + emit + forceLogout, tránh double; ta gọi trực tiếp
       cascadeDeletePerson(before, req.user.username, req.ip);
-      return res.json({success:true, hard:true, cascade:true});
+      return res.json({success:true, hard:true, cascade:true, note:'Đã xóa local. Dòng trên Google Sheet vẫn giữ (ràng buộc tuyệt đối) và sẽ tự kéo lại sau deploy - muốn xóa vĩnh viễn hãy xóa trực tiếp trên Sheet hoặc dùng POST /api/admin/delete-sheet-rows'});
     }
     // Fallback nếu chưa có cascade
     db.employees.splice(idx,1);
@@ -1494,7 +1494,7 @@ app.delete('/api/employees/:id', authMiddleware, roleCheck(['Admin','HR']), (req
     io.emit('offRequests:update', db.offRequests);
     io.emit('emergencyRequests:update', db.emergencyRequests);
     emitForceLogout(empId, 'Tài khoản nhân viên đã bị xóa vĩnh viễn khỏi hệ thống');
-    return res.json({success:true, hard:true, removedKeys: beforeKeys});
+    return res.json({success:true, hard:true, removedKeys: beforeKeys, note:'Đã xóa local. Dòng trên Google Sheet vẫn giữ (ràng buộc tuyệt đối) và sẽ tự kéo lại sau deploy - muốn xóa vĩnh viễn hãy xóa trực tiếp trên Sheet hoặc dùng POST /api/admin/delete-sheet-rows'});
   }
   // Default: soft delete -> ARCHIVED (giữ lịch sử) + forceLogout ngay - KHÔNG xóa trên Google Sheet 17iXM (1 chiều, Sheet giữ lại để Admin có thể đồng bộ lại)
   before.status='ARCHIVED';
@@ -6698,6 +6698,44 @@ app.post('/api/admin/rebuild-sheet-tab', authMiddleware, roleCheck(['Admin']), a
     });
     audit(req.user.username,'REBUILD_SHEET_TAB','SHEET', { sheet: sheetName, totalRows: plan.totalRows }, { kept: plan.kept, dropped: plan.dupDropped, badRows: plan.badRows }, req.ip);
     res.json({ success:true, ...plan, dryRun:false });
+  }catch(e){ res.status(500).json({ error: e.message }); }
+});
+// Admin: xóa CHỈ ĐỊNH một số dòng trên Sheet (ghi rõ IDs, có audit).
+// Đây là cách duy nhất xóa trên Sheet qua web (thay cho xóa trực tiếp trên Google Sheets).
+// Mọi luồng tự động khác đều bị cấm xóa Sheet.
+app.post('/api/admin/delete-sheet-rows', authMiddleware, roleCheck(['Admin']), async (req,res)=>{
+  const spreadsheetId = req.body.spreadsheetId || db.settings?.googleSheet?.spreadsheetId || '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w';
+  const sheetName = req.body.sheet;
+  const ids = (req.body.ids||[]).map(x=>String(x).trim()).filter(Boolean);
+  if(!sheetName) return res.status(400).json({ error:'Thiếu tên sheet' });
+  if(ids.length===0) return res.status(400).json({ error:'Thiếu danh sách ids cần xóa' });
+  if(ids.length>100) return res.status(400).json({ error:'Tối đa 100 ids/lần' });
+  const token = await getGoogleAccessToken();
+  if(!token) return res.status(500).json({ error:'Chưa cấu hình ServiceAccount để ghi Sheet' });
+  try{
+    const metaRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}`, { headers:{ Authorization:`Bearer ${token}` }});
+    const meta = await metaRes.json();
+    const tab = (meta.sheets||[]).find(s=>s.properties.title===sheetName);
+    if(!tab) return res.status(404).json({ error:`Không thấy tab ${sheetName} trên Sheet` });
+    const gridId = tab.properties.sheetId;
+    const valRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A1:B5000`, { headers:{ Authorization:`Bearer ${token}` }});
+    const values = (await valRes.json()).values || [];
+    const targets = [];
+    for(let i=1;i<values.length;i++){
+      const c0=(values[i][0]||'').toString().trim();
+      const c1=(values[i][1]||'').toString().trim();
+      if(ids.includes(c0)||ids.includes(c1)) targets.push(i);
+    }
+    if(targets.length===0) return res.json({ success:true, deleted:0, note:'Không tìm thấy dòng nào khớp ids' });
+    targets.sort((a,b)=>b-a);
+    const delRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
+      method:'POST', headers:{ Authorization:`Bearer ${token}`, 'Content-Type':'application/json' },
+      body: JSON.stringify({ requests: targets.map(idx=>({ deleteDimension:{ range:{ sheetId: gridId, dimension:'ROWS', startIndex: idx, endIndex: idx+1 }} })) })
+    });
+    const delData = await delRes.json();
+    if(delData.error) return res.status(502).json({ error: delData.error.message });
+    audit(req.user.username,'DELETE_SHEET_ROWS','SHEET', { sheet: sheetName, ids }, { deleted: targets.length }, req.ip);
+    res.json({ success:true, sheet: sheetName, deleted: targets.length, rows: targets.map(i=>i+1) });
   }catch(e){ res.status(500).json({ error: e.message }); }
 });
 // ============ AUDIT / SYNC / ZALO / NOTIF ============
