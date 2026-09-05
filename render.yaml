@@ -18,11 +18,11 @@ services:
         generateValue: true
       - key: ALLOWED_ORIGINS
         value: "*"
-      # Google Sheet Operational Data Hub - Ràng buộc Spec 3
+      # Google Sheet Operational Data Hub - Đồng bộ theo render hiện tại 05/09/2026 (đang đảo so với Spec 28/08)
       - key: GOOGLE_SHEET_SPREADSHEET_ID
-        value: 1rcqEKraSRhr-Tn9qwlhADlkQUei8j65bXeHF_Tmkd38
-      - key: GOOGLE_SHEET_TARGET_DATABASE_ID
         value: 17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w
+      - key: GOOGLE_SHEET_TARGET_DATABASE_ID
+        value: 1rcqEKraSRhr-Tn9qwlhADlkQUei8j65bXeHF_Tmkd38
       - key: GOOGLE_SHEET_WEBHOOK_URL
         value: https://script.google.com/macros/s/AKfycbz_umbomilk_apps_script/exec
       - key: GOOGLE_SHEET_WEBHOOK_SECRET

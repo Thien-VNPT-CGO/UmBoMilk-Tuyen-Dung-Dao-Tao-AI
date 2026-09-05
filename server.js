@@ -65,15 +65,16 @@ const DEFAULT_SHIFTS = {
 };
 
 const DEFAULT_SETTINGS = {
-  // Operational Data Hub - Ràng buộc chuẩn theo Spec 3 (28/08/2026)
-  // - spreadsheetId / formResponsesSheetId: Sheet nộp Form (Nguồn vào) - 1rcq...
-  // - targetDatabaseSpreadsheetId: Sheet Database chính (Nguồn xuất 20 cột) - 17iXM...
-  // - targetWebhookUrl: Apps Script Webhook (cần deploy từ scripts/google-apps-script.gs)
+  // Operational Data Hub - Ràng buộc theo render hiện tại (đã đồng bộ 05/09/2026)
+  // - spreadsheetId: Sheet nộp Form (Nguồn vào) - khớp render 17iXM...
+  // - formResponsesSheetId: Sheet nộp Form responses - 1rcq...
+  // - targetDatabaseSpreadsheetId: Sheet Database chính (Nguồn xuất 20 cột) - khớp render 1rcq...
+  // Lưu ý: render đang đảo so với Spec 28/08 (Spec: Form=1rcq, DB=17iXM); code đã đồng bộ theo render để 2 cột giống tên trong render
   googleSheet: {
-    spreadsheetId: '1rcqEKraSRhr-Tn9qwlhADlkQUei8j65bXeHF_Tmkd38',
+    spreadsheetId: '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w',
     formResponsesSheetId: '1rcqEKraSRhr-Tn9qwlhADlkQUei8j65bXeHF_Tmkd38',
     formSheetName: 'FROM_NHAN_VIEN',
-    targetDatabaseSpreadsheetId: '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w',
+    targetDatabaseSpreadsheetId: '1rcqEKraSRhr-Tn9qwlhADlkQUei8j65bXeHF_Tmkd38',
     targetWebhookUrl: 'https://script.google.com/macros/s/AKfycbz_umbomilk_apps_script/exec',
     secret: 'umbomilk_secret_2026',
     serviceAccountEmail: 'umbomilk-hr@umbomilk-hr.iam.gserviceaccount.com',
