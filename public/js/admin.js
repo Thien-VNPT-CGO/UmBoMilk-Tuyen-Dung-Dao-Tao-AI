@@ -2191,50 +2191,45 @@ function getEmployeeTrainingProgress(emp) {
       const month = wDate.getMonth()+1;
       const weekInMonth = Math.ceil(wDate.getDate()/7);
       const weekLabel = `Tuần ${weekInMonth} - T${month}`;
-      // Nếu có schedule chi tiết cho tuần đó, đếm realtime
-      let working = 0, off = 0, emerg = 0;
+      // Nếu có schedule chi tiết cho tuần đó, đếm realtime (đã ẩn OFF đột xuất trên HR)
+      let working = 0, off = 0;
       if(sched && sched.days){
         sched.days.forEach(d=>{
           if(d.status==='WORKING' || d.status==='SUBSTITUTE') working++;
           else if(d.status==='OFF') off++;
-          else if(d.status==='EMERGENCY_OFF' || d.status==='EMERGENCY_PENDING') emerg++;
           else if(d.status==='WORKING') working++;
         });
         // Nếu schedule chưa đủ 7 ngày (do mới tạo), bổ sung từ offRequests
         if(sched.days.length<7){
           const weekDates = [];
           for(let i=0;i<7;i++){ const cur=new Date(wDate); cur.setDate(wDate.getDate()+i); weekDates.push(cur.toISOString().split('T')[0]); }
-          const offInWeek = allOff.filter(r=>r.employeeId===emp.employeeId && r.status==='APPROVED').reduce((s,r)=> s + r.dates.filter(d=> weekDates.includes(d)).length,0);
-          const emergInWeek = allEmerg.filter(r=>r.employeeId===emp.employeeId && (r.status==='PENDING'||r.status==='APPROVED') && weekDates.includes(r.date)).length;
-          // Nếu schedule thiếu, ước tính
-          if(working+off+emerg <7){
-            const remaining = 7 - (working+off+emerg);
+          // Nếu schedule thiếu, ước tính (không tính OFF đột xuất trên HR)
+          if(working+off <7){
+            const remaining = 7 - (working+off);
             working += remaining;
           }
         }
       } else {
-        // Không có schedule: tính từ offRequests/emergency cho tuần target
+        // Không có schedule: tính từ offRequests cho tuần target (không tính OFF đột xuất trên HR)
         const weekDates = [];
         for(let i=0;i<7;i++){ const cur=new Date(wDate); cur.setDate(wDate.getDate()+i); weekDates.push(cur.toISOString().split('T')[0]); }
         off = allOff.filter(r=>r.employeeId===emp.employeeId && r.status==='APPROVED').reduce((s,r)=> s + r.dates.filter(d=> weekDates.includes(d)).length,0);
-        emerg = allEmerg.filter(r=>r.employeeId===emp.employeeId && (r.status==='PENDING'||r.status==='APPROVED') && weekDates.includes(r.date)).length;
-        working = 7 - off - emerg;
+        working = 7 - off;
         if(working<0) working=0;
       }
-      // Ràng buộc: off tối đa 2, emerg tối đa 1
+      // Ràng buộc: off tối đa 2 (OFF đột xuất đã ẩn trên HR)
       const offLabel = `${off}/2`;
-      const emergLabel = `${emerg}/1`;
       const workingLabel = `${working}/7`;
       const percent = Math.round((working/7)*100);
       return { 
         completed: working, total: 7, percent, 
         label: weekLabel, 
-        workingLabel, emergLabel, offLabel,
-        sub: `Số ca làm: ${workingLabel} ngày • OFF đột xuất: ${emergLabel} ngày`,
-        weekLabel, working, off, emerg
+        workingLabel, offLabel,
+        sub: `Số ca làm: ${workingLabel} ngày`,
+        weekLabel, working, off
       };
     }catch(e){
-      return { completed: 5, total: 7, percent: 71, label: `Tuần 1 - T${new Date().getMonth()+1}`, workingLabel:'5/7', emergLabel:'0/1', sub: 'Số ca làm: 5/7 • OFF đột xuất: 0/1' };
+      return { completed: 5, total: 7, percent: 71, label: `Tuần 1 - T${new Date().getMonth()+1}`, workingLabel:'5/7', sub: 'Số ca làm: 5/7' };
     }
   }
 
@@ -2776,9 +2771,6 @@ function renderEmployeesStore(){
                 </span>
                 <span class="text-[11px] font-bold px-2.5 py-1 rounded-full ${trainProgress.working>=5?'bg-emerald-50 text-emerald-700 border border-emerald-200':'bg-amber-50 text-amber-700 border border-amber-200'}">
                   Số ca làm: ${trainProgress.workingLabel||trainProgress.label} ngày
-                </span>
-                <span class="text-[11px] font-bold px-2.5 py-1 rounded-full ${trainProgress.emerg>0?'bg-orange-50 text-orange-700 border border-orange-200':'bg-slate-50 text-slate-500 border border-slate-200'}">
-                  OFF đột xuất: ${trainProgress.emergLabel||'0/1'} ngày
                 </span>
                 <div class="w-24 bg-slate-100 border border-slate-200/60 h-1.5 rounded-full overflow-hidden mt-1 p-0.5">
                   <div class="bg-gradient-to-r from-emerald-400 to-emerald-600 h-full rounded-full transition-all duration-500" style="width: ${trainProgress.percent}%"></div>
