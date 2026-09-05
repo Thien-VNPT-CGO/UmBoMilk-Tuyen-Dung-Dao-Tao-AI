@@ -3824,18 +3824,18 @@ function renderSchedules(){
 
     return `
       <div class="bg-white rounded-2xl border-2 border-pink-300 overflow-hidden shadow-sm">
-        <div class="px-4 py-3 bg-gradient-to-r from-pink-500 to-rose-500 text-white flex flex-wrap items-center justify-between gap-2">
+        <div class="px-5 py-4 bg-gradient-to-r from-pink-500 to-rose-500 text-white flex flex-wrap items-center justify-between gap-3">
           <div class="flex items-center gap-3">
-            <div class="w-10 h-10 bg-white/20 backdrop-blur rounded-xl flex items-center justify-center font-black text-sm border border-white/20">${bid}</div>
+            <div class="w-11 h-11 bg-white/20 backdrop-blur rounded-xl flex items-center justify-center font-black text-base border border-white/20">${bid}</div>
             <div>
-              <div class="font-black text-sm leading-none">${branchFull}</div>
-              <div class="text-xs font-medium text-white/90">${empList.length} nhân viên • Hiển thị 1 dòng/nhân viên</div>
+              <div class="font-black text-base leading-none">${branchFull}</div>
+              <div class="text-sm font-medium text-white/90">${empList.length} nhân viên • Hiển thị 1 dòng/nhân viên</div>
             </div>
           </div>
-          <div class="flex gap-1.5 flex-wrap">
-            <span class="text-[11px] font-bold bg-white text-pink-600 px-2 py-1 rounded-full shadow">SÁNG ${sang}</span>
-            <span class="text-[11px] font-bold bg-white text-pink-600 px-2 py-1 rounded-full shadow">CHIỀU ${chieu}</span>
-            <span class="text-[11px] font-bold bg-white text-pink-600 px-2 py-1 rounded-full shadow">TỐI ${toi}</span>
+          <div class="flex gap-2 flex-wrap">
+            <span class="text-sm font-bold bg-white text-pink-600 px-3 py-1.5 rounded-full shadow">SÁNG ${sang}</span>
+            <span class="text-sm font-bold bg-white text-pink-600 px-3 py-1.5 rounded-full shadow">CHIỀU ${chieu}</span>
+            <span class="text-sm font-bold bg-white text-pink-600 px-3 py-1.5 rounded-full shadow">TỐI ${toi}</span>
           </div>
         </div>
         <div class="p-3 space-y-3 bg-pink-50/30">
@@ -3900,22 +3900,22 @@ function renderSchedules(){
 
             return `
               <div class="bg-white rounded-2xl border border-pink-200 overflow-hidden shadow-sm">
-                <div class="px-3 py-2 bg-white border-b border-pink-100 flex flex-wrap items-center justify-between gap-2">
-                  <div class="flex items-center gap-2">
-                    <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-pink-500 to-rose-500 text-white flex items-center justify-center font-black text-xs shadow">${emp.name?.split(' ').pop()?.[0]||'?'}</div>
+                <div class="px-4 py-3 bg-white border-b border-pink-100 flex flex-wrap items-center justify-between gap-3">
+                  <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-pink-500 to-rose-500 text-white flex items-center justify-center font-black text-base shadow">${emp.name?.split(' ').pop()?.[0]||'?'}</div>
                     <div>
-                      <div class="font-black text-sm text-pink-900 leading-none">${emp.name || item.employeeId}</div>
-                      <div class="text-[11px] font-mono text-slate-500">${emp.employeeId || item.employeeId} • ${emp.phone || ''}</div>
-                      <div class="text-[11px] font-bold text-pink-700">${branchFull2}</div>
+                      <div class="font-black text-base text-pink-900 leading-none">${emp.name || item.employeeId}</div>
+                      <div class="text-sm font-mono text-slate-600 mt-0.5">${emp.employeeId || item.employeeId} • ${emp.phone || ''}</div>
+                      <div class="text-sm font-bold text-pink-700">${branchFull2}</div>
                     </div>
                   </div>
                   <div class="flex flex-wrap items-center gap-2">
-                    <span class="text-[11px] font-black px-2 py-1 rounded-full ${emp.type==='OFFICIAL'?'bg-pink-500 text-white':'bg-blue-100 text-blue-700 border border-blue-200'}">${(emp.type==='OFFICIAL' ? (emp.officialStartDate && new Date().toISOString().split('T')[0] < emp.officialStartDate ? 'Chưa chính thức' : 'Chính thức') : getStatusVi(emp.type||'')+' '+getStatusVi(emp.status||''))}</span>
-                    ${(emp.type==='TRAINING' && (emp.status === 'WAITING_OFFICIAL' || (emp.status === 'TRAINING' && typeof getTrainingCompletedDays === 'function' && getTrainingCompletedDays(emp) >= 7))) ? `<span class="text-[11px] font-black px-2.5 py-1 rounded-full bg-amber-500 text-white shadow-xs animate-pulse flex items-center gap-1" title="Khóa lịch: NV đã hoàn thành đủ 7 ngày Training — Chờ HR duyệt Chính thức"><i class="fa-solid fa-lock"></i> 🔒 Đã 7/7 Training (Khóa lịch)</span>` : ''}
-                    <span class="text-xs font-bold bg-white border border-pink-200 text-pink-700 px-2.5 py-1 rounded-full"><i class="fa-solid fa-calendar-week text-pink-500"></i> ${startDateRange}</span>
+                    <span class="text-sm font-black px-3 py-1.5 rounded-full ${emp.type==='OFFICIAL'?'bg-pink-500 text-white':'bg-blue-100 text-blue-700 border border-blue-200'}">${(emp.type==='OFFICIAL' ? (emp.officialStartDate && new Date().toISOString().split('T')[0] < emp.officialStartDate ? 'Chưa chính thức' : 'Chính thức') : getStatusVi(emp.type||'')+' '+getStatusVi(emp.status||''))}</span>
+                    ${(emp.type==='TRAINING' && (emp.status === 'WAITING_OFFICIAL' || (emp.status === 'TRAINING' && typeof getTrainingCompletedDays === 'function' && getTrainingCompletedDays(emp) >= 7))) ? `<span class="text-sm font-black px-3 py-1.5 rounded-full bg-amber-500 text-white shadow-xs animate-pulse flex items-center gap-1" title="Khóa lịch: NV đã hoàn thành đủ 7 ngày Training — Chờ HR duyệt Chính thức"><i class="fa-solid fa-lock"></i> 🔒 Đã 7/7 Training (Khóa lịch)</span>` : ''}
+                    <span class="text-sm font-bold bg-white border border-pink-200 text-pink-700 px-3 py-1.5 rounded-full"><i class="fa-solid fa-calendar-week text-pink-500"></i> ${startDateRange}</span>
                   </div>
                 </div>
-                <div class="grid grid-cols-7 gap-1 p-2 bg-slate-50/50">
+                <div class="grid grid-cols-7 gap-2 p-3 bg-slate-50/50">
                   ${displayDays.map(d=>{
                     const att = (typeof attendances!=='undefined' ? attendances : []).find(a=>a.employeeId===(emp.employeeId||emp.id) && a.date===d.date);
                     const isWaiting = d.status==='WAITING_OFFICIAL';
@@ -3977,14 +3977,14 @@ function renderSchedules(){
                     }
                     const baseBg = isWaiting ? 'bg-slate-100 border-slate-200' : isOffDay ? 'bg-slate-50 border-slate-200' : badgeText.includes('VẮNG') ? 'bg-red-50 border-red-200' : badgeText.includes('THIẾU') ? 'bg-amber-50 border-amber-200' : badgeText.includes('TRỄ')||badgeText.includes('VỀ SỚM') ? 'bg-orange-50 border-orange-200' : badgeText.includes('ĐÚNG GIỜ') ? 'bg-emerald-50 border-emerald-200' : isFuture ? 'bg-blue-50/50 border-blue-200' : 'bg-white border-pink-300 shadow-2xs';
                     return `
-                      <div class="rounded-xl border p-2 text-center ${baseBg}">
-                        <div class="text-[11px] font-black ${isOffDay?'text-slate-600': d.isWorking?'text-pink-700':'text-slate-600'}">${d.dayName}</div>
-                        <div class="text-[11px] font-mono ${isOffDay?'text-slate-500':'text-pink-900'}">${fmtDMYShort(d.date)}</div>
-                        <div class="text-[10px] text-slate-500">${fmtDMY(d.date)}</div>
-                        <div class="text-[10px] font-bold mt-1 px-1 py-0.5 rounded-full ${badgeClass}">${badgeText}</div>
-                        ${d.substituteFor?`<div class="text-[10px] text-slate-500 mt-1 truncate">Thay: ${d.substituteFor}</div>`:''}
-                        <div class="text-[11px] font-bold mt-1 ${detailClass}">${detailText}</div>
-                        ${!isOffDay && !isFuture && att && att.checkIn && att.checkOut ? `<div class="text-[10px] text-slate-400 mt-0.5">📍 ${att.checkIn.gps?att.checkIn.gps.split(',')[0]:''} ${att.checkIn.image ? '• 📷' : ''}</div>` : ''}
+                      <div class="rounded-xl border p-3 text-center ${baseBg}">
+                        <div class="text-sm font-black ${isOffDay?'text-slate-600': d.isWorking?'text-pink-700':'text-slate-600'}">${d.dayName}</div>
+                        <div class="text-base font-mono font-bold ${isOffDay?'text-slate-500':'text-pink-900'}">${fmtDMYShort(d.date)}</div>
+                        <div class="text-xs font-medium text-slate-500">${fmtDMY(d.date)}</div>
+                        <div class="text-xs font-black mt-1.5 px-2 py-1 rounded-full ${badgeClass}">${badgeText}</div>
+                        ${d.substituteFor?`<div class="text-xs text-slate-500 mt-1 truncate">Thay: ${d.substituteFor}</div>`:''}
+                        <div class="text-sm font-bold mt-1.5 ${detailClass}">${detailText}</div>
+                        ${!isOffDay && !isFuture && att && att.checkIn && att.checkOut ? `<div class="text-xs text-slate-400 mt-1">📍 ${att.checkIn.gps?att.checkIn.gps.split(',')[0]:''} ${att.checkIn.image ? '• 📷' : ''}</div>` : ''}
                       </div>
                     `;
                   }).join('')}

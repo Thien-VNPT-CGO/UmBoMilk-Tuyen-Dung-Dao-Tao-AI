@@ -1046,19 +1046,19 @@ async function loadSchedule(){
       const isTraining = employee.type==='TRAINING' || employee.status==='TRAINING' || employee.status==='WAITING_TEST';
       return `
       <div class="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm">
-        <div class="px-4 py-3 bg-gradient-to-r from-indigo-50 to-blue-50 border-b flex flex-wrap justify-between items-center gap-2">
-          <div class="flex items-center gap-2">
-            <span class="font-black text-sm text-indigo-900">Tuần ${fmtDMY(s.weekStart)}</span>
-            ${isCurrentWeek ? '<span class="text-[10px] font-black bg-indigo-600 text-white px-2 py-0.5 rounded-full">TUẦN NÀY</span>' : '<span class="text-[10px] font-black bg-slate-400 text-white px-2 py-0.5 rounded-full">TUẦN TỚI</span>'}
-            <span class="text-[10px] font-bold bg-white border border-indigo-100 px-2 py-0.5 rounded-full">${workingDays} ngày làm</span>
-            <span class="hidden sm:inline-flex text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full" title="AI tự động xếp lịch T2→CN dựa trên 5 ngày OFF và quy định ≥12 ngày/tháng"><i class="fa-solid fa-robot mr-1"></i>AI Auto</span>
+        <div class="px-5 py-4 bg-gradient-to-r from-indigo-50 to-blue-50 border-b flex flex-wrap justify-between items-center gap-3">
+          <div class="flex items-center gap-3">
+            <span class="font-black text-base text-indigo-900">Tuần ${fmtDMY(s.weekStart)}</span>
+            ${isCurrentWeek ? '<span class="text-sm font-black bg-indigo-600 text-white px-3 py-1 rounded-full">TUẦN NÀY</span>' : '<span class="text-sm font-black bg-slate-400 text-white px-3 py-1 rounded-full">TUẦN TỚI</span>'}
+            <span class="text-sm font-bold bg-white border border-indigo-100 px-3 py-1 rounded-full">${workingDays} ngày làm</span>
+            <span class="hidden sm:inline-flex text-sm font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-1 rounded-full" title="AI tự động xếp lịch T2→CN dựa trên 5 ngày OFF và quy định ≥12 ngày/tháng"><i class="fa-solid fa-robot mr-1"></i>AI Auto</span>
           </div>
-          <div class="flex items-center gap-1">
-            ${isTraining ? `<button onclick="openTrainingShiftModal('${s.weekStart}')" class="text-[11px] font-black bg-gradient-to-r from-pink-500 to-rose-500 text-white px-3 py-1.5 rounded-xl shadow hover:from-pink-600 hover:to-rose-600 flex items-center gap-1"><i class="fa-solid fa-rotate"></i> Đổi ca</button><button onclick="openTrainingAddShiftModal('${s.weekStart}')" class="text-[11px] font-black bg-white border border-pink-200 text-pink-700 px-2 py-1.5 rounded-xl hover:bg-pink-50"><i class="fa-solid fa-plus"></i> Thêm ca</button>` : ''}
-            <span class="text-[11px] font-bold text-slate-500 hidden md:inline">${getBranchDisplay(employee.branchId)}</span>
+          <div class="flex items-center gap-2">
+            ${isTraining ? `<button onclick="openTrainingShiftModal('${s.weekStart}')" class="text-sm font-black bg-gradient-to-r from-pink-500 to-rose-500 text-white px-4 py-2 rounded-xl shadow hover:from-pink-600 hover:to-rose-600 flex items-center gap-1.5"><i class="fa-solid fa-rotate"></i> Đổi ca</button><button onclick="openTrainingAddShiftModal('${s.weekStart}')" class="text-sm font-black bg-white border border-pink-200 text-pink-700 px-3 py-2 rounded-xl hover:bg-pink-50"><i class="fa-solid fa-plus"></i> Thêm ca</button>` : ''}
+            <span class="text-sm font-bold text-slate-600 hidden md:inline">${getBranchDisplay(employee.branchId)}</span>
           </div>
         </div>
-        <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2 p-2 bg-slate-50/50">
+        <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-3 p-3 bg-slate-50/50">
           ${s.days.map(d=>{
             const isToday = d.date === today;
             let bgColor = 'bg-white';
@@ -1088,47 +1088,48 @@ async function loadSchedule(){
             }
 
             return `
-            <div class="rounded-2xl border-2 ${borderColor} p-2 text-center transition-all ${bgColor} ${isToday ? 'ring-2 ring-pink-100 scale-[1.02] z-10 shadow-md' : ''}">
-              <div class="text-[10px] font-black ${isToday?'text-pink-600':'text-slate-400'} uppercase">${d.dayName}</div>
-              <div class="text-[11px] font-bold ${isToday?'text-pink-900':'text-slate-700'}">${fmtDMYShort(d.date)}</div>
-              <div class="mt-2 flex flex-col items-center gap-1">
-                <span class="text-[9px] font-black px-2 py-0.5 rounded-full ${statusClass}">${statusText}</span>
-                <div class="text-[10px] font-bold text-slate-600 leading-tight h-8 flex items-center justify-center">
-                  ${(d.status === 'WORKING' || d.status === 'SUBSTITUTE') ? d.shift.replace('CA_', '') : ''}
+            <div class="rounded-2xl border-2 ${borderColor} p-3 text-center transition-all ${bgColor} ${isToday ? 'ring-2 ring-pink-300 scale-[1.02] z-10 shadow-md' : ''}">
+              <div class="text-sm font-black ${isToday?'text-pink-600':'text-slate-400'} uppercase tracking-wider">${d.dayName}</div>
+              <div class="text-lg font-mono font-black ${isToday?'text-pink-900':'text-slate-800'}">${fmtDMYShort(d.date)}</div>
+              <div class="text-xs font-medium text-slate-500">${fmtDMY(d.date)}</div>
+              <div class="mt-2 flex flex-col items-center gap-1.5">
+                <span class="text-xs font-black px-3 py-1 rounded-full ${statusClass}">${statusText}</span>
+                <div class="text-sm font-black text-slate-700 leading-tight min-h-[28px] flex items-center justify-center">
+                  ${(d.status === 'WORKING' || d.status === 'SUBSTITUTE') ? d.shift.replace('CA_', '') : '—'}
                 </div>
               </div>
-              ${isToday ? '<div class="text-[8px] font-black text-pink-500 mt-1 uppercase">Hôm nay</div>' : ''}
+              ${isToday ? '<div class="text-xs font-black text-pink-600 mt-1.5 uppercase tracking-widest">● Hôm nay</div>' : ''}
             </div>
             `;
           }).join('')}
         </div>
-        <div class="px-5 py-2 bg-slate-50 border-t flex justify-between items-center text-[10px] text-slate-400">
+        <div class="px-5 py-3 bg-slate-50 border-t flex justify-between items-center text-sm text-slate-600">
            <span><i class="fa-solid fa-building-user mr-1"></i> ${getBranchDisplay(employee.branchId)}</span>
            <span class="italic">Cập nhật bởi AI lúc ${new Date().toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit'})}</span>
         </div>
         ${(() => {
-          // Chú thích chi tiết lịch làm việc (hiển thị cho cả Training và Official)
+          // Chú thích chi tiết lịch làm việc (hiển thị cho cả Training và Official) — chữ to cho NV dễ đọc
           const isTraining = employee.type==='TRAINING';
           if(isTraining){
-            return `<div class="px-4 py-3 bg-amber-50 border-t border-amber-100 text-[11px] text-amber-800 leading-relaxed">
-              <div class="font-black flex items-center gap-2"><i class="fa-solid fa-circle-info text-amber-600"></i> Chú thích lịch Training (12 ngày thử việc):</div>
-              <div class="mt-1">• <b>WORKING:</b> Ngày làm việc (7/12 ngày) - AI tự xếp theo ca đăng ký</div>
-              <div>• <b>OFF:</b> Ngày nghỉ đã đăng ký (5/12 ngày) - chọn khi đăng ký OFF</div>
-              <div>• <b>WAITING_OFFICIAL:</b> Chờ HR duyệt lên chính thức</div>
-              <div>• <b>Hôm nay:</b> Viền hồng đậm</div>
-              <div>• Đổi ca: Training có thể đổi/thêm ca (1 ngày 2 ca) để rút ngắn 7→6 ngày - HR duyệt 15 phút</div>
+            return `<div class="px-5 py-4 bg-amber-50 border-t border-amber-100 text-sm text-amber-800 leading-relaxed">
+              <div class="font-black text-base flex items-center gap-2"><i class="fa-solid fa-circle-info text-amber-600"></i> Chú thích lịch Training (12 ngày thử việc):</div>
+              <div class="mt-2 text-sm">• <b>WORKING:</b> Ngày làm việc (7/12 ngày) - AI tự xếp theo ca đăng ký</div>
+              <div class="text-sm">• <b>OFF:</b> Ngày nghỉ đã đăng ký (5/12 ngày) - chọn khi đăng ký OFF</div>
+              <div class="text-sm">• <b>WAITING_OFFICIAL:</b> Chờ HR duyệt lên chính thức</div>
+              <div class="text-sm">• <b>Hôm nay:</b> Viền hồng đậm</div>
+              <div class="text-sm">• Đổi ca: Training có thể đổi/thêm ca (1 ngày 2 ca) để rút ngắn 7→6 ngày - HR duyệt 15 phút</div>
             </div>`;
           } else {
-            return `<div class="px-4 py-3 bg-blue-50 border-t border-blue-100 text-[11px] text-blue-700 leading-relaxed">
-              <div class="font-black flex items-center gap-2"><i class="fa-solid fa-circle-info text-blue-600"></i> Chú thích hệ thống gán ca tự động:</div>
-              <div class="mt-1">• <b>WORKING:</b> Ngày làm việc theo ca đã gán (CA_SANG:07-12h, CA_CHIEU:12-18h, CA_TOI:18-23h)</div>
-              <div>• <b>OFF:</b> Ngày nghỉ (đã đăng ký OFF 2 ngày/tuần hoặc Chủ Nhật) - AI đảm bảo không trùng ca cùng chi nhánh</div>
-              <div>• <b>SUBSTITUTE:</b> Ngày thay ca cho NV khác (đổi ca)</div>
-              <div>• <b>Tuần này/Tuần tới:</b> Nhãn phân biệt tuần hiện tại và tuần sau</div>
-              <div>• Lịch tuần sau AI tạo sau khi HR duyệt OFF (T7 15:00) và gửi đến NV qua thông báo</div>
-              <div>• <b>Đổi ca:</b></div>
-              <div class="ml-3">+ Xin phép đổi ca &gt; 24 tiếng trước lịch làm: thực hiện theo quy trình đổi ca trong app</div>
-              <div class="ml-3">+ Xin phép đổi ca &lt; 24 tiếng trước lịch làm: Vui lòng liên hệ trực tiếp HR</div>
+            return `<div class="px-5 py-4 bg-blue-50 border-t border-blue-100 text-sm text-blue-800 leading-relaxed">
+              <div class="font-black text-base flex items-center gap-2"><i class="fa-solid fa-circle-info text-blue-600"></i> Chú thích hệ thống gán ca tự động:</div>
+              <div class="mt-2 text-sm">• <b>WORKING:</b> Ngày làm việc theo ca đã gán (CA_SANG:07-12h, CA_CHIEU:12-18h, CA_TOI:18-23h)</div>
+              <div class="text-sm">• <b>OFF:</b> Ngày nghỉ (đã đăng ký OFF 2 ngày/tuần hoặc Chủ Nhật) - AI đảm bảo không trùng ca cùng chi nhánh</div>
+              <div class="text-sm">• <b>SUBSTITUTE:</b> Ngày thay ca cho NV khác (đổi ca)</div>
+              <div class="text-sm">• <b>Tuần này/Tuần tới:</b> Nhãn phân biệt tuần hiện tại và tuần sau</div>
+              <div class="text-sm">• Lịch tuần sau AI tạo sau khi HR duyệt OFF (T7 15:00) và gửi đến NV qua thông báo</div>
+              <div class="text-sm">• <b>Đổi ca:</b></div>
+              <div class="ml-3 text-sm">+ Xin phép đổi ca &gt; 24 tiếng trước lịch làm: thực hiện theo quy trình đổi ca trong app</div>
+              <div class="ml-3 text-sm">+ Xin phép đổi ca &lt; 24 tiếng trước lịch làm: Vui lòng liên hệ trực tiếp HR</div>
             </div>`;
           }
         })()}
