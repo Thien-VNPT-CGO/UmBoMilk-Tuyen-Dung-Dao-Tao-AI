@@ -2,46 +2,44 @@
 <html lang="vi">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<meta name="theme-color" content="#0ea5e9">
-<title>Ụm Bò Milk - Finance</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ụm Bò Milk - Finance | Kế toán</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
-<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="/socket.io/socket.io.js"></script>
-<script>tailwind.config={theme:{extend:{fontFamily:{sans:['Be Vietnam Pro','sans-serif']}}}}</script>
-<style>body{font-family:'Be Vietnam Pro',sans-serif;background:#f0f9ff} .card{background:white;border:1px solid #e0f2fe;border-radius:20px;box-shadow:0 2px 16px rgba(14,165,233,.06);padding:18px}</style>
+<script>tailwind.config={theme:{extend:{fontFamily:{sans:['Inter','sans-serif'],mono:['JetBrains Mono','monospace']}}}}</script>
+<style>
+  body{font-family:'Inter',sans-serif;background:#f8fafc;color:#0f172a}
+  .mono{font-family:'JetBrains Mono',monospace}
+  .card{background:white;border:1px solid #e2e8f0;border-radius:16px;box-shadow:0 1px 3px rgba(15,23,42,.06),0 4px 16px rgba(15,23,42,.04)}
+  .tab-active{background:#0f172a;color:white;box-shadow:0 1px 2px rgba(15,23,42,.1)}
+  .tab-idle{background:white;color:#475569;border:1px solid #e2e8f0}
+  .tab-idle:hover{border-color:#cbd5e1;color:#0f172a}
+  th{font-weight:700;letter-spacing:.02em}
+  tr:nth-child(even) td{background:#f8fafc}
+  tr:hover td{background:#f1f5f9}
+</style>
 </head>
 <body class="min-h-screen">
-<!-- Login overlay -->
-<div id="loginOverlay" class="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-auto" style="background:linear-gradient(140deg,#0c4a6e 0%,#0ea5e9 45%,#38bdf8 100%)">
-  <div class="absolute top-0 left-0 w-72 h-72 rounded-full pointer-events-none" style="background:radial-gradient(circle,rgba(255,255,255,.15),transparent 70%);transform:translate(-45%,-45%)"></div>
-  <div class="w-full max-w-md relative">
-    <div class="text-center mb-6">
-      <img src="/images/logo.png" alt="Ụm Bò Milk" class="w-16 h-16 rounded-2xl object-contain bg-white p-1 shadow-2xl mx-auto">
-      <div class="text-white font-black text-xl mt-3 tracking-wide">ỤM BÒ MILK • FINANCE</div>
-      <div class="text-white/80 text-sm font-medium mt-1">Kế toán • Tổng hợp báo cáo chấm công</div>
-      <div class="text-white/60 text-xs mt-1">Đăng nhập bằng Key do Admin cấp (WEEK/MONTH/YEAR)</div>
+<!-- Login -->
+<div id="loginOverlay" class="fixed inset-0 z-50 flex items-center justify-center p-4" style="background:#0f172a">
+  <div class="w-full max-w-[420px]">
+    <div class="text-center mb-8">
+      <div class="w-12 h-12 rounded-2xl bg-white flex items-center justify-center mx-auto shadow-lg"><img src="/images/logo.png" class="w-8 h-8 object-contain"></div>
+      <div class="text-white font-extrabold text-[22px] mt-4 tracking-tight">FINANCE</div>
+      <div class="text-slate-400 text-sm mt-1">Ụm Bò Milk • Kế toán tổng hợp</div>
+      <div class="inline-flex items-center gap-2 mt-3 text-[11px] font-bold tracking-widest text-slate-500 uppercase"><span class="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span> Chuẩn kế toán • Đối soát 1:1</div>
     </div>
-    <div class="bg-white rounded-3xl overflow-hidden" style="box-shadow:0 24px 80px rgba(0,0,0,.28)">
-      <form id="loginForm" class="p-6 space-y-4">
-        <div>
-          <label class="text-[11px] font-black text-sky-600 uppercase tracking-widest">Key kích hoạt Finance</label>
-          <input id="financeKey" placeholder="FIN-W-XXXX-XXXX hoặc FIN-M-... / FIN-Y-..." class="w-full mt-2 px-4 py-3.5 rounded-2xl border-2 border-sky-100 bg-sky-50/40 focus:border-sky-400 focus:ring-4 focus:ring-sky-50 outline-none font-mono text-sm transition-all">
-        </div>
-        <div class="bg-amber-50 border border-amber-200 rounded-2xl p-3 flex gap-2">
-          <i class="fa-solid fa-key text-amber-500 mt-0.5 text-sm"></i>
-          <div class="text-xs font-semibold text-amber-700">Key do Admin cấp theo <strong>tuần / tháng / năm</strong>. Hết hạn tự động văng ra, phải xin key mới.</div>
-        </div>
+    <div class="bg-white rounded-[24px] p-6 shadow-2xl">
+      <form id="loginForm" class="space-y-4">
+        <div><label class="text-[11px] font-bold tracking-widest text-slate-500 uppercase">Finance Key</label><input id="financeKey" placeholder="FIN-W-XXXX / FIN-M-XXXX / FIN-Y-XXXX" class="w-full mt-2 px-4 py-3.5 rounded-2xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-slate-900 focus:ring-4 focus:ring-slate-900/10 outline-none font-mono text-sm"></div>
+        <div class="rounded-2xl bg-amber-50 border border-amber-200 p-3 flex gap-2.5"><i class="fa-solid fa-shield-halved text-amber-600 mt-0.5"></i><div class="text-xs leading-5 text-amber-800"><b>Key theo tuần/tháng/năm.</b> Hết hạn tự động đăng xuất.</div></div>
         <div id="loginError" class="hidden text-xs font-bold bg-red-50 text-red-700 border border-red-200 rounded-2xl px-4 py-3"></div>
-        <div id="keyInfo" class="hidden text-xs bg-sky-50 border border-sky-200 rounded-2xl p-3"></div>
-        <button type="submit" class="w-full font-black py-4 rounded-2xl text-white text-sm transition-all active:scale-95" style="background:linear-gradient(135deg,#0ea5e9,#0284c7);box-shadow:0 8px 24px rgba(14,165,233,.4)">
-          <i class="fa-solid fa-right-to-bracket mr-2"></i>ĐĂNG NHẬP FINANCE
-        </button>
-        <div class="text-center text-[11px] text-slate-400">
-          <a href="/admin" class="text-sky-600 font-bold">Cổng Admin</a> <span class="mx-1">•</span> <a href="/employee" class="text-sky-600 font-bold">Cổng Nhân viên</a>
-        </div>
+        <div id="keyInfo" class="hidden text-xs bg-slate-50 border border-slate-200 rounded-2xl p-3"></div>
+        <button type="submit" class="w-full bg-slate-900 hover:bg-black text-white font-bold py-3.5 rounded-2xl text-sm">Đăng nhập</button>
+        <div class="flex justify-center gap-3 text-xs"><a href="/admin" class="font-bold text-slate-900 underline decoration-slate-300">Admin</a><a href="/employee" class="font-bold text-slate-900 underline decoration-slate-300">Nhân viên</a></div>
       </form>
     </div>
   </div>
@@ -49,68 +47,73 @@
 
 <!-- App -->
 <div id="app" class="hidden">
-  <header class="h-[64px] bg-white border-b border-sky-100 flex items-center justify-between px-4 sticky top-0 z-40 shadow-sm">
+  <header class="h-[56px] bg-white border-b border-slate-200 flex items-center justify-between px-4 lg:px-6 sticky top-0 z-40">
     <div class="flex items-center gap-3">
-      <img src="/images/logo.png" alt="logo" class="w-10 h-10 rounded-xl object-contain bg-white p-1 shadow">
+      <img src="/images/logo.png" class="w-8 h-8 rounded-xl object-contain border border-slate-200 p-1">
       <div>
-        <div class="font-black text-sky-900 leading-none">ỤM BÒ MILK • FINANCE</div>
-        <div class="text-[11px] font-bold text-sky-600 flex items-center gap-1.5 mt-0.5">
-          <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
-          Kế toán • <span id="keyLabel">—</span> • Hết hạn: <span id="keyExpiry">—</span>
-        </div>
+        <div class="font-extrabold text-slate-900 leading-none text-[13px] tracking-tight">ỤM BÒ MILK <span class="font-normal text-slate-500">• FINANCE</span></div>
+        <div class="text-[11px] font-bold text-slate-500 flex items-center gap-1.5"><span class="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span><span id="keyLabel" class="mono">—</span><span class="text-slate-300">•</span> hết hạn <span id="keyExpiry" class="mono">—</span></div>
       </div>
     </div>
     <div class="flex items-center gap-2">
-      <span id="countdown" class="hidden text-xs font-black bg-amber-100 text-amber-700 border border-amber-200 px-3 py-1 rounded-full"></span>
-      <button onclick="logout()" class="w-10 h-10 rounded-xl bg-white border border-sky-100 text-sky-600 flex items-center justify-center hover:bg-sky-50"><i class="fa-solid fa-right-from-bracket"></i></button>
+      <span id="countdown" class="hidden text-xs font-bold bg-amber-500 text-white px-3 py-1.5 rounded-full"></span>
+      <button onclick="logout()" class="w-8 h-8 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 flex items-center justify-center"><i class="fa-solid fa-right-from-bracket text-xs"></i></button>
     </div>
   </header>
 
-  <main class="p-4 lg:p-6 max-w-7xl mx-auto space-y-4">
+  <div class="max-w-[1440px] mx-auto px-4 lg:px-6 py-5 space-y-4">
     <!-- Controls -->
-    <div class="card flex flex-wrap items-center gap-3">
+    <div class="card p-3 flex flex-wrap items-center gap-3">
       <div class="flex items-center gap-2">
-        <label class="text-xs font-bold text-slate-700">Tháng</label>
-        <input id="reportMonth" type="month" class="px-3 py-2 rounded-xl border border-sky-200 text-sm font-bold">
+        <span class="text-xs font-bold tracking-widest text-slate-500 uppercase">Kỳ</span>
+        <input id="reportMonth" type="month" class="px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm font-bold mono">
       </div>
       <div class="flex items-center gap-2">
-        <label class="text-xs font-bold text-slate-700">Chi nhánh</label>
-        <select id="reportBranch" class="px-3 py-2 rounded-xl border border-sky-200 text-sm font-bold">
-          <option value="">Tất cả CN</option>
-          <option value="CN1">CN1 - 130 Vạn kiếp</option>
-          <option value="CN2">CN2 - 261 Tô Hiến Thành</option>
-          <option value="CN3">CN3 - 120 Hoàng Diệu 2</option>
-          <option value="CN4">CN4 - 111 Tôn Đản</option>
+        <span class="text-xs font-bold tracking-widest text-slate-500 uppercase">CN</span>
+        <select id="reportBranch" class="px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm font-bold">
+          <option value="">Tất cả</option>
+          <option value="CN1">CN1 • 130 Vạn Kiếp</option>
+          <option value="CN2">CN2 • 261 Tô Hiến Thành</option>
+          <option value="CN3">CN3 • 120 Hoàng Diệu 2</option>
+          <option value="CN4">CN4 • 111 Tôn Đản</option>
         </select>
       </div>
-      <button onclick="loadAll()" class="ml-auto px-4 py-2 rounded-xl bg-sky-500 hover:bg-sky-600 text-white text-sm font-black shadow"><i class="fa-solid fa-rotate mr-1"></i> Tải lại</button>
-      <button onclick="exportFinance()" class="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-black shadow"><i class="fa-solid fa-file-csv mr-1"></i> Xuất CSV</button>
+      <div class="ml-auto flex items-center gap-2">
+        <button onclick="loadAll()" class="px-3.5 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 text-sm font-bold hover:bg-slate-50"><i class="fa-solid fa-rotate mr-1"></i> Tải lại</button>
+        <button onclick="exportFinance()" class="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-black text-white text-sm font-bold"><i class="fa-solid fa-file-csv mr-1"></i> Xuất CSV</button>
+      </div>
     </div>
 
     <!-- Tabs -->
-    <div class="flex flex-wrap gap-2 bg-white border border-sky-100 rounded-2xl p-2">
-      <button onclick="switchTab('overview')" id="tabBtn-overview" class="flex-1 min-w-[120px] px-3 py-2 rounded-xl text-sm font-black bg-sky-500 text-white">Tổng quan</button>
-      <button onclick="switchTab('monthly')" id="tabBtn-monthly" class="flex-1 min-w-[120px] px-3 py-2 rounded-xl text-sm font-bold bg-white border border-sky-100">Bảng chốt công</button>
-      <button onclick="switchTab('daily')" id="tabBtn-daily" class="flex-1 min-w-[120px] px-3 py-2 rounded-xl text-sm font-bold bg-white border border-sky-100">Chi tiết ngày</button>
-      <button onclick="switchTab('anomalies')" id="tabBtn-anomalies" class="flex-1 min-w-[120px] px-3 py-2 rounded-xl text-sm font-bold bg-white border border-sky-100">Sai lệch</button>
-      <button onclick="switchTab('master')" id="tabBtn-master" class="flex-1 min-w-[120px] px-3 py-2 rounded-xl text-sm font-bold bg-white border border-sky-100">MASTER_DATA</button>
-      <button onclick="switchTab('template')" id="tabBtn-template" class="flex-1 min-w-[120px] px-3 py-2 rounded-xl text-sm font-bold bg-white border border-sky-100">_TEMPLATE_LUONG</button>
-      <button onclick="switchTab('dongphuc')" id="tabBtn-dongphuc" class="flex-1 min-w-[120px] px-3 py-2 rounded-xl text-sm font-bold bg-white border border-sky-100">DONG_PHUC</button>
-      <button onclick="switchTab('khamsk')" id="tabBtn-khamsk" class="flex-1 min-w-[120px] px-3 py-2 rounded-xl text-sm font-bold bg-white border border-sky-100">KHAM_SUC_KHOE</button>
+    <div class="flex flex-wrap gap-1.5 p-1 bg-slate-100 rounded-2xl w-fit">
+      <button onclick="switchTab('overview')" id="tabBtn-overview" class="px-4 py-2 rounded-xl text-sm font-bold tab-active">Tổng quan</button>
+      <button onclick="switchTab('monthly')" id="tabBtn-monthly" class="px-4 py-2 rounded-xl text-sm font-bold tab-idle">Chốt công</button>
+      <button onclick="switchTab('daily')" id="tabBtn-daily" class="px-4 py-2 rounded-xl text-sm font-bold tab-idle">Chi tiết</button>
+      <button onclick="switchTab('anomalies')" id="tabBtn-anomalies" class="px-4 py-2 rounded-xl text-sm font-bold tab-idle">Sai lệch</button>
+      <div class="w-px h-6 bg-slate-200 mx-1 self-center"></div>
+      <button onclick="switchTab('master')" id="tabBtn-master" class="px-3 py-2 rounded-xl text-xs font-bold tab-idle">MASTER_DATA</button>
+      <button onclick="switchTab('template')" id="tabBtn-template" class="px-3 py-2 rounded-xl text-xs font-bold tab-idle">_TEMPLATE</button>
+      <button onclick="switchTab('dongphuc')" id="tabBtn-dongphuc" class="px-3 py-2 rounded-xl text-xs font-bold tab-idle">DONG_PHUC</button>
+      <button onclick="switchTab('khamsk')" id="tabBtn-khamsk" class="px-3 py-2 rounded-xl text-xs font-bold tab-idle">KHAM_SUC_KHOE</button>
     </div>
 
     <!-- Overview -->
     <div id="tab-overview" class="tab-section">
-      <div id="kpiGrid" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3"></div>
+      <div id="kpiGrid" class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3"></div>
+      <div class="mt-3 text-[11px] text-slate-500">Đối soát 1:1 • Training 21.000đ/h • Official 25.500đ/h • Hoàn cọc chỉ 1 lần theo BH_Code</div>
     </div>
 
     <!-- Monthly -->
     <div id="tab-monthly" class="tab-section hidden">
-      <div class="card overflow-hidden p-0">
-        <div class="overflow-auto max-h-[60vh]">
+      <div class="card p-0 overflow-hidden">
+        <div class="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+          <div class="font-bold text-slate-900">Bảng chốt công</div>
+          <div class="text-xs text-slate-500">Chuẩn kế toán • 1 dòng = 1 NV</div>
+        </div>
+        <div class="overflow-auto max-h-[62vh]">
           <table class="w-full text-sm">
-            <thead class="bg-sky-600 text-white text-xs font-black sticky top-0"><tr><th class="px-3 py-2 text-left">NV</th><th class="px-2 py-2">Tiêu chuẩn</th><th class="px-2 py-2">Thực tế</th><th class="px-2 py-2">Tính lương</th><th class="px-2 py-2">Trễ</th><th class="px-2 py-2">Thiếu</th></tr></thead>
-            <tbody id="monthlyTbody"></tbody>
+            <thead class="bg-slate-900 text-white text-xs sticky top-0"><tr><th class="px-3 py-2.5 text-left font-bold">Nhân viên</th><th class="px-2 py-2.5 text-right">TC</th><th class="px-2 py-2.5 text-right">Thực</th><th class="px-2 py-2.5 text-right">Tính lương</th><th class="px-2 py-2.5 text-center">Trễ</th><th class="px-2 py-2.5 text-center">Thiếu</th></tr></thead>
+            <tbody id="monthlyTbody" class="divide-y divide-slate-100"></tbody>
           </table>
         </div>
       </div>
@@ -118,113 +121,94 @@
 
     <!-- Daily -->
     <div id="tab-daily" class="tab-section hidden">
-      <div class="card">
-        <div class="flex items-center gap-2 mb-3">
-          <select id="dailyEmp" class="flex-1 px-3 py-2 rounded-xl border border-sky-200 text-sm font-bold"></select>
-          <button onclick="loadDaily()" class="px-4 py-2 rounded-xl bg-sky-500 text-white text-sm font-bold">Xem</button>
+      <div class="card p-4">
+        <div class="flex gap-2 mb-3">
+          <select id="dailyEmp" class="flex-1 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm font-bold"></select>
+          <button onclick="loadDaily()" class="px-5 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-bold">Xem</button>
         </div>
-        <div class="overflow-auto max-h-[60vh]">
-          <table class="w-full text-xs">
-            <thead class="bg-sky-600 text-white font-black sticky top-0"><tr><th class="px-2 py-2">Ngày</th><th class="px-2 py-2">Ca</th><th class="px-2 py-2">IN</th><th class="px-2 py-2">OUT</th><th class="px-2 py-2">Trạng thái</th></tr></thead>
-            <tbody id="dailyTbody"></tbody>
+        <div class="overflow-auto max-h-[62vh] border border-slate-200 rounded-xl">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-900 text-white text-xs sticky top-0"><tr><th class="px-3 py-2.5 text-left">Ngày</th><th class="px-3 py-2.5">Ca</th><th class="px-3 py-2.5">IN</th><th class="px-3 py-2.5">OUT</th><th class="px-3 py-2.5">TT</th></tr></thead>
+            <tbody id="dailyTbody" class="divide-y divide-slate-100"></tbody>
           </table>
         </div>
       </div>
     </div>
 
-    <!-- Anomalies -->
-    <div id="tab-anomalies" class="tab-section hidden">
-      <div id="anomalyList" class="space-y-2"></div>
-    </div>
+    <div id="tab-anomalies" class="tab-section hidden"><div id="anomalyList" class="space-y-2"></div></div>
 
     <!-- MASTER_DATA -->
     <div id="tab-master" class="tab-section hidden">
-      <div class="card overflow-hidden p-0">
-        <div class="p-3 bg-sky-50 border-b border-sky-100 flex justify-between items-center">
-          <div class="font-black text-sky-900">MASTER_DATA</div>
-          <span class="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full">Single Source of Truth</span>
+      <div class="card p-0 overflow-hidden">
+        <div class="px-4 py-3 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+          <div class="font-bold text-slate-900">MASTER_DATA <span class="ml-2 text-xs font-normal text-slate-500">1 dòng = 1 BH_Code • 1:1</span></div>
+          <span class="text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-full">Single Source</span>
         </div>
-        <div class="p-3 bg-sky-50 border-b border-sky-100">
+        <div class="p-3 bg-slate-50 border-b border-slate-200">
           <div class="grid grid-cols-2 md:grid-cols-6 gap-2">
-            <input id="masterBh" placeholder="BH_Code" class="px-2 py-1.5 rounded-xl border border-sky-200 text-xs">
-            <input id="masterHoTen" placeholder="HoTen" class="px-2 py-1.5 rounded-xl border border-sky-200 text-xs">
-            <input id="masterBranch" placeholder="BranchGoc" class="px-2 py-1.5 rounded-xl border border-sky-200 text-xs">
-            <select id="masterStatus" class="px-2 py-1.5 rounded-xl border border-sky-200 text-xs"><option>Training</option><option>Official</option></select>
-            <input id="masterNgay" type="date" class="px-2 py-1.5 rounded-xl border border-sky-200 text-xs">
-            <button onclick="saveMaster()" class="px-3 py-1.5 rounded-xl bg-sky-500 text-white text-xs font-black">Lưu → Sheet</button>
+            <input id="masterBh" placeholder="BH_Code" class="px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm mono">
+            <input id="masterHoTen" placeholder="Họ tên" class="px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm">
+            <input id="masterBranch" placeholder="BranchGoc" class="px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm">
+            <select id="masterStatus" class="px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm"><option>Training</option><option>Official</option></select>
+            <input id="masterNgay" type="date" class="px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm">
+            <button onclick="saveMaster()" class="px-3 py-2 rounded-xl bg-slate-900 text-white text-sm font-bold">Lưu → Sheet</button>
           </div>
-          <div class="text-[11px] text-slate-500 mt-1">Sửa trên web → đồng bộ realtime về Google Sheets MASTER_DATA (1:1)</div>
         </div>
         <div class="overflow-auto max-h-[60vh]">
-          <table class="w-full text-xs">
-            <thead class="bg-sky-600 text-white font-black sticky top-0"><tr><th class="px-2 py-2">BH_Code</th><th class="px-2 py-2">HoTen</th><th class="px-2 py-2">BranchGoc</th><th class="px-2 py-2">Status</th><th class="px-2 py-2">Ngày Lên Chính Thức</th><th class="px-2 py-2">Đơn Giá</th><th class="px-2 py-2">Sửa</th></tr></thead>
-            <tbody id="masterTbody"></tbody>
+          <table class="w-full text-sm">
+            <thead class="bg-slate-900 text-white text-xs sticky top-0"><tr><th class="px-3 py-2.5 text-left">BH_Code</th><th class="px-3 py-2.5 text-left">Họ tên</th><th class="px-3 py-2.5">Branch</th><th class="px-3 py-2.5">Status</th><th class="px-3 py-2.5">Ngày lên CT</th><th class="px-3 py-2.5 text-right">Đơn giá</th><th class="px-3 py-2.5"></th></tr></thead>
+            <tbody id="masterTbody" class="divide-y divide-slate-100"></tbody>
           </table>
         </div>
       </div>
     </div>
 
-    <!-- TEMPLATE -->
     <div id="tab-template" class="tab-section hidden">
-      <div class="card">
-        <div class="font-black text-sky-900 mb-2">_TEMPLATE_LUONG (ẩn) - Công thức</div>
-        <div class="text-xs text-slate-600 mb-3">Sheet ẩn chứa công thức Tổng giờ, Ngày công, Lương Training/Official, Hoàn cọc. Khi tạo LUONG_THANG_MM_YYYY sẽ copy nguyên mẫu.</div>
-        <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 font-mono text-xs overflow-auto max-h-[60vh]" id="templateInfo"></div>
+      <div class="card p-4">
+        <div class="font-bold text-slate-900">_TEMPLATE_LUONG <span class="ml-2 text-xs font-normal text-slate-500">ẩn • công thức</span></div>
+        <div class="mt-3 bg-slate-50 border border-slate-200 rounded-xl p-4 font-mono text-xs leading-6 overflow-auto max-h-[60vh]" id="templateInfo"></div>
       </div>
     </div>
 
-    <!-- DONG_PHUC -->
     <div id="tab-dongphuc" class="tab-section hidden">
-      <div class="card overflow-hidden p-0">
-        <div class="p-3 bg-amber-50 border-b border-amber-200 flex justify-between items-center">
-          <div class="font-black text-amber-900">DONG_PHUC</div>
-          <span class="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-full">Hoàn/Khấu trừ 1 lần</span>
+      <div class="card p-0 overflow-hidden">
+        <div class="px-4 py-3 border-b border-slate-200 flex items-center justify-between bg-amber-50">
+          <div class="font-bold text-amber-900">DONG_PHUC</div>
+          <span class="text-xs font-bold bg-white border border-amber-200 text-amber-700 px-2.5 py-1 rounded-full">1 lần / BH_Code</span>
         </div>
-        <div class="p-3 bg-amber-50 border-b border-amber-100">
+        <div class="p-3 bg-amber-50/50 border-b border-amber-100">
           <div class="grid grid-cols-2 md:grid-cols-5 gap-2">
-            <input id="dongBh" placeholder="BH_Code" class="px-2 py-1.5 rounded-xl border border-amber-200 text-xs">
-            <input id="dongHoTen" placeholder="HoTen" class="px-2 py-1.5 rounded-xl border border-amber-200 text-xs">
-            <input id="dongTien" type="number" placeholder="Số tiền" class="px-2 py-1.5 rounded-xl border border-amber-200 text-xs">
-            <input id="dongNgay" type="date" class="px-2 py-1.5 rounded-xl border border-amber-200 text-xs">
-            <button onclick="saveDongPhuc()" class="px-3 py-1.5 rounded-xl bg-amber-500 text-white text-xs font-black">Lưu → Sheet</button>
+            <input id="dongBh" placeholder="BH_Code" class="px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm mono">
+            <input id="dongHoTen" placeholder="Họ tên" class="px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm">
+            <input id="dongTien" type="number" placeholder="Số tiền" class="px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm">
+            <input id="dongNgay" type="date" class="px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm">
+            <button onclick="saveDongPhuc()" class="px-3 py-2 rounded-xl bg-amber-600 text-white text-sm font-bold">Lưu</button>
           </div>
         </div>
-        <div class="overflow-auto max-h-[60vh]">
-          <table class="w-full text-xs">
-            <thead class="bg-amber-600 text-white font-black sticky top-0"><tr><th class="px-2 py-2">BH_Code</th><th class="px-2 py-2">HoTen</th><th class="px-2 py-2">Số Tiền</th><th class="px-2 py-2">Ngày</th><th class="px-2 py-2">Sửa</th></tr></thead>
-            <tbody id="dongphucTbody"></tbody>
-          </table>
-        </div>
+        <div class="overflow-auto max-h-[60vh]"><table class="w-full text-sm"><thead class="bg-amber-600 text-white text-xs sticky top-0"><tr><th class="px-3 py-2.5 text-left">BH_Code</th><th class="px-3 py-2.5 text-left">Họ tên</th><th class="px-3 py-2.5 text-right">Số tiền</th><th class="px-3 py-2.5">Ngày</th><th class="px-3 py-2.5"></th></tr></thead><tbody id="dongphucTbody" class="divide-y divide-slate-100"></tbody></table></div>
       </div>
     </div>
 
-    <!-- KHAM_SUC_KHOE -->
     <div id="tab-khamsk" class="tab-section hidden">
-      <div class="card overflow-hidden p-0">
-        <div class="p-3 bg-emerald-50 border-b border-emerald-200 flex justify-between items-center">
+      <div class="card p-0 overflow-hidden">
+        <div class="px-4 py-3 border-b border-slate-200 flex items-center justify-between bg-emerald-50">
           <div class="font-black text-emerald-900">KHAM_SUC_KHOE</div>
-          <span class="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full">Hoàn 1 lần</span>
+          <span class="text-xs font-bold bg-white border border-emerald-200 text-emerald-700 px-2.5 py-1 rounded-full">1 lần / BH_Code</span>
         </div>
-        <div class="p-3 bg-emerald-50 border-b border-emerald-100">
+        <div class="p-3 bg-emerald-50/50 border-b border-emerald-100">
           <div class="grid grid-cols-2 md:grid-cols-5 gap-2">
-            <input id="khamBh" placeholder="BH_Code" class="px-2 py-1.5 rounded-xl border border-emerald-200 text-xs">
-            <input id="khamHoTen" placeholder="HoTen" class="px-2 py-1.5 rounded-xl border border-emerald-200 text-xs">
-            <input id="khamTien" type="number" placeholder="Số tiền" class="px-2 py-1.5 rounded-xl border border-emerald-200 text-xs">
-            <input id="khamNgay" type="date" class="px-2 py-1.5 rounded-xl border border-emerald-200 text-xs">
-            <button onclick="saveKhamSK()" class="px-3 py-1.5 rounded-xl bg-emerald-500 text-white text-xs font-black">Lưu → Sheet</button>
+            <input id="khamBh" placeholder="BH_Code" class="px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm mono">
+            <input id="khamHoTen" placeholder="Họ tên" class="px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm">
+            <input id="khamTien" type="number" placeholder="Số tiền" class="px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm">
+            <input id="khamNgay" type="date" class="px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm">
+            <button onclick="saveKhamSK()" class="px-3 py-2 rounded-xl bg-emerald-600 text-white text-sm font-bold">Lưu</button>
           </div>
         </div>
-        <div class="overflow-auto max-h-[60vh]">
-          <table class="w-full text-xs">
-            <thead class="bg-emerald-600 text-white font-black sticky top-0"><tr><th class="px-2 py-2">BH_Code</th><th class="px-2 py-2">HoTen</th><th class="px-2 py-2">Số Tiền</th><th class="px-2 py-2">Ngày</th><th class="px-2 py-2">Sửa</th></tr></thead>
-            <tbody id="khamskTbody"></tbody>
-          </table>
-        </div>
+        <div class="overflow-auto max-h-[60vh]"><table class="w-full text-sm"><thead class="bg-emerald-600 text-white text-xs sticky top-0"><tr><th class="px-3 py-2.5 text-left">BH_Code</th><th class="px-3 py-2.5 text-left">Họ tên</th><th class="px-3 py-2.5 text-right">Số tiền</th><th class="px-3 py-2.5">Ngày</th><th class="px-3 py-2.5"></th></tr></thead><tbody id="khamskTbody" class="divide-y divide-slate-100"></tbody></table></div>
       </div>
     </div>
-  </main>
+  </div>
 </div>
-
 <script src="/js/finance.js"></script>
 </body>
 </html>
