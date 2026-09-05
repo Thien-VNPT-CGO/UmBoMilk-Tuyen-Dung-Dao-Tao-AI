@@ -342,22 +342,22 @@ function switchTab(id){
   document.querySelectorAll('[id^="nav-"]').forEach(b=>b.classList.remove('nav-active'));
   const navBtn = document.getElementById('nav-'+id);
   if(navBtn) navBtn.classList.add('nav-active');
-  // lazy load
-  if(id==='dashboard') loadDashboard();
-  if(id==='applicants') loadApplicants();
-  if(id==='interviews') loadInterviews();
-  if(id==='employees-store') loadEmployees();
+  // lazy load - bọc an toàn để không bao giờ văng Uncaught (in promise)
+  if(id==='dashboard') safeCall(loadDashboard());
+  if(id==='applicants') safeCall(loadApplicants());
+  if(id==='interviews') safeCall(loadInterviews());
+  if(id==='employees-store') safeCall(loadEmployees());
   if(id==='beta-workshop') renderBeta();
-  if(id==='schedule') loadSchedules();
-  if(id==='shiftSwap') loadShiftSwapAdmin();
-  if(id==='requests') loadRequests();
-  if(id==='attendance') loadAttendances();
-  if(id==='zalo') loadZalo();
-  if(id==='elearning') loadElearning();
-  if(id==='finance-keys') loadFinanceKeys();
-  if(id==='google-sheet-hub') loadGoogleSheetHub();
-  if(id==='settings') loadSettings();
-  if(id==='audit') loadAudit();
+  if(id==='schedule') safeCall(loadSchedules());
+  if(id==='shiftSwap') safeCall(loadShiftSwapAdmin());
+  if(id==='requests') safeCall(loadRequests());
+  if(id==='attendance') safeCall(loadAttendances());
+  if(id==='zalo') safeCall(loadZalo());
+  if(id==='elearning') safeCall(loadElearning());
+  if(id==='finance-keys') safeCall(loadFinanceKeys());
+  if(id==='google-sheet-hub') safeCall(loadGoogleSheetHub());
+  if(id==='settings') safeCall(loadSettings());
+  if(id==='audit') safeCall(loadAudit());
   if(window.innerWidth<1024) document.getElementById('sidebar').classList.add('hidden');
 }
 
@@ -372,11 +372,32 @@ function togglePass(){
 async function api(path, opts={}){
   const headers = {'Content-Type':'application/json'};
   if(token) headers['Authorization']='Bearer '+token;
-  const res = await fetch(API+path, {...opts, headers:{...headers, ...(opts.headers||{})}});
+  let res;
+  try{
+    res = await fetch(API+path, {...opts, headers:{...headers, ...(opts.headers||{})}});
+  }catch(e){
+    throw new Error('Không kết nối được máy chủ ('+path+') - kiểm tra mạng/server');
+  }
   const data = await res.json().catch(()=>({}));
-  if(!res.ok) throw new Error(data.error||'Lỗi API');
+  if(!res.ok) throw new Error(data.error||(`Lỗi API ${res.status} (${path})`));
   return data;
 }
+// Bọc mọi promise fire-and-forget: lỗi hiện toast thay vì văng Uncaught (in promise)
+function safeCall(promise){
+  return Promise.resolve(promise).catch(e=>{
+    console.error('[safeCall]', e);
+    try{ showToast(e.message||'Có lỗi xảy ra','error'); }catch(_){}
+  });
+}
+// Lưới an toàn cuối: mọi rejection sót lại đều hiện toast, không văng console Uncaught
+window.addEventListener('unhandledrejection', (ev)=>{
+  try{
+    console.error('[unhandledrejection]', ev.reason);
+    const msg = (ev.reason && ev.reason.message) || 'Có lỗi xảy ra';
+    if(typeof showToast==='function') showToast(msg,'error');
+  }catch(_){}
+  ev.preventDefault();
+});
 // Pagination helper - khung giữa cố định, chia trang khi nhiều dữ liệu
 function renderPagination(containerId, total, page, limit, onPageChange){
   const el = document.getElementById(containerId);
@@ -559,19 +580,19 @@ function connectSocket(){
         }
       }catch(e){ console.error('realtime ràng buộc error', e); }
       // reload relevant data without full fetch if payload provided?
-      // For simplicity, refetch current tab
-      if(active==='dashboard') loadDashboard();
-      if(active==='applicants') loadApplicants();
-      if(active==='interviews') loadInterviews();
-      if(active==='employees-store') loadEmployees();
-      if(active==='schedule') loadSchedules();
-      if(active==='requests') loadRequests();
-      if(active==='attendance') loadAttendances();
-      if(active==='zalo') loadZalo();
-      if(active==='elearning') loadElearning();
-      if(active==='finance-keys') loadFinanceKeys();
+      // For simplicity, refetch current tab (bọc an toàn, không văng Uncaught)
+      if(active==='dashboard') safeCall(loadDashboard());
+      if(active==='applicants') safeCall(loadApplicants());
+      if(active==='interviews') safeCall(loadInterviews());
+      if(active==='employees-store') safeCall(loadEmployees());
+      if(active==='schedule') safeCall(loadSchedules());
+      if(active==='requests') safeCall(loadRequests());
+      if(active==='attendance') safeCall(loadAttendances());
+      if(active==='zalo') safeCall(loadZalo());
+      if(active==='elearning') safeCall(loadElearning());
+      if(active==='finance-keys') safeCall(loadFinanceKeys());
       if(active==='settings') {/* */}
-      if(active==='audit') loadAudit();
+      if(active==='audit') safeCall(loadAudit());
       // realtime drive / OT / leave toasts
       if(ev==='drive:update' && data) showToast(`📁 Drive realtime: ${Array.isArray(data)?data.length:1} file mới (${data[0]?.drivePath||''})`, 'info');
       if(ev==='overtime:update') showToast('⏱ OT realtime cập nhật', 'info');
@@ -612,8 +633,8 @@ function connectSocket(){
   // Listen for realtime AUTO-PASS event from server poller
   socket.on('interview:auto_pass', (data)=>{
     showToast(`🎉 [AUTO-PASS REALTIME] Ứng viên "${data.applicantName}" đã tự động PASS phỏng vấn (Hết giờ Google Meet ${data.timeSlot})`, 'success');
-    loadApplicants();
-    loadInterviews();
+    safeCall(loadApplicants());
+    safeCall(loadInterviews());
   });
 }
 
@@ -4068,7 +4089,7 @@ function renderSchedules(){
     `;
   }).join('');
   // Hiển thị duyệt lịch tuần sau nếu có draft
-  setTimeout(loadNextWeekDrafts, 500);
+  setTimeout(()=>safeCall(loadNextWeekDrafts()), 500);
 }
 async function loadNextWeekDrafts(){
   try{
@@ -4769,7 +4790,7 @@ async function saveSettings(){
       showToast('Đã lưu cài đặt hệ thống + Audit Log','success');
     }
     // reload để cập nhật envLocked
-    setTimeout(loadSettings, 500);
+    setTimeout(()=>safeCall(loadSettings()), 500);
   }catch(e){
     if(e.message.includes('423') || e.message.includes('khóa bởi ENV')){
       showToast(e.message,'error');
