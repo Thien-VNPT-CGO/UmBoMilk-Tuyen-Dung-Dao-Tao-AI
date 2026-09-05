@@ -520,6 +520,26 @@ function connectSocket(){
         syncEl.classList.add('bg-emerald-500','animate-pulse');
         setTimeout(() => { if (syncEl) { syncEl.textContent = 'SYNCED'; syncEl.classList.remove('animate-pulse'); } }, 1200);
       }
+      // === REALTIME RÀNG BUỘC: Chấm công -> Lịch + Nhân viên Training/Chính thức ===
+      // Cập nhật local ngay để render tức thì (không chờ fetch), rồi vẫn fetch nền để đồng bộ
+      try{
+        if(ev==='attendances:update' && Array.isArray(data)){
+          attendances = data;
+          if(active==='employees-store' && typeof renderEmployeesStore==='function'){ renderEmployeesStore(); showToast('📍 Realtime: Chấm công vừa cập nhật — Lịch & bảng NV đã đổi màu', 'info'); }
+          if(active==='schedule' && typeof renderSchedules==='function'){ renderSchedules(); }
+          if(active==='attendance' && typeof renderAttendancesList==='function'){ renderAttendancesList(); }
+        }
+        if(ev==='schedules:update' && Array.isArray(data)){
+          schedules = data;
+          if(active==='schedule' && typeof renderSchedules==='function'){ renderSchedules(); }
+          if(active==='employees-store' && typeof renderEmployeesStore==='function'){ renderEmployeesStore(); }
+        }
+        if(ev==='employees:update' && Array.isArray(data)){
+          employees = data;
+          if(active==='employees-store' && typeof renderEmployeesStore==='function'){ renderEmployeesStore(); }
+          if(active==='schedule' && typeof renderSchedules==='function'){ renderSchedules(); }
+        }
+      }catch(e){ console.error('realtime ràng buộc error', e); }
       // reload relevant data without full fetch if payload provided?
       // For simplicity, refetch current tab
       if(active==='dashboard') loadDashboard();
@@ -2649,6 +2669,14 @@ function renderEmployeesStore(){
   if(empPag.page <1) empPag.page =1;
   const empStart = (empPag.page -1)*empPag.limit;
   const paginatedEmp = list.slice(empStart, empStart + empPag.limit);
+  // Cập nhật ngày trong chú thích legend realtime (luôn chạy, cả khi có NV hay không)
+  try{
+    const nowLegend = new Date();
+    const todayL = nowLegend.toLocaleDateString('vi-VN', {timeZone:'Asia/Ho_Chi_Minh'});
+    const todayISO = nowLegend.toLocaleDateString('en-CA', {timeZone:'Asia/Ho_Chi_Minh'});
+    const elLegend = document.getElementById('legendTodayDate');
+    if(elLegend) elLegend.textContent = todayL + ' • ' + todayISO;
+  }catch(_){}
   // Empty state per tab
   const tableEl = document.getElementById('employeesTable');
   if (tableEl) {
@@ -2656,7 +2684,7 @@ function renderEmployeesStore(){
       const emptyMsg = currentEmpStoreTab==='TRAINING' 
         ? `<div class="text-pink-600 font-bold">Chưa có nhân viên Training</div><div class="text-slate-500 text-xs mt-1">Nhân viên mới từ Form sau khi duyệt sẽ vào tab này (7 ngày Training) • Lọc: ${branchF||'Tất cả CN'}</div>`
         : `<div class="text-emerald-600 font-bold">Chưa có nhân viên Chính thức</div><div class="text-slate-500 text-xs mt-1">Chỉ 2 ngày OFF/tuần (T6 12:00→T7 15:00) • AI sắp lịch T2→CN • Lọc: ${branchF||'Tất cả CN'}</div>`;
-      const colspan = currentEmpStoreTab==='OFFICIAL' ? 7 : 8;
+      const colspan = currentEmpStoreTab==='OFFICIAL' ? 8 : 9;
       tableEl.innerHTML = `<tr><td colspan="${colspan}" class="px-4 py-10 text-center bg-white"><div class="w-12 h-12 bg-pink-100 text-pink-600 rounded-xl flex items-center justify-center mx-auto"><i class="fa-solid ${currentEmpStoreTab==='TRAINING'?'fa-graduation-cap':'fa-user-check'}"></i></div><div class="mt-3 text-sm">${emptyMsg}</div></td></tr>`;
       renderPagination('employeesPagination', 0, 1, empPag.limit, 'goEmpPage');
       return;
@@ -2686,6 +2714,57 @@ function renderEmployeesStore(){
           <td class="px-4 py-3.5 align-middle text-center whitespace-nowrap">
             <span class="text-xs font-bold bg-pink-50 text-pink-700 px-2.5 py-1 rounded-xl border border-pink-200/70 inline-block">${getBranchDisplay(e.branchId)}</span>
             <div class="text-xs font-black text-slate-700 mt-1">${e.shift}</div>
+          </td>
+
+          <!-- Chấm công hôm nay (Realtime) - Ràng buộc với Lịch làm việc -->
+          <td class="px-4 py-3.5 align-middle text-center whitespace-nowrap">
+            ${(()=>{
+              const nowLocal = new Date();
+              const todayLocal = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth()+1).padStart(2,'0')}-${String(nowLocal.getDate()).padStart(2,'0')}`;
+              const todayVN = new Date().toLocaleDateString('en-CA', {timeZone:'Asia/Ho_Chi_Minh'});
+              const todayUTC = new Date().toISOString().split('T')[0];
+              const candidates = [todayLocal, todayVN, todayUTC];
+              let attToday = null;
+              for(const d of candidates){ attToday = (typeof attendances!=='undefined'?attendances:[]).find(a=>a.employeeId===e.employeeId && a.date===d); if(attToday) break; }
+              // Kiểm tra lịch hôm nay để phân biệt OFF / WAITING
+              let schedToday = null;
+              try{
+                const sched = (typeof schedules!=='undefined'?schedules:[]).find(s=>s.employeeId===e.employeeId && (s.days||[]).some(dd=>candidates.includes(dd.date)));
+                if(sched) schedToday = sched.days.find(dd=>candidates.includes(dd.date));
+              }catch(_){}
+              const isOffSchedule = schedToday && schedToday.status==='OFF';
+              const isWaiting = schedToday && schedToday.status==='WAITING_OFFICIAL';
+              let badge='', cls='', timeInfo='', gpsInfo='';
+              if(isOffSchedule){
+                badge='OFF'; cls='bg-slate-100 text-slate-600 border border-slate-200'; timeInfo='Nghỉ theo lịch'; 
+              } else if(isWaiting){
+                badge='CHỜ'; cls='bg-slate-200 text-slate-500 border'; timeInfo='Chưa chính thức';
+              } else if(!attToday || !attToday.checkIn){
+                badge='✗ Vắng'; cls='bg-red-500 text-white shadow-2xs'; timeInfo='Không đi làm';
+              } else if(attToday.checkIn && !attToday.checkOut){
+                badge='● Đang làm'; cls='bg-blue-500 text-white shadow-2xs animate-pulse'; timeInfo=`IN ${attToday.checkIn.time}`; gpsInfo=attToday.checkIn.gps?`📍 ${String(attToday.checkIn.gps).split(',')[0]}`:'';
+              } else if(attToday.violations && attToday.violations.includes('LATE') && attToday.violations.includes('EARLY_LEAVE')){
+                badge='⚠ Trễ + Sớm'; cls='bg-orange-500 text-white'; timeInfo=`IN ${attToday.checkIn.time} • OUT ${attToday.checkOut.time}`; 
+              } else if(attToday.violations && attToday.violations.includes('LATE')){
+                badge='⚠ Trễ'; cls='bg-orange-500 text-white'; timeInfo=`IN ${attToday.checkIn.time} • OUT ${attToday.checkOut.time}`; 
+              } else if(attToday.violations && attToday.violations.includes('EARLY_LEAVE')){
+                badge='⚠ Về sớm'; cls='bg-orange-400 text-white'; timeInfo=`IN ${attToday.checkIn.time} • OUT ${attToday.checkOut.time}`;
+              } else if(attToday.violations && attToday.violations.includes('NO_CHECKOUT')){
+                badge='⚠ Thiếu OUT'; cls='bg-amber-400 text-white'; timeInfo=`IN ${attToday.checkIn.time}`;
+              } else if(attToday.status==='COMPLETED' || (attToday.checkIn && attToday.checkOut)){
+                badge='✔ Hoàn thành'; cls='bg-emerald-500 text-white shadow-2xs'; timeInfo=`IN ${attToday.checkIn.time} • OUT ${attToday.checkOut.time}`;
+              } else {
+                badge='—'; cls='bg-white text-slate-500 border'; timeInfo=attToday.status||'—';
+              }
+              const violationBadges = (attToday?.violations||[]).map(v=>`<span class="text-[9px] font-bold bg-white/20 border border-white/30 px-1 py-0.5 rounded-full">${v}</span>`).join('');
+              return `<div class="inline-flex flex-col items-center gap-1 min-w-[130px]">
+                <span class="text-[11px] font-black px-3 py-1 rounded-full ${cls} flex items-center gap-1 justify-center">${badge}</span>
+                <span class="text-[11px] font-bold text-slate-700">${timeInfo}</span>
+                ${gpsInfo?`<span class="text-[10px] text-slate-500">${gpsInfo} ${attToday?.checkIn?.image ? '• 📷' : ''}</span>`:''}
+                ${violationBadges?`<span class="flex gap-1 flex-wrap justify-center">${violationBadges}</span>`:''}
+                <span class="text-[10px] text-slate-400">${candidates[0].split('-').reverse().join('/')}</span>
+              </div>`;
+            })()}
           </td>
 
           <!-- Tiến độ ca làm / Training -->
