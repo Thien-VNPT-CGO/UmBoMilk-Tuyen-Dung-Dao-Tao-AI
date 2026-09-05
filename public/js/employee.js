@@ -901,12 +901,26 @@ async function submitCheckout(){
   }
 }
 async function loadAttendanceTab(){
+  // AI realtime window cho NV chính thức — đồng bộ với server.js: checkInOpenBefore=30, checkInCloseAfter=60, penalty sau 5p/30p/60p
+  const SHIFT_MAP = {CA_SANG:{start:'07:00', end:'12:00', hours:5}, CA_CHIEU:{start:'12:00', end:'18:00', hours:6}, CA_TOI:{start:'18:00', end:'23:00', hours:5}};
+  const isOfficial = employee && (employee.type==='OFFICIAL' || employee.status==='OFFICIAL');
+  const sInfo = SHIFT_MAP[employee.shift] || SHIFT_MAP['CA_SANG'];
+  const fmtHM = (mins)=>{ const h=Math.floor(mins/60)%24; const m=mins%60; return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'); };
+  const parseHM = (str)=>{ const [h,m]=str.split(':').map(Number); return h*60+m; };
+  const startMins = parseHM(sInfo.start);
+  const endMins = parseHM(sInfo.end);
+  const openCheckIn = startMins - 30; // AI mở trước 30p
+  const closeCheckIn = startMins + 60; // đóng sau 60p (server.js checkInCloseAfter)
+  const openCheckOut = endMins; // AI mở sau giờ hết ca
   try{
-    const shiftInfo = {CA_SANG:{start:'07:00'}, CA_CHIEU:{start:'12:00'}, CA_TOI:{start:'18:00'}}[employee.shift]||{start:'07:00'};
-    document.getElementById('checkinWindow').textContent=`Mở ${shiftInfo.start} -30p`;
+    const winEl = document.getElementById('checkinWindow');
+    if(winEl){
+      if(isOfficial) winEl.textContent = `AI mở ${fmtHM(openCheckIn)} → ${fmtHM(closeCheckIn)} (trễ 5p phạt 30k)`;
+      else winEl.textContent = `Mở ${sInfo.start} -30p (Training)`;
+    }
   }catch(e){}
 
-  // Sequential Check-in / Check-out UI visibility
+  // Sequential Check-in / Check-out UI + AI window realtime (official)
   try{
     const today = new Date().toISOString().split('T')[0];
     const atts = await api('/api/attendances?employeeId='+employee.employeeId+'&date='+today);
@@ -914,44 +928,130 @@ async function loadAttendanceTab(){
 
     const cardCheckin = document.getElementById('cardCheckin');
     const cardCheckout = document.getElementById('cardCheckout');
-    
-    // Ràng buộc ca làm việc: Chỉ hiển thị card nếu đúng ca hoặc admin bypass
+    const btnIn = document.getElementById('btnSubmitCheckin');
+    const btnOut = document.querySelector('#cardCheckout button[onclick="submitCheckout()"]') || document.getElementById('btnSubmitCheckout');
+
     const now = new Date();
-    const currentHour = now.getHours();
-    const currentMin = now.getMinutes();
-    const currentTime = currentHour + currentMin/60;
-    
-    let isShiftTime = false;
-    const shift = employee.shift;
-    if(shift === 'CA_SANG') isShiftTime = currentTime >= 6.5 && currentTime <= 12.5;
-    else if(shift === 'CA_CHIEU') isShiftTime = currentTime >= 11.5 && currentTime <= 18.5;
-    else if(shift === 'CA_TOI') isShiftTime = currentTime >= 17.5 && currentTime <= 23.5;
-    
-    // Nếu không phải giờ ca, ẩn cả 2 card và hiện thông báo
-    if(!isShiftTime){
-       if (cardCheckin) cardCheckin.classList.add('hidden');
-       if (cardCheckout) cardCheckout.classList.add('hidden');
-       let msgEl = document.getElementById('attendanceShiftMsg');
-       if(!msgEl){
-         msgEl = document.createElement('div');
-         msgEl.id = 'attendanceShiftMsg';
-         msgEl.className = 'card bg-amber-50 border-amber-200 text-amber-800 text-sm font-bold text-center p-8';
-         cardCheckin.parentElement.insertBefore(msgEl, cardCheckin);
-       }
-       msgEl.innerHTML = `<i class="fa-solid fa-clock text-2xl mb-2 block"></i> Ngoài giờ ca làm việc (${employee.shift})<br><span class="text-xs font-normal opacity-75">Điểm danh chỉ mở trước ca 30 phút và đóng sau ca 30 phút.</span>`;
-       msgEl.classList.remove('hidden');
+    const nowMins = now.getHours()*60 + now.getMinutes();
+    const diffLate = nowMins - startMins; // phút trễ
+
+    // Tạo vùng thông báo AI realtime nếu chưa có
+    let aiInfo = document.getElementById('attendanceAiInfo');
+    if(!aiInfo && cardCheckin && cardCheckin.parentElement){
+      aiInfo = document.createElement('div');
+      aiInfo.id = 'attendanceAiInfo';
+      aiInfo.className = 'card mt-3 p-3 text-xs font-bold hidden';
+      cardCheckin.parentElement.insertBefore(aiInfo, cardCheckin);
+    }
+    let shiftMsg = document.getElementById('attendanceShiftMsg');
+    if(!shiftMsg && cardCheckin && cardCheckin.parentElement){
+      shiftMsg = document.createElement('div');
+      shiftMsg.id = 'attendanceShiftMsg';
+      shiftMsg.className = 'card bg-amber-50 border-amber-200 text-amber-800 text-sm font-bold text-center p-6 hidden';
+      cardCheckin.parentElement.insertBefore(shiftMsg, cardCheckin);
+    }
+
+    const showAiInfo = (html, cls)=>{
+      if(!aiInfo) return;
+      aiInfo.className = 'card mt-3 p-3 text-xs font-bold text-center '+cls;
+      aiInfo.innerHTML = html;
+      aiInfo.classList.remove('hidden');
+    };
+    const hideAiInfo = ()=>{ if(aiInfo) aiInfo.classList.add('hidden'); };
+
+    if(isOfficial){
+      // --- NV CHÍNH THỨC: AI window nghiêm ngặt ---
+      if(!todayAtt || !todayAtt.checkIn){
+        // Chưa check-in
+        if(nowMins < openCheckIn){
+          const remain = openCheckIn - nowMins;
+          if(cardCheckin) cardCheckin.classList.remove('hidden');
+          if(cardCheckout) cardCheckout.classList.add('hidden');
+          if(shiftMsg){ shiftMsg.innerHTML = `<i class=\"fa-solid fa-robot text-pink-500 text-xl mb-2 block\"></i> AI chưa mở Check-in<br><span class=\"text-sm\">Ca ${employee.shift} ${sInfo.start}-${sInfo.end} • AI sẽ mở lúc <b>${fmtHM(openCheckIn)}</b> (còn ${remain} phút)</span>`; shiftMsg.className='card bg-slate-50 border-slate-200 text-slate-600 text-sm font-bold text-center p-6'; shiftMsg.classList.remove('hidden'); }
+          if(btnIn) btnIn.disabled = true, btnIn.classList.add('opacity-50','cursor-not-allowed');
+          showAiInfo(`<i class=\"fa-solid fa-clock\"></i> AI tự động mở Check-in trước giờ làm 30 phút • Sau ${fmtHM(closeCheckIn)} sẽ đóng và tính phạt theo nội quy`, 'bg-slate-50 border-slate-200 text-slate-600');
+        } else if(nowMins <= closeCheckIn){
+          const remain = closeCheckIn - nowMins;
+          const late5 = diffLate >=5 && diffLate <30;
+          const late30 = diffLate >=30 && diffLate <60;
+          const late60 = diffLate >=60;
+          if(cardCheckin) cardCheckin.classList.remove('hidden');
+          if(cardCheckout) cardCheckout.classList.add('hidden');
+          if(shiftMsg) shiftMsg.classList.add('hidden');
+          if(btnIn) btnIn.disabled = false, btnIn.classList.remove('opacity-50','cursor-not-allowed');
+          if(late60) showAiInfo(`<span class=\"text-red-600\">⚠️ Đã trễ ${diffLate} phút — nếu check-in bây giờ sẽ phạt 100% ca (${(sInfo.hours*25500).toLocaleString('vi-VN')}đ) • Còn ${remain} phút trước khi đóng</span>`, 'bg-red-50 border-red-200 text-red-700');
+          else if(late30) showAiInfo(`<span class=\"text-orange-600\">⚠️ Đã trễ ${diffLate} phút — phạt 50% ca (${Math.round(sInfo.hours*25500*0.5).toLocaleString('vi-VN')}đ) • Còn ${remain} phút</span>`, 'bg-orange-50 border-orange-200 text-orange-700');
+          else if(late5) showAiInfo(`<span class=\"text-amber-600\">⚠️ Trễ ${diffLate} phút — phạt 30.000đ • Còn ${remain} phút trước khi đóng</span>`, 'bg-amber-50 border-amber-200 text-amber-700');
+          else showAiInfo(`<span class=\"text-emerald-600\">✔ AI đang mở Check-in • Còn ${remain} phút • Check-in đúng giờ không phạt</span>`, 'bg-emerald-50 border-emerald-200 text-emerald-700');
+        } else {
+          // Đã đóng
+          if(cardCheckin) cardCheckin.classList.remove('hidden');
+          if(cardCheckout) cardCheckout.classList.add('hidden');
+          if(shiftMsg){ shiftMsg.innerHTML = `<i class=\"fa-solid fa-triangle-exclamation text-red-500 text-xl mb-2 block\"></i> Đã đóng Check-in lúc ${fmtHM(closeCheckIn)}<br><span class=\"text-sm\">Quá 60 phút sau ${sInfo.start} — hệ thống sẽ ghi <b>VẮNG/TRỄ NẶNG</b> và phạt 100% ca theo nội quy</span>`; shiftMsg.className='card bg-red-50 border-red-200 text-red-700 text-sm font-bold text-center p-6'; shiftMsg.classList.remove('hidden'); }
+          if(btnIn) btnIn.disabled = true, btnIn.classList.add('opacity-50','cursor-not-allowed');
+          showAiInfo(`<span class=\"text-red-600\">AI đã đóng Check-in — liên hệ HR nếu có lý do</span>`, 'bg-red-50 border-red-200 text-red-700');
+        }
+      } else if(todayAtt.checkIn && !todayAtt.checkOut){
+        // Đã check-in, chờ check-out
+        if(cardCheckin) cardCheckin.classList.add('hidden');
+        if(cardCheckout) cardCheckout.classList.remove('hidden');
+        if(shiftMsg) shiftMsg.classList.add('hidden');
+        if(nowMins < openCheckOut){
+          const remain = openCheckOut - nowMins;
+          if(btnOut) btnOut.disabled = true, btnOut.classList.add('opacity-50','cursor-not-allowed');
+          showAiInfo(`<i class=\"fa-solid fa-hourglass-half\"></i> Đã Check-in lúc ${todayAtt.checkIn.time} • AI sẽ mở Check-out lúc <b>${sInfo.end}</b> sau khi hết ca (còn ${remain} phút) • Ra sớm trước ${sInfo.end} sẽ phạt 50.000đ`, 'bg-blue-50 border-blue-200 text-blue-700');
+        } else {
+          if(btnOut) btnOut.disabled = false, btnOut.classList.remove('opacity-50','cursor-not-allowed');
+          hideAiInfo();
+          // Cập nhật badge check-out window
+          const coBadge = cardCheckout.querySelector('span.bg-rose-100');
+          if(coBadge) coBadge.textContent = 'AI ĐANG MỞ • Bấm Check-out ngay';
+        }
+      } else {
+        // Hoàn thành cả 2
+        if(cardCheckin) cardCheckin.classList.add('hidden');
+        if(cardCheckout) cardCheckout.classList.remove('hidden');
+        if(shiftMsg) shiftMsg.classList.add('hidden');
+        hideAiInfo();
+        if(btnOut) btnOut.disabled = true, btnOut.classList.add('opacity-50','cursor-not-allowed');
+      }
+      // Realtime tự động refresh mỗi phút cho official
+      if(!window._attendanceRealtimeInterval){
+        window._attendanceRealtimeInterval = setInterval(()=>{ if(document.getElementById('tab-attendance') && !document.getElementById('tab-attendance').classList.contains('hidden')) loadAttendanceTab(); }, 60000);
+      }
     } else {
-       document.getElementById('attendanceShiftMsg')?.classList.add('hidden');
-       if (!todayAtt || !todayAtt.checkIn) {
-         if (cardCheckin) cardCheckin.classList.remove('hidden');
+      // --- NV TRAINING: giữ logic cũ đơn giản, không phạt trễ ---
+      const currentTime = now.getHours() + now.getMinutes()/60;
+      let isShiftTime = false;
+      const shift = employee.shift;
+      if(shift === 'CA_SANG') isShiftTime = currentTime >= 6.5 && currentTime <= 12.5;
+      else if(shift === 'CA_CHIEU') isShiftTime = currentTime >= 11.5 && currentTime <= 18.5;
+      else if(shift === 'CA_TOI') isShiftTime = currentTime >= 17.5 && currentTime <= 23.5;
+      if(!isShiftTime){
+         if (cardCheckin) cardCheckin.classList.add('hidden');
          if (cardCheckout) cardCheckout.classList.add('hidden');
-       } else if (todayAtt.checkIn && !todayAtt.checkOut) {
-         if (cardCheckin) cardCheckin.classList.add('hidden');
-         if (cardCheckout) cardCheckout.classList.remove('hidden');
-       } else {
-         if (cardCheckin) cardCheckin.classList.add('hidden');
-         if (cardCheckout) cardCheckout.classList.remove('hidden');
-       }
+         if(shiftMsg){
+           shiftMsg.innerHTML = `<i class=\"fa-solid fa-clock text-2xl mb-2 block\"></i> Ngoài giờ ca làm việc (${employee.shift})<br><span class=\"text-xs font-normal opacity-75\">Training: điểm danh linh hoạt, không phạt trễ</span>`;
+           shiftMsg.className='card bg-amber-50 border-amber-200 text-amber-800 text-sm font-bold text-center p-6';
+           shiftMsg.classList.remove('hidden');
+         }
+         hideAiInfo();
+      } else {
+         if(shiftMsg) shiftMsg.classList.add('hidden');
+         hideAiInfo();
+         if (!todayAtt || !todayAtt.checkIn) {
+           if (cardCheckin) cardCheckin.classList.remove('hidden');
+           if (cardCheckout) cardCheckout.classList.add('hidden');
+         } else if (todayAtt.checkIn && !todayAtt.checkOut) {
+           if (cardCheckin) cardCheckin.classList.add('hidden');
+           if (cardCheckout) cardCheckout.classList.remove('hidden');
+         } else {
+           if (cardCheckin) cardCheckin.classList.add('hidden');
+           if (cardCheckout) cardCheckout.classList.remove('hidden');
+         }
+         if(btnIn) btnIn.disabled=false, btnIn.classList.remove('opacity-50','cursor-not-allowed');
+         if(btnOut) btnOut.disabled=false, btnOut.classList.remove('opacity-50','cursor-not-allowed');
+      }
     }
   }catch(e){}
 
