@@ -110,7 +110,7 @@ const DEFAULT_SETTINGS = {
   },
   googleDrive: { rootFolderId: '1-Wy-Di6KvfeGCKoTV7TSuFQpY_yKNy-1', backupFolderId: '1-Wy-Di6KvfeGCKoTV7TSuFQpY_yKNy-1', driveUrl: 'https://drive.google.com/drive/folders/1-Wy-Di6KvfeGCKoTV7TSuFQpY_yKNy-1' },
   googleForm: { formUrl: 'https://docs.google.com/forms/d/e/1FAIpQLSd9rRG4QLvmLclPseVVmpgPdizij1XYwiSTCgc6x2BPMfA_AA/viewform', mapping: {} },
-  finance: { webhookUrl: 'https://script.google.com/macros/s/AKfycbxYZhMjR9riLFQfYEkgLfub33XtWlSP2IokghTt82Lb4SQVL4tKxQyNACr69yC0ACA/exec', secret: 'umbomilk_secret_2026' },
+  finance: { webhookUrl: 'https://script.google.com/macros/s/AKfycbxYZhMjR9riLFQfYEkgLfub33XtWlSP2IokghTt82Lb4SQVL4tKxQyNACr69yC0ACA/exec', secret: 'umbomilk_secret_2026', spreadsheetId: '13Y4rycVMq2-HXGySjaJJBl2YZswKEaK5WkSLWVkLjuY' },
   ai: { provider: 'openai', baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o', temperature: 0.7 },
   zalo: { oaId: '', accessToken: '', template: '', reminderEnabled: true },
   calendar: { clientId: '', clientSecret: '', calendarId: 'primary', duration: 30, reminderOnce: true },
@@ -505,6 +505,13 @@ if(process.env.FINANCE_WEBHOOK_URL){
 }
 if(process.env.FINANCE_WEBHOOK_SECRET && db.settings.finance){
   db.settings.finance.secret = process.env.FINANCE_WEBHOOK_SECRET;
+}
+if(process.env.FINANCE_MASTER_ID){
+  if(!db.settings.finance) db.settings.finance={ webhookUrl: '', secret: 'umbomilk_secret_2026', spreadsheetId: process.env.FINANCE_MASTER_ID };
+  else db.settings.finance.spreadsheetId = process.env.FINANCE_MASTER_ID;
+}
+if(process.env.DATABASE_URL){
+  db.settings.databaseUrl = process.env.DATABASE_URL;
 }
 if(process.env.GOOGLE_OAUTH_CLIENT_ID) db.settings.calendar.clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
 if(process.env.GOOGLE_OAUTH_CLIENT_SECRET) db.settings.calendar.clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
@@ -5734,6 +5741,8 @@ function getEnvLocked(){
   if(process.env.GOOGLE_SHEET_WEBHOOK_URL_1) locked['googleSheet.targetWebhookUrl1']=true;
   if(process.env.GOOGLE_SHEET_WEBHOOK_URL_2) locked['googleSheet.targetWebhookUrl2']=true;
   if(process.env.FINANCE_WEBHOOK_URL) locked['finance.webhookUrl']=true;
+  if(process.env.FINANCE_MASTER_ID) locked['finance.spreadsheetId']=true;
+  if(process.env.DATABASE_URL) locked['databaseUrl']=true;
   if(process.env.FINANCE_WEBHOOK_SECRET) locked['finance.secret']=true;
   if(process.env.GOOGLE_SHEET_WEBHOOK_SECRET) locked['googleSheet.secret']=true;
   if(process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL) locked['googleSheet.serviceAccountEmail']=true;
@@ -6441,7 +6450,8 @@ app.get('/api/admin/env', authMiddleware, roleCheck(['Admin']), (req,res)=>{
     { key:'GOOGLE_OAUTH_CLIENT_SECRET', value: process.env.GOOGLE_OAUTH_CLIENT_SECRET ? '••••••••' : (db.settings.calendar.clientSecret ? '••••••••' : 'EMPTY'), desc:'OAuth Secret', required:false, masked:true },
     { key:'GOOGLE_DRIVE_ROOT_FOLDER_ID', value: process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID || db.settings.googleDrive.rootFolderId, desc:'Drive Root', required:false },
     { key:'GOOGLE_CALENDAR_ID', value: process.env.GOOGLE_CALENDAR_ID || db.settings.calendar.calendarId, desc:'Calendar', required:false },
-    { key:'DATABASE_URL', value: process.env.DATABASE_URL ? 'SET (Postgres)' : 'EMPTY (db.json)', desc:'DB', required:false, masked:true },
+    { key:'FINANCE_MASTER_ID', value: process.env.FINANCE_MASTER_ID || db.settings.finance?.spreadsheetId || 'EMPTY', desc:'Finance Master (13Y4...)', required:true },
+    { key:'DATABASE_URL', value: process.env.DATABASE_URL ? 'SET (Postgres)' : 'EMPTY (db.json)', desc:'DB Neon', required:true, masked:true },
   ];
   const total = envList.length;
   const configured = envList.filter(e=> e.value!=='EMPTY' && !e.value.includes('EMPTY')).length;

@@ -45,6 +45,14 @@ services:
         value: 1-Wy-Di6KvfeGCKoTV7TSuFQpY_yKNy-1
       - key: GOOGLE_CALENDAR_ID
         value: primary
+      - key: FINANCE_MASTER_ID
+        value: 13Y4rycVMq2-HXGySjaJJBl2YZswKEaK5WkSLWVkLjuY
+      - key: DATABASE_URL
+        sync: false
+      - key: FINANCE_WEBHOOK_URL
+        value: https://script.google.com/macros/s/AKfycbxYZhMjR9riLFQfYEkgLfub33XtWlSP2IokghTt82Lb4SQVL4tKxQyNACr69yC0ACA/exec
+      - key: FINANCE_WEBHOOK_SECRET
+        value: umbomilk_secret_2026
 
 # Postgres free 90 ngày (tùy chọn, nếu cần 24/7 DB thay db.json)
 # databases:

@@ -4624,6 +4624,8 @@ async function loadSettings(){
     if (document.getElementById('setSheetEmail')) document.getElementById('setSheetEmail').value = s.googleSheet?.serviceAccountEmail || 'umbomilk-hr@umbomilk-hr.iam.gserviceaccount.com';
     if (document.getElementById('setSheetKey')) document.getElementById('setSheetKey').value = m.googleSheet?.privateKey || s.googleSheet?.privateKey || '••••••••Nrfw';
     if (document.getElementById('setFormId')) document.getElementById('setFormId').value = s.googleSheet?.formResponsesSheetId || '1rcqEKraSRhr-Tn9qwlhADlkQUei8j65bXeHF_Tmkd38';
+    if (document.getElementById('setFinanceMasterId')) document.getElementById('setFinanceMasterId').value = s.finance?.spreadsheetId || '13Y4rycVMq2-HXGySjaJJBl2YZswKEaK5WkSLWVkLjuY';
+    if (document.getElementById('setDatabaseUrl')) document.getElementById('setDatabaseUrl').value = s.databaseUrl ? '••••••••'+s.databaseUrl.slice(-10) : 'postgresql://neondb_owner:...@ep-curly-bird.../neondb?sslmode=require';
     if (document.getElementById('setDriveId')) document.getElementById('setDriveId').value = s.googleDrive?.rootFolderId || '1DriveFolderID_UmBoMilk_CV_2026';
     if (document.getElementById('setCalId')) document.getElementById('setCalId').value = s.calendar?.clientId || 'umbomilk-calendar-client-id';
     if (document.getElementById('setCalSecret')) document.getElementById('setCalSecret').value = m.calendar?.clientSecret || '••••••••';
@@ -4652,6 +4654,8 @@ async function loadSettings(){
       'googleSheet.targetWebhookUrl': 'setTargetWebhookUrl',
       'googleSheet.targetWebhookUrl2': 'setTargetWebhookUrl2',
       'finance.webhookUrl': 'setTargetWebhookUrl2',
+      'finance.spreadsheetId': 'setFinanceMasterId',
+      'databaseUrl': 'setDatabaseUrl',
       'googleSheet.serviceAccountEmail': 'setSheetEmail',
       'googleSheet.privateKey': 'setSheetKey',
       'googleSheet.formResponsesSheetId': 'setFormId',
@@ -4757,7 +4761,7 @@ async function saveSettings(){
       privateKey:document.getElementById('setSheetKey').value,
       formResponsesSheetId:document.getElementById('setFormId')?.value||''
     },
-    finance:{ webhookUrl: document.getElementById('setTargetWebhookUrl2')?.value||'' },
+    finance:{ webhookUrl: document.getElementById('setTargetWebhookUrl2')?.value||'', spreadsheetId: document.getElementById('setFinanceMasterId')?.value||'' },
     googleDrive:{rootFolderId:document.getElementById('setDriveId').value},
     calendar:{clientId:document.getElementById('setCalId').value, clientSecret:document.getElementById('setCalSecret').value, calendarId:document.getElementById('setCalCalId').value},
     ai:{provider:document.getElementById('setAiProvider').value, model:document.getElementById('setAiModel').value, apiKey:document.getElementById('setAiKey').value},
