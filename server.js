@@ -6737,7 +6737,7 @@ app.get('/api/finance/sheets/template-info', financeAuthMiddleware, (req,res)=>{
 app.post('/api/finance/sheets/master-data', financeAuthMiddleware, async (req,res)=>{
   const { bhCode, hoTen, branchGoc, status, ngayLenChinhThuc } = req.body;
   if(!bhCode) return res.status(400).json({ error:'Thiếu BH_Code' });
-  // Cập nhật local DB (MASTER_DATA)
+  // Cập nhật local DB (MASTER_DATA) - nếu chưa có thì tạo mới (finance có thể tạo BH mới)
   let emp = db.employees.find(e=> e.employeeId===bhCode);
   if(emp){
     const before={...emp};
@@ -6747,6 +6747,19 @@ app.post('/api/finance/sheets/master-data', financeAuthMiddleware, async (req,re
     if(ngayLenChinhThuc!==undefined) emp.officialStartDate=ngayLenChinhThuc;
     emp.updated_at=new Date().toISOString();
     audit(req.finance.key,'UPDATE_MASTER_DATA','MASTER_DATA', before, emp, req.ip);
+  } else {
+    // Tạo mới BH_Code từ Finance web (chưa có trong HR)
+    const newEmp = {
+      id: uuidv4(), employeeId: bhCode, name: hoTen||bhCode, phone: '', branchId: branchGoc||'CN1', shift: 'CA_SANG',
+      startDate: new Date().toISOString().split('T')[0], status: status||'Training', type: (status==='Official'?'OFFICIAL':'TRAINING'),
+      category: 'STORE', version:1, updated_at: new Date().toISOString(), updated_by: req.finance.key, source:'FINANCE_WEB', sync_status:'PENDING'
+    };
+    if(ngayLenChinhThuc) newEmp.officialStartDate=ngayLenChinhThuc;
+    db.employees.push(newEmp);
+    audit(req.finance.key,'CREATE_MASTER_DATA','MASTER_DATA', null, newEmp, req.ip);
+    // Tạo key cho NV mới nếu cần
+    const newKey={ id: uuidv4(), employeeId: bhCode, key: 'KEY-'+Math.random().toString(36).substring(2,10).toUpperCase(), status:'ACTIVE', version:1, updated_at: new Date().toISOString(), sync_status:'PENDING' };
+    db.keys.push(newKey);
   }
   // Đồng bộ lên Google Sheets Finance MASTER_DATA
   const financeId = db.settings.finance?.spreadsheetId || process.env.FINANCE_MASTER_ID || 'FINANCE_MASTER_ID';

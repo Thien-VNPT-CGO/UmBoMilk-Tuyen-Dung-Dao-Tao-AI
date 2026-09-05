@@ -13,8 +13,14 @@ function onOpen(){
   try{ setupFinanceSheets(); }catch(e){}
 }
 
+function getFinanceSpreadsheet(){
+  if(FINANCE_ID && FINANCE_ID !== 'REPLACE_FINANCE_MASTER_ID' && FINANCE_ID !== 'FINANCE_MASTER_ID'){
+    try{ return SpreadsheetApp.openById(FINANCE_ID); }catch(e){}
+  }
+  return SpreadsheetApp.getActiveSpreadsheet();
+}
 function setupFinanceSheets(){
-  const ss = SpreadsheetApp.openById(FINANCE_ID);
+  const ss = getFinanceSpreadsheet();
   let created=[];
   // 1. MASTER_DATA
   let sh = ss.getSheetByName('MASTER_DATA');
@@ -49,7 +55,7 @@ function setupFinanceSheets(){
 function createMonthlySheet(month,year){
   setupFinanceSheets();
   month=month||new Date().getMonth()+1; year=year||new Date().getFullYear();
-  const ss=SpreadsheetApp.openById(FINANCE_ID);
+  const ss=getFinanceSpreadsheet();
   const tpl=ss.getSheetByName(TEMPLATE_NAME);
   const name=`LUONG_THANG_${String(month).padStart(2,'0')}_${year}`;
   if(ss.getSheetByName(name)) return {exists:true, name};
@@ -73,7 +79,7 @@ function doPost(e){
     setupFinanceSheets();
     const data=JSON.parse(e.postData.contents);
     if(data.secret!==SECRET) return json({success:false,error:'Unauthorized'});
-    const ss=SpreadsheetApp.openById(FINANCE_ID);
+    const ss=getFinanceSpreadsheet();
     if(data.action==='UPSERT_EMPLOYEE') upsertMaster(ss.getSheetByName('MASTER_DATA'), data.payload);
     else if(data.action==='UPSERT_TIMEKEEPING'){ const p=data.payload; const shName=`LUONG_THANG_${p.date.slice(5,7)}_${p.date.slice(0,4)}`; let sh=ss.getSheetByName(shName); if(!sh) sh=createMonthlySheet(parseInt(p.date.slice(5,7)), parseInt(p.date.slice(0,4))).sheet || ss.getSheetByName(shName); upsertHours(sh,p); }
     else if(data.action==='UPSERT_DONGPHUC') upsertByBH(ss.getSheetByName('DONG_PHUC'), data.payload);
