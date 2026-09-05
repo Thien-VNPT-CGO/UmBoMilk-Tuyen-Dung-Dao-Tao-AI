@@ -3778,13 +3778,15 @@ function renderSchedules(){
     grid.innerHTML = `<div class="bg-white rounded-2xl border border-pink-200 p-8 text-center shadow-sm"><div class="w-12 h-12 bg-pink-100 text-pink-600 rounded-xl flex items-center justify-center mx-auto"><i class="fa-solid fa-calendar-xmark"></i></div><div class="font-bold text-pink-900 mt-3">${emptyMsg[currentScheduleCategory]||'Chưa có lịch'}</div><div class="text-sm text-slate-500 mt-1">Bộ lọc: ${currentScheduleCategory} ${branch?'• '+branch:''} • T2→CN (dd/MM/yyyy)</div></div>`;
     return;
   }
-  // === GROUP BY BRANCH + SORT BY SHIFT SÁNG->CHIỀU->TỐI ===
-  const SHIFT_ORDER = {CA_SANG:0, CA_CHIEU:1, CA_TOI:2};
+  // === GROUP BY BRANCH + SORT BY SHIFT SÁNG->CHIỀU->TỐI (UTC+7 Vietnam) - CA_TRUA map -> CA_CHIEU ===
+  const SHIFT_ORDER = {CA_SANG:0, CA_CHIEU:1, CA_TRUA:1, CA_TOI:2};
   const SHIFT_DETAIL = {
     CA_SANG: {label:'Ca Sáng', time:'07:00-12:00', hours:5, color:'bg-amber-100 text-amber-700 border-amber-200'},
     CA_CHIEU: {label:'Ca Chiều', time:'12:00-18:00', hours:6, color:'bg-pink-100 text-pink-700 border-pink-200'},
+    CA_TRUA: {label:'Ca Chiều', time:'12:00-18:00', hours:6, color:'bg-pink-100 text-pink-700 border-pink-200'},
     CA_TOI: {label:'Ca Tối', time:'18:00-23:00', hours:5, color:'bg-indigo-100 text-indigo-700 border-indigo-200'}
   };
+  const normalizeShift = (s)=> s==='CA_TRUA' ? 'CA_CHIEU' : s;
   const branchGrouped = {};
   filtered.forEach(s=>{
     const emp = employees.find(e=>e.employeeId===s.employeeId);
@@ -3818,17 +3820,17 @@ function renderSchedules(){
     const empList = Object.values(branchGrouped[bid]);
 
     empList.sort((a,b)=>{
-      const shiftA = a.emp?.shift || a.schedules[0]?.shift || '';
-      const shiftB = b.emp?.shift || b.schedules[0]?.shift || '';
+      const shiftA = normalizeShift(a.emp?.shift || a.schedules[0]?.shift || '');
+      const shiftB = normalizeShift(b.emp?.shift || b.schedules[0]?.shift || '');
       const orderA = SHIFT_ORDER[shiftA] ?? 99;
       const orderB = SHIFT_ORDER[shiftB] ?? 99;
       if(orderA!==orderB) return orderA-orderB;
       return (a.emp?.name||a.employeeId).localeCompare(b.emp?.name||b.employeeId);
     });
 
-    const sang = empList.filter(item=> (item.emp?.shift||item.schedules[0]?.shift)==='CA_SANG').length;
-    const chieu = empList.filter(item=> (item.emp?.shift||item.schedules[0]?.shift)==='CA_CHIEU').length;
-    const toi = empList.filter(item=> (item.emp?.shift||item.schedules[0]?.shift)==='CA_TOI').length;
+    const sang = empList.filter(item=> normalizeShift(item.emp?.shift||item.schedules[0]?.shift)==='CA_SANG').length;
+    const chieu = empList.filter(item=> normalizeShift(item.emp?.shift||item.schedules[0]?.shift)==='CA_CHIEU').length;
+    const toi = empList.filter(item=> normalizeShift(item.emp?.shift||item.schedules[0]?.shift)==='CA_TOI').length;
 
     return `
       <div class="bg-white rounded-2xl border-2 border-pink-300 overflow-hidden shadow-sm">
@@ -3943,7 +3945,8 @@ function renderSchedules(){
                     } else if(isFuture){
                       badgeText='SẮP TỚI';
                       badgeClass='bg-blue-50 text-blue-700 border border-blue-200';
-                      detailText=d.shift + (SHIFT_DETAIL[d.shift]?.time ? ' • ' + SHIFT_DETAIL[d.shift].time : '');
+                      const normShiftFuture = normalizeShift(d.shift);
+                      detailText=normShiftFuture + (SHIFT_DETAIL[normShiftFuture]?.time ? ' • ' + SHIFT_DETAIL[normShiftFuture].time : '');
                       detailClass='text-blue-700';
                     } else {
                       if(!att || !att.checkIn){

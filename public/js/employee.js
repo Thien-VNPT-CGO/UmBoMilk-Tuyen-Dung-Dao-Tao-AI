@@ -10,6 +10,7 @@ let branches=[];
 function getVietnamTodayStr(){ return new Date().toLocaleDateString('en-CA', {timeZone: 'Asia/Ho_Chi_Minh'}); }
 function getVietnamNow(){ return new Date(new Date().toLocaleString('en-US', {timeZone: 'Asia/Ho_Chi_Minh'})); }
 function toVietnamDateStr(d){ const date = d instanceof Date ? d : new Date(d); return date.toLocaleDateString('en-CA', {timeZone: 'Asia/Ho_Chi_Minh'}); }
+function normalizeShift(s){ return s==='CA_TRUA' ? 'CA_CHIEU' : s; }
 
 
 let testCourses=[];
@@ -907,10 +908,11 @@ async function submitCheckout(){
   }
 }
 async function loadAttendanceTab(){
-  // AI realtime window cho NV chính thức — đồng bộ với server.js: checkInOpenBefore=30, checkInCloseAfter=60, penalty sau 5p/30p/60p
-  const SHIFT_MAP = {CA_SANG:{start:'07:00', end:'12:00', hours:5}, CA_CHIEU:{start:'12:00', end:'18:00', hours:6}, CA_TOI:{start:'18:00', end:'23:00', hours:5}};
+  // AI realtime window cho NV chính thức — đồng bộ với server.js: checkInOpenBefore=30, checkInCloseAfter=60, penalty sau 5p/30p/60p (UTC+7 Vietnam)
+  const SHIFT_MAP = {CA_SANG:{start:'07:00', end:'12:00', hours:5}, CA_CHIEU:{start:'12:00', end:'18:00', hours:6}, CA_TRUA:{start:'12:00', end:'18:00', hours:6}, CA_TOI:{start:'18:00', end:'23:00', hours:5}};
+  const normalizeShiftEmp = (s)=> s==='CA_TRUA' ? 'CA_CHIEU' : s;
   const isOfficial = employee && (employee.type==='OFFICIAL' || employee.status==='OFFICIAL');
-  const sInfo = SHIFT_MAP[employee.shift] || SHIFT_MAP['CA_SANG'];
+  const sInfo = SHIFT_MAP[normalizeShiftEmp(employee.shift)] || SHIFT_MAP['CA_SANG'];
   const fmtHM = (mins)=>{ const h=Math.floor(mins/60)%24; const m=mins%60; return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'); };
   const parseHM = (str)=>{ const [h,m]=str.split(':').map(Number); return h*60+m; };
   const startMins = parseHM(sInfo.start);
@@ -1193,7 +1195,7 @@ async function loadSchedule(){
               <div class="mt-3 flex flex-col items-center gap-2">
                 <span class="text-sm font-black px-4 py-1.5 rounded-full ${statusClass}">${statusText}</span>
                 <div class="text-lg font-black text-slate-800 leading-tight min-h-[32px] flex items-center justify-center">
-                  ${(d.status === 'WORKING' || d.status === 'SUBSTITUTE') ? d.shift.replace('CA_', '') : '—'}
+                  ${(d.status === 'WORKING' || d.status === 'SUBSTITUTE') ? normalizeShift(d.shift).replace('CA_', '') : '—'}
                 </div>
               </div>
               ${isToday ? '<div class="text-sm font-black text-pink-600 mt-2 uppercase tracking-widest">● Hôm nay</div>' : ''}

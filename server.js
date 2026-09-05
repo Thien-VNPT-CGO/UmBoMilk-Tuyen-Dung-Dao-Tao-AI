@@ -73,6 +73,7 @@ const DEFAULT_BRANCHES = [
 const DEFAULT_SHIFTS = {
   CA_SANG: { name: 'Ca Sáng', start: '07:00', end: '12:00', hours: 5 },
   CA_CHIEU: { name: 'Ca Chiều', start: '12:00', end: '18:00', hours: 6 },
+  CA_TRUA: { name: 'Ca Chiều', start: '12:00', end: '18:00', hours: 6 },
   CA_TOI: { name: 'Ca Tối', start: '18:00', end: '23:00', hours: 5 }
 };
 
