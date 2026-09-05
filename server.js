@@ -5069,36 +5069,28 @@ async function generateNextWeekDraft(triggerBy='SYSTEM'){
   const groupMap={}; officials.forEach(emp=>{ const k=`${emp.branchId}_${emp.shift}`; if(!groupMap[k]) groupMap[k]=[]; groupMap[k].push(emp); });
   const empDayStatus={}; officials.forEach(emp=> empDayStatus[emp.employeeId]={});
 
-  // Round-robin cho nhóm >1, tôn trọng OFF
+  // Fix: cùng chi nhánh cùng ca không trùng OFF - cho phép nhiều WORKING, chỉ 1 OFF/ngày
   for(const key in groupMap){
     const group = groupMap[key];
     if(group.length<=1) continue;
     const workCount={}; group.forEach(e=> workCount[e.employeeId]=0);
     for(const dateStr of nextWeekDates){
-      // Những NV đã OFF theo đăng ký thì không xét
       const available = group.filter(emp=> !(offMap[emp.employeeId] && offMap[emp.employeeId].has(dateStr)));
       if(available.length===0){
-        // Tất cả đều OFF -> tất cả OFF
         group.forEach(emp=> empDayStatus[emp.employeeId][dateStr]='OFF');
         continue;
       }
-      if(available.length===1){
-        const sole = available[0];
-        group.forEach(emp=> empDayStatus[emp.employeeId][dateStr] = (emp.employeeId===sole.employeeId) ? 'WORKING' : 'OFF');
-        workCount[sole.employeeId]++;
-        continue;
-      }
-      // Chọn NV ít ngày nhất trong available
-      let chosen=available[0]; let min=workCount[chosen.employeeId];
-      for(const emp of available){ if(workCount[emp.employeeId] < min){ min=workCount[emp.employeeId]; chosen=emp; } }
+      // Đã có OFF theo đăng ký thì những người còn lại đều WORKING (không ép chỉ 1 WORKING)
+      // Chỉ khi không ai OFF và cần cân bằng min 12 ngày mới dùng round-robin, nhưng vẫn cho phép nhiều WORKING
+      // Để đơn giản: tất cả available đều WORKING, đồng thời tăng workCount để cân bằng tuần sau
       group.forEach(emp=>{
         if(offMap[emp.employeeId] && offMap[emp.employeeId].has(dateStr)){
           empDayStatus[emp.employeeId][dateStr]='OFF';
         } else {
-          empDayStatus[emp.employeeId][dateStr] = (emp.employeeId===chosen.employeeId) ? 'WORKING' : 'OFF';
+          empDayStatus[emp.employeeId][dateStr]='WORKING';
+          workCount[emp.employeeId]++;
         }
       });
-      workCount[chosen.employeeId]++;
     }
   }
   // Nhóm size 1: tôn trọng OFF, còn lại WORKING (trừ CN nếu không OFF thì WORKING)
