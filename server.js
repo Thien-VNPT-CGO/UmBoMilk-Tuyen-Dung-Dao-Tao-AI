@@ -1116,10 +1116,15 @@ app.get('/api/employees', authMiddleware, (req,res)=>{
   }
   res.json(list);
 });
-app.post('/api/employees', authMiddleware, roleCheck(['Admin','HR']), (req,res)=>{
+app.post('/api/employees', authMiddleware, roleCheck(['Admin','HR']), async (req,res)=>{
   const { name, phone, branchId, shift, category } = req.body;
   if(!name||!phone||!branchId||!shift) return res.status(400).json({error:'Thiếu thông tin'});
   if(!db.branches.find(b=>b.id===branchId)) return res.status(400).json({error:'Chi nhánh không hợp lệ'});
+  // RÀNG BUỘC realtime: 1 SĐT duy nhất trên toàn bộ 17iXM + web (ứng viên + nhân viên)
+  {
+    const dup = await isPhoneDuplicateEverywhere(phone);
+    if(dup.dup) return res.status(409).json({error: dupPhoneErrorMessage(phone, dup)});
+  }
   const employeeId = generateEmployeeId(branchId);
   const now = getVietnamNow();
   const end = getVietnamNow(); end.setDate(now.getDate()+7);
@@ -1142,10 +1147,13 @@ app.post('/api/employees', authMiddleware, roleCheck(['Admin','HR']), (req,res)=
   res.json({ employee: emp, key });
 });
 // Bulk import Official employees (data cũ)
-app.post('/api/employees/import-official', authMiddleware, roleCheck(['Admin','HR']), (req,res)=>{
+app.post('/api/employees/import-official', authMiddleware, roleCheck(['Admin','HR']), async (req,res)=>{
   const rows = req.body.employees || req.body.rows || req.body.data || [];
   if(!Array.isArray(rows) || rows.length===0) return res.status(400).json({error:'Không có dữ liệu import (cần mảng employees)'});
   if(rows.length>500) return res.status(400).json({error:'Tối đa 500 nhân viên/lần import'});
+  // RÀNG BUỘC realtime: nạp 1 lần tập SĐT trên Sheet 17iXM để chặn trùng cho cả batch
+  const importSheetPhones = await getSheetPhoneSet().catch(()=>new Set());
+  const batchPhones = new Set();
   function normBranch(input){
     if(!input) return null;
     const raw = String(input).trim();
@@ -1215,7 +1223,17 @@ app.post('/api/employees/import-official', authMiddleware, roleCheck(['Admin','H
       if(!phone) { results.skipped.push({idx, reason:'Thiếu SĐT', row}); return; }
       if(!branchId) { results.errors.push({idx, reason:'Chi nhánh không hợp lệ: '+ (row.branchId||row['Chi nhánh']), row}); return; }
       if(!db.branches.find(b=>b.id===branchId)) { results.errors.push({idx, reason:'Chi nhánh không tồn tại: '+branchId, row}); return; }
-      if(db.employees.find(e=>e.phone===phone)){ results.skipped.push({idx, reason:'Trùng SĐT '+phone, row}); return; }
+      // RÀNG BUỘC realtime: 1 SĐT duy nhất (chuẩn hóa) trên web + batch + Sheet 17iXM
+      {
+        const norm = normalizePhone(phone);
+        const hitE = db.employees.find(e=>normalizePhone(e.phone)===norm);
+        if(hitE){ results.skipped.push({idx, reason:`Trùng SĐT ${phone} (nhân viên ${hitE.name})`, row}); return; }
+        const hitA = db.applicants.find(a=>normalizePhone(a.phone)===norm);
+        if(hitA){ results.skipped.push({idx, reason:`Trùng SĐT ${phone} (ứng viên ${hitA.name} - dùng Chuyển Training thay vì import)`, row}); return; }
+        if(batchPhones.has(norm)){ results.skipped.push({idx, reason:`Trùng SĐT ${phone} trong cùng file import`, row}); return; }
+        if(importSheetPhones.has(norm)){ results.skipped.push({idx, reason:`Trùng SĐT ${phone} đã có trên Google Sheet 17iXM`, row}); return; }
+        batchPhones.add(norm);
+      }
       let employeeId = employeeIdInput;
       if(employeeId){
         if(db.employees.find(e=>e.employeeId===employeeId) || results.employees.find(e=>e.employeeId===employeeId)){
@@ -1261,10 +1279,13 @@ app.post('/api/employees/import-official', authMiddleware, roleCheck(['Admin','H
   res.json(results);
 });
 // Import Training - cập nhật dữ liệu training hiện tại (yêu cầu #3) - cho phép upsert theo SĐT/Mã NV
-app.post('/api/employees/import-training', authMiddleware, roleCheck(['Admin','HR']), (req,res)=>{
+app.post('/api/employees/import-training', authMiddleware, roleCheck(['Admin','HR']), async (req,res)=>{
   const rows = req.body.employees || req.body.rows || req.body.data || [];
   if(!Array.isArray(rows) || rows.length===0) return res.status(400).json({error:'Không có dữ liệu import (cần mảng employees)'});
   if(rows.length>500) return res.status(400).json({error:'Tối đa 500 nhân viên/lần import'});
+  // RÀNG BUỘC realtime: nạp 1 lần tập SĐT trên Sheet 17iXM để chặn trùng cho cả batch
+  const importSheetPhones = await getSheetPhoneSet().catch(()=>new Set());
+  const batchPhones = new Set();
   function normBranch(input){
     if(!input) return null;
     const raw = String(input).trim();
@@ -1311,7 +1332,8 @@ app.post('/api/employees/import-training', authMiddleware, roleCheck(['Admin','H
     return getVietnamTodayStr();
   }
   const results = { imported:0, updated:0, skipped:[], errors:[], employees:[], keys:[] };
-  rows.forEach((row, idx)=>{
+  // Dùng for..of (không dùng forEach) để await kiểm tra trùng SĐT realtime từng dòng
+  for(const [idx, row] of rows.entries()){
     try{
       const name = (row.name || row['Họ tên'] || row['Ho ten'] || row['ten'] || row['Name'] || '').toString().trim();
       const phone = (row.phone || row['SĐT'] || row['SDT'] || row['sdt'] || row['Phone'] || row['phone'] || '').toString().trim();
@@ -1322,13 +1344,28 @@ app.post('/api/employees/import-training', authMiddleware, roleCheck(['Admin','H
       const statusIn = (row.status|| 'TRAINING').toString().toUpperCase();
       const category = (row.category||'STORE').toString().toUpperCase();
       const employeeIdInput = (row.employeeId || row['Mã NV'] || row['Ma NV'] || row['ID'] || '').toString().trim();
-      if(!name) { results.skipped.push({idx, reason:'Thiếu Họ tên', row}); return; }
-      if(!phone) { results.skipped.push({idx, reason:'Thiếu SĐT', row}); return; }
-      if(!branchId) { results.errors.push({idx, reason:'Chi nhánh không hợp lệ', row}); return; }
-      // Kiểm tra tồn tại theo SĐT hoặc Mã NV → UPDATE thay vì skip (yêu cầu #3)
+      if(!name) { results.skipped.push({idx, reason:'Thiếu Họ tên', row}); continue; }
+      if(!phone) { results.skipped.push({idx, reason:'Thiếu SĐT', row}); continue; }
+      if(!branchId) { results.errors.push({idx, reason:'Chi nhánh không hợp lệ', row}); continue; }
+      // RÀNG BUỘC realtime: chỉ UPDATE khi đúng Mã NV (cùng người).
+      // SĐT trùng người khác (web/batch/Sheet 17iXM/ứng viên) -> bỏ qua, không ghi đè hồ sơ người khác.
+      const normPhone = normalizePhone(phone);
       let existing = null;
       if(employeeIdInput) existing = db.employees.find(e=>e.employeeId===employeeIdInput);
-      if(!existing) existing = db.employees.find(e=>e.phone===phone);
+      if(existing){
+        if(normalizePhone(existing.phone)!==normPhone){
+          const dup = await isPhoneDuplicateEverywhere(phone, {excludeEmployeeId: existing.employeeId});
+          if(dup.dup){ results.skipped.push({idx, reason: dupPhoneErrorMessage(phone, dup), row}); continue; }
+        }
+      } else {
+        const hitE = db.employees.find(e=>normalizePhone(e.phone)===normPhone);
+        if(hitE){ results.skipped.push({idx, reason:`Trùng SĐT ${phone} (nhân viên ${hitE.name})`, row}); continue; }
+        const hitA = db.applicants.find(a=>normalizePhone(a.phone)===normPhone);
+        if(hitA){ results.skipped.push({idx, reason:`Trùng SĐT ${phone} (ứng viên ${hitA.name})`, row}); continue; }
+        if(batchPhones.has(normPhone)){ results.skipped.push({idx, reason:`Trùng SĐT ${phone} trong cùng file import`, row}); continue; }
+        if(importSheetPhones.has(normPhone)){ results.skipped.push({idx, reason:`Trùng SĐT ${phone} đã có trên Google Sheet 17iXM`, row}); continue; }
+        batchPhones.add(normPhone);
+      }
       if(existing){
         const before = {...existing};
         existing.name = name;
@@ -1349,10 +1386,10 @@ app.post('/api/employees/import-training', authMiddleware, roleCheck(['Admin','H
       } else {
         let employeeId = employeeIdInput;
         if(employeeId && db.employees.find(e=>e.employeeId===employeeId)){
-          results.skipped.push({idx, reason:'Trùng Mã NV '+employeeId, row}); return;
+          results.skipped.push({idx, reason:'Trùng Mã NV '+employeeId, row}); continue;
         }
         if(!employeeId){
-          try{ employeeId = generateEmployeeId(branchId); }catch(e){ results.errors.push({idx, reason:'Không sinh được Mã NV', row}); return; }
+          try{ employeeId = generateEmployeeId(branchId); }catch(e){ results.errors.push({idx, reason:'Không sinh được Mã NV', row}); continue; }
         }
         const now = getVietnamISOString();
         const emp = {
@@ -1371,19 +1408,20 @@ app.post('/api/employees/import-training', authMiddleware, roleCheck(['Admin','H
         db.keys.push(key);
         results.keys.push(key);
         results.imported++;
+        batchPhones.add(normalizePhone(phone));
         audit(req.user.username,'IMPORT_TRAINING','EMPLOYEE',null,emp, req.ip);
         addSyncQueue('EMPLOYEE','CREATE',emp, req.user.username, 'IMPORT_TRAINING');
       }
     }catch(e){
       results.errors.push({idx, reason:e.message, row});
     }
-  });
+  }
   saveDB();
   io.emit('employees:update', db.employees);
   io.emit('keys:update', db.keys);
   res.json(results);
 });
-app.put('/api/employees/:id', authMiddleware, roleCheck(['Admin','HR','Manager']), (req,res)=>{
+app.put('/api/employees/:id', authMiddleware, roleCheck(['Admin','HR','Manager']), async (req,res)=>{
   const emp = db.employees.find(e=>e.id===req.params.id || e.employeeId===req.params.id);
   if(!emp) return res.status(404).json({error:'Không tìm thấy'});
   const before = {...emp};
@@ -1391,6 +1429,11 @@ app.put('/api/employees/:id', authMiddleware, roleCheck(['Admin','HR','Manager']
   // Mọi cập nhật tính năng/code không được đổi mã; chỉ cấp mới khi xóa rồi đăng ký/import lại.
   const { employeeId: _eid, id: _id, ...safeBody } = req.body || {};
   if(_eid && _eid!==emp.employeeId) console.log(`[BẢO VỆ MÃ NV] Chặn đổi mã ${emp.employeeId} -> ${_eid} bởi ${req.user.username}`);
+  // RÀNG BUỘC realtime: đổi SĐT sang số đã tồn tại (web/Sheet 17iXM) thì chặn
+  if(safeBody.phone && normalizePhone(safeBody.phone)!==normalizePhone(emp.phone)){
+    const dup = await isPhoneDuplicateEverywhere(safeBody.phone, {excludeEmployeeId: emp.employeeId});
+    if(dup.dup) return res.status(409).json({error: dupPhoneErrorMessage(safeBody.phone, dup)});
+  }
   Object.assign(emp, safeBody);
   emp.version = (emp.version||1)+1;
   emp.updated_at = getVietnamISOString();
@@ -1902,11 +1945,14 @@ app.get('/api/applicants', authMiddleware, (req,res)=>{
   }
   res.json(list);
 });
-app.post('/api/applicants', (req,res)=>{
+app.post('/api/applicants', async (req,res)=>{
   const { name, phone, email, branchPreference, cvData, gender, birthYear, education, hometown, shiftPreference, experience, handling, facebook, source } = req.body;
   const source_id = 'form_'+uuidv4();
-  // Check duplicate by phone only (more strict for real form)
-  if(phone && db.applicants.find(a=>a.phone===phone)) return res.status(409).json({error:'Trùng SĐT - hồ sơ đã tồn tại'});
+  // RÀNG BUỘC realtime: 1 SĐT duy nhất trên toàn bộ 17iXM + web (ứng viên + nhân viên)
+  if(phone){
+    const dup = await isPhoneDuplicateEverywhere(phone);
+    if(dup.dup) return res.status(409).json({error: dupPhoneErrorMessage(phone, dup)});
+  }
   // Map branch/shift text to ID using robust helpers
   let branchId = mapBranchText(branchPreference);
   let shift = mapShiftText(shiftPreference);
@@ -1937,7 +1983,7 @@ app.post('/api/applicants', (req,res)=>{
   res.json(applicant);
 });
 // Webhook for Google Form - handles both entry.xxx and direct field names, also Sheet sync
-app.post('/api/recruitment/form-submit', (req,res)=>{
+app.post('/api/recruitment/form-submit', async (req,res)=>{
   const body = req.body;
   const mapped = {};
   for(const [k,v] of Object.entries(body)){
@@ -1971,8 +2017,11 @@ app.post('/api/recruitment/form-submit', (req,res)=>{
   if(!mapped.name || !mapped.phone) return res.status(400).json({error:'Thiếu Tên hoặc SĐT', received: mapped});
   // Call main applicant creation
   req.body = mapped;
-  // Check duplicate
-  if(mapped.phone && db.applicants.find(a=>a.phone===mapped.phone)) return res.status(409).json({error:'Trùng SĐT', phone:mapped.phone});
+  // RÀNG BUỘC realtime: 1 SĐT duy nhất trên toàn bộ 17iXM + web (ứng viên + nhân viên)
+  if(mapped.phone){
+    const dup = await isPhoneDuplicateEverywhere(mapped.phone);
+    if(dup.dup) return res.status(409).json({error: dupPhoneErrorMessage(mapped.phone, dup), phone:mapped.phone});
+  }
   let branchId = mapBranchText(mapped.branchPreference);
   let shift = mapShiftText(mapped.shiftPreference);
   let applicant = {
@@ -2709,6 +2758,56 @@ function normalizePhone(phone) {
   if (p.length === 9 && !p.startsWith('0')) p = '0' + p;
   return p;
 }
+// RÀNG BUỘC realtime: 1 SĐT chỉ tồn tại 1 lần trên toàn bộ file 17iXM + web.
+// Cache SĐT trên Sheet 60s để không gọi API mỗi lần nhập liệu.
+let sheetPhoneCache = { at: 0, set: new Set() };
+async function getSheetPhoneSet(){
+  const now = Date.now();
+  if(now - sheetPhoneCache.at < 60000 && sheetPhoneCache.set.size>0) return sheetPhoneCache.set;
+  const set = new Set(sheetPhoneCache.set);
+  try{
+    const spreadsheetId = db.settings?.googleSheet?.spreadsheetId || '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w';
+    const token = await getGoogleAccessToken();
+    if(!token) return set;
+    for(const sheetName of ['NHAN_VIEN_MOI','NHAN_VIEN_TRAINING','NHAN_VIEN_CHINH_THUC']){
+      try{
+        const resp = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A1:Z5000`, { headers:{ Authorization:`Bearer ${token}` }});
+        if(!resp.ok) continue;
+        const j = await resp.json();
+        const values = j.values || [];
+        if(values.length<2) continue;
+        const iPhone = values[0].findIndex(h=>h==='SĐT');
+        if(iPhone===-1) continue;
+        for(let i=1;i<values.length;i++){
+          const ph = normalizePhone((values[i][iPhone]||'').toString());
+          if(ph) set.add(ph);
+        }
+      }catch(e){}
+    }
+    sheetPhoneCache = { at: now, set };
+  }catch(e){}
+  return sheetPhoneCache.set;
+}
+// Kiểm tra SĐT đã tồn tại ở web (ứng viên + nhân viên) hoặc Sheet 17iXM chưa.
+// opts: {excludeApplicantId, excludeEmployeeId} - bỏ qua chính bản ghi đang tự cập nhật.
+async function isPhoneDuplicateEverywhere(phone, opts={}){
+  const norm = normalizePhone(phone||'');
+  if(!norm) return { dup:false };
+  const hitA = db.applicants.find(a=> normalizePhone(a.phone)===norm && a.id!==opts.excludeApplicantId);
+  if(hitA) return { dup:true, where:'WEB', kind:'applicant', name:hitA.name, id:hitA.id };
+  const hitE = db.employees.find(e=> normalizePhone(e.phone)===norm && e.employeeId!==opts.excludeEmployeeId && e.id!==opts.excludeEmployeeId);
+  if(hitE) return { dup:true, where:'WEB', kind:'employee', name:hitE.name, id:hitE.employeeId };
+  try{
+    const set = await getSheetPhoneSet();
+    if(set.has(norm)) return { dup:true, where:'SHEET_17iXM', kind:'sheet' };
+  }catch(e){}
+  return { dup:false };
+}
+function dupPhoneErrorMessage(phone, info){
+  const place = info.where==='SHEET_17iXM' ? 'Google Sheet 17iXM' : 'Web App';
+  const who = info.name ? ` (${info.kind==='applicant'?'ứng viên':'nhân viên'} ${info.name})` : '';
+  return `Trùng SĐT ${phone} - đã tồn tại trên ${place}${who}, không lưu trùng`;
+}
 
 // Danh sách Sheet được bảo vệ tuyệt đối - không bao giờ xóa dòng (dù web đã xóa)
 function isSheetDeleteProtected(spreadsheetId){
@@ -2886,7 +2985,9 @@ function parseCSV(text) {
 }
 
 function syncLiveGoogleSheetCSV(spreadsheetId, sheetName) {
-  return new Promise((resolve) => {
+  // RÀNG BUỘC realtime: nạp sẵn SĐT của nhân viên + Sheet 17iXM để không tạo trùng
+  const preloadPhones = getSheetPhoneSet().catch(()=>new Set());
+  return Promise.resolve(preloadPhones).then((sheetSet)=> new Promise((resolve) => {
     const sid = spreadsheetId || db.settings.googleSheet.formResponsesSheetId || db.settings.googleSheet.spreadsheetId || '1rcqEKraSRhr-Tn9qwlhADlkQUei8j65bXeHF_Tmkd38';
     const sName = sheetName || db.settings.googleSheet.formSheetName || 'FROM_NHAN_VIEN';
     const csvUrl = `https://docs.google.com/spreadsheets/d/${sid}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sName)}`;
@@ -2903,6 +3004,12 @@ function syncLiveGoogleSheetCSV(spreadsheetId, sheetName) {
             const norm = normalizePhone(a.phone);
             if (norm) seenPhones.add(norm);
           });
+          // RÀNG BUỘC realtime: SĐT đã có ở nhân viên hoặc bất kỳ tab nào của 17iXM thì không tạo ứng viên trùng
+          db.employees.forEach(e => {
+            const norm = normalizePhone(e.phone);
+            if (norm) seenPhones.add(norm);
+          });
+          try{ (sheetSet||new Set()).forEach(ph=>{ if(ph) seenPhones.add(ph); }); }catch(e){}
 
           let added = 0;
           for (let i = 1; i < rows.length; i++) {
@@ -2965,11 +3072,11 @@ function syncLiveGoogleSheetCSV(spreadsheetId, sheetName) {
           resolve(0);
         }
       });
-    }).on('error', (e) => {
-      console.error('syncLiveGoogleSheetCSV fetch error:', e.message);
-      resolve(0);
-    });
-  });
+      }).on('error', (e) => {
+        console.error('syncLiveGoogleSheetCSV fetch error:', e.message);
+        resolve(0);
+      });
+  }));
 }
 
 // Background auto-polling: CHỈ ĐỌC Sheet nộp Form (1rcq - nguồn vào), KHÔNG đọc Database (17iXM - nguồn xuất 20 cột)
