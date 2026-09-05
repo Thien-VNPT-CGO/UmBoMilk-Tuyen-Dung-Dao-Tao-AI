@@ -586,6 +586,105 @@ async function rehydrateFromSheet(){
   }catch(e){ console.error('[HỒI PHỤC] Lỗi', e.message); }
 }
 setTimeout(()=>{ rehydrateFromSheet().catch(()=>{}); }, 20000);
+// KÉO DỮ LIỆU TỪ SHEET 17iXM LÊN WEB MỖI LẦN KHỞI ĐỘNG (deploy/cập nhật code/sửa tính năng).
+// Upsert theo mã NV: thiếu thì thêm (giữ nguyên mã NV + key), có rồi thì chỉ ghi đè
+// khi dòng Sheet mới hơn local. Không bao giờ xóa local. Không push ngược (tránh loop).
+async function bootPullFromMasterSheet(manualBy){
+  const out = { pulled:0, updated:0, keys:0, skipped:0 };
+  try{
+    const spreadsheetId = db.settings?.googleSheet?.spreadsheetId || '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w';
+    const token = await getGoogleAccessToken();
+    if(!token || !spreadsheetId){ console.log('[KÉO SHEET] Bỏ qua (chưa cấu hình ServiceAccount/Sheet)'); return out; }
+    const sheets = [
+      { name:'NHAN_VIEN_TRAINING', defType:'TRAINING' },
+      { name:'NHAN_VIEN_CHINH_THUC', defType:'OFFICIAL' }
+    ];
+    for(const { name: sheetName, defType } of sheets){
+      let values = [];
+      try{
+        const resp = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A1:Z5000`, { headers:{ Authorization:`Bearer ${token}` }});
+        if(!resp.ok) continue;
+        const j = await resp.json();
+        values = j.values || [];
+      }catch(e){ console.error(`[KÉO SHEET] Đọc ${sheetName} lỗi`, e.message); continue; }
+      if(values.length<2) continue;
+      const headers = values[0];
+      const col = (h, fb)=>{ const i=headers.findIndex(x=>x===h); return i!==-1?i:fb; };
+      const isOfficial = sheetName==='NHAN_VIEN_CHINH_THUC';
+      const iMaNV=col('Mã NV',1), iName=col('Họ tên',2), iPhone=col('SĐT',3), iKey=col('Khóa',4),
+            iBranch=col('Chi nhánh',5), iShift=col('Ca',6), iStart=col('Ngày bắt đầu',7),
+            iStatus=col('Trạng thái', isOfficial?8:10), iUpdated=col('Cập nhật lúc', isOfficial?13:16);
+      for(let r=1;r<values.length;r++){
+        const row = values[r];
+        const maNV=(row[iMaNV]||'').toString().trim();
+        if(!maNV){ out.skipped++; continue; }
+        const sheetUpdated=(row[iUpdated]||'').toString().trim();
+        const sheetTime = sheetUpdated ? new Date(sheetUpdated).getTime() : 0;
+        const shift = ['CA_SANG','CA_CHIEU','CA_TOI'].includes((row[iShift]||'').toString().trim()) ? row[iShift].toString().trim() : 'CA_SANG';
+        const branchRaw = (row[iBranch]||'').toString().trim();
+        const branchId = db.branches.find(b=>b.id===branchRaw) ? branchRaw : 'CN2';
+        const sheetKey = (row[iKey]||'').toString().trim();
+        let emp = db.employees.find(e=>e.employeeId===maNV);
+        if(!emp){
+          const type = isOfficial ? 'OFFICIAL' : (((row[col('Loại', isOfficial?10:13)]||'').toString().trim()==='OFFICIAL') ? 'OFFICIAL' : 'TRAINING');
+          emp = {
+            id: ((row[col('ID',0)]||'').toString().trim()) || uuidv4(),
+            employeeId: maNV,
+            name: (row[iName]||'').toString().trim() || maNV,
+            phone: (row[iPhone]||'').toString().trim(),
+            branchId, shift,
+            startDate: (row[iStart]||'').toString().trim() || getVietnamTodayStr(),
+            endDate: null, trainingDays: type==='TRAINING' ? 7 : null,
+            status: (row[iStatus]||'').toString().trim() || type,
+            testScore: null, testResult: null, type, category: 'STORE',
+            avatar:'', checkHistory: [],
+            version: 1, updated_at: sheetUpdated || getVietnamISOString(),
+            updated_by: manualBy||'BOOT_PULL', source:'SHEET_17iXM', sync_status:'SYNCED'
+          };
+          if(type==='OFFICIAL' && isOfficial) emp.officialStartDate = (row[col('Ngày chính thức',11)]||'').toString().trim() || null;
+          db.employees.push(emp); out.pulled++;
+        } else {
+          const localTime = emp.updated_at ? new Date(emp.updated_at).getTime() : 0;
+          if(sheetTime>0 && sheetTime>localTime){
+            const beforeStatus = emp.status;
+            if(row[iName]) emp.name = row[iName].toString().trim();
+            if(row[iPhone]!==undefined) emp.phone = (row[iPhone]||'').toString().trim();
+            emp.branchId = branchId; emp.shift = shift;
+            if(row[iStart]) emp.startDate = row[iStart].toString().trim();
+            if(row[iStatus]) emp.status = row[iStatus].toString().trim();
+            if(isOfficial && row[col('Ngày chính thức',11)]) emp.officialStartDate = row[col('Ngày chính thức',11)].toString().trim();
+            emp.version = (emp.version||1)+1;
+            emp.updated_at = sheetUpdated;
+            emp.updated_by = manualBy||'BOOT_PULL';
+            emp.sync_status = 'SYNCED';
+            out.updated++;
+            if(beforeStatus!==emp.status) console.log(`[KÉO SHEET] ${maNV} trạng thái ${beforeStatus} -> ${emp.status}`);
+          } else { out.skipped++; }
+        }
+        // Key: giữ device binding local, chỉ đồng bộ chuỗi key theo Sheet
+        if(sheetKey){
+          let keyRec = db.keys.find(k=>k.employeeId===maNV);
+          if(!keyRec){
+            db.keys.push({ id: uuidv4(), employeeId: maNV, key: sheetKey, deviceId: null, boundAt: null, status: 'ACTIVE', version: 1, updated_at: getVietnamISOString(), sync_status: 'SYNCED' });
+            out.keys++;
+          } else if(keyRec.key!==sheetKey){
+            keyRec.key = sheetKey; keyRec.status='ACTIVE';
+            keyRec.version=(keyRec.version||1)+1; keyRec.updated_at = getVietnamISOString();
+            out.keys++;
+          }
+        }
+      }
+    }
+    if(out.pulled>0 || out.updated>0 || out.keys>0){
+      saveDB();
+      io.emit('employees:update', db.employees);
+      io.emit('keys:update', db.keys);
+    }
+    console.log(`[KÉO SHEET 17iXM] Thêm mới ${out.pulled} + cập nhật ${out.updated} NV + ${out.keys} key (bỏ qua ${out.skipped})${manualBy?` bởi ${manualBy}`:''}`);
+    return out;
+  }catch(e){ console.error('[KÉO SHEET] Lỗi', e.message); return out; }
+}
+setTimeout(()=>{ bootPullFromMasterSheet().catch(()=>{}); }, 12000);
 
 // ============ HELPERS ============
 function audit(actor, action, entity, before, after, ip='127.0.0.1'){
@@ -2534,6 +2633,13 @@ app.post('/api/admin/sync-from-sheet', authMiddleware, roleCheck(['Admin']), asy
     console.error('SYNC_FROM_SHEET error', e);
     res.status(500).json({error:e.message});
   }
+});
+// Kéo toàn bộ NV + key từ Sheet 17iXM lên web (thủ công, Admin).
+// Dùng sau mỗi lần cập nhật code/deploy nếu cần làm mới ngay, hoặc boot đã tự chạy.
+app.post('/api/admin/pull-from-sheet', authMiddleware, roleCheck(['Admin']), async (req,res)=>{
+  const out = await bootPullFromMasterSheet(req.user.username);
+  audit(req.user.username,'PULL_FROM_SHEET','EMPLOYEE',null,out, req.ip);
+  res.json({success:true, ...out, employees: db.employees.length, keys: db.keys.length});
 });
 
 function normalizePhone(phone) {
