@@ -3943,22 +3943,24 @@ async function syncSheetTab(sheetKey){
   if(!def) return;
   // === RÀNG BUỘC: Không đồng bộ lên Sheet khi Web DB rỗng (yêu cầu ràng buộc dữ liệu) ===
   // Chỉ sync khi có dữ liệu thực tế trên web, tránh đẩy rỗng/mock data lên Sheet
+  // Sử dụng ?? 0 để xử lý trường hợp dbCollection là undefined/null
   let dbCollection;
+  let dbLen = 0;
   switch(sheetKey){
-    case 'NHAN_VIEN_MOI':    dbCollection = db.applicants;    break;
-    case 'NHAN_VIEN_TRAINING': dbCollection = db.employees.filter(e=>e.type==='TRAINING');    break;
-    case 'NHAN_VIEN_CHINH_THUC': dbCollection = db.employees.filter(e=>e.type==='OFFICIAL');    break;
-    case 'LICH_LAM_VIEC':     dbCollection = db.schedules;    break;
-    case 'RECORD_DIEM_DANH':  dbCollection = db.attendances;    break;
-    case 'PHIEU_OFF_HANG_TUAN': dbCollection = db.offRequests;    break;
-    case 'PHIEU_OFF_DOT_XUAT': dbCollection = db.emergencyRequests;    break;
-    case 'PHIEU_DOI_THIET_BI': dbCollection = db.deviceRequests;    break;
-    case 'KET_QUA_TEST':      dbCollection = db.testResults;    break;
-    case 'SYNC_QUEUE':        dbCollection = db.syncQueue;    break;
-    default:                  dbCollection = null;              break;
+    case 'NHAN_VIEN_MOI':     dbCollection = db.applicants;      dbLen = (db.applicants?.length ?? 0);    break;
+    case 'NHAN_VIEN_TRAINING': dbCollection = db.employees.filter(e=>e.type==='TRAINING'); dbLen = (db.employees.filter(e=>e.type==='TRAINING')?.length ?? 0);    break;
+    case 'NHAN_VIEN_CHINH_THUC': dbCollection = db.employees.filter(e=>e.type==='OFFICIAL'); dbLen = (db.employees.filter(e=>e.type==='OFFICIAL')?.length ?? 0);    break;
+    case 'LICH_LAM_VIEC':     dbCollection = db.schedules;       dbLen = (db.schedules?.length ?? 0);    break;
+    case 'RECORD_DIEM_DANH':  dbCollection = db.attendances;   dbLen = (db.attendances?.length ?? 0);  break;
+    case 'PHIEU_OFF_HANG_TUAN': dbCollection = db.offRequests; dbLen = (db.offRequests?.length ?? 0);    break;
+    case 'PHIEU_OFF_DOT_XUAT': dbCollection = db.emergencyRequests; dbLen = (db.emergencyRequests?.length ?? 0); break;
+    case 'PHIEU_DOI_THIET_BI': dbCollection = db.deviceRequests; dbLen = (db.deviceRequests?.length ?? 0); break;
+    case 'KET_QUA_TEST':      dbCollection = db.testResults;   dbLen = (db.testResults?.length ?? 0);  break;
+    case 'SYNC_QUEUE':        dbCollection = db.syncQueue;     dbLen = (db.syncQueue?.length ?? 0);  break;
+    default:                  dbCollection = null;               dbLen = 0;                              break;
   }
-  if(dbCollection && dbCollection.length === 0){
-    console.log(`[SYNC GUARD] Sheet ${def.sheetName}: Web DB rỗng -> Bỏ qua sync tránh đẩy dữ liệu rỗng lên Sheet`);
+  if(dbLen === 0){
+    console.log(`[SYNC GUARD] Sheet ${def.sheetName}: Web DB rỗng (length=${dbLen}) -> Bỏ qua sync tránh đẩy dữ liệu rỗng lên Sheet`);
     return;
   }
   const spreadsheetId = db.settings?.googleSheet?.spreadsheetId;
@@ -4057,18 +4059,19 @@ async function syncSheetTab(sheetKey){
 async function syncAllTabsToSheetsRealtime(){
   // === RÀNG BUỘC: Không sync khi Web DB rỗng (yêu cầu ràng buộc dữ liệu) ===
   // Chỉ chạy sync khi có dữ liệu thực tế trên web, tránh ping Sheet khi không có gì để đồng bộ
+  // Sử dụng nullish coalescing ?? an toàn cho mọi trường hợp
   const hasData = 
-    db.applicants && db.applicants.length > 0 ||
-    db.employees && db.employees.length > 0 ||
-    db.schedules && db.schedules.length > 0 ||
-    db.attendances && db.attendances.length > 0 ||
-    db.offRequests && db.offRequests.length > 0 ||
-    db.emergencyRequests && db.emergencyRequests.length > 0 ||
-    db.deviceRequests && db.deviceRequests.length > 0 ||
-    db.testResults && db.testResults.length > 0 ||
-    db.syncQueue && db.syncQueue.length > 0;
+    (db.applicants?.length ?? 0) > 0 ||
+    (db.employees?.length ?? 0) > 0 ||
+    (db.schedules?.length ?? 0) > 0 ||
+    (db.attendances?.length ?? 0) > 0 ||
+    (db.offRequests?.length ?? 0) > 0 ||
+    (db.emergencyRequests?.length ?? 0) > 0 ||
+    (db.deviceRequests?.length ?? 0) > 0 ||
+    (db.testResults?.length ?? 0) > 0 ||
+    (db.syncQueue?.length ?? 0) > 0;
   if(!hasData){
-    console.log('[SYNC GUARD] Web DB rỗng -> Bỏ qua syncAllTabsToSheetsRealtime tránh đẩy dữ liệu rỗng lên Sheet');
+    console.log('[SYNC GUARD] Web DB rỗng -> B? qua syncAllTabsToSheetsRealtime tránh d?y d? li?u r?ng l�n Sheet');
     return;
   }
   const ok = await ensureSheetsExist();
