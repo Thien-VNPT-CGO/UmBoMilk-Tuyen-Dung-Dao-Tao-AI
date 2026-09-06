@@ -7225,7 +7225,20 @@ app.post('/api/system/reset', authMiddleware, roleCheck(['Admin']), async (req,r
           }catch(e){ errors.push(`${tab}: ${e.message}`); }
           await new Promise(r=>setTimeout(r,150)); // throttle
         }
-        sheetResult = { cleared: ok, total: tabs.length, errors };
+        // Xóa cả Sheet nộp Form (1rcq) — nếu không, poller 15s đọc responses cũ
+        // sẽ hồi sinh ứng viên vào web rồi sync 60s đẩy ngược lên 17iXM
+        let formCleared = false;
+        try{
+          const formSid = db.settings?.googleSheet?.formResponsesSheetId || '1rcqEKraSRhr-Tn9qwlhADlkQUei8j65bXeHF_Tmkd38';
+          const formTab = db.settings?.googleSheet?.formSheetName || 'FROM_NHAN_VIEN';
+          const fr = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${formSid}/values/${encodeURIComponent(formTab)}!A2:Z5000:clear`, {
+            method:'POST', headers:{ Authorization:`Bearer ${token}` }
+          });
+          const fj = await fr.json().catch(()=>({}));
+          if(fj.error) errors.push(`FORM ${formTab}: ${fj.error.message}`);
+          else { formCleared = true; console.log(`[SYSTEM RESET] Đã xóa Sheet Form ${formSid}/${formTab}`); }
+        }catch(e){ errors.push(`FORM: ${e.message}`); }
+        sheetResult = { cleared: ok, total: tabs.length, errors, formCleared };
         console.log(`[SYSTEM RESET] Đã xóa Sheet 17iXM: ${ok}/${tabs.length} tab`);
       }
     }catch(e){ sheetResult = { cleared:false, error:e.message }; }

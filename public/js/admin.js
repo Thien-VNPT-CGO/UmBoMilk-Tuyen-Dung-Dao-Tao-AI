@@ -4950,9 +4950,9 @@ async function deleteUser(id){
 async function resetSystem(){
   if(!confirm('Reset sẽ xóa dữ liệu (giữ Settings). Tiếp tục?')) return;
   const scope=prompt('Nhập scope: ALL hoặc EMPLOYEES','EMPLOYEES');
-  if(scope==='ALL' && !confirm('⚠️ Scope ALL sẽ XÓA VĨNH VIỄN toàn bộ dòng dữ liệu trên Google Sheet 17iXM (mọi tab, giữ header) LẪN web app.\n\nKhông thể khôi phục! Bạn chắc chắn?')) return;
+  if(scope==='ALL' && !confirm('⚠️ Scope ALL sẽ XÓA VĨNH VIỄN toàn bộ dòng dữ liệu trên Google Sheet 17iXM (mọi tab, giữ header) + Sheet Form nộp đơn (chống hồi sinh) LẪN web app.\n\nKhông thể khôi phục! Bạn chắc chắn?')) return;
   const res=await api('/api/system/reset', {method:'POST', body:JSON.stringify({scope}), headers:{Authorization:'Bearer '+token}});
-  if(scope==='ALL' && res.sheet) showToast(`Đã reset ALL — Sheet 17iXM: xóa ${res.sheet.cleared??0}/${res.sheet.total??0} tab${res.sheet.errors?.length?` (lỗi ${res.sheet.errors.length} tab)`:''}${res.sheet.error?` — ${res.sheet.error}`:''}`, res.sheet.error?'warning':'success');
+  if(scope==='ALL' && res.sheet) showToast(`Đã reset ALL — Sheet 17iXM: xóa ${res.sheet.cleared??0}/${res.sheet.total??0} tab • Form: ${res.sheet.formCleared?'đã xóa':(res.sheet.error||'lỗi')}${res.sheet.errors?.length?` (lỗi ${res.sheet.errors.length} mục)`:''}${res.sheet.error?` — ${res.sheet.error}`:''}`, (res.sheet.error||!res.sheet.formCleared)?'warning':'success');
   else showToast('Đã reset: '+scope,'success');
   loadDashboard();
 }
