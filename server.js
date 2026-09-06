@@ -6097,16 +6097,32 @@ function coordinateBranchShifts(weekStart, actor){
         groups.get(key).push({ sched: s, day: d, emp });
       }
     }
-    for(const [key, list] of groups){
-      if(list.length<=1) continue;
+    // Sắp xếp nhóm theo ngày để phân bổ lần lượt, cân bằng số ngày làm giữa các NV
+    const orderedGroups = [...groups.entries()].filter(([,list])=>list.length>1)
+      .sort((a,b)=> a[1][0].day.date < b[1][0].day.date ? -1 : 1);
+    // Đếm số ngày WORKING hiện tại trong tuần cho cân bằng tải
+    const weekWorkCount = new Map();
+    for(const s of db.schedules.filter(x=>x.weekStart===weekStart)){
+      const n = (s.days||[]).filter(d=>d.status==='WORKING').length;
+      weekWorkCount.set(s.employeeId, (weekWorkCount.get(s.employeeId)||0)+n);
+    }
+    const firstApproved = (empId)=>{
+      const reqs = db.offRequests.filter(r=>r.employeeId===empId && r.status==='APPROVED');
+      if(!reqs.length) return Infinity;
+      return Math.min(...reqs.map(r=>{ const t=new Date(r.createdAt).getTime(); return isNaN(t)?Infinity:t; }));
+    };
+    for(const [key, list] of orderedGroups){
       result.groups++;
-      const firstApproved = (empId)=>{
-        const reqs = db.offRequests.filter(r=>r.employeeId===empId && r.status==='APPROVED');
-        if(!reqs.length) return Infinity;
-        return Math.min(...reqs.map(r=>{ const t=new Date(r.createdAt).getTime(); return isNaN(t)?Infinity:t; }));
-      };
-      list.sort((a,b)=> firstApproved(a.emp.employeeId)-firstApproved(b.emp.employeeId));
+      // Ưu tiên: ai ít ngày làm trong tuần hơn thì giữ slot (cân bằng tải);
+      // bằng nhau thì ai được duyệt OFF trước (FCFS) giữ slot
+      list.sort((a,b)=>{
+        const ca = weekWorkCount.get(a.emp.employeeId)||0, cb = weekWorkCount.get(b.emp.employeeId)||0;
+        if(ca!==cb) return ca-cb;
+        return firstApproved(a.emp.employeeId)-firstApproved(b.emp.employeeId);
+      });
       const [keeper, ...rest] = list;
+      // Trừ ngày của keeper khỏi đếm của những người còn lại? Không — cập nhật đếm sau mỗi lần lật
+      weekWorkCount.set(keeper.emp.employeeId, (weekWorkCount.get(keeper.emp.employeeId)||0));
       for(const it of rest){
         // RÀNG BUỘC HỞ CA: lật ngày này mà slot không còn ai trực (0 WORKING) thì GIỮ NGUYÊN + báo HR
         const stillWorking = list.filter(x=>x!==it && x.day.status==='WORKING').length;
@@ -6120,6 +6136,7 @@ function coordinateBranchShifts(weekStart, actor){
         it.day.shift='OFF';
         it.day.autoOff=true;
         it.day.autoOffReason=`AI cân lịch: giữ ${keeper.emp.name} trực ${key.split('|')[2]} ngày ${it.day.date}`;
+        weekWorkCount.set(it.emp.employeeId, (weekWorkCount.get(it.emp.employeeId)||0)-1);
         it.sched.version=(it.sched.version||1)+1;
         it.sched.updated_at=getVietnamISOString();
         result.resolved.push({ employeeId: it.emp.employeeId, name: it.emp.name, date: it.day.date, keeper: keeper.emp.employeeId, slot: key });
