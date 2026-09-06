@@ -4616,65 +4616,43 @@ function renderCoursesAdmin(){
     </div>
   `).join('');
 }
-function updateQuizBankInfo(){
+async function updateQuizBankInfo(){
   const el=document.getElementById('quizBankInfo');
   if(!el) return;
-  const bank=(testCourses||[]).find(c=>c.id==='course_001')||(testCourses||[])[0];
-  const n=bank?(bank.questions||[]).length:0;
-  el.textContent = bank?`Ngân hàng đề "${bank.title}": ${n} câu${n>=25?' — đủ mở đề 25 câu':' — CHƯA đủ 25 câu, cần import thêm'}`:'Chưa có ngân hàng đề';
-}
-function downloadQuizTemplate(){
   try{
-    const rows=[['Câu hỏi','A','B','C','D','Đáp án (1-4 hoặc A-D)','Giải thích'],
-      ['Trà sữa Ụm Bò truyền thống gồm những thành phần chính nào?','Trà đen + Sữa tươi + Trân châu','Trà xanh + Sữa đặc','Cà phê + Sữa','Nước lọc + Đường',1,'Đáp án đúng là A'],
-      ['Khách hỏi "trà sữa có béo quá không em?" NV nên làm gì trước?','Hỏi nhu cầu đá/đường của khách','Nói không béo đâu','Im lặng pha chế','Đổi món khác','A','Hiểu nhu cầu trước']];
-    const ws=XLSX.utils.aoa_to_sheet(rows);
-    const wb=XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb,ws,'CAU_HOI');
-    XLSX.writeFile(wb,'mau-cau-hoi-ubm.xlsx');
-  }catch(e){ showToast('Không tạo được file mẫu: '+e.message,'error'); }
+    const st=await api('/api/quiz/status');
+    const link=document.getElementById('quizSheetLink');
+    if(link && st.config) link.href=st.config.sheetUrl||link.href;
+    const idInp=document.getElementById('quizSheetId');
+    if(idInp && st.config && !idInp.value) idInp.value=st.config.spreadsheetId||'';
+    const nmInp=document.getElementById('quizSheetName');
+    if(nmInp && st.config && !nmInp.value) nmInp.value=st.config.sheetName||'';
+    el.textContent=`Nguồn: Sheet ${st.config.spreadsheetId}${st.config.sheetName?` / tab ${st.config.sheetName}`:' (tab đầu)'} • Ngân hàng: ${st.total} câu${st.ready?' — đủ mở đề 25 câu':' — CHƯA đủ 25 câu, HR bổ sung trên Sheet'}${st.lastSync?` • Đồng bộ: ${fmtDMYTime(st.lastSync)} (${st.by||'auto'})`:''}`;
+  }catch(e){
+    const bank=(testCourses||[]).find(c=>c.id==='course_001')||(testCourses||[])[0];
+    const n=bank?(bank.questions||[]).length:0;
+    el.textContent = bank?`Ngân hàng đề: ${n} câu${n>=25?' — đủ mở đề 25 câu':' — CHƯA đủ 25 câu'}`:'Chưa có ngân hàng đề';
+  }
 }
-async function importQuizFile(){
-  const inp=document.getElementById('quizFileInput');
+async function syncQuizBankNow(){
   const st=document.getElementById('quizImportStatus');
-  const f=inp&&inp.files&&inp.files[0];
-  if(!f){ showToast('Chọn file Excel/CSV/JSON trước','error'); return; }
-  if(st) st.textContent='Đang đọc file...';
+  if(st) st.textContent='Đang kéo đề từ Sheet...';
   try{
-    let questions=[];
-    if(/\.json$/i.test(f.name)){
-      const txt=await f.text();
-      const data=JSON.parse(txt);
-      const arr=Array.isArray(data)?data:(Array.isArray(data.questions)?data.questions:[]);
-      questions=arr.map(r=>({question:r.question||r['Câu hỏi']||'', options:r.options||[r.A,r.B,r.C,r.D], correct:r.correct??r['Đáp án'], explanation:r.explanation||r['Giải thích']||''}));
-    } else {
-      const buf=await f.arrayBuffer();
-      const wb=XLSX.read(buf,{type:'array'});
-      const ws=wb.Sheets[wb.SheetNames[0]];
-      const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
-      const normCell=s=>String(s||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,'').trim();
-      let hi=-1, map=null;
-      for(let r=0;r<Math.min(3,rows.length);r++){
-        const cells=(rows[r]||[]).map(normCell);
-        const m={};
-        cells.forEach((c,i)=>{
-          if(!m.q && (c.includes('cau hoi')||c==='question'||c.includes('cauhoi'))) m.q=i;
-          else if(c==='a') m.A=i; else if(c==='b') m.B=i; else if(c==='c') m.C=i; else if(c==='d') m.D=i;
-          else if(c.includes('dap an')||c==='answer'||c.includes('dapan')) m.ans=i;
-          else if(c.includes('giai thich')||c.includes('explanation')||c==='note') m.exp=i;
-        });
-        if(m.q!==undefined && m.A!==undefined && m.ans!==undefined){ hi=r; map=m; break; }
-      }
-      if(hi<0){ map={q:0,A:1,B:2,C:3,D:4,ans:5,exp:6}; hi=-1; }
-      questions=rows.slice(hi+1).map(r=>({question:String(r[map.q]??'').trim(), options:[r[map.A],r[map.B],r[map.C],r[map.D]].map(x=>String(x??'').trim()), correct:String(r[map.ans]??'').trim(), explanation:map.exp!==undefined?String(r[map.exp]??''):''})).filter(r=>r.question);
-    }
-    if(st) st.textContent=`Đã đọc ${questions.length} dòng — đang gửi server...`;
-    const res=await api('/api/courses/import',{method:'POST', body:JSON.stringify({questions})});
-    if(st) st.textContent=`Đã nhập ${res.added} câu mới (tổng ${res.total})`;
-    showToast(`Đã nhập ${res.added} câu mới — ngân hàng có ${res.total} câu`,'success');
-    inp.value='';
+    const res=await api('/api/quiz/sync',{method:'POST'});
+    if(st) st.textContent=`Đã đồng bộ ${res.total} câu từ Sheet`;
+    showToast(`Đã đồng bộ ${res.total} câu từ Google Sheet`,'success');
     loadElearning();
-  }catch(e){ if(st) st.textContent=''; showToast(e.message||'Lỗi import','error'); }
+  }catch(e){ if(st) st.textContent=''; showToast(e.message||'Lỗi đồng bộ','error'); }
+}
+async function saveQuizBankConfig(){
+  const spreadsheetId=document.getElementById('quizSheetId')?.value?.trim();
+  const sheetName=document.getElementById('quizSheetName')?.value?.trim()||'';
+  if(!spreadsheetId) return showToast('Nhập Spreadsheet ID','error');
+  try{
+    await api('/api/quiz/config',{method:'POST', body:JSON.stringify({spreadsheetId, sheetName})});
+    showToast('Đã lưu nguồn Sheet đề — bấm Đồng bộ ngay để kéo về','success');
+    syncQuizBankNow();
+  }catch(e){ showToast(e.message,'error'); }
 }
 async function openOnlineQuiz(employeeId){
   const force=document.getElementById('quizForceOpen')?.checked;

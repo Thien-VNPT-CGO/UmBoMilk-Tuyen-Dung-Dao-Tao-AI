@@ -646,13 +646,17 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
           <span class="text-xs font-bold bg-pink-100 text-pink-700 px-3 py-1 rounded-full border border-pink-200">Random 25 câu • 5s/câu • Thang 10đ</span>
         </div>
         <div class="bg-white rounded-2xl border border-purple-200 p-4 shadow-sm mb-4">
-          <div class="font-black text-sm text-purple-900 flex items-center gap-2"><i class="fa-solid fa-file-import text-purple-500"></i> Import ngân hàng câu hỏi trắc nghiệm (Admin/HR)</div>
-          <div class="text-[11px] text-slate-500 mt-1">File Excel (.xlsx/.xls/.csv) hoặc JSON • Cột: <b>Câu hỏi | A | B | C | D | Đáp án (1–4 hoặc A–D) | Giải thích</b> (không cần header chuẩn — hệ thống tự nhận diện). File Word (.doc/.docx): lưu thành Excel/CSV rồi import.</div>
+          <div class="font-black text-sm text-purple-900 flex items-center gap-2"><i class="fa-solid fa-cloud-arrow-down text-purple-500"></i> Ngân hàng câu hỏi — tự động từ Google Sheet</div>
+          <div class="text-[11px] text-slate-500 mt-1">HR/Admin <b>sửa trực tiếp trên Sheet</b>, hệ thống <b>tự kéo về mỗi 60 giây</b> rồi random 25 câu/mỗi lượt thi. Cột trên Sheet: <b>Câu hỏi | A | B | C | D | Đáp án (1–4 hoặc A–D) | Giải thích</b>.</div>
           <div class="mt-2 flex flex-wrap items-center gap-2">
-            <input type="file" id="quizFileInput" accept=".xlsx,.xls,.csv,.json,.txt" class="text-xs border border-purple-200 rounded-xl px-2 py-1.5 bg-white">
-            <button onclick="importQuizFile()" class="text-xs font-black bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-xl">Import đề</button>
-            <button onclick="downloadQuizTemplate()" class="text-xs font-bold bg-white border border-purple-200 text-purple-700 px-4 py-2 rounded-xl hover:bg-purple-50">Tải file mẫu</button>
+            <a id="quizSheetLink" href="https://docs.google.com/spreadsheets/d/1h06TrHMRnBOHMkp7Ri4Rz8yRw8ptemQp0ftjMldHYdc/edit?usp=sharing" target="_blank" class="text-xs font-bold bg-white border border-purple-200 text-purple-700 px-4 py-2 rounded-xl hover:bg-purple-50">Mở Sheet đề <i class="fa-solid fa-arrow-up-right-from-square"></i></a>
+            <button onclick="syncQuizBankNow()" class="text-xs font-black bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-xl">Đồng bộ ngay</button>
             <span id="quizImportStatus" class="text-xs font-bold text-slate-500"></span>
+          </div>
+          <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
+            <input id="quizSheetId" placeholder="Spreadsheet ID" class="border border-purple-200 rounded-xl px-2 py-1.5 w-72">
+            <input id="quizSheetName" placeholder="Tên tab (trống = tab đầu)" class="border border-purple-200 rounded-xl px-2 py-1.5 w-56">
+            <button onclick="saveQuizBankConfig()" class="font-bold bg-white border border-purple-200 text-purple-700 px-4 py-1.5 rounded-xl hover:bg-purple-50">Lưu nguồn Sheet</button>
           </div>
           <div id="quizBankInfo" class="mt-2 text-xs font-bold text-purple-700"></div>
         </div>

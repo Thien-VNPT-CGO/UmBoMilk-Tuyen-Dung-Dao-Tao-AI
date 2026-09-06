@@ -115,6 +115,12 @@ const DEFAULT_SETTINGS = {
     formUrl: 'https://docs.google.com/forms/d/e/1FAIpQLSeteDABiq7mday0Yko-PyyUIW4uccicP7FJJt2evc7xbbWBfA/viewform',
     masked: true
   },
+  // Ngân hàng câu hỏi trắc nghiệm đầu ra — nguồn thật duy nhất là Google Sheet (HR/Admin sửa trên Sheet, server tự kéo)
+  quizBank: {
+    spreadsheetId: '1h06TrHMRnBOHMkp7Ri4Rz8yRw8ptemQp0ftjMldHYdc',
+    sheetName: '',
+    sheetUrl: 'https://docs.google.com/spreadsheets/d/1h06TrHMRnBOHMkp7Ri4Rz8yRw8ptemQp0ftjMldHYdc/edit?usp=sharing'
+  },
   googleDrive: { rootFolderId: '1-Wy-Di6KvfeGCKoTV7TSuFQpY_yKNy-1', backupFolderId: '1-Wy-Di6KvfeGCKoTV7TSuFQpY_yKNy-1', driveUrl: 'https://drive.google.com/drive/folders/1-Wy-Di6KvfeGCKoTV7TSuFQpY_yKNy-1' },
   googleForm: { formUrl: 'https://docs.google.com/forms/d/e/1FAIpQLSd9rRG4QLvmLclPseVVmpgPdizij1XYwiSTCgc6x2BPMfA_AA/viewform', mapping: {} },
   finance: { webhookUrl: 'https://script.google.com/macros/s/AKfycbxYZhMjR9riLFQfYEkgLfub33XtWlSP2IokghTt82Lb4SQVL4tKxQyNACr69yC0ACA/exec', secret: 'umbomilk_secret_2026', spreadsheetId: '13Y4rycVMq2-HXGySjaJJBl2YZswKEaK5WkSLWVkLjuY' },
@@ -125,7 +131,7 @@ const DEFAULT_SETTINGS = {
   attendance: { checkInOpenBefore: 30, checkInCloseAfter: 60, lateThreshold: 15, earlyLeaveThreshold: 15, penaltyLate: 30000, penaltyAbsent: 100000, penaltyNoCheckout: 50000 },
   payroll: { trainingRate: 21000, officialRate: 25500, shifts: DEFAULT_SHIFTS },
   off: { openDay: 5, openHour: 12, closeDay: 6, closeHour: 15, maxPerWeek: 2 },
-  test: { minPerQuestion: 5, totalQuestions: 20, passScore: 7, retakeMin: 5, maxRetest: 3 },
+  test: { minPerQuestion: 5, totalQuestions: 25, passScore: 8, retakeMin: 5, maxRetest: 3 },
   security: { sessionTimeout: 120, deviceBind: true }
 };
 
@@ -263,7 +269,7 @@ function loadDB() {
       // ensure branches correct (CN2 fix)
       db.branches = DEFAULT_BRANCHES;
       if (!db.settings) db.settings = DEFAULT_SETTINGS;
-      else db.settings = { ...DEFAULT_SETTINGS, ...db.settings, googleSheet: { ...DEFAULT_SETTINGS.googleSheet, ...(db.settings.googleSheet||{}) }, ai: { ...DEFAULT_SETTINGS.ai, ...(db.settings.ai||{}) }, zalo: { ...DEFAULT_SETTINGS.zalo, ...(db.settings.zalo||{}) }, calendar: { ...DEFAULT_SETTINGS.calendar, ...(db.settings.calendar||{}) }, attendance: { ...DEFAULT_SETTINGS.attendance, ...(db.settings.attendance||{}) } };
+      else db.settings = { ...DEFAULT_SETTINGS, ...db.settings, googleSheet: { ...DEFAULT_SETTINGS.googleSheet, ...(db.settings.googleSheet||{}) }, quizBank: { ...DEFAULT_SETTINGS.quizBank, ...(db.settings.quizBank||{}) }, ai: { ...DEFAULT_SETTINGS.ai, ...(db.settings.ai||{}) }, zalo: { ...DEFAULT_SETTINGS.zalo, ...(db.settings.zalo||{}) }, calendar: { ...DEFAULT_SETTINGS.calendar, ...(db.settings.calendar||{}) }, attendance: { ...DEFAULT_SETTINGS.attendance, ...(db.settings.attendance||{}) } };
       // ensure payroll shifts
       if (!db.settings.payroll) db.settings.payroll = DEFAULT_SETTINGS.payroll;
       if (!db.payrollPeriods) db.payrollPeriods = [];
@@ -5945,6 +5951,121 @@ app.post('/api/emergency-requests/:id/respond', (req,res)=>{
   db.zaloRecords.unshift(zr);
   io.emit('zalo:update', db.zaloRecords);
   res.json(er);
+});
+
+// ============ NGÂN HÀNG ĐỀ TRẮC NGHIỆM — NGUỒN THẬT DUY NHẤT: GOOGLE SHEET ============
+// HR/Admin sửa câu hỏi trực tiếp trên Sheet, server tự kéo về mỗi 60s (không cần bấm import).
+// Sheet phải chia sẻ "Bất kỳ ai có đường liên kết → Người xem" (khuyên dùng, không cần ServiceAccount).
+function getQuizBankConfig(){
+  const qb = db.settings?.quizBank || {};
+  return {
+    spreadsheetId: process.env.QUIZ_BANK_SPREADSHEET_ID || qb.spreadsheetId || '1h06TrHMRnBOHMkp7Ri4Rz8yRw8ptemQp0ftjMldHYdc',
+    sheetName: process.env.QUIZ_BANK_SHEET_NAME || qb.sheetName || '',
+    sheetUrl: qb.sheetUrl || 'https://docs.google.com/spreadsheets/d/1h06TrHMRnBOHMkp7Ri4Rz8yRw8ptemQp0ftjMldHYdc/edit?usp=sharing'
+  };
+}
+function fetchQuizBankCSV(){
+  const cfg = getQuizBankConfig();
+  const sheetParam = cfg.sheetName ? `&sheet=${encodeURIComponent(cfg.sheetName)}` : '';
+  const csvUrl = `https://docs.google.com/spreadsheets/d/${cfg.spreadsheetId}/gviz/tq?tqx=out:csv${sheetParam}`;
+  return new Promise((resolve)=>{
+    https.get(csvUrl, (res)=>{
+      let raw='';
+      res.on('data', chunk=> raw+=chunk);
+      res.on('end', ()=>{
+        try{
+          if(!res.statusCode || res.statusCode>=400) return resolve({ ok:false, error:`Sheet HTTP ${res.statusCode} — kiểm tra chia sẻ "Bất kỳ ai có link → Người xem"` });
+          const rows = parseCSV(raw);
+          resolve({ ok:true, rows });
+        }catch(e){ resolve({ ok:false, error:e.message }); }
+      });
+    }).on('error', (e)=> resolve({ ok:false, error:e.message }));
+  });
+}
+function normalizeQuizBankRows(rows){
+  if(!rows || rows.length<2) return [];
+  const normCell = s=>String(s||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,'').trim();
+  let hi=-1, map=null;
+  for(let r=0;r<Math.min(3,rows.length);r++){
+    const cells=(rows[r]||[]).map(normCell);
+    const m={};
+    cells.forEach((c,i)=>{
+      if(m.q===undefined && (c.includes('cau hoi')||c==='question'||c.includes('cauhoi'))) m.q=i;
+      else if(c==='a') m.A=i; else if(c==='b') m.B=i; else if(c==='c') m.C=i; else if(c==='d') m.D=i;
+      else if(c.includes('dap an')||c==='answer'||c.includes('dapan')) m.ans=i;
+      else if(c.includes('giai thich')||c.includes('explanation')||c==='note') m.exp=i;
+    });
+    if(m.q!==undefined && m.A!==undefined && m.ans!==undefined){ hi=r; map=m; break; }
+  }
+  if(!map) return [];
+  const toIdx = (v)=>{
+    const s=String(v??'').trim().toUpperCase();
+    if(/^[A-D]$/.test(s)) return s.charCodeAt(0)-65;
+    const n=parseInt(s,10);
+    if(!isNaN(n)) return (n>=0&&n<=3)?n:((n>=1&&n<=4)?n-1:-1);
+    return -1;
+  };
+  const out=[];
+  for(let r=hi+1;r<rows.length;r++){
+    const row=rows[r]||[];
+    const qtext=String(row[map.q]??'').trim();
+    const opts=[row[map.A],row[map.B],row[map.C],row[map.D]].map(x=>String(x??'').trim());
+    const ci=toIdx(row[map.ans]);
+    if(!qtext || opts.some(o=>!o) || ci<0) continue;
+    out.push({ question:qtext, options:opts, correct:ci, explanation: map.exp!==undefined?String(row[map.exp]??''):'' });
+  }
+  return out;
+}
+async function syncQuizBankFromSheet(manualBy){
+  const out = { updated:0, total:0, skipped:0 };
+  try{
+    const cfg = getQuizBankConfig();
+    const fetched = await fetchQuizBankCSV();
+    if(!fetched.ok){ console.error('[QUIZ BANK] Kéo Sheet lỗi:', fetched.error); return { ...out, error: fetched.error }; }
+    const parsed = normalizeQuizBankRows(fetched.rows);
+    if(parsed.length===0) return { ...out, error:'Sheet không có dòng câu hỏi hợp lệ (cần: Câu hỏi | A | B | C | D | Đáp án | Giải thích)' };
+    let bank = db.testCourses.find(c=>c.id==='course_001') || db.testCourses[0];
+    if(!bank){
+      bank = { id:'course_001', title:'Kiểm tra đầu ra - Ụm Bò Milk 2026', description:'Ngân hàng câu hỏi trắc nghiệm (tự động từ Google Sheet)', totalQuestions:0, minPerQuestion:5, questions:[], voiceSimulations:[], createdAt:getVietnamISOString() };
+      db.testCourses.unshift(bank);
+    }
+    bank.questions = parsed.map(q=>({ id:'q'+uuidv4().slice(0,8), ...q }));
+    bank.totalQuestions = bank.questions.length;
+    bank.minPerQuestion = 5;
+    bank.description = 'Ngân hàng câu hỏi trắc nghiệm (tự động từ Google Sheet)';
+    bank.quizSource = { spreadsheetId: cfg.spreadsheetId, sheetName: cfg.sheetName, sheetUrl: cfg.sheetUrl, updatedAt: getVietnamISOString(), rowCount: parsed.length, by: manualBy||'AUTO_60S' };
+    out.updated = parsed.length; out.total = bank.questions.length;
+    audit(manualBy||'SYSTEM','SYNC_QUIZ_BANK','TEST',null,{total:bank.questions.length},'sheet-sync');
+    saveDB();
+    io.emit('courses:update', db.testCourses);
+    console.log(`[QUIZ BANK] Đã đồng bộ ${parsed.length} câu từ Sheet (${manualBy||'AUTO_60S'})`);
+    return out;
+  }catch(e){ console.error('[QUIZ BANK] error', e.message); return { ...out, error: e.message }; }
+}
+setInterval(()=>{ syncQuizBankFromSheet().catch(()=>{}); }, 60*1000);
+setTimeout(()=>{ syncQuizBankFromSheet('BOOT').catch(()=>{}); }, 20000);
+// HR/Admin xem trạng thái nguồn đề (không cần quyền đặc biệt — dữ liệu câu hỏi không nhạy cảm)
+app.get('/api/quiz/status', (req,res)=>{
+  const cfg = getQuizBankConfig();
+  const bank = db.testCourses.find(c=>c.id==='course_001') || db.testCourses[0];
+  res.json({ config: cfg, total: bank?(bank.questions||[]).length:0, lastSync: bank?.quizSource?.updatedAt||null, by: bank?.quizSource?.by||null, ready: (bank?(bank.questions||[]).length:0)>=25 });
+});
+// HR/Admin đồng bộ thủ công ngay (không chờ 60s)
+app.post('/api/quiz/sync', authMiddleware, roleCheck(['Admin','HR']), async (req,res)=>{
+  const out = await syncQuizBankFromSheet(req.user.username);
+  if(out.error) return res.status(502).json({ success:false, ...out });
+  res.json({ success:true, ...out });
+});
+// Admin đổi Sheet nguồn đề (ENV Render đè lên cấu hình này nếu có)
+app.post('/api/quiz/config', authMiddleware, roleCheck(['Admin']), (req,res)=>{
+  const { spreadsheetId, sheetName } = req.body||{};
+  if(!db.settings.quizBank) db.settings.quizBank = { ...DEFAULT_SETTINGS.quizBank };
+  if(spreadsheetId) db.settings.quizBank.spreadsheetId = String(spreadsheetId).trim();
+  if(sheetName!==undefined) db.settings.quizBank.sheetName = String(sheetName||'').trim();
+  db.settings.quizBank.sheetUrl = `https://docs.google.com/spreadsheets/d/${db.settings.quizBank.spreadsheetId}/edit?usp=sharing`;
+  audit(req.user.username,'CONFIG_QUIZ_BANK','TEST',null,db.settings.quizBank, req.ip);
+  saveDB();
+  res.json({ success:true, config: getQuizBankConfig() });
 });
 
 // ============ E-LEARNING & TEST ============

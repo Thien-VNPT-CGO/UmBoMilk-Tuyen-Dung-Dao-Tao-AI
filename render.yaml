@@ -59,6 +59,11 @@ services:
         value: https://script.google.com/macros/s/AKfycbxYZhMjR9riLFQfYEkgLfub33XtWlSP2IokghTt82Lb4SQVL4tKxQyNACr69yC0ACA/exec
       - key: FINANCE_WEBHOOK_SECRET
         value: umbomilk_secret_2026
+      # Ngân hàng đề trắc nghiệm đầu ra — nguồn thật duy nhất là Google Sheet (HR sửa trên Sheet, server tự kéo 60s)
+      - key: QUIZ_BANK_SPREADSHEET_ID
+        value: 1h06TrHMRnBOHMkp7Ri4Rz8yRw8ptemQp0ftjMldHYdc
+      - key: QUIZ_BANK_SHEET_NAME
+        value: ""
 
 # Postgres free 90 ngày (tùy chọn, nếu cần 24/7 DB thay db.json)
 # databases:
