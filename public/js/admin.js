@@ -1,4 +1,4 @@
-const API = location.hostname.includes('vercel.app') ? 'https://umbomilk-hr.onrender.com' : '';
+﻿const API = location.hostname.includes('vercel.app') ? 'https://umbomilk-hr.onrender.com' : '';
 let token = localStorage.getItem('admin_token');
 let currentUser = JSON.parse(localStorage.getItem('admin_user') || 'null');
 let socket = null;
@@ -641,6 +641,34 @@ function connectSocket(){
     safeCall(loadApplicants());
     safeCall(loadInterviews());
   });
+  // ============ YEU CAU #10: HR Action Realtime Toast ============
+  socket.on('hr:action', (data) => {
+    if(!data) return;
+    hrToast(data.action, data.success !== false, data.detail);
+  });
+}
+
+// hrToast: hien thi thong bao realtime khi HR thuc hien hanh dong quan tri (Yeu cau #10)
+function hrToast(action, success=true, detail='') {
+  const actionMap = {
+    'approve_off':       { icon: 'OK', label: 'Duyet don nghi OFF' },
+    'reject_off':        { icon: 'X', label: 'Tu choi don nghi OFF' },
+    'approve_emergency': { icon: 'EM', label: 'Duyet OFF dot xuat' },
+    'reject_emergency':  { icon: 'X', label: 'Tu choi OFF dot xuat' },
+    'create_employee':   { icon: '++', label: 'Tao nhan vien moi' },
+    'delete_employee':   { icon: '--', label: 'Xoa nhan vien' },
+    'archive_employee':  { icon: 'ARC', label: 'Luu tru nhan vien' },
+    'import_employees':  { icon: 'IMP', label: 'Import nhan vien hang loat' },
+    'schedule_assign':   { icon: 'SCH', label: 'Can lich lam viec' },
+    'promote_official':  { icon: 'PRO', label: 'Duyet len Chinh thuc' },
+    'revoke_key':        { icon: 'KEY', label: 'Thu hoi Key thiet bi' },
+    'approve_device':    { icon: 'DEV', label: 'Duyet doi thiet bi' },
+    'sync_sheet':        { icon: 'SYN', label: 'Dong bo Google Sheet' },
+  };
+  const info = actionMap[action] || { icon: success ? 'OK' : 'ERR', label: action || 'Hanh dong HR' };
+  const type = success ? 'success' : 'error';
+  const msg = '[HR] ' + info.icon + ' ' + info.label + (detail ? ' - ' + detail : '');
+  if(typeof showToast === 'function') showToast(msg, type);
 }
 
 // Client-side 10-second ticker to update countdowns & PASS button states live
@@ -4550,7 +4578,8 @@ async function loadAnomalies(){
   const branch=document.getElementById('reportBranch')?.value || '';
   try{
     const list=await api(`/api/attendance/anomalies?month=${month}&branch=${branch}`);
-    document.getElementById('anomalyCount').textContent=list.length+' lỗi';
+    const anomalyCountEl = document.getElementById('anomalyCount');
+    if(anomalyCountEl) anomalyCountEl.textContent=list.length+' lỗi';
     const el=document.getElementById('anomalyList');
     if(list.length===0) return el.innerHTML='<div class="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center text-sm text-emerald-700">✔ Không có sai lệch - đủ điều kiện chốt</div>';
     el.innerHTML=list.slice(0,50).map(a=>`

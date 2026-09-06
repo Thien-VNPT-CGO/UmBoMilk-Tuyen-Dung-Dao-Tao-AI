@@ -1,4 +1,4 @@
-require('dotenv').config();
+﻿require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const https = require('https');
@@ -340,7 +340,7 @@ function saveDB() {
       const stats = fs.statSync(DATA_FILE);
       if(stats.size > 5*1024*1024){
         console.warn('[DB] db.json >5MB, pruning oldest attendance images');
-        db.attendances.slice(-50).forEach(a=>{ if(a.checkIn?.image && a.checkIn.image.length>50000) a.checkIn.image='[pruned]'; if(a.checkOut?.image && a.checkOut.image.length>50000) a.checkOut.image='[pruned]'; });
+        db.attendances.slice(0, Math.max(0, db.attendances.length - 50)).forEach(a=>{ if(a.checkIn?.image && a.checkIn.image.length>50000) a.checkIn.image='[pruned]'; if(a.checkOut?.image && a.checkOut.image.length>50000) a.checkOut.image='[pruned]'; });
       }
     }catch(e){}
     io.emit('db:update', { timestamp: getVietnamISOString() });
@@ -1226,6 +1226,7 @@ app.post('/api/employees', authMiddleware, roleCheck(['Admin','HR']), async (req
   saveDB();
   io.emit('employees:update', db.employees);
   io.emit('keys:update', db.keys);
+  io.emit('hr:action', { action: 'create_employee', success: true, detail: 'New employee created' });
   res.json({ employee: emp, key });
 });
 // Bulk import Official employees (data cũ)
@@ -1587,6 +1588,7 @@ app.delete('/api/employees/:id', authMiddleware, roleCheck(['Admin','HR']), (req
   saveDB();
   io.emit('employees:update', db.employees);
   emitForceLogout(before.employeeId, 'Tài khoản của bạn đã bị vô hiệu hóa (ARCHIVED). Vui lòng liên hệ HR.');
+  io.emit('hr:action', { action: 'archive_employee', success: true, detail: 'Soft delete (ARCHIVED)' });
   res.json({success:true, keptOnSheet:true});
 });
 // FIX P0.4: merged transition (generic + official) - single source, realtime, branchScope check

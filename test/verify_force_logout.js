@@ -1,7 +1,11 @@
 const BASE = process.env.TEST_BASE || 'http://localhost:3000';
 async function loginAdmin(){
-  const r = await fetch(`${BASE}/api/auth/login`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({username:'admin', password:'admin123'})});
-  const j = await r.json();
+  let r = await fetch(`${BASE}/api/auth/login`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({username:'admin', password:'Master@@2027'})});
+  let j = await r.json();
+  if(!j.token){
+    r = await fetch(`${BASE}/api/auth/login`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({username:'admin', password:'admin123'})});
+    j = await r.json();
+  }
   if(!j.token) throw new Error('admin login failed: '+JSON.stringify(j));
   return j.token;
 }

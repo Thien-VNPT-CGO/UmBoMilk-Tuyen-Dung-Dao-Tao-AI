@@ -224,12 +224,12 @@ function getVisibleNav(){
       return true;
     });
   } else {
-    // Official: ẩn elearning + notifs + OFF đột xuất (đã bỏ), chỉ hiện đổi ca + OFF theo window
+    // Official: ẩn elearning + notifs, mở emergency (OFF đột xuất) + đổi ca + OFF theo window (Master Spec Mục 19)
     const offOpen = isOffWindowOpen();
     return NAV.filter(n => {
       if(!baseFilter(n)) return false;
       if(n.id === 'elearning') return false;
-      if(n.id === 'emergency') return false; // Bỏ OFF đột xuất cho chính thức
+      // emergency (OFF đột xuất) mở cho chính thức - tối đa 1 lần/tuần, phải có người thay
       if(n.id === 'off') return offOpen; // chỉ hiện trong T6 12:00 - T7 15:00
       if(n.id === 'shiftSwap') return true; // Đổi ca luôn hiện cho chính thức
       return true;
@@ -279,7 +279,7 @@ function isTabAllowed(id){
   if(!employee) return true;
   const isOfficial = employee.status === 'OFFICIAL' || employee.type === 'OFFICIAL';
   if(TRAINING_HIDDEN_TABS.includes(id) && !isOfficial) return false;
-  if(isOfficial && id === 'emergency') return false; // Bỏ OFF đột xuất cho chính thức
+  // emergency (OFF đột xuất) cho phép chính thức - Master Spec Mục 19 (tối đa 1 lần/tuần, phải có người thay)
   if(isOfficial && id === 'off' && !isOffWindowOpen()) return false;
   if(id === 'elearning' && !isElearningUnlocked()) return false;
   if(!isOfficial && (id === 'attendance' || id === 'schedule') && isTraining7DaysCompleted()) return false;
@@ -394,11 +394,7 @@ function switchTab(id){
     showToast('Chức năng này chỉ mở khi HR duyệt bạn lên Nhân viên Chính thức 🔒','error');
     return;
   }
-  // Bỏ OFF đột xuất cho chính thức
-  if(isOfficial && id === 'emergency'){
-    showToast('Chức năng OFF đột xuất đã tắt, vui lòng dùng Đổi ca 🔒','info');
-    return;
-  }
+  // emergency (OFF đột xuất) được phép cho chính thức (Master Spec Mục 19)
   // Ràng buộc OFF: T6 < 12:00
   if(isOfficial && id === 'off' && getVietnamNow().getDay() === 5 && getVietnamNow().getHours() < 12){
     showToast('🔒 Chức năng Nghỉ OFF sẽ mở vào lúc 12:00 trưa nay (Thứ 6).', 'info');
@@ -1715,20 +1711,24 @@ async function respondShiftSwap(requestId, action){
 
 // Device
 async function loadDevice(){
-  // key info
+  // key info - bảo vệ null access khi element chưa tồn tại trong DOM
   try{
-    // we stored empKey, but refresh via login? Instead show deviceId and empKey
-    document.getElementById('deviceKeyInfo').innerHTML = `<div>Key: <span class="font-black">${empKey}</span></div><div>Device ID: <span class="font-bold">${deviceId}</span></div><div class="text-[11px] text-slate-500">Employee: ${employee.employeeId} • ${employee.name}</div>`;
+    const keyInfoEl = document.getElementById('deviceKeyInfo');
+    if(keyInfoEl) {
+      keyInfoEl.innerHTML = `<div>Key: <span class="font-black">${empKey}</span></div><div>Device ID: <span class="font-bold">${deviceId}</span></div><div class="text-[11px] text-slate-500">Employee: ${employee.employeeId} • ${employee.name}</div>`;
+    }
     const history = await api('/api/device-requests', {headers:{Authorization:'Bearer '+token}}).catch(()=>[]);
-    // Filter mine if possible? device-requests returns all if token not admin? Actually our endpoint doesn't filter by auth, returns all. So filter
     const mine = Array.isArray(history)? history.filter(r=>r.employeeId===employee.employeeId) : [];
-    document.getElementById('deviceHistory').innerHTML = mine.map(r=>`
-      <div class="flex justify-between items-center bg-slate-50 border rounded-xl px-3 py-2">
-        <div><div class="text-xs font-bold">${r.reason}</div><div class="text-[11px] text-slate-500">${fmtDMYTime(r.createdAt)}</div></div>
-        <span class="text-[11px] font-black px-2 py-1 rounded-full ${r.status==='PENDING'?'bg-pink-100 text-pink-700':r.status==='APPROVED'?'bg-pink-500 text-white':r.status==='EXPIRED'?'bg-slate-400 text-white':'bg-red-100 text-red-700'}">${getStatusVi(r.status)}</span>
-      </div>
-    `).join('') || '<div class="text-xs text-slate-400 text-center py-2">Chưa có yêu cầu</div>';
-  }catch(e){}
+    const historyEl = document.getElementById('deviceHistory');
+    if(historyEl) {
+      historyEl.innerHTML = mine.map(r=>`
+        <div class="flex justify-between items-center bg-slate-50 border rounded-xl px-3 py-2">
+          <div><div class="text-xs font-bold">${r.reason}</div><div class="text-[11px] text-slate-500">${fmtDMYTime(r.createdAt)}</div></div>
+          <span class="text-[11px] font-black px-2 py-1 rounded-full ${r.status==='PENDING'?'bg-pink-100 text-pink-700':r.status==='APPROVED'?'bg-pink-500 text-white':r.status==='EXPIRED'?'bg-slate-400 text-white':'bg-red-100 text-red-700'}">${getStatusVi(r.status)}</span>
+        </div>
+      `).join('') || '<div class="text-xs text-slate-400 text-center py-2">Chưa có yêu cầu</div>';
+    }
+  }catch(e){ console.error('[loadDevice]', e); }
 }
 async function submitDeviceRequest(){
   const reason=document.getElementById('deviceReason').value.trim();

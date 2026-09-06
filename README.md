@@ -17,16 +17,17 @@ npm start
 
 | Cổng | URL | Mô tả |
 |------|-----|-------|
-| Trang chủ | http://localhost:3000/ | Landing chọn cổng Admin / Nhân viên |
+| Trang chủ | http://localhost:3000/ | Landing chọn cổng Admin / Nhân viên / Tài chính |
 | Admin HR | http://localhost:3000/admin | 13 tabs quản trị |
 | Nhân viên | http://localhost:3000/employee | 9 tabs nhân viên |
+| Tài chính | http://localhost:3000/finance | Báo cáo chốt công & đối soát kế toán |
 
 ## 🔐 Tài khoản demo
 
 ### Admin HR (Web App Quản trị)
 | Username | Password | Role | Branch Scope |
 |----------|----------|------|--------------|
-| `admin` | `admin123` | Admin (full) | CN1,CN2,CN3,CN4 |
+| `admin` | `Master@@2027` | Admin (full) | CN1,CN2,CN3,CN4 |
 | `hr` | `hr123` | HR | CN1,CN2 |
 | `manager` | `manager123` | Manager | CN2 |
 | `umbomilk` | `view123` | Umbomilk (ReadOnly) | All |
@@ -119,12 +120,21 @@ um-bo-milk-app/
 ├── package.json
 ├── data/db.json       # JSON persistence (Operational Data Hub)
 ├── public/
-│   ├── index.html     # Landing
-│   ├── admin.html     # Admin SPA
-│   ├── employee.html  # Employee SPA
+│   ├── index.html     # Landing - 3 cổng: Admin / Nhân viên / Tài chính
+│   ├── admin.html     # Admin SPA (13 tabs + hrToast Realtime)
+│   ├── employee.html  # Employee SPA (9 tabs + emergency OFF)
+│   ├── finance.html   # Finance SPA (Kế toán chốt công)
 │   └── js/
-│       ├── admin.js   # 13 tabs logic + realtime
-│       └── employee.js# 9 tabs logic + camera/GPS/test
+│       ├── admin.js   # 13 tabs logic + realtime + hrToast (Req #10)
+│       ├── employee.js# 9 tabs logic + camera/GPS/test + emergency
+│       └── finance.js # Finance kế toán
+├── scripts/
+│   ├── google-apps-script.gs # Webhook trigger cho Google Sheet
+│   ├── finance.gs             # Google Apps Script cho tài chính
+│   └── migrate.js             # Migration utility
+└── test/
+    ├── realtime.test.js       # 5 integration tests
+    └── verify_force_logout.js # Force logout verification
 ```
 
 ---
@@ -150,3 +160,16 @@ Mọi thay đổi có Audit Log.
 - Ảnh camera lưu base64 trong JSON (thay cho Drive upload)
 - Schedule tự sinh tuần hiện tại, cập nhật khi OFF/TEST chuyển trạng thái
 - Để test TEST: dùng nhân viên Training → E-learning → Bắt đầu TEST
+
+---
+
+## 📋 Changelog
+
+### v1.0.1 - 07/09/2026
+- ✅ Fix lỗi prune ảnh: `slice(-50)` → `slice(0, length-50)` bảo vệ ảnh mới nhất
+- ✅ Mở lại tab OFF đột xuất cho Nhân viên Chính thức (Master Spec Mục 19)
+- ✅ Fix null access `anomalyCount` trong admin.js tránh crash
+- ✅ Fix null access `deviceKeyInfo`/`deviceHistory` trong employee.js
+- ✅ Thêm `hrToast()` + `socket.on('hr:action')` — Yêu cầu #10 Realtime HR notification
+- ✅ Thêm `io.emit('hr:action')` cho các action: tạo NV, xóa cứng, archive
+- ✅ Dọn dẹp file tạm: `audit_check.js`, `deep_lint.js`, `check_settings.js`

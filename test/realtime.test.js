@@ -12,12 +12,13 @@ async function login(username, password){
 describe('Ụm Bò Milk - Realtime & Automation', ()=>{
   let adminToken, managerToken;
   before(async ()=>{
-    const a = await login('admin','admin123');
+    let a = await login('admin','Master@@2027');
+    if(!a || !a.token) a = await login('admin','admin123');
     adminToken = a.token;
     const m = await login('manager','manager123');
     managerToken = m.token;
-    assert.ok(adminToken);
-    assert.ok(managerToken);
+    assert.ok(adminToken, 'Admin token should be present');
+    assert.ok(managerToken, 'Manager token should be present');
   });
   it('health realtime', async ()=>{
     const r = await fetch(`${BASE}/health`);
