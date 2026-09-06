@@ -295,7 +295,7 @@ function enforceSingleVisibleTab(){
   });
 }
 // Tự động refresh nav mỗi phút để cập nhật window OFF realtime
-setInterval(()=>{ if(employee) refreshNavVisibility(); }, 60000);
+setInterval(()=>{ if(employee) syncOffWindowFlag().then(()=>{ try{ refreshNavVisibility(); }catch(e){} }); }, 60000);
 
 function initNav(){
   const el=document.getElementById('navMenu');
@@ -537,6 +537,8 @@ function showApp(){
   document.getElementById('avatarFallback').textContent=employee.name.split(' ').pop()[0];
   document.getElementById('homeAvatar').textContent=employee.name.split(' ').pop()[0];
   initNav();
+  // Lấy cờ VIP test OFF trước để tab OFF hiện ngay nếu Admin đang bật
+  syncOffWindowFlag().then(()=>{ try{ refreshNavVisibility(); }catch(e){} });
   // Ẩn/hiện các tab theo quyền TRAINING (bao gồm e-learning)
   refreshNavVisibility();
   switchTab('home');
@@ -887,6 +889,13 @@ function updateClock(){
     badge.textContent=isOpen?(window._offVipTest?'ĐANG MỞ (VIP TEST)':'ĐANG MỞ (T6 12:00→T7 15:00)'):'ĐÃ ĐÓNG';
     badge.className='text-xs font-black px-3 py-1 rounded-full '+(isOpen?'bg-pink-500 text-white':'bg-slate-200 text-slate-600');
   }
+}
+async function syncOffWindowFlag(){
+  // Lấy cờ VIP test OFF từ server để tab OFF hiện ngay cả khi NV đăng nhập mới trong lúc VIP bật
+  try{
+    const win = await api('/api/off-window');
+    window._offVipTest = !!win.vipTest;
+  }catch(e){}
 }
 function isOffWindowOpen(){
   // Admin bật VIP test là mở mọi lúc (cờ realtime từ server, tắt là về khung giờ)
