@@ -711,8 +711,10 @@ async function pullAllFromSheet(){
   showToast('Đang kéo dữ liệu từ Google Sheet 17iXM...','info');
   try{
     const res=await api('/api/admin/pull-from-sheet',{method:'POST'});
-    showToast(`Đã cập nhật từ Sheet: +${res.pulled||0} NV mới, ${res.updated||0} NV cập nhật, +${res.pulledApplicants||0} ứng viên mới, ${res.updatedApplicants||0} ứng viên cập nhật, ${res.keys||0} key (bỏ qua ${res.skipped||0})`,'success');
-    loadDashboard(); loadApplicants(); loadEmployees();
+    const t=res.tabs||{};
+    const sum=k=>(t[k]?.pulled||0)+(t[k]?.updated||0);
+    showToast(`Đã cập nhật từ Sheet 17iXM: +${res.pulled||0} NV mới/${res.updated||0} cập nhật, +${res.pulledApplicants||0} UV mới/${res.updatedApplicants||0} cập nhật, ${res.keys||0} key • Lịch ${sum('schedules')} • Chấm công ${sum('attendances')} • OFF ${sum('offRequests')} • Đột xuất ${sum('emergencyRequests')} • Thiết bị ${sum('deviceRequests')} • Test ${t.testResults?.pulled||0} • Zalo ${t.zalo?.pulled||0} • Drive ${t.driveFiles?.pulled||0} (bỏ qua ${res.skipped||0} dòng rác)`,'success');
+    loadDashboard(); loadApplicants(); loadEmployees(); loadSchedules(); loadAttendances(); loadRequests();
   }catch(e){ showToast(e.message||'Lỗi kéo dữ liệu từ Sheet','error'); }
 }
 function renderKPI(kpi){

@@ -2825,12 +2825,255 @@ app.post('/api/admin/sync-from-sheet', authMiddleware, roleCheck(['Admin']), asy
     res.status(500).json({error:e.message});
   }
 });
+// Kéo các tab còn lại (lịch, chấm công, phiếu, test, zalo, drive) từ Sheet 17iXM lên web.
+// Upsert theo ID, bỏ qua dòng rác (thiếu Mã NV/SĐT, header lặp), bản ghi pulled đánh SYNCED
+// và KHÔNG đẩy ngược lên Sheet (tránh loop). Chỉ Admin gọi qua nút "Cập nhật dữ liệu từ Google Sheet".
+async function pullRemainingTabsFromMasterSheet(manualBy){
+  const out = { tabs: {} };
+  const spreadsheetId = db.settings?.googleSheet?.spreadsheetId || '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w';
+  const token = await getGoogleAccessToken();
+  if(!token || !spreadsheetId){ console.log('[KÉO SHEET] Bỏ qua tabs phụ (chưa cấu hình ServiceAccount/Sheet)'); return out; }
+  const readTab = async (sheetName)=>{
+    try{
+      const resp = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A1:Z5000`, { headers:{ Authorization:`Bearer ${token}` }});
+      if(!resp.ok) return null;
+      const j = await resp.json();
+      const values = j.values || [];
+      if(values.length<2) return { H: values[0]||[], rows: [] };
+      return { H: values[0], rows: values.slice(1) };
+    }catch(e){ console.error(`[KÉO SHEET] Đọc ${sheetName} lỗi`, e.message); return null; }
+  };
+  const ci = (H,h,fb)=>{ const i=(H||[]).findIndex(x=>x===h); return i!==-1?i:fb; };
+  const badId = (id)=>{ const s=String(id||'').trim(); return !s || /^(ID|MÃ NV|MA NV)$/i.test(s); };
+  const badCode = (c)=>{ const s=String(c||'').trim(); return !s || /^(ID|MÃ NV|MA NV)$/i.test(s); };
+  const S = (v)=> (v||'').toString().trim();
+  const num = (v)=>{ if(v===''||v===undefined||v===null) return null; const n=Number(String(v).replace(',','.')); return isNaN(n)?null:n; };
+  let changed = false;
+  const emitFlags = {};
+  const touch = (...evs)=>{ changed=true; evs.forEach(e=>emitFlags[e]=true); };
+
+  // 1. LICH_LAM_VIEC → db.schedules (gộp ngày theo schedule id, dedupe theo ngày giữ dòng sau)
+  {
+    const t = await readTab('LICH_LAM_VIEC');
+    const st = { pulled:0, updated:0, skipped:0 };
+    if(t){
+      const H=t.H;
+      const iId=ci(H,'ID',0), iEmp=ci(H,'Mã NV',1), iWeek=ci(H,'Tuần bắt đầu',4), iDate=ci(H,'Ngày',5),
+            iDay=ci(H,'Thứ',6), iShift=ci(H,'Ca',7), iStatus=ci(H,'Trạng thái',8), iSub=ci(H,'Người thay',9), iVer=ci(H,'Phiên bản',10);
+      const groups = new Map();
+      for(const row of t.rows){
+        const sid=S(row[iId]), empId=S(row[iEmp]), date=S(row[iDate]);
+        if(badId(sid) || badCode(empId) || !date){ st.skipped++; continue; }
+        if(!groups.has(sid)) groups.set(sid, { empId, week: S(row[iWeek]), days: new Map() });
+        const g = groups.get(sid);
+        g.days.set(date, { date, dayName: S(row[iDay]), shift: S(row[iShift])||'CA_SANG', status: S(row[iStatus])||'WORKING', substituteFor: S(row[iSub])||null });
+        const v = num(row[iVer]); if(v!==null) g.version = Math.max(g.version||0, v);
+      }
+      for(const [sid, g] of groups){
+        let sched = db.schedules.find(s=>s.id===sid);
+        if(!sched){
+          sched = { id: sid, employeeId: g.empId, weekStart: g.week||'', days: [...g.days.values()], version: g.version||1, updated_at: getVietnamISOString(), updated_by: manualBy||'PULL_SHEET', approvalStatus:'APPROVED' };
+          db.schedules.push(sched); st.pulled++;
+        } else {
+          let dirty=false;
+          for(const d of g.days.values()){
+            const ex = (sched.days||[]).find(x=>x.date===d.date);
+            if(!ex){ (sched.days=sched.days||[]).push(d); dirty=true; }
+            else if(ex.status!==d.status || ex.shift!==d.shift){ ex.status=d.status; ex.shift=d.shift; ex.dayName=d.dayName||ex.dayName; ex.substituteFor=d.substituteFor; dirty=true; }
+          }
+          if(dirty){ sched.version=(sched.version||1)+1; sched.updated_at=getVietnamISOString(); st.updated++; }
+          else st.skipped++;
+        }
+      }
+    }
+    out.tabs.schedules = st; if(st.pulled||st.updated) touch('schedules:update');
+  }
+  // 2. RECORD_DIEM_DANH → db.attendances (thêm mới; bản ghi có sẵn chỉ bù checkOut còn thiếu)
+  {
+    const t = await readTab('RECORD_DIEM_DANH');
+    const st = { pulled:0, updated:0, skipped:0 };
+    if(t){
+      const H=t.H;
+      const iId=ci(H,'ID',0), iEmp=ci(H,'Mã NV',1), iDate=ci(H,'Ngày',3), iShift=ci(H,'Ca',4), iBranch=ci(H,'Chi nhánh',5),
+            iInT=ci(H,'Giờ vào ca',6), iInG=ci(H,'GPS vào',7), iInD=ci(H,'Drive vào',9),
+            iOutT=ci(H,'Giờ ra ca',10), iOutG=ci(H,'GPS ra',11), iOutD=ci(H,'Drive ra',13),
+            iStatus=ci(H,'Trạng thái',14), iVio=ci(H,'Vi phạm',15), iVer=ci(H,'Phiên bản',16);
+      for(const row of t.rows){
+        const id=S(row[iId]), empId=S(row[iEmp]), date=S(row[iDate]);
+        if(badId(id) || badCode(empId) || !date){ st.skipped++; continue; }
+        let a = db.attendances.find(x=>x.id===id);
+        if(!a){
+          db.attendances.push({ id, employeeId: empId, date, shift: S(row[iShift])||'CA_SANG', branchId: S(row[iBranch])||'',
+            checkIn: S(row[iInT])?{ time:S(row[iInT]), gps:S(row[iInG]), image:'', drivePath:S(row[iInD]), timestamp:'', content:'' }:null,
+            checkOut: S(row[iOutT])?{ time:S(row[iOutT]), gps:S(row[iOutG]), image:'', drivePath:S(row[iOutD]), timestamp:'', content:'' }:null,
+            status: S(row[iStatus])||'COMPLETED', violations: S(row[iVio])?S(row[iVio]).split(',').map(s=>s.trim()).filter(Boolean):[],
+            version: num(row[iVer])||1, updated_at: getVietnamISOString(), sync_status:'SYNCED' });
+          st.pulled++;
+        } else {
+          let dirty=false;
+          if((!a.checkOut || !a.checkOut.time) && S(row[iOutT])){ a.checkOut={ time:S(row[iOutT]), gps:S(row[iOutG]), image:'', drivePath:S(row[iOutD]), timestamp:'', content:'' }; dirty=true; }
+          if((!a.checkIn || !a.checkIn.time) && S(row[iInT])){ a.checkIn={ time:S(row[iInT]), gps:S(row[iInG]), image:'', drivePath:S(row[iInD]), timestamp:'', content:'' }; dirty=true; }
+          if(dirty){ a.version=(a.version||1)+1; st.updated++; } else st.skipped++;
+        }
+      }
+    }
+    out.tabs.attendances = st; if(st.pulled||st.updated) touch('attendances:update');
+  }
+  // 3. RECORD_ZALO → db.zaloRecords (chỉ thêm mới — nội dung Sheet bị cắt 200 ký tự nên không ghi đè)
+  {
+    const t = await readTab('RECORD_ZALO');
+    const st = { pulled:0, skipped:0 };
+    if(t){
+      const H=t.H;
+      const iId=ci(H,'ID',0), iSent=ci(H,'Thời gian gửi',1), iRecv=ci(H,'Người nhận',2), iType=ci(H,'Loại',3), iContent=ci(H,'Nội dung',4), iStatus=ci(H,'Trạng thái',5), iErr=ci(H,'Lỗi',6);
+      for(const row of t.rows){
+        const id=S(row[iId]);
+        if(badId(id)){ st.skipped++; continue; }
+        if(!db.zaloRecords.find(z=>z.id===id)){
+          db.zaloRecords.unshift({ id, sent_at: S(row[iSent])||getVietnamISOString(), receiver: S(row[iRecv]), type: S(row[iType]), content: S(row[iContent]), status: S(row[iStatus])||'SENT', error: S(row[iErr]) });
+          st.pulled++;
+        } else st.skipped++;
+      }
+    }
+    out.tabs.zalo = st; if(st.pulled) touch('zalo:update');
+  }
+  // 4. PHIEU_OFF_HANG_TUAN → db.offRequests (upsert theo ID)
+  {
+    const t = await readTab('PHIEU_OFF_HANG_TUAN');
+    const st = { pulled:0, updated:0, skipped:0 };
+    if(t){
+      const H=t.H;
+      const iId=ci(H,'ID',0), iEmp=ci(H,'Mã NV',1), iName=ci(H,'Họ tên',2), iBranch=ci(H,'Chi nhánh',3), iShift=ci(H,'Ca',4),
+            iDates=ci(H,'Ngày OFF',5), iType=ci(H,'Loại',6), iStatus=ci(H,'Trạng thái',7), iAuto=ci(H,'Tự động duyệt',8), iCreated=ci(H,'Ngày tạo',9);
+      for(const row of t.rows){
+        const id=S(row[iId]), empId=S(row[iEmp]);
+        if(badId(id) || badCode(empId)){ st.skipped++; continue; }
+        const dates = S(row[iDates]).split(',').map(s=>s.trim()).filter(Boolean);
+        if(!dates.length){ st.skipped++; continue; }
+        let r = db.offRequests.find(x=>x.id===id);
+        if(!r){
+          db.offRequests.push({ id, employeeId: empId, employeeName: S(row[iName]), branchId: S(row[iBranch]), shift: S(row[iShift]),
+            dates, type: S(row[iType])||'WEEKLY', status: S(row[iStatus])||'APPROVED', autoApproved: S(row[iAuto])==='YES',
+            createdAt: S(row[iCreated])||getVietnamISOString(), version:1, sync_status:'SYNCED' });
+          st.pulled++;
+        } else {
+          const ns = S(row[iStatus]);
+          if(ns && ns!==r.status){ r.status=ns; r.version=(r.version||1)+1; st.updated++; }
+          else st.skipped++;
+        }
+      }
+    }
+    out.tabs.offRequests = st; if(st.pulled||st.updated) touch('offRequests:update');
+  }
+  // 5. PHIEU_OFF_DOT_XUAT → db.emergencyRequests (upsert theo ID)
+  {
+    const t = await readTab('PHIEU_OFF_DOT_XUAT');
+    const st = { pulled:0, updated:0, skipped:0 };
+    if(t){
+      const H=t.H;
+      const iId=ci(H,'ID',0), iEmp=ci(H,'Mã NV',1), iName=ci(H,'Họ tên',2), iBranch=ci(H,'Chi nhánh',3), iShift=ci(H,'Ca',4),
+            iDate=ci(H,'Ngày OFF',5), iReason=ci(H,'Lý do',6), iSub=ci(H,'Người thay',7), iStatus=ci(H,'Trạng thái',8), iStep=ci(H,'Bước liên hoàn',9), iCreated=ci(H,'Ngày tạo',10);
+      for(const row of t.rows){
+        const id=S(row[iId]), empId=S(row[iEmp]), date=S(row[iDate]);
+        if(badId(id) || badCode(empId) || !date){ st.skipped++; continue; }
+        let r = db.emergencyRequests.find(x=>x.id===id);
+        if(!r){
+          db.emergencyRequests.push({ id, employeeId: empId, employeeName: S(row[iName]), branchId: S(row[iBranch]), shift: S(row[iShift]),
+            date, reason: S(row[iReason]), substituteName: S(row[iSub]), status: S(row[iStatus])||'APPROVED',
+            cascadeStep: num(row[iStep])||1, createdAt: S(row[iCreated])||getVietnamISOString(), version:1, sync_status:'SYNCED' });
+          st.pulled++;
+        } else {
+          const ns = S(row[iStatus]);
+          if(ns && ns!==r.status){ r.status=ns; r.version=(r.version||1)+1; st.updated++; }
+          else st.skipped++;
+        }
+      }
+    }
+    out.tabs.emergencyRequests = st; if(st.pulled||st.updated) touch('emergencyRequests:update');
+  }
+  // 6. PHIEU_DOI_THIET_BI → db.deviceRequests (upsert theo ID)
+  {
+    const t = await readTab('PHIEU_DOI_THIET_BI');
+    const st = { pulled:0, updated:0, skipped:0 };
+    if(t){
+      const H=t.H;
+      const iId=ci(H,'ID',0), iEmp=ci(H,'Mã NV',1), iReason=ci(H,'Lý do',2), iOld=ci(H,'Thiết bị cũ',3), iNew=ci(H,'Thiết bị mới',4),
+            iStatus=ci(H,'Trạng thái',5), iCreated=ci(H,'Ngày tạo',6), iExp=ci(H,'Hết hạn',7);
+      for(const row of t.rows){
+        const id=S(row[iId]), empId=S(row[iEmp]);
+        if(badId(id) || badCode(empId)){ st.skipped++; continue; }
+        let r = db.deviceRequests.find(x=>x.id===id);
+        if(!r){
+          db.deviceRequests.push({ id, employeeId: empId, reason: S(row[iReason]), oldDeviceId: S(row[iOld])||null, newDeviceId: S(row[iNew])||null,
+            status: S(row[iStatus])||'APPROVED', createdAt: S(row[iCreated])||getVietnamISOString(), expiresAt: S(row[iExp])||null, version:1, sync_status:'SYNCED' });
+          st.pulled++;
+        } else {
+          const ns = S(row[iStatus]);
+          if(ns && ns!==r.status){ r.status=ns; r.version=(r.version||1)+1; st.updated++; }
+          else st.skipped++;
+        }
+      }
+    }
+    out.tabs.deviceRequests = st; if(st.pulled||st.updated) touch('deviceRequests:update');
+  }
+  // 7. KET_QUA_TEST → db.testResults (chỉ thêm mới theo ID — điểm số không ghi đè)
+  {
+    const t = await readTab('KET_QUA_TEST');
+    const st = { pulled:0, skipped:0 };
+    if(t){
+      const H=t.H;
+      const iId=ci(H,'ID',0), iEmp=ci(H,'Mã NV',1), iCourse=ci(H,'Khóa',3), iScore=ci(H,'Điểm',4), iCT=ci(H,'Đúng/Tổng',5),
+            iResult=ci(H,'Kết quả',6), iTime=ci(H,'Thời gian làm',7), iCreated=ci(H,'Ngày tạo',8);
+      for(const row of t.rows){
+        const id=S(row[iId]), empId=S(row[iEmp]);
+        if(badId(id) || badCode(empId)){ st.skipped++; continue; }
+        if(!db.testResults.find(x=>x.id===id)){
+          const ct = S(row[iCT]).split('/').map(s=>parseInt(s,10));
+          db.testResults.unshift({ id, employeeId: empId, courseId: S(row[iCourse]), score: num(row[iScore])??0,
+            correct: isNaN(ct[0])?0:ct[0], total: isNaN(ct[1])?0:ct[1], result: S(row[iResult]),
+            timeSpent: S(row[iTime]), createdAt: S(row[iCreated])||getVietnamISOString(), version:1, sync_status:'SYNCED' });
+          st.pulled++;
+        } else st.skipped++;
+      }
+    }
+    out.tabs.testResults = st; if(st.pulled) touch('testResults:update');
+  }
+  // 8. DRIVE_FILES → db.driveFiles (chỉ thêm mới theo ID)
+  {
+    const t = await readTab('DRIVE_FILES');
+    const st = { pulled:0, skipped:0 };
+    if(t){
+      const H=t.H;
+      const iId=ci(H,'ID',0), iEmp=ci(H,'Mã NV',1), iName=ci(H,'Họ tên',2), iDate=ci(H,'Ngày',3), iType=ci(H,'Loại',4),
+            iFile=ci(H,'Tên tệp',5), iPath=ci(H,'Đường dẫn Drive',6), iUrl=ci(H,'Liên kết',7), iCreated=ci(H,'Ngày tạo',8);
+      for(const row of t.rows){
+        const id=S(row[iId]), empId=S(row[iEmp]);
+        if(badId(id) || badCode(empId)){ st.skipped++; continue; }
+        if(!db.driveFiles.find(x=>x.id===id)){
+          db.driveFiles.push({ id, employeeId: empId, employeeName: S(row[iName]), date: S(row[iDate]), type: S(row[iType]),
+            fileName: S(row[iFile]), drivePath: S(row[iPath]), url: S(row[iUrl]), createdAt: S(row[iCreated])||getVietnamISOString(), version:1, sync_status:'SYNCED' });
+          st.pulled++;
+        } else st.skipped++;
+      }
+    }
+    out.tabs.driveFiles = st; if(st.pulled) touch('drive:update');
+  }
+  if(changed){
+    saveDB();
+    const payloads = { 'schedules:update': db.schedules, 'attendances:update': db.attendances, 'offRequests:update': db.offRequests, 'emergencyRequests:update': db.emergencyRequests, 'deviceRequests:update': db.deviceRequests, 'testResults:update': db.testResults, 'zalo:update': db.zaloRecords, 'drive:update': db.driveFiles.slice(0,20) };
+    for(const ev of Object.keys(emitFlags)) io.emit(ev, payloads[ev]);
+  }
+  console.log('[KÉO SHEET 17iXM] Tabs phụ:', JSON.stringify(out.tabs));
+  return out;
+}
 // Kéo toàn bộ NV + key từ Sheet 17iXM lên web (thủ công, Admin).
 // Dùng sau mỗi lần cập nhật code/deploy nếu cần làm mới ngay, hoặc boot đã tự chạy.
 app.post('/api/admin/pull-from-sheet', authMiddleware, roleCheck(['Admin']), async (req,res)=>{
   const out = await bootPullFromMasterSheet(req.user.username);
-  audit(req.user.username,'PULL_FROM_SHEET','EMPLOYEE',null,out, req.ip);
-  res.json({success:true, ...out, employees: db.employees.length, keys: db.keys.length});
+  const extra = await pullRemainingTabsFromMasterSheet(req.user.username);
+  const tabs = extra.tabs||{};
+  audit(req.user.username,'PULL_FROM_SHEET','EMPLOYEE',null,{...out, tabs}, req.ip);
+  res.json({success:true, ...out, tabs, employees: db.employees.length, keys: db.keys.length});
 });
 
 function normalizePhone(phone) {
