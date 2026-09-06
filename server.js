@@ -717,6 +717,19 @@ async function syncToGoogleSheet(item){
     console.log(`[SYNC BẢO VỆ] Chặn lệnh xóa ${item.entity}/${item.operation} - Google Sheet giữ dữ liệu`);
     return { success:true, via:'DELETE_BLOCKED_SHEET_PROTECTED', note:'Google Sheet 17iXM không bao giờ bị xóa dòng' };
   }
+  // RÀNG BUỘC CHỐNG RÁC REALTIME: webhook đi thẳng qua Apps Script (bypass merge 60s)
+  // nên chặn ngay tại đây nếu payload thiếu cả SĐT lẫn Mã NV.
+  {
+    const p = item.payload||{};
+    const digits = String(p.phone||p.receiver||'').replace(/\D/g,'');
+    const code = String(p.employeeId||p.id||'').trim();
+    const badCode = !code || /^(ID|MÃ NV|MA NV)$/i.test(code);
+    const hasId = digits.length>=9 || !badCode;
+    if(!hasId){
+      console.log(`[CHỐNG RÁC] Chặn webhook ${item.entity}/${item.operation} thiếu SĐT/Mã NV - không đẩy lên Sheet`);
+      return { success:true, via:'TRASH_BLOCKED_NO_PHONE_OR_CODE', note:'Payload thiếu SĐT và Mã NV nên không đồng bộ lên Sheet' };
+    }
+  }
   const webhookUrls = getAllWebhookUrls();
   const secret = process.env.GOOGLE_SHEET_WEBHOOK_SECRET || db.settings?.googleSheet?.secret || 'umbomilk_secret_2026';
   if(webhookUrls.length===0) throw new Error('Chưa cấu hình Google Sheet Webhook URL trong Cài đặt (cần 1 trong 3: WEBHOOK_URL / _1 / _2)');
@@ -4099,14 +4112,21 @@ async function syncSheetTab(sheetKey){
         });
       } else { oldIndexMap.set(k, [merged.length]); merged.push(r); appended++; }
     });
-    // Ghi đè đúng vùng (update, KHÔNG clear) - merged luôn >= existing nên không còn ô thừa,
-    // và không có khoảng trống mất dữ liệu nếu lỗi giữa chừng (clear+append cũ đã bỏ).
+    // Ghi đè đúng vùng (update, KHÔNG clear toàn tab để không mất dữ liệu nếu lỗi giữa chừng).
     if(merged.length>0){
       const endRow = 1 + merged.length;
       await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(def.sheetName)}!A2:Z${endRow}?valueInputOption=RAW`, {
         method:'PUT', headers:{ Authorization:`Bearer ${token}`, 'Content-Type':'application/json'},
         body: JSON.stringify({ values: merged })
       });
+      // RÀNG BUỘC CHỐNG RÁC: sau khi dọn rác, merged ngắn hơn vùng cũ → xóa đuôi thừa
+      // (nếu không, rác cũ nằm dưới vẫn hiển thị dù đã bị loại khỏi merged).
+      const oldEndRow = 1 + existing.length;
+      if(oldEndRow > endRow){
+        await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(def.sheetName)}!A${endRow+1}:Z${oldEndRow}:clear`, {
+          method:'POST', headers:{ Authorization:`Bearer ${token}` }
+        });
+      }
     }
     console.log(`[SHEET] Đã đồng bộ ${def.sheetName}: giữ ${existing.length} dòng cũ + cập nhật ${updated} + thêm ${appended} + dọn ${droppedOld} dòng rác (thiếu SĐT/Mã NV) - Realtime 1:1`);
   }catch(e){ console.error(`syncSheetTab ${sheetKey} error`, e.message); }
