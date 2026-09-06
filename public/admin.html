@@ -491,6 +491,7 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
         <div class="flex items-center gap-2 mb-3">
           <span class="text-xs font-bold text-pink-700 bg-pink-50 border border-pink-200 px-3 py-1 rounded-full" id="scheduleCategoryLabel">Lịch Nhân viên Thử việc • T2→CN</span>
           <span class="text-xs font-bold bg-white border border-pink-200 px-3 py-1 rounded-full text-pink-600" id="scheduleCategoryCount">0 lịch</span>
+          <button onclick="coordinateWeek()" class="text-xs font-black bg-gradient-to-r from-amber-500 to-orange-500 text-white px-3 py-1 rounded-full hover:from-amber-600 hover:to-orange-600 shadow-2xs" title="AI cân lịch tuần đang xem: cùng CN + cùng ngày + cùng ca chỉ giữ 1 NV WORKING (FCFS, giữ ≥12 ngày/tháng)"><i class="fa-solid fa-scale-balanced"></i> AI cân lịch</button>
           <button onclick="renderSchedules()" class="ml-auto text-xs font-bold bg-white border border-pink-200 text-pink-700 px-3 py-1 rounded-full hover:bg-pink-50"><i class="fa-solid fa-rotate"></i> Tải lại</button>
         </div>
         <!-- Chú thích chấm công hôm nay — Realtime cho Lịch làm việc (HR) -->

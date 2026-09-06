@@ -5801,16 +5801,79 @@ app.post('/api/off-requests', (req,res)=>{
     // Đảm bảo lịch tuần sau hiển thị ngay cho NV sau khi đăng ký OFF (realtime) - gỡ trạng thái chờ duyệt
     sched.approvalStatus = 'APPROVED';
   }
-  // AI also ensures next week's schedule respects TH1 (no duplicate OFF same shift already checked)
+  // AI điều phối chéo: cùng CN + cùng ngày + cùng ca chỉ 1 NV WORKING (không trùng ca)
+  const coord = coordinateBranchShifts(weekStr, employeeId);
   audit(employeeId,'OFF_WEEKLY_AI_AUTO','OFF_REQUEST',null,newReq, req.ip);
   addSyncQueue('OFF_REQUEST','CREATE',newReq, employeeId, 'WEB_EMPLOYEE');
   saveDB();
   io.emit('offRequests:update', db.offRequests);
   io.emit('schedules:update', db.schedules);
-  const zr = { id: uuidv4(), sent_at: getVietnamISOString(), receiver: emp.phone, type:'OFF_APPROVED', content:`OFF tuần sau đã được Auto Approve: ${dates.join(', ')}`, status:'SENT', error:'' };
+  const zr = { id: uuidv4(), sent_at: getVietnamISOString(), receiver: emp.phone, type:'OFF_APPROVED', content:`OFF tuần sau đã được Auto Approve: ${dates.join(', ')}${coord.resolved.length?` • AI cân lịch: ${coord.resolved.length} ca trùng đã chuyển OFF`:''}`, status:'SENT', error:'' };
   db.zaloRecords.unshift(zr);
   io.emit('zalo:update', db.zaloRecords);
-  res.json(newReq);
+  res.json({ ...newReq, coordinated: coord.resolved.length, coordSkipped: coord.skippedMin12.length });
+});
+// AI cân lịch chống trùng ca: cùng Chi nhánh + cùng Ngày + cùng Ca → giữ tối đa 1 NV WORKING.
+// Ưu tiên FCFS (ai được duyệt OFF trước giữ slot). Người bị chuyển sang OFF nhận TB + audit.
+// Safeguard TH2: không lật ngày nào khiến NV dưới 12 ngày làm/tháng (ngày đó giữ nguyên, báo HR xử tay).
+function coordinateBranchShifts(weekStart, actor){
+  const result = { weekStart, resolved: [], skippedMin12: [], groups: 0 };
+  try{
+    const byEmp = new Map(db.employees.map(e=>[e.employeeId, e]));
+    const groups = new Map();
+    for(const s of db.schedules.filter(x=>x.weekStart===weekStart)){
+      const emp = byEmp.get(s.employeeId);
+      if(!emp) continue;
+      if(!(emp.type==='OFFICIAL' || emp.status==='OFFICIAL')) continue;
+      for(const d of (s.days||[])){
+        if(d.status!=='WORKING') continue;
+        const shift = d.shift || emp.shift;
+        const key = `${emp.branchId}|${d.date}|${shift}`;
+        if(!groups.has(key)) groups.set(key, []);
+        groups.get(key).push({ sched: s, day: d, emp });
+      }
+    }
+    for(const [key, list] of groups){
+      if(list.length<=1) continue;
+      result.groups++;
+      const firstApproved = (empId)=>{
+        const reqs = db.offRequests.filter(r=>r.employeeId===empId && r.status==='APPROVED');
+        if(!reqs.length) return Infinity;
+        return Math.min(...reqs.map(r=>{ const t=new Date(r.createdAt).getTime(); return isNaN(t)?Infinity:t; }));
+      };
+      list.sort((a,b)=> firstApproved(a.emp.employeeId)-firstApproved(b.emp.employeeId));
+      const [keeper, ...rest] = list;
+      for(const it of rest){
+        // Safeguard: đếm ngày WORKING còn lại trong tháng (trừ chính ngày này), dưới 12 thì giữ nguyên
+        const m = it.day.date.slice(0,7);
+        let working = 0;
+        db.schedules.filter(s=>s.employeeId===it.emp.employeeId).forEach(s=>(s.days||[]).forEach(d=>{ if(d.date.startsWith(m) && d.status==='WORKING' && d.date!==it.day.date) working++; }));
+        if(working < 12){ result.skippedMin12.push({ employeeId: it.emp.employeeId, name: it.emp.name, date: it.day.date, slot: key }); continue; }
+        it.day.status='OFF';
+        it.day.shift='OFF';
+        it.day.autoOff=true;
+        it.day.autoOffReason=`AI cân lịch: giữ ${keeper.emp.name} trực ${key.split('|')[2]} ngày ${it.day.date}`;
+        it.sched.version=(it.sched.version||1)+1;
+        it.sched.updated_at=getVietnamISOString();
+        result.resolved.push({ employeeId: it.emp.employeeId, name: it.emp.name, date: it.day.date, keeper: keeper.emp.employeeId, slot: key });
+        db.notifications.unshift({ id: uuidv4(), to: it.emp.employeeId, type:'SCHEDULE_COORDINATED', title:'AI cân lịch chống trùng ca', content:`Ngày ${it.day.date}: bạn chuyển sang OFF (giữ ${keeper.emp.name} trực ca ${key.split('|')[2]}).`, createdAt: getVietnamISOString(), read:false });
+      }
+    }
+    if(result.resolved.length){
+      saveDB();
+      io.emit('schedules:update', db.schedules);
+      io.emit('notifications:update', db.notifications);
+      audit(actor||'SYSTEM','COORDINATE_SCHEDULE','SCHEDULE',{weekStart},result,'system');
+    }
+  }catch(e){ console.error('[COORDINATE] error', e.message); }
+  return result;
+}
+// HR/Admin chạy tay AI cân lịch cho 1 tuần (vá lịch cũ + kiểm tra sau đăng ký)
+app.post('/api/schedules/coordinate', authMiddleware, roleCheck(['Admin','HR','Manager']), (req,res)=>{
+  const { weekStart } = req.body||{};
+  if(!weekStart) return res.status(400).json({error:'Thiếu weekStart (YYYY-MM-DD thứ 2 đầu tuần)'});
+  const out = coordinateBranchShifts(weekStart, req.user.username);
+  res.json({ success:true, ...out });
 });
 function isSameWeek(date1, date2){
   const d1 = getMonday(new Date(date1));

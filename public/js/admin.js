@@ -3764,6 +3764,16 @@ function isScheduleInCategory(sched, cat){
   if(cat==='SALE') return category==='SALE';
   return cat==='TRAINING';
 }
+async function coordinateWeek(){
+  const weekVal = document.getElementById('scheduleWeek')?.value || '';
+  const weekStart = getMondayStr(weekVal);
+  if(!confirm(`AI cân lịch tuần ${weekStart}?\n\n• Cùng CN + cùng ngày + cùng ca → giữ tối đa 1 NV WORKING\n• Ưu tiên ai được duyệt OFF trước (FCFS)\n• Không đẩy ai dưới 12 ngày làm/tháng (ngày đó giữ nguyên, báo HR)`)) return;
+  try{
+    const res = await api('/api/schedules/coordinate', {method:'POST', body:JSON.stringify({weekStart})});
+    showToast(`AI cân xong tuần ${weekStart}: ${res.groups||0} nhóm trùng → ${res.resolved.length} ca chuyển OFF${res.skippedMin12.length?` • ${res.skippedMin12.length} ca giữ nguyên (bảo vệ 12 ngày/tháng, HR xử tay)`:''}`, res.resolved.length?'success':'info');
+    loadSchedules();
+  }catch(e){ showToast(e.message,'error'); }
+}
 function changeScheduleWeek(offsetDays) {
   const weekInput = document.getElementById('scheduleWeek');
   if (!weekInput) return;
@@ -4015,10 +4025,10 @@ function renderSchedules(){
                       detailText='Chưa gán ca';
                       detailClass='text-slate-500';
                     } else if(isOffDay){
-                      badgeText='NGHỈ (OFF)';
-                      badgeClass='bg-slate-200 text-slate-600';
-                      detailText='—';
-                      detailClass='text-slate-400';
+                      badgeText=d.autoOff?'NGHỈ (AI CÂN)':'NGHỈ (OFF)';
+                      badgeClass=d.autoOff?'bg-amber-100 text-amber-700 border border-amber-200':'bg-slate-200 text-slate-600';
+                      detailText=d.autoOff?('⚖ '+(d.autoOffReason||'AI chống trùng ca')):'—';
+                      detailClass=d.autoOff?'text-amber-700':'text-slate-400';
                     } else if(isFuture){
                       badgeText='SẮP TỚI';
                       badgeClass='bg-blue-50 text-blue-700 border border-blue-200';
