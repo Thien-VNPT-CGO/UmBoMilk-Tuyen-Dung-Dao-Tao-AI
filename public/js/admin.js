@@ -578,6 +578,11 @@ function connectSocket(){
           if(active==='employees-store' && typeof renderEmployeesStore==='function'){ renderEmployeesStore(); }
           if(active==='schedule' && typeof renderSchedules==='function'){ renderSchedules(); }
         }
+        // Realtime ràng buộc: NV đăng ký OFF là counter SỐ NGÀY OFF trên web HR đổi ngay (không chờ fetch)
+        if(ev==='offRequests:update' && Array.isArray(data)){
+          offRequests = data;
+          if(active==='employees-store' && typeof renderEmployeesStore==='function'){ renderEmployeesStore(); }
+        }
       }catch(e){ console.error('realtime ràng buộc error', e); }
       // reload relevant data without full fetch if payload provided?
       // For simplicity, refetch current tab (bọc an toàn, không văng Uncaught)
@@ -2310,7 +2315,8 @@ function getEmployeeOffProgress(emp) {
       const offList = (typeof offRequests!=='undefined' ? offRequests : []);
       // Đếm OFF tuần sau (next week Mon-Sun) - AI đã sắp lịch
       const nextMon = toVietnamDateStr(getMonday(new Date(getVietnamNow().getTime()+7*24*60*60*1000)));
-      const nextSun = new Date(new Date(nextMon).getTime()+6*24*60*60*1000);
+      const _nxSun = new Date(nextMon+'T00:00:00'); _nxSun.setDate(_nxSun.getDate()+6);
+      const nextSun = toVietnamDateStr(_nxSun);
       const countNextWeek = offList.filter(r=>r.employeeId===emp.employeeId && r.status==='APPROVED' && r.dates.some(d=>d>=nextMon && d<=nextSun)).reduce((s,r)=>s+r.dates.filter(d=>d>=nextMon && d<=nextSun).length,0);
       if(countNextWeek===2) return { count:2, label: '2/2 ngày OFF (tuần sau)', isFull: true };
       if(countNextWeek>0) return { count:countNextWeek, label: `${countNextWeek}/2 ngày OFF`, isFull: false };
@@ -3732,6 +3738,13 @@ function switchScheduleCategory(cat){
   const lbl = document.getElementById('scheduleCategoryLabel');
   if(lbl) lbl.textContent = (labels[cat]||cat) + ' • T2→CN';
   renderSchedules();
+}
+function getMonday(d){
+  const date = d instanceof Date ? new Date(d) : new Date(d);
+  const day = date.getDay();
+  date.setDate(date.getDate() - day + (day===0 ? -6 : 1));
+  date.setHours(0,0,0,0);
+  return date;
 }
 function getMondayStr(dStr) {
   if (!dStr) return getVietnamTodayStr();
