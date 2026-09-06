@@ -4014,19 +4014,63 @@ async function syncSheetTab(sheetKey){
       default:
         return;
     }
-    // RÀNG BUỘC TUYỆT ĐỐI: Google Sheet (đặc biệt 17iXM) KHÔNG BAO GIỜ bị xóa dòng.
-    // Web xóa local -> Sheet GIỮ NGUYÊN. Chỉ hợp nhất: giữ dòng cũ + cập nhật dòng trùng key + thêm dòng mới.
+    // RÀNG BUỘC CHỐNG RÁC: chỉ lưu dòng có SĐT hoặc Mã NV — dòng thiếu cả 2 = rác, bỏ qua.
+    // Vị trí cột SĐT / Mã NV theo từng tab (phone:-1 = tab này không có cột SĐT).
+    const TRASH_GUARD = {
+      NHAN_VIEN_MOI: { phone: 7, code: -1 },
+      NHAN_VIEN_TRAINING: { phone: 3, code: 1 },
+      NHAN_VIEN_CHINH_THUC: { phone: 3, code: 1 },
+      LICH_LAM_VIEC: { phone: -1, code: 1 },
+      RECORD_DIEM_DANH: { phone: -1, code: 1 },
+      RECORD_ZALO: { phone: 2, code: -1 },
+      PHIEU_OFF_HANG_TUAN: { phone: -1, code: 1 },
+      PHIEU_OFF_DOT_XUAT: { phone: -1, code: 1 },
+      PHIEU_DOI_THIET_BI: { phone: -1, code: 1 },
+      KET_QUA_TEST: { phone: -1, code: 1 },
+      DRIVE_FILES: { phone: -1, code: 1 }
+    };
+    const guard = TRASH_GUARD[sheetKey];
+    const hasPhoneOrCode = (row)=>{
+      if(!guard) return true;
+      const digits = guard.phone>=0 ? String(row[guard.phone]||'').replace(/\D/g,'') : '';
+      const code = guard.code>=0 ? String(row[guard.code]||'').trim() : '';
+      const badCode = !code || /^(ID|MÃ NV|MA NV)$/i.test(code);
+      const okPhone = digits.length >= 9;
+      if(guard.phone>=0 && guard.code>=0) return okPhone || !badCode;
+      if(guard.phone>=0) return okPhone;
+      return !badCode;
+    };
+    // 1. Lọc rác từ web trước khi đẩy lên Sheet
+    if(guard){
+      const before = rows.length;
+      rows = rows.filter(hasPhoneOrCode);
+      if(rows.length!==before) console.log(`[CHỐNG RÁC] ${def.sheetName}: bỏ ${before-rows.length} dòng web thiếu SĐT/Mã NV`);
+    }
+    // 2. Lịch: gộp trùng theo Mã NV + Ngày (giữ dòng mới nhất) — mỗi lần render không append thêm dòng
+    if(sheetKey==='LICH_LAM_VIEC'){
+      const seen = new Map();
+      rows.forEach(r=>{ seen.set(String(r[1]||'').trim()+'|'+String(r[5]||'').trim(), r); });
+      rows = [...seen.values()];
+    }
+    // RÀNG BUỘC: Sheet GIỮ dữ liệu thật (web xóa local không xóa Sheet).
+    // Ngoại lệ duy nhất: dòng RÁC (thiếu SĐT/Mã NV: header lặp, template) bị dọn ở lần sync này.
     const getRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(def.sheetName)}!A2:Z`, { headers:{ Authorization:`Bearer ${token}` }});
     const getData = await getRes.json().catch(()=>({}));
     const existing = getData.values || [];
-    // RÀNG BUỘC TUYỆT ĐỐI: giữ lại TOÀN BỘ dòng đang có trên Sheet (kể cả dòng lỗi/dòng lạ).
-    // Chỉ Admin dọn thủ công qua POST /api/admin/rebuild-sheet-tab. Web không tự xóa bất cứ dòng nào.
     const isBadKey = (k)=> !k || /\s/.test(k) || k==='ID';
+    // Key merge: lịch dùng Mã NV + Ngày (ổn định qua mọi lần render), các tab khác dùng ID
+    const matchKey = (r)=> sheetKey==='LICH_LAM_VIEC' ? (String(r[1]||'').trim()+'|'+String(r[5]||'').trim()) : (r[0]||'').toString();
     const merged = [];
     const oldIndexMap = new Map();
+    let droppedOld = 0;
     existing.forEach((r)=>{
-      const k=(r[0]||'').toString();
-      if(!isBadKey(k)){
+      if(!hasPhoneOrCode(r)){ droppedOld++; return; }
+      const k = matchKey(r);
+      if(sheetKey==='LICH_LAM_VIEC'){
+        // Lịch trùng Mã NV + Ngày chỉ giữ dòng đầu — các dòng trùng sau bị dọn
+        if(!String(r[1]||'').trim() || !String(r[5]||'').trim() || oldIndexMap.has(k)){ droppedOld++; return; }
+        oldIndexMap.set(k, [merged.length]);
+      } else if(!isBadKey(k)){
         if(!oldIndexMap.has(k)) oldIndexMap.set(k, []);
         oldIndexMap.get(k).push(merged.length);
       }
@@ -4034,10 +4078,11 @@ async function syncSheetTab(sheetKey){
     });
     let appended = 0, updated = 0;
     rows.forEach(r=>{
-      const k=(r[0]||'').toString();
-      if(isBadKey(k)) return;
+      const k = matchKey(r);
+      if(sheetKey==='LICH_LAM_VIEC'){
+        if(!String(r[1]||'').trim() || !String(r[5]||'').trim()) return;
+      } else if(isBadKey(k)) return;
       if(oldIndexMap.has(k)){
-        // Cập nhật TẤT CẢ dòng cùng key (kể cả dòng trùng cũ) để Sheet tự nhất quán - không xóa dòng nào
         oldIndexMap.get(k).forEach(ei=>{
           const old = merged[ei];
           const len = Math.max(old.length, r.length);
@@ -4056,7 +4101,7 @@ async function syncSheetTab(sheetKey){
         body: JSON.stringify({ values: merged })
       });
     }
-    console.log(`[SHEET] Đã đồng bộ ${def.sheetName}: giữ ${existing.length} dòng cũ + cập nhật ${updated} + thêm ${appended} (không xóa dòng nào) - Realtime 1:1`);
+    console.log(`[SHEET] Đã đồng bộ ${def.sheetName}: giữ ${existing.length} dòng cũ + cập nhật ${updated} + thêm ${appended} + dọn ${droppedOld} dòng rác (thiếu SĐT/Mã NV) - Realtime 1:1`);
   }catch(e){ console.error(`syncSheetTab ${sheetKey} error`, e.message); }
 }
 async function syncAllTabsToSheetsRealtime(){
