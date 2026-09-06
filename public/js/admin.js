@@ -766,6 +766,12 @@ function renderCharts(charts){
   }catch(e){ console.error('lateChart error',e); }
 }
 function renderDashSync(){
+  // Chỉ hiển thị Sync Queue cho Admin - nhân viên/HR không cần xem
+  if(currentUser && currentUser.role !== 'Admin'){
+    const el = document.getElementById('dashSync');
+    if(el) el.innerHTML = '';
+    return;
+  }
   const el=document.getElementById('dashSync');
   if(!el) return;
   if(syncQueue.length===0) el.innerHTML='<div class="text-xs text-slate-400 text-center py-4">Không có sync queue</div>';
