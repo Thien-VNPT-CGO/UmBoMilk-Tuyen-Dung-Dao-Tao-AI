@@ -2767,27 +2767,34 @@ let sheetPhoneCache = { at: 0, set: new Set() };
 async function getSheetPhoneSet(){
   const now = Date.now();
   if(now - sheetPhoneCache.at < 60000 && sheetPhoneCache.set.size>0) return sheetPhoneCache.set;
-  const set = new Set(sheetPhoneCache.set);
   try{
     const spreadsheetId = db.settings?.googleSheet?.spreadsheetId || '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w';
     const token = await getGoogleAccessToken();
-    if(!token) return set;
-    for(const sheetName of ['NHAN_VIEN_MOI','NHAN_VIEN_TRAINING','NHAN_VIEN_CHINH_THUC']){
-      try{
-        const resp = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A1:Z5000`, { headers:{ Authorization:`Bearer ${token}` }});
-        if(!resp.ok) continue;
-        const j = await resp.json();
-        const values = j.values || [];
-        if(values.length<2) continue;
-        const iPhone = values[0].findIndex(h=>h==='SĐT');
-        if(iPhone===-1) continue;
-        for(let i=1;i<values.length;i++){
-          const ph = normalizePhone((values[i][iPhone]||'').toString());
-          if(ph) set.add(ph);
-        }
-      }catch(e){}
+    // RÀNG BUỘC: dựng set MỚI từ Sheet mỗi lần fetch (không cộng dồn cache cũ)
+    // để số đã xóa/reset khỏi Sheet không còn bị báo trùng oan.
+    const set = new Set();
+    let fetched = false;
+    if(token){
+      for(const sheetName of ['NHAN_VIEN_MOI','NHAN_VIEN_TRAINING','NHAN_VIEN_CHINH_THUC']){
+        try{
+          const resp = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A1:Z5000`, { headers:{ Authorization:`Bearer ${token}` }});
+          if(!resp.ok) continue;
+          fetched = true;
+          const j = await resp.json();
+          const values = j.values || [];
+          if(values.length<2) continue;
+          const iPhone = values[0].findIndex(h=>h==='SĐT');
+          if(iPhone===-1) continue;
+          for(let i=1;i<values.length;i++){
+            const ph = normalizePhone((values[i][iPhone]||'').toString());
+            if(ph) set.add(ph);
+          }
+        }catch(e){}
+      }
     }
-    sheetPhoneCache = { at: now, set };
+    // Chỉ ghi đè cache khi ít nhất 1 tab đọc OK (kể cả Sheet trống → set rỗng);
+    // lỗi mạng/token thì giữ cache cũ để vẫn chống trùng được.
+    if(fetched) sheetPhoneCache = { at: now, set };
   }catch(e){}
   return sheetPhoneCache.set;
 }
@@ -7225,6 +7232,8 @@ app.post('/api/system/reset', authMiddleware, roleCheck(['Admin']), async (req,r
   } else if(scope==='EMPLOYEES'){
     db.employees=[]; db.keys=[]; db.attendances=[]; db.schedules=[];
   }
+  // Reset ALL xóa Sheet → xóa luôn cache SĐT để import lại không bị báo trùng oan
+  if(scope==='ALL'){ try{ sheetPhoneCache = { at: 0, set: new Set() }; }catch(_){} }
   audit(req.user.username,'SYSTEM_RESET','SYSTEM', {scope, before: 'snapshot'}, {scope, sheet: sheetResult}, req.ip);
   saveDB();
   io.emit('system:reset', {scope});
