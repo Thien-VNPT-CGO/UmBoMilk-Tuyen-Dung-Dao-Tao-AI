@@ -694,6 +694,21 @@ async function loadDashboard(){
   }catch(e){ console.error('audit error',e); renderDashAudit(); }
   try{ updatePendingCount(); }catch(e){ console.error(e); }
   try{ updateModeBadge(); }catch(e){ console.error(e); }
+  // Nút kéo Sheet→web chỉ Admin thấy (endpoint đã roleCheck Admin)
+  try{
+    const b=document.getElementById('btnPullAllSheet');
+    if(b) b.style.display=(currentUser&&(currentUser.role==='Admin'||currentUser.username==='admin'))?'':'none';
+  }catch(e){}
+}
+async function pullAllFromSheet(){
+  if(!(currentUser&&(currentUser.role==='Admin'||currentUser.username==='admin'))) return showToast('Chỉ Admin được kéo dữ liệu từ Google Sheet','error');
+  if(!confirm('Kéo toàn bộ dữ liệu từ Google Sheet 17iXM lên web app?\n\n• Ứng viên + NV + key (upsert theo ID, chỉ ghi đè khi Sheet mới hơn)\n• Không xóa dữ liệu local • Không đẩy ngược lên Sheet')) return;
+  showToast('Đang kéo dữ liệu từ Google Sheet 17iXM...','info');
+  try{
+    const res=await api('/api/admin/pull-from-sheet',{method:'POST'});
+    showToast(`Đã cập nhật từ Sheet: +${res.pulled||0} NV mới, ${res.updated||0} NV cập nhật, +${res.pulledApplicants||0} ứng viên mới, ${res.updatedApplicants||0} ứng viên cập nhật, ${res.keys||0} key (bỏ qua ${res.skipped||0})`,'success');
+    loadDashboard(); loadApplicants(); loadEmployees();
+  }catch(e){ showToast(e.message||'Lỗi kéo dữ liệu từ Sheet','error'); }
 }
 function renderKPI(kpi){
   const items = [

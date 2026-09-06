@@ -678,12 +678,67 @@ async function bootPullFromMasterSheet(manualBy){
         }
       }
     }
-    if(out.pulled>0 || out.updated>0 || out.keys>0){
+    // Kéo ứng viên từ NHAN_VIEN_MOI (upsert theo ID, bắt buộc có SĐT — bỏ qua header/template)
+    try{
+      const respA = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent('NHAN_VIEN_MOI')}!A1:Z5000`, { headers:{ Authorization:`Bearer ${token}` }});
+      if(respA.ok){
+        const jA = await respA.json();
+        const vals = jA.values || [];
+        if(vals.length>=2){
+          const H = vals[0];
+          const ci = (h, fb)=>{ const i=H.findIndex(x=>x===h); return i!==-1?i:fb; };
+          const iId=ci('ID',0), iCreated=ci('Ngày ĐK',1), iName=ci('Họ tên',2), iGender=ci('Giới tính',3),
+                iBirth=ci('Năm sinh',4), iEdu=ci('Trình độ',5), iHome=ci('Quê quán',6), iPhone=ci('SĐT',7),
+                iShiftT=ci('Ca đăng ký',8), iBranchT=ci('Chi nhánh ĐK',9), iExp=ci('Kinh nghiệm',10),
+                iHand=ci('Xử lý đột xuất',11), iFb=ci('Facebook',12), iSrc=ci('Nguồn biết tin',13),
+                iAi=ci('Điểm AI',14), iStatus=ci('Trạng thái',16), iSrcId=ci('Mã nguồn',17), iUpd=ci('Cập nhật lúc',19);
+          for(let r=1;r<vals.length;r++){
+            const row = vals[r];
+            const id = (row[iId]||'').toString().trim();
+            const phone = (row[iPhone]||'').toString().trim();
+            if(!id || !normalizePhone(phone)){ out.skipped++; continue; }
+            const sheetUpd = (row[iUpd]||'').toString().trim();
+            const sheetTime = sheetUpd ? new Date(sheetUpd).getTime() : 0;
+            let app = db.applicants.find(a=>a.id===id);
+            if(!app){
+              db.applicants.push({
+                id, name: (row[iName]||'').toString().trim()||id, gender: (row[iGender]||'').toString().trim(),
+                birthYear: (row[iBirth]||'').toString().trim(), education: (row[iEdu]||'').toString().trim(),
+                hometown: (row[iHome]||'').toString().trim(), phone,
+                shiftPreference: '', shiftText: (row[iShiftT]||'').toString().trim(),
+                branchPreference: '', branchText: (row[iBranchT]||'').toString().trim(),
+                experience: (row[iExp]||'').toString().trim(), handling: (row[iHand]||'').toString().trim(),
+                facebook: (row[iFb]||'').toString().trim(), source: (row[iSrc]||'').toString().trim()||'Google Sheet',
+                aiScore: row[iAi]===''||row[iAi]===undefined ? null : Number(String(row[iAi]).replace(',','.'))||null,
+                aiBreakdown: [], status: (row[iStatus]||'').toString().trim()||'NEW_APPLICANT',
+                source_id: (row[iSrcId]||'').toString().trim()||('sheet_pull_'+id),
+                createdAt: (row[iCreated]||'').toString().trim()||getVietnamISOString(),
+                version: 1, updated_at: sheetUpd||getVietnamISOString(),
+                updated_by: manualBy||'BOOT_PULL', sync_status:'SYNCED'
+              });
+              out.pulledApplicants = (out.pulledApplicants||0)+1;
+            } else {
+              const localTime = app.updated_at ? new Date(app.updated_at).getTime() : 0;
+              if(sheetTime>0 && sheetTime>localTime){
+                if(row[iName]) app.name = row[iName].toString().trim();
+                if(row[iPhone]!==undefined) app.phone = phone;
+                if(row[iStatus]) app.status = row[iStatus].toString().trim();
+                app.updated_at = sheetUpd; app.updated_by = manualBy||'BOOT_PULL'; app.sync_status='SYNCED';
+                app.version = (app.version||1)+1;
+                out.updatedApplicants = (out.updatedApplicants||0)+1;
+              } else out.skipped++;
+            }
+          }
+        }
+      }
+    }catch(e){ console.error('[KÉO SHEET] Đọc NHAN_VIEN_MOI lỗi', e.message); }
+    if(out.pulled>0 || out.updated>0 || out.keys>0 || out.pulledApplicants>0 || out.updatedApplicants>0){
       saveDB();
       io.emit('employees:update', db.employees);
       io.emit('keys:update', db.keys);
+      io.emit('applicants:update', db.applicants);
     }
-    console.log(`[KÉO SHEET 17iXM] Thêm mới ${out.pulled} + cập nhật ${out.updated} NV + ${out.keys} key (bỏ qua ${out.skipped})${manualBy?` bởi ${manualBy}`:''}`);
+    console.log(`[KÉO SHEET 17iXM] Thêm mới ${out.pulled} + cập nhật ${out.updated} NV + ${out.keys} key + ${out.pulledApplicants||0}/${out.updatedApplicants||0} ứng viên mới/cập nhật (bỏ qua ${out.skipped})${manualBy?` bởi ${manualBy}`:''}`);
     return out;
   }catch(e){ console.error('[KÉO SHEET] Lỗi', e.message); return out; }
 }
