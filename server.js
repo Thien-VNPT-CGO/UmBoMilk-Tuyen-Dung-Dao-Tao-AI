@@ -367,7 +367,7 @@ db.testCourses = [
       questions: Array.from({length:25}, (_,i)=>({
         id: `q${i+1}`,
         question: `Câu ${i+1}: Thành phần chính của món Trà Sữa Ụm Bò Truyền Thống là gì?`,
-        options: ['Trà đen + Sữa tươi + Trân châu', 'Trà xanh + Sữa đặc', 'Cà phê + Sữa', 'Nước lọc + Đường', 'Trà herbal + Sữa végétarienne'],
+        options: ['Trà đen + Sữa tươi + Trân châu', 'Trà xanh + Sữa đặc', 'Cà phê + Sữa', 'Nước lọc + Đường'],
         correct: 0,
         explanation: 'Đáp án đúng là Trà đen + Sữa tươi'
       })),
@@ -5964,11 +5964,11 @@ app.post('/api/courses/import', authMiddleware, roleCheck(['Admin','HR']), (req,
     const { questions, title, description } = req.body||{};
     if(!Array.isArray(questions) || questions.length===0) return res.status(400).json({error:'Dữ liệu questions không hợp lệ (cần mảng câu hỏi)'});
     const normLetter = (v)=>{
-      if(typeof v==='number') return (v>=0 && v<=4) ? v : ((v>=1 && v<=5) ? v-1 : -1);
+      if(typeof v==='number') return (v>=0 && v<=3) ? v : ((v>=1 && v<=4) ? v-1 : -1);
       const s = String(v??'').trim().toUpperCase();
-      if(/^[A-E]$/.test(s)) return s.charCodeAt(0)-65;
+      if(/^[A-D]$/.test(s)) return s.charCodeAt(0)-65;
       const n = parseInt(s,10);
-      if(!isNaN(n)) return (n>=0 && n<=4) ? n : ((n>=1 && n<=5) ? n-1 : -1);
+      if(!isNaN(n)) return (n>=0 && n<=3) ? n : ((n>=1 && n<=4) ? n-1 : -1);
       return -1;
     };
     const norm = [];
@@ -5977,14 +5977,14 @@ app.post('/api/courses/import', authMiddleware, roleCheck(['Admin','HR']), (req,
       const qtext = String(r.question||r.cauHoi||r['Câu hỏi']||'').trim();
       let opts = r.options;
       if(!Array.isArray(opts)){
-        opts = [r.A||r.a||r['A'], r.B||r.b||r['B'], r.C||r.c||r['C'], r.D||r.d||r['D'], r.E||r.e||r['E']];
+        opts = [r.A||r.a||r['A'], r.B||r.b||r['B'], r.C||r.c||r['C'], r.D||r.d||r['D']];
       }
       opts = (opts||[]).map(o=>String(o??'').trim());
       const ci = normLetter(r.correct ?? r.answer ?? r['Đáp án']);
-      if(!qtext || opts.length!==5 || opts.some(o=>!o) || ci<0) continue;
+      if(!qtext || opts.length!==4 || opts.some(o=>!o) || ci<0) continue;
       norm.push({ id: 'q'+uuidv4().slice(0,8), question: qtext, options: opts, correct: ci, explanation: String(r.explanation||r['Giải thích']||'') });
     }
-    if(norm.length===0) return res.status(400).json({error:'Không có câu hỏi hợp lệ (cần: Câu hỏi + 5 đáp án A–E + Đáp án đúng)'});
+    if(norm.length===0) return res.status(400).json({error:'Không có câu hỏi hợp lệ (cần: Câu hỏi + 4 đáp án A–D + Đáp án đúng)'});
     let bank = db.testCourses.find(c=>c.id==='course_001') || db.testCourses[0];
     if(!bank){
       bank = { id:'course_001', title:'Kiểm tra đầu ra - Ụm Bò Milk 2026', description:'Ngân hàng câu hỏi trắc nghiệm', totalQuestions:0, minPerQuestion:5, questions:[], voiceSimulations:[], createdAt:getVietnamISOString() };

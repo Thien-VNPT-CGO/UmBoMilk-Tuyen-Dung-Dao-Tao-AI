@@ -4632,9 +4632,9 @@ function updateQuizBankInfo(){
 }
 function downloadQuizTemplate(){
   try{
-    const rows=[['Câu hỏi','A','B','C','D','E','Đáp án (1-5 hoặc A-E)','Giải thích'],
-      ['Trà sữa Ụm Bò truyền thống gồm những thành phần chính nào?','Trà đen + Sữa tươi + Trân châu','Trà xanh + Sữa đặc','Cà phê + Sữa','Nước lọc + Đường','Trà herbal + Sữa hạt',1,'Đáp án đúng là A'],
-      ['Khách hỏi "trà sữa có béo quá không em?" NV nên làm gì trước?','Hỏi nhu cầu đá/đường của khách','Nói không béo đâu','Im lặng pha chế','Đổi món khác','Gọi quản lý','A','Hiểu nhu cầu trước']];
+    const rows=[['Câu hỏi','A','B','C','D','Đáp án (1-4 hoặc A-D)','Giải thích'],
+      ['Trà sữa Ụm Bò truyền thống gồm những thành phần chính nào?','Trà đen + Sữa tươi + Trân châu','Trà xanh + Sữa đặc','Cà phê + Sữa','Nước lọc + Đường',1,'Đáp án đúng là A'],
+      ['Khách hỏi "trà sữa có béo quá không em?" NV nên làm gì trước?','Hỏi nhu cầu đá/đường của khách','Nói không béo đâu','Im lặng pha chế','Đổi món khác','A','Hiểu nhu cầu trước']];
     const ws=XLSX.utils.aoa_to_sheet(rows);
     const wb=XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb,ws,'CAU_HOI');
@@ -4653,7 +4653,7 @@ async function importQuizFile(){
       const txt=await f.text();
       const data=JSON.parse(txt);
       const arr=Array.isArray(data)?data:(Array.isArray(data.questions)?data.questions:[]);
-      questions=arr.map(r=>({question:r.question||r['Câu hỏi']||'', options:r.options||[r.A,r.B,r.C,r.D,r.E], correct:r.correct??r['Đáp án'], explanation:r.explanation||r['Giải thích']||''}));
+      questions=arr.map(r=>({question:r.question||r['Câu hỏi']||'', options:r.options||[r.A,r.B,r.C,r.D], correct:r.correct??r['Đáp án'], explanation:r.explanation||r['Giải thích']||''}));
     } else {
       const buf=await f.arrayBuffer();
       const wb=XLSX.read(buf,{type:'array'});
@@ -4666,14 +4666,14 @@ async function importQuizFile(){
         const m={};
         cells.forEach((c,i)=>{
           if(!m.q && (c.includes('cau hoi')||c==='question'||c.includes('cauhoi'))) m.q=i;
-          else if(c==='a') m.A=i; else if(c==='b') m.B=i; else if(c==='c') m.C=i; else if(c==='d') m.D=i; else if(c==='e') m.E=i;
+          else if(c==='a') m.A=i; else if(c==='b') m.B=i; else if(c==='c') m.C=i; else if(c==='d') m.D=i;
           else if(c.includes('dap an')||c==='answer'||c.includes('dapan')) m.ans=i;
           else if(c.includes('giai thich')||c.includes('explanation')||c==='note') m.exp=i;
         });
         if(m.q!==undefined && m.A!==undefined && m.ans!==undefined){ hi=r; map=m; break; }
       }
-      if(hi<0){ map={q:0,A:1,B:2,C:3,D:4,E:5,ans:6,exp:7}; hi=-1; }
-      questions=rows.slice(hi+1).map(r=>({question:String(r[map.q]??'').trim(), options:[r[map.A],r[map.B],r[map.C],r[map.D],r[map.E]].map(x=>String(x??'').trim()), correct:String(r[map.ans]??'').trim(), explanation:map.exp!==undefined?String(r[map.exp]??''):''})).filter(r=>r.question);
+      if(hi<0){ map={q:0,A:1,B:2,C:3,D:4,ans:5,exp:6}; hi=-1; }
+      questions=rows.slice(hi+1).map(r=>({question:String(r[map.q]??'').trim(), options:[r[map.A],r[map.B],r[map.C],r[map.D]].map(x=>String(x??'').trim()), correct:String(r[map.ans]??'').trim(), explanation:map.exp!==undefined?String(r[map.exp]??''):''})).filter(r=>r.question);
     }
     if(st) st.textContent=`Đã đọc ${questions.length} dòng — đang gửi server...`;
     const res=await api('/api/courses/import',{method:'POST', body:JSON.stringify({questions})});
