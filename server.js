@@ -7212,34 +7212,58 @@ app.post('/api/system/reset', authMiddleware, roleCheck(['Admin']), async (req,r
       if(!token){
         sheetResult = { cleared:false, error:'Chưa cấu hình ServiceAccount — Sheet 17iXM GIỮ NGUYÊN, chỉ web bị reset' };
       } else {
+        // Xóa + đọc lại VERIFY từng tab (retry 3 lần) — tab nào còn dòng là báo lỗi chi tiết
+        const clearAndVerify = async (sid, tab)=>{
+          const range = `${encodeURIComponent(tab)}!A2:Z5000`;
+          let lastErr = '';
+          for(let attempt=1; attempt<=3; attempt++){
+            try{
+              const clr = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sid}/values/${range}:clear`, {
+                method:'POST', headers:{ Authorization:`Bearer ${token}` }
+              });
+              const cj = await clr.json().catch(()=>({}));
+              if(cj.error){ lastErr = cj.error.message; }
+              else {
+                // Đọc lại cột A để verify thật sự trống
+                const vr = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sid}/values/${encodeURIComponent(tab)}!A2:A5000`, {
+                  headers:{ Authorization:`Bearer ${token}` }
+                });
+                const vj = await vr.json().catch(()=>({}));
+                if(vj.error){ lastErr = vj.error.message; }
+                else {
+                  const left = (vj.values||[]).filter(r=>String(r[0]||'').trim()!=='').length;
+                  if(left===0) return { tab, ok:true, attempts: attempt };
+                  lastErr = `vẫn còn ${left} dòng sau khi xóa (lần ${attempt})`;
+                }
+              }
+            }catch(e){ lastErr = e.message; }
+            await new Promise(r=>setTimeout(r, 400));
+          }
+          return { tab, ok:false, error: lastErr };
+        };
         const tabs = Object.values(SHEET_DEFINITIONS).map(d=>d.sheetName);
-        let ok=0; const errors=[];
+        const tabResults = [];
         for(const tab of tabs){
-          try{
-            const clr = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(tab)}!A2:Z5000:clear`, {
-              method:'POST', headers:{ Authorization:`Bearer ${token}` }
-            });
-            const cj = await clr.json().catch(()=>({}));
-            if(cj.error) errors.push(`${tab}: ${cj.error.message}`);
-            else ok++;
-          }catch(e){ errors.push(`${tab}: ${e.message}`); }
-          await new Promise(r=>setTimeout(r,150)); // throttle
+          const r = await clearAndVerify(spreadsheetId, tab);
+          tabResults.push(r);
+          if(r.ok) console.log(`[SYSTEM RESET] Đã xóa sạch tab ${tab}`);
+          else console.log(`[SYSTEM RESET] Tab ${tab} XÓA THẤT BẠI: ${r.error}`);
+          await new Promise(r2=>setTimeout(r2,150)); // throttle
         }
+        const ok = tabResults.filter(t=>t.ok).length;
+        const errors = tabResults.filter(t=>!t.ok).map(t=>`${t.tab}: ${t.error}`);
         // Xóa cả Sheet nộp Form (1rcq) — nếu không, poller 15s đọc responses cũ
         // sẽ hồi sinh ứng viên vào web rồi sync 60s đẩy ngược lên 17iXM
         let formCleared = false;
         try{
           const formSid = db.settings?.googleSheet?.formResponsesSheetId || '1rcqEKraSRhr-Tn9qwlhADlkQUei8j65bXeHF_Tmkd38';
           const formTab = db.settings?.googleSheet?.formSheetName || 'FROM_NHAN_VIEN';
-          const fr = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${formSid}/values/${encodeURIComponent(formTab)}!A2:Z5000:clear`, {
-            method:'POST', headers:{ Authorization:`Bearer ${token}` }
-          });
-          const fj = await fr.json().catch(()=>({}));
-          if(fj.error) errors.push(`FORM ${formTab}: ${fj.error.message}`);
-          else { formCleared = true; console.log(`[SYSTEM RESET] Đã xóa Sheet Form ${formSid}/${formTab}`); }
+          const fr = await clearAndVerify(formSid, formTab);
+          if(fr.ok){ formCleared = true; console.log(`[SYSTEM RESET] Đã xóa Sheet Form ${formSid}/${formTab}`); }
+          else errors.push(`FORM ${formTab}: ${fr.error}`);
         }catch(e){ errors.push(`FORM: ${e.message}`); }
-        sheetResult = { cleared: ok, total: tabs.length, errors, formCleared };
-        console.log(`[SYSTEM RESET] Đã xóa Sheet 17iXM: ${ok}/${tabs.length} tab`);
+        sheetResult = { cleared: ok, total: tabs.length, errors, formCleared, tabs: tabResults.map(t=>({tab:t.tab, ok:t.ok, error:t.error||null})) };
+        console.log(`[SYSTEM RESET] Đã xóa Sheet 17iXM: ${ok}/${tabs.length} tab (verify từng tab)`);
       }
     }catch(e){ sheetResult = { cleared:false, error:e.message }; }
   } else if(scope==='EMPLOYEES'){
