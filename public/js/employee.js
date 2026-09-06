@@ -1738,11 +1738,7 @@ async function loadElearning(){
               <div class="text-xs text-slate-500 mt-1">${c.description}</div>
               <div class="mt-2 flex flex-wrap gap-2">
                 <span class="text-xs font-bold bg-purple-100 text-purple-700 px-2 py-1 rounded-full">${c.totalQuestions} câu trắc nghiệm</span>
-                <span class="text-xs font-bold bg-blue-100 text-blue-700 px-2 py-1 rounded-full">Mô phỏng thoại: ${c.voiceSimulations.length} tình huống</span>
                 <span class="text-xs font-bold bg-pink-100 text-pink-700 px-2 py-1 rounded-full">≥${c.minPerQuestion} giây/câu = ${c.totalQuestions*c.minPerQuestion} giây tối thiểu</span>
-              </div>
-              <div class="mt-3 grid md:grid-cols-2 gap-2">
-                ${c.voiceSimulations.map(v=>`<div class="bg-purple-50 border border-purple-200 rounded-xl p-2"><div class="text-xs font-bold text-purple-800">${v.scenario}</div><div class="text-[11px] text-purple-700 mt-1">Tiêu chí: ${v.rubric.join(' • ')}</div><textarea placeholder="Câu trả lời thoại (nhập văn bản demo)" class="w-full mt-2 px-2 py-1 rounded-lg border border-purple-200 text-xs" rows="2"></textarea></div>`).join('')}
               </div>
               <button onclick="startTest('${c.id}')" class="w-full mt-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-black py-2.5 rounded-xl">Bắt đầu làm TEST (random 25 câu • 5s/câu)</button>
               ${lastResult?`<div class="mt-3 bg-slate-50 border rounded-xl p-2 text-xs"><div class="font-bold">Kết quả gần nhất: ${lastResult.score}đ • ${lastResult.result} • ${fmtDMYTime(lastResult.createdAt)}</div><div class="text-[11px] text-slate-500">${lastResult.correct}/${lastResult.total} đúng • ${lastResult.timeSpent}s</div></div>`:''}

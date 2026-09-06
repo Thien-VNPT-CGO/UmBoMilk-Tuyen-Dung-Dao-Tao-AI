@@ -4613,13 +4613,6 @@ function renderCoursesAdmin(){
         <div><div class="font-black text-slate-800">${c.title}</div><div class="text-xs text-slate-500 mt-1">${c.description}</div><div class="mt-2 flex gap-2"><span class="text-xs font-bold bg-purple-100 text-purple-700 px-2 py-1 rounded-full">${c.totalQuestions} câu</span><span class="text-xs font-bold bg-pink-100 text-pink-700 px-2 py-1 rounded-full">≥${c.minPerQuestion}s/câu = ${c.totalQuestions*c.minPerQuestion}s tối thiểu</span></div></div>
         <span class="text-xs font-bold bg-slate-900 text-white px-3 py-1 rounded-full">${c.id}</span>
       </div>
-      <details class="mt-3"><summary class="text-xs font-bold text-blue-600 cursor-pointer">Xem 5 câu mẫu</summary><div class="mt-2 space-y-2 max-h-[200px] overflow-auto scrollbar-thin">
-        ${c.questions.slice(0,5).map(q=>`<div class="bg-slate-50 border rounded-xl p-2"><div class="text-xs font-bold">${q.question}</div><div class="text-[11px] text-slate-600 mt-1">${q.options.map((o,i)=>`<span class="${i===q.correct?'font-black text-pink-700':''}">${i+1}. ${o} </span>`).join(' • ')}</div></div>`).join('')}
-      </div></details>
-      <div class="mt-3 bg-purple-50 border border-purple-200 rounded-xl p-3">
-        <div class="text-xs font-black text-purple-800">AI Voice Simulation</div>
-        ${c.voiceSimulations.map(v=>`<div class="mt-1 text-xs"><span class="font-bold">${v.id}:</span> ${v.scenario} <span class="text-[11px] bg-white border px-2 py-0.5 rounded-full">${v.rubric.join(' • ')}</span></div>`).join('')}
-      </div>
     </div>
   `).join('');
 }

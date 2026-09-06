@@ -371,10 +371,7 @@ db.testCourses = [
         correct: 0,
         explanation: 'Đáp án đúng là Trà đen + Sữa tươi'
       })),
-      voiceSimulations: [
-        { id:'vs1', scenario:'Khách hỏi: Trà sữa có béo quá không em?', rubric: ['Hiểu nhu cầu','Kiến thức SP','Logic tư vấn','Xử lý phản đối','Thái độ']},
-        { id:'vs2', scenario:'Khách phàn nàn: Sao đợi lâu vậy?', rubric: ['Hiểu nhu cầu','Kiến thức SP','Logic tư vấn','Xử lý phản đối','Thái độ']}
-      ],
+      voiceSimulations: [],
       createdAt: getVietnamISOString()
     }
   ];
