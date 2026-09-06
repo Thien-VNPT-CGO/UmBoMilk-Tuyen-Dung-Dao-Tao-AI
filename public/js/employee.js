@@ -1447,8 +1447,7 @@ async function loadOff(){
        return r.dates.some(d => dates.includes(d));
     });
 
-    const bypass=document.getElementById('bypassWindow')?.checked;
-    const isOpen = win.isOpen || bypass;
+    const isOpen = win.isOpen;
     window._offVipTest = !!win.vipTest;
     try{ refreshNavVisibility(); }catch(e){}
     statusEl.textContent = isOpen? (win.vipTest?'🟢 AI đang MỞ đăng ký OFF (VIP TEST — Admin mở, TH1/TH2 giữ nguyên) - Auto Approve FCFS':'🟢 AI đang MỞ đăng ký OFF (T6 12:00 → T7 15:00) - Auto Approve FCFS') : '🔴 AI đã ĐÓNG đăng ký OFF - ngoài khung giờ (sẽ bị từ chối)';
@@ -1465,7 +1464,6 @@ async function loadOff(){
           <i class="fa-solid fa-clock text-slate-400 text-3xl mb-3 block"></i>
           <div class="font-black text-slate-700">CHƯA ĐẾN THỜI GIAN ĐĂNG KÝ</div>
           <div class="text-xs text-slate-500 mt-2">Vui lòng quay lại vào khung giờ mở cửa (Thứ 6 12:00 - Thứ 7 15:00).</div>
-          <label class="mt-4 flex justify-center items-center gap-2 text-xs text-pink-600 cursor-pointer"><input type="checkbox" id="bypassWindow" class="rounded accent-pink-500" onchange="loadOff()"> Bypass khung giờ (demo)</label>
         </div>
       `;
     } else if(alreadyRegistered){
@@ -1489,7 +1487,6 @@ async function loadOff(){
           <button onclick="submitOff()" class="flex-1 text-white font-black py-3 rounded-xl shadow text-sm" style="background:linear-gradient(135deg,#ec4899,#f43f5e)">Gửi đăng ký (AI Auto Approve)</button>
           <button onclick="loadOff()" class="bg-white border border-pink-200 text-pink-700 font-bold px-4 py-3 rounded-xl text-sm">↻</button>
         </div>
-        <label class="mt-2 flex items-center gap-2 text-xs text-pink-600"><input type="checkbox" id="bypassWindow" class="rounded accent-pink-500"> Bypass khung giờ (demo)</label>
       `;
       const offDatesEl=document.getElementById('offDates');
       offDatesEl.innerHTML = dates.map(d=>{
@@ -1503,7 +1500,7 @@ async function loadOff(){
       window._offWindowSocketBound=true;
       socket.on('offWindow:update', (data)=>{
         window._offVipTest = !!(data && data.vipTest);
-        const open = data.isOpen || document.getElementById('bypassWindow')?.checked;
+        const open = data.isOpen;
         statusEl.textContent = open? (window._offVipTest?'🟢 AI đang MỞ đăng ký OFF (VIP TEST) - Cập nhật trực tiếp':'🟢 AI đang MỞ đăng ký OFF - Cập nhật trực tiếp') : '🔴 AI đã ĐÓNG - Cập nhật trực tiếp';
         statusEl.className='mt-3 text-xs font-bold rounded-xl px-3 py-2 '+(open?'bg-emerald-50 text-emerald-700 border border-emerald-200':'bg-red-100 text-red-700 border border-red-200');
         try{ refreshNavVisibility(); }catch(e){}
@@ -1524,9 +1521,8 @@ async function loadOff(){
 async function submitOff(){
   const checks=[...document.querySelectorAll('.offCheck:checked')].map(c=>c.value);
   if(checks.length===0) return showToast('Chưa chọn ngày','error');
-  const bypass=document.getElementById('bypassWindow').checked;
   try{
-    const res = await api('/api/off-requests', {method:'POST', body:JSON.stringify({employeeId:employee.employeeId, dates:checks, bypassWindow:bypass})});
+    const res = await api('/api/off-requests', {method:'POST', body:JSON.stringify({employeeId:employee.employeeId, dates:checks})});
     showToast('OFF đã tự động duyệt: '+res.dates.map(d=>fmtDMY(d)).join(', '),'success');
     loadOff(); loadSchedule();
   }catch(e){ showToast(e.message,'error'); }
