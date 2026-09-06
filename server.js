@@ -357,17 +357,17 @@ function initEmpty() {
   db.shiftSwapRequests = [];
   // Ngân hàng câu hỏi kiểm tra đầu ra (cấu hình vận hành, không phải mock nghiệp vụ).
   // Không có UI tạo khóa học nên giữ 1 khóa mặc định để E-learning hoạt động với dữ liệu thật.
-  db.testCourses = [
+db.testCourses = [
     {
       id: 'course_001',
       title: 'Kiểm tra đầu ra - Ụm Bò Milk 2026',
       description: 'Bài kiểm tra tổng hợp kiến thức sản phẩm và quy trình phục vụ',
-      totalQuestions: 20,
+      totalQuestions: 25,
       minPerQuestion: 5,
-      questions: Array.from({length:20}, (_,i)=>({
+      questions: Array.from({length:25}, (_,i)=>({
         id: `q${i+1}`,
         question: `Câu ${i+1}: Thành phần chính của món Trà Sữa Ụm Bò Truyền Thống là gì?`,
-        options: ['Trà đen + Sữa tươi + Trân châu', 'Trà xanh + Sữa đặc', 'Cà phê + Sữa', 'Nước lọc + Đường'],
+        options: ['Trà đen + Sữa tươi + Trân châu', 'Trà xanh + Sữa đặc', 'Cà phê + Sữa', 'Nước lọc + Đường', 'Trà herbal + Sữa végétarienne'],
         correct: 0,
         explanation: 'Đáp án đúng là Trà đen + Sữa tươi'
       })),
@@ -5958,91 +5958,157 @@ app.get('/api/test-results', (req,res)=>{
   if(employeeId) list = list.filter(r=>r.employeeId===employeeId);
   res.json(list);
 });
+// Import ngân hàng câu hỏi trắc nghiệm - Admin/HR (client parse file doc/excel/csv/json rồi POST JSON chuẩn)
+app.post('/api/courses/import', authMiddleware, roleCheck(['Admin','HR']), (req,res)=>{
+  try{
+    const { questions, title, description } = req.body||{};
+    if(!Array.isArray(questions) || questions.length===0) return res.status(400).json({error:'Dữ liệu questions không hợp lệ (cần mảng câu hỏi)'});
+    const normLetter = (v)=>{
+      if(typeof v==='number') return (v>=0 && v<=4) ? v : ((v>=1 && v<=5) ? v-1 : -1);
+      const s = String(v??'').trim().toUpperCase();
+      if(/^[A-E]$/.test(s)) return s.charCodeAt(0)-65;
+      const n = parseInt(s,10);
+      if(!isNaN(n)) return (n>=0 && n<=4) ? n : ((n>=1 && n<=5) ? n-1 : -1);
+      return -1;
+    };
+    const norm = [];
+    for(const r of questions){
+      if(!r) continue;
+      const qtext = String(r.question||r.cauHoi||r['Câu hỏi']||'').trim();
+      let opts = r.options;
+      if(!Array.isArray(opts)){
+        opts = [r.A||r.a||r['A'], r.B||r.b||r['B'], r.C||r.c||r['C'], r.D||r.d||r['D'], r.E||r.e||r['E']];
+      }
+      opts = (opts||[]).map(o=>String(o??'').trim());
+      const ci = normLetter(r.correct ?? r.answer ?? r['Đáp án']);
+      if(!qtext || opts.length!==5 || opts.some(o=>!o) || ci<0) continue;
+      norm.push({ id: 'q'+uuidv4().slice(0,8), question: qtext, options: opts, correct: ci, explanation: String(r.explanation||r['Giải thích']||'') });
+    }
+    if(norm.length===0) return res.status(400).json({error:'Không có câu hỏi hợp lệ (cần: Câu hỏi + 5 đáp án A–E + Đáp án đúng)'});
+    let bank = db.testCourses.find(c=>c.id==='course_001') || db.testCourses[0];
+    if(!bank){
+      bank = { id:'course_001', title:'Kiểm tra đầu ra - Ụm Bò Milk 2026', description:'Ngân hàng câu hỏi trắc nghiệm', totalQuestions:0, minPerQuestion:5, questions:[], voiceSimulations:[], createdAt:getVietnamISOString() };
+      db.testCourses.unshift(bank);
+    }
+    const seen = new Set(bank.questions.map(q=>String(q.question||'').trim().toLowerCase()));
+    let added=0;
+    for(const q of norm){ if(!seen.has(q.question.trim().toLowerCase())){ bank.questions.push(q); seen.add(q.question.trim().toLowerCase()); added++; } }
+    bank.totalQuestions = bank.questions.length;
+    bank.minPerQuestion = 5;
+    if(title) bank.title = String(title);
+    if(description) bank.description = String(description);
+    bank.updated_at = getVietnamISOString();
+    audit(req.user.username,'IMPORT_QUIZ','TEST',null,{added, total:bank.questions.length}, req.ip);
+    saveDB();
+    io.emit('courses:update', db.testCourses);
+    res.json({ success:true, added, total:bank.questions.length, courseId: bank.id });
+  }catch(e){ res.status(500).json({error:e.message}); }
+});
+// Mở đề thi trắc nghiệm đầu ra: random 25 câu từ ngân hàng, mỗi câu 5 giây, thang 10đ
+// HR/Admin mở cho NV training đủ 7 ngày (hoặc force). Trả về đề đã ẩn đáp án + thông tin NV.
+app.post('/api/quiz/open', (req,res)=>{
+  try{
+    const { employeeId, force, openedBy } = req.body||{};
+    const bank = db.testCourses.find(c=>c.id==='course_001') || db.testCourses[0];
+    if(!bank) return res.status(404).json({error:'Chưa có ngân hàng đề — HR/Admin import file Excel trước'});
+    const emp = db.employees.find(e=>e.employeeId===employeeId);
+    if(!emp) return res.status(404).json({error:'Không tìm thấy nhân viên'});
+    if(emp.type!=='TRAINING' && !['TRAINING','WAITING_TEST','RETEST'].includes(emp.status)) return res.status(403).json({error:'Chỉ nhân viên Training mới được mở TEST đầu ra'});
+    if(!force && emp.startDate){
+      const t0 = new Date(emp.startDate+'T00:00:00+07:00').getTime();
+      if(!isNaN(t0)){
+        const diffDays = Math.floor((Date.now()-t0)/86400000);
+        if(diffDays < 7) return res.status(400).json({error:`Nhân viên mới training ${diffDays} ngày — đủ 7 ngày mới được mở TEST (hoặc tick Mở ép)`, diffDays});
+      }
+    }
+    const pool = Array.isArray(bank.questions)? bank.questions : [];
+    if(pool.length < 25) return res.status(400).json({error:`Ngân hàng đề chưa đủ 25 câu (hiện có ${pool.length}) — HR/Admin import thêm file Excel`, total: pool.length});
+    // Dùng lại ca thi đang mở nếu còn hiệu lực, tránh random lại khi NV tải lại trang
+    const sess = emp.testSchedule;
+    let picked = null;
+    if(sess && sess.type==='ONLINE_QUIZ' && sess.status==='IN_PROGRESS' && Array.isArray(sess.questionIds) && sess.questionIds.length===25){
+      const valid = sess.questionIds.map(id=>pool.find(q=>q.id===id)).filter(Boolean);
+      if(valid.length===25) picked = valid;
+    }
+    if(!picked) picked = [...pool].sort(()=>Math.random()-0.5).slice(0,25);
+    emp.testSchedule = { type:'ONLINE_QUIZ', courseId: bank.id, questionIds: picked.map(q=>q.id), status:'IN_PROGRESS', startedAt: getVietnamISOString(), perQuestionSec:5, total:25, openedBy: openedBy||'HR' };
+    emp.status='WAITING_TEST';
+    emp.updated_at=getVietnamISOString();
+    audit(openedBy||'HR','OPEN_QUIZ','TEST',{employeeId},{total:25, courseId: bank.id}, req.ip);
+    saveDB();
+    io.emit('employees:update', db.employees);
+    res.json({ success:true, courseId: bank.id, questions: picked.map(q=>({id:q.id, question:q.question, options:q.options})), questionIds: picked.map(q=>q.id), employee:{employeeId:emp.employeeId, name:emp.name, phone:emp.phone}, perQuestionSec:5, total:25, timeLimitSec:125 });
+  }catch(e){ res.status(500).json({error:e.message}); }
+});
 app.post('/api/courses/:id/submit', (req,res)=>{
-  const { employeeId, answers, timeSpent, voiceAnswers } = req.body;
+  const { employeeId, answers, timeSpent, questionIds } = req.body||{};
   const course = db.testCourses.find(c=>c.id===req.params.id);
   if(!course) return res.status(404).json({error:'Không tìm thấy'});
   const emp = db.employees.find(e=>e.employeeId===employeeId);
-  if(!emp) return res.status(404).json({error:'Không tìm thấy nhôn viôn'});
-  // Validate min time 5s per question
-  const minTime = (course.minPerQuestion || 5) * (course.totalQuestions || 20);
-  if(timeSpent && timeSpent < minTime) {
-    return res.status(400).json({error:`Thời gian làm bài tối thiểu là ${minTime} giây (${course.totalQuestions} câu x ${course.minPerQuestion||5}s). Bạn đã làm ${timeSpent}s.`});
-  }
-  // Calculate score: 10 point scale? correct/total *10
-  let correct =0;
-  course.questions.forEach((q,idx)=>{
-    if(answers[idx]===q.correct) correct++;
-  });
-  const score = (correct / course.totalQuestions) * 10;
-  const rounded = Math.round(score*10)/10;
-  const passScore = (db.settings && db.settings.test) ? db.settings.test.passScore : 7;
-  let result, newStatus;
-  if(rounded < 5){ result='FAILED'; newStatus='FAILED_TEST'; }
-  else if(rounded < passScore){ result='CHUA_DU_DK'; newStatus='RETEST'; }
-  else { result='DAT'; newStatus='OFFICIAL'; }
-  const testRes = {
-    id: uuidv4(), employeeId, courseId: course.id, score: rounded, correct, total: course.totalQuestions,
-    answers, timeSpent, voiceAnswers, result, createdAt: getVietnamISOString(), version:1
-  };
+  if(!emp) return res.status(404).json({error:'Không tìm thấy nhân viên'});
+  // Chốt đúng 25 câu của ca thi (chống tráo đề): ưu tiên session đã mở, fallback 25 câu đầu ngân hàng
+  const bank = Array.isArray(course.questions)? course.questions : [];
+  const sess = emp.testSchedule;
+  const sessIds = (sess && sess.type==='ONLINE_QUIZ' && Array.isArray(sess.questionIds) && sess.questionIds.length===25) ? sess.questionIds : null;
+  const ids = (Array.isArray(questionIds) && questionIds.length===25) ? questionIds : (sessIds || bank.slice(0,25).map(q=>q.id));
+  const qlist = ids.map(id=>bank.find(q=>q.id===id)).filter(Boolean);
+  if(qlist.length!==25) return res.status(400).json({error:'Ca thi không đủ 25 câu — vui lòng mở lại đề'});
+  if(!Array.isArray(answers) || answers.length!==25) return res.status(400).json({error:'Bài làm phải đủ 25 câu'});
+  let correct=0;
+  qlist.forEach((q,idx)=>{ if(answers[idx]===q.correct) correct++; });
+  const rounded = Math.round((correct/25*10)*10)/10;
+  // Thang 10đ: >=8 ĐẠT • 5–dưới 8 thi lại • <5 LOẠI
+  let result;
+  if(rounded < 5) result='FAILED';
+  else if(rounded < 8) result='CHUA_DU_DK';
+  else result='DAT';
+  const testRes = { id: uuidv4(), employeeId, employeeName: emp.name, employeePhone: emp.phone, courseId: course.id, score: rounded, correct, total: 25, answers, timeSpent: timeSpent||null, result, createdAt: getVietnamISOString(), version:1 };
   db.testResults.unshift(testRes);
   const before = {...emp};
   emp.testScore = rounded;
   emp.testResult = result;
-  // Transition logic
+  if(sess && sess.type==='ONLINE_QUIZ') sess.status='SUBMITTED';
   if(result==='FAILED'){
     emp.status='FAILED_TEST';
-    // After 2 hours would go ARCHIVED - simulate? For now keep FAILED, but allow HR to archive
+    db.notifications.unshift({ id: uuidv4(), to: employeeId, type:'TEST_LOAI', title:'Kết quả TEST: LOẠI', content:`Bạn đạt ${rounded}đ (< 5đ). Hệ thống sẽ tự động đăng xuất tài khoản sau 15 phút.`, createdAt: getVietnamISOString(), read:false });
     setTimeout(()=>{
-      const e = db.employees.find(x=>x.employeeId===employeeId);
-      if(e && e.status==='FAILED_TEST'){
-        e.status='ARCHIVED';
-        saveDB();
-        io.emit('employees:update', db.employees);
-        audit('SYSTEM','AUTO_ARCHIVE','EMPLOYEE',before,e,'system');
-      }
-    }, 2*60*60*1000); // 2h
+      try{
+        const e = db.employees.find(x=>x.employeeId===employeeId);
+        if(e && e.status==='FAILED_TEST'){
+          e.status='ARCHIVED';
+          e.updated_at=getVietnamISOString();
+          saveDB();
+          io.emit('employees:update', db.employees);
+          emitForceLogout(employeeId, 'Tài khoản training bị LOẠI (TEST dưới 5đ) — tự động đăng xuất sau 15 phút');
+        }
+      }catch(_){}
+    }, 15*60*1000);
   } else if(result==='CHUA_DU_DK'){
     emp.status='RETEST';
     emp.type='TRAINING';
-  } else if(result==='DAT'){
-    // Will auto transition after delay (for demo immediate, but spec says after time quy định)
-    setTimeout(()=>{
-      const e = db.employees.find(x=>x.employeeId===employeeId);
-      if(e && e.testResult==='DAT'){
-        e.status='OFFICIAL';
-        e.type='OFFICIAL';
-        e.endDate=null;
-        // create schedule
-        const weekStart = getMonday(getVietnamNow());
-        const days=[];
-        for(let i=0;i<7;i++){
-          const d=new Date(weekStart); d.setDate(weekStart.getDate()+i);
-          const ds=toVietnamDateStr(d);
-          days.push({date:ds, dayName:['T2','T3','T4','T5','T6','T7','CN'][i], shift:e.shift, status:'WORKING', substituteFor:null});
-        }
-        db.schedules.push({ id: uuidv4(), employeeId: e.employeeId, weekStart: toVietnamDateStr(weekStart), days, version:1, updated_at: getVietnamISOString()});
-        saveDB();
-        io.emit('employees:update', db.employees);
-        io.emit('schedules:update', db.schedules);
-      }
-    }, 3000);
-    emp.status='WAITING_OFFICIAL'; // transitional
+    if(sess) sess.status='NEED_RETAKE';
+    db.notifications.unshift({ id: uuidv4(), to: employeeId, type:'TEST_RETAKE', title:'Kết quả TEST: Thi lại', content:`Bạn đạt ${rounded}đ (5–dưới 8đ). Thông báo thi lại lần sau — HR sẽ gửi lịch thi lại cho bạn.`, createdAt: getVietnamISOString(), read:false });
+  } else {
+    emp.status='WAITING_OFFICIAL';
+    if(sess) sess.status='PASSED_WAIT_APPROVE';
+    db.notifications.unshift({ id: uuidv4(), to: employeeId, type:'TEST_PASS', title:'Kết quả TEST: ĐẠT', content:`Chúc mừng ${emp.name}! Bạn đạt ${rounded}đ (≥ 8đ) — hoàn thành tốt, chờ HR duyệt trở thành Nhân viên chính thức Ụm Bò Milk.`, createdAt: getVietnamISOString(), read:false });
+    const zr = { id: uuidv4(), sent_at: getVietnamISOString(), receiver: emp.phone, type:'TEST_PASS', content:`Chúc mừng ${emp.name} (${emp.employeeId}) TEST ĐẠT ${rounded}đ — chờ HR duyệt chính thức Ụm Bò Milk!`, status:'SENT', error:'' };
+    db.zaloRecords.unshift(zr);
+    io.emit('zalo:update', db.zaloRecords);
   }
   emp.version=(emp.version||1)+1;
   emp.updated_at=getVietnamISOString();
   emp.sync_status='PENDING';
-  addSyncQueue('TEST_RESULT','CREATE',testRes, employeeId, 'WEB_EMPLOYEE');
-  addSyncQueue('EMPLOYEE','UPDATE',emp, employeeId, 'WEB_EMPLOYEE');
-  audit(employeeId,'SUBMIT_TEST','TEST',before,emp, req.ip);
+  try{ addSyncQueue('TEST_RESULT','CREATE',testRes, employeeId, 'WEB_EMPLOYEE'); }catch(_){}
+  try{ addSyncQueue('EMPLOYEE','UPDATE',emp, employeeId, 'WEB_EMPLOYEE'); }catch(_){}
+  try{ audit(employeeId,'SUBMIT_TEST','TEST',before,emp, req.ip); }catch(_){}
   saveDB();
   io.emit('testResults:update', db.testResults);
   io.emit('employees:update', db.employees);
-  const zr = { id: uuidv4(), sent_at: getVietnamISOString(), receiver: emp.phone, type:'TEST_RESULT', content:`Kết quả TEST: ${rounded} điểm - ${result}`, status:'SENT', error:'' };
-  db.zaloRecords.unshift(zr);
-  io.emit('zalo:update', db.zaloRecords);
-  res.json({ testResult: testRes, employee: emp });
+  io.emit('notifications:update', db.notifications);
+  res.json({ testResult: testRes, employee: emp, passed: result==='DAT', score: rounded });
 });
+
 
 // Helper: xác định field nào đang bị ENV khóa (Render)
 function getEnvLocked(){

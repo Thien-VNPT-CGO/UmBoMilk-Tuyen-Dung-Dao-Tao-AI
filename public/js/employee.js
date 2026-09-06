@@ -1744,33 +1744,38 @@ async function loadElearning(){
               <div class="mt-3 grid md:grid-cols-2 gap-2">
                 ${c.voiceSimulations.map(v=>`<div class="bg-purple-50 border border-purple-200 rounded-xl p-2"><div class="text-xs font-bold text-purple-800">${v.scenario}</div><div class="text-[11px] text-purple-700 mt-1">Tiêu chí: ${v.rubric.join(' • ')}</div><textarea placeholder="Câu trả lời thoại (nhập văn bản demo)" class="w-full mt-2 px-2 py-1 rounded-lg border border-purple-200 text-xs" rows="2"></textarea></div>`).join('')}
               </div>
-              <button onclick="startTest('${c.id}')" class="w-full mt-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-black py-2.5 rounded-xl">Bắt đầu làm TEST (${c.totalQuestions} câu)</button>
+              <button onclick="startTest('${c.id}')" class="w-full mt-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-black py-2.5 rounded-xl">Bắt đầu làm TEST (random 25 câu • 5s/câu)</button>
               ${lastResult?`<div class="mt-3 bg-slate-50 border rounded-xl p-2 text-xs"><div class="font-bold">Kết quả gần nhất: ${lastResult.score}đ • ${lastResult.result} • ${fmtDMYTime(lastResult.createdAt)}</div><div class="text-[11px] text-slate-500">${lastResult.correct}/${lastResult.total} đúng • ${lastResult.timeSpent}s</div></div>`:''}
             </div>
           `).join('')}
         </div>
         <div class="mt-4 bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs">
-          <div class="font-black">Quy tắc kết quả:</div>
+          <div class="font-black">Quy tắc kết quả (25 câu • 5s/câu • thang 10đ):</div>
           <div class="mt-1 space-y-1">
-            <div class="flex justify-between"><span>Điểm &lt; 5</span><span class="font-bold text-red-600">LOẠI → LƯU TRỮ (giữ lịch sử)</span></div>
-            <div class="flex justify-between"><span>5 ≤ Điểm ≤ 7</span><span class="font-bold text-amber-600">CHƯA ĐỦ ĐIỀU KIỆN → Giữ Thử việc, chờ thi lại</span></div>
-            <div class="flex justify-between"><span>Điểm &gt; 7</span><span class="font-bold text-green-600">ĐẠT → Chuyển Thử việc → Chính thức</span></div>
+            <div class="flex justify-between"><span>Điểm &lt; 5</span><span class="font-bold text-red-600">LOẠI → TB app + logout sau 15p</span></div>
+            <div class="flex justify-between"><span>5 – dưới 8</span><span class="font-bold text-amber-600">Chưa ĐẠT → thi lại (HR gửi lịch)</span></div>
+            <div class="flex justify-between"><span>Điểm ≥ 8</span><span class="font-bold text-green-600">ĐẠT 🎆 → chờ duyệt Chính thức</span></div>
           </div>
         </div>
       </div>
     `;
   }catch(e){}
 }
-function startTest(courseId){
-  currentTest = testCourses.find(c=>c.id===courseId);
-  if(!currentTest) return;
-  testAnswers = Array(currentTest.totalQuestions).fill(null);
-  testIndex=0;
-  testStartTime=Date.now();
-  document.getElementById('testModal').classList.remove('hidden');
-  document.getElementById('testMin').textContent=currentTest.totalQuestions*currentTest.minPerQuestion;
-  renderTestQuestion();
-  startTestTimer();
+async function startTest(courseId){
+  try{
+    showToast('Đang mở đề thi 25 câu...','info');
+    const sess = await api('/api/quiz/open',{method:'POST', body:JSON.stringify({employeeId:employee.employeeId})});
+    currentTest = { id: sess.courseId, questions: sess.questions, totalQuestions: sess.total||25, minPerQuestion: sess.perQuestionSec||5, questionIds: sess.questionIds };
+    testAnswers = Array(25).fill(null);
+    testIndex=0;
+    testStartTime=Date.now();
+    document.getElementById('testModal').classList.remove('hidden');
+    document.getElementById('testMin').textContent='125';
+    const info=document.getElementById('testEmpInfo');
+    if(info) info.textContent=`${sess.employee.employeeId} • ${sess.employee.name} • ${sess.employee.phone}`;
+    renderTestQuestion();
+    startTestTimer();
+  }catch(e){ showToast(e.message||'Chưa mở được đề thi — liên hệ HR','error'); }
 }
 function startTestTimer(){
   if(testTimerInterval) clearInterval(testTimerInterval);
@@ -1778,15 +1783,33 @@ function startTestTimer(){
     const elapsed = Math.floor((Date.now()-testStartTime)/1000);
     const m=String(Math.floor(elapsed/60)).padStart(2,'0');
     const s=String(elapsed%60).padStart(2,'0');
-    document.getElementById('testTimer').textContent=`${m}:${s}`;
-    // auto lock when time? For demo, not auto
+    const t=document.getElementById('testTimer');
+    if(t) t.textContent=`${m}:${s}`;
+  },1000);
+  startQTimer();
+}
+function startQTimer(){
+  if(window.testQTimerInterval) clearInterval(window.testQTimerInterval);
+  window.testQTimeLeft=5;
+  const el=document.getElementById('testQTimer');
+  if(el) el.textContent='5';
+  window.testQTimerInterval=setInterval(()=>{
+    window.testQTimeLeft--;
+    const qel=document.getElementById('testQTimer');
+    if(qel) qel.textContent=String(Math.max(window.testQTimeLeft,0));
+    if(window.testQTimeLeft<=0){
+      clearInterval(window.testQTimerInterval);
+      if(testIndex < 24){ testIndex++; renderTestQuestion(); startQTimer(); }
+      else submitTest(true);
+    }
   },1000);
 }
 function renderTestQuestion(){
   const q=currentTest.questions[testIndex];
-  document.getElementById('testProgress').textContent=`${testIndex+1}/${currentTest.totalQuestions}`;
+  if(!q) return;
+  document.getElementById('testProgress').textContent=`${testIndex+1}/25`;
   document.getElementById('testBody').innerHTML=`
-    <div class="font-bold text-sm text-slate-800">Câu ${testIndex+1}: ${q.question}</div>
+    <div class="font-bold text-sm text-slate-800">Câu ${testIndex+1}/25: ${q.question}</div>
     <div class="mt-4 space-y-2">
       ${q.options.map((opt,i)=>`
         <label class="flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer ${testAnswers[testIndex]===i?'border-indigo-500 bg-indigo-50':'border-slate-200 hover:bg-slate-50'}">
@@ -1795,32 +1818,59 @@ function renderTestQuestion(){
         </label>
       `).join('')}
     </div>
-    <div class="mt-4 text-[11px] text-slate-500">Thời gian tối thiểu ${currentTest.minPerQuestion}s/câu • Tổng tối thiểu ${currentTest.totalQuestions*currentTest.minPerQuestion}s = ${Math.floor(currentTest.totalQuestions*currentTest.minPerQuestion/60)}:${String(currentTest.totalQuestions*currentTest.minPerQuestion%60).padStart(2,'0')}</div>
+    <div class="mt-4 text-[11px] text-slate-500">Mỗi câu 5 giây — hết giờ tự chuyển câu • Tổng 25 câu thang 10đ</div>
   `;
 }
-function selectAnswer(i){ testAnswers[testIndex]=i; }
-function prevQuestion(){ if(testIndex>0){ testIndex--; renderTestQuestion(); } }
-function nextQuestion(){ if(testIndex < currentTest.totalQuestions-1){ testIndex++; renderTestQuestion(); } }
-function closeTest(){ document.getElementById('testModal').classList.add('hidden'); if(testTimerInterval) clearInterval(testTimerInterval); }
-async function submitTest(){
-  const unanswered = testAnswers.filter(a=>a===null).length;
-  if(unanswered>0 && !confirm(`Còn ${unanswered} câu chưa trả lời. Vẫn nộp?`)) return;
-  const timeSpent = Math.floor((Date.now()-testStartTime)/1000);
-  const minRequired = currentTest.totalQuestions * currentTest.minPerQuestion;
-  if(timeSpent < minRequired && !confirm(`Thời gian làm bài ${timeSpent}s chưa đạt tối thiểu ${minRequired}s (≥5s/câu). Bạn có chắc muốn nộp? Hệ thống sẽ vẫn chấm.`)) return;
-  // collect voice answers (from page)
-  const voiceAnswers = [...document.querySelectorAll('#elearningContent textarea')].map(t=>t.value);
+function selectAnswer(i){ testAnswers[testIndex]=i; renderTestQuestion(); }
+function prevQuestion(){ if(testIndex>0){ testIndex--; renderTestQuestion(); startQTimer(); } }
+function nextQuestion(){ if(testIndex < 24){ testIndex++; renderTestQuestion(); startQTimer(); } }
+function closeTest(){ document.getElementById('testModal').classList.add('hidden'); if(testTimerInterval) clearInterval(testTimerInterval); if(window.testQTimerInterval) clearInterval(window.testQTimerInterval); }
+function showFireworks(){
   try{
-    const res = await api('/api/courses/'+currentTest.id+'/submit', {method:'POST', body:JSON.stringify({employeeId:employee.employeeId, answers:testAnswers, timeSpent, voiceAnswers})});
+    const ov=document.createElement('div');
+    ov.id='fireworksOverlay';
+    ov.style.cssText='position:fixed;inset:0;z-index:9999;pointer-events:none;background:rgba(0,0,0,.25)';
+    ov.innerHTML='<canvas id="fwCanvas" style="width:100%;height:100%"></canvas><div style="position:absolute;top:18%;width:100%;text-align:center;color:#fff;font-weight:900;font-size:22px;text-shadow:0 2px 12px rgba(0,0,0,.5)">🎆 Chúc mừng bạn đã ĐẠT! 🎆</div>';
+    document.body.appendChild(ov);
+    const cv=document.getElementById('fwCanvas');
+    cv.width=window.innerWidth; cv.height=window.innerHeight;
+    const ctx=cv.getContext('2d');
+    const colors=['#f43f5e','#f59e0b','#10b981','#3b82f6','#a855f7','#facc15'];
+    const parts=[];
+    for(let i=0;i<160;i++) parts.push({x:Math.random()*cv.width, y:cv.height*0.3+Math.random()*cv.height*0.4, vx:(Math.random()-0.5)*8, vy:(Math.random()-0.5)*8-2, c:colors[i%colors.length], life:60+Math.random()*40});
+    let frames=0;
+    const iv=setInterval(()=>{
+      frames++;
+      ctx.clearRect(0,0,cv.width,cv.height);
+      parts.forEach(p=>{ p.x+=p.vx; p.y+=p.vy; p.vy+=0.15; p.life--; ctx.fillStyle=p.c; ctx.fillRect(p.x,p.y,4,4); });
+      if(frames>240){ clearInterval(iv); ov.remove(); }
+    },33);
+  }catch(_){}
+}
+async function submitTest(auto){
+  if(window.testQTimerInterval) clearInterval(window.testQTimerInterval);
+  const unanswered = testAnswers.filter(a=>a===null).length;
+  if(!auto && unanswered>0 && !confirm(`Còn ${unanswered} câu chưa trả lời (hết 5s tự bỏ qua). Vẫn nộp?`)) { startQTimer(); return; }
+  const timeSpent = Math.floor((Date.now()-testStartTime)/1000);
+  try{
+    const res = await api('/api/courses/'+currentTest.id+'/submit', {method:'POST', body:JSON.stringify({employeeId:employee.employeeId, answers:testAnswers, timeSpent, questionIds:currentTest.questionIds})});
     closeTest();
-    const msg = `Kết quả: ${res.testResult.score}đ • ${getStatusVi(res.testResult.result) || res.testResult.result} • Đúng ${res.testResult.correct}/${res.testResult.total}`;
-    alert(msg + (res.employee.status==='OFFICIAL'?' \nĐã chuyển sang Chính thức!': res.employee.status==='FAILED_TEST'?' \nBạn không đạt - sẽ chuyển lưu trữ sau 2h': ' \nChờ thi lại'));
-    showToast(msg, res.testResult.result==='DAT'?'success':'error');
-    // refresh employee
+    const r=res.testResult;
+    if(r.result==='DAT'){
+      showFireworks();
+      showToast(`🎆 Chúc mừng ${employee.name}! ĐẠT ${r.score}đ — hoàn thành tốt, chờ HR duyệt thành Nhân viên chính thức Ụm Bò Milk`,'success');
+      alert(`🎆 CHÚC MỪNG! Bạn đạt ${r.score}đ (≥ 8đ) — ĐẠT!\nĐúng ${r.correct}/25 câu.\nBạn đã hoàn thành tốt, chờ HR duyệt trở thành Nhân viên chính thức Ụm Bò Milk.`);
+    } else if(r.result==='CHUA_DU_DK'){
+      showToast(`Bạn đạt ${r.score}đ (5–dưới 8đ) — Chưa ĐẠT. Thông báo thi lại lần sau, HR sẽ gửi lịch thi lại.`,'error');
+      alert(`Bạn đạt ${r.score}đ — Chưa ĐẠT.\nĐúng ${r.correct}/25 câu.\nThông báo thi lại lần sau, HR sẽ gửi lịch thi lại cho bạn.`);
+    } else {
+      showToast(`Bạn đạt ${r.score}đ (< 5đ) — LOẠI. Hệ thống đã gửi thông báo và sẽ tự động đăng xuất sau 15 phút.`,'error');
+      alert(`Bạn đạt ${r.score}đ — LOẠI.\nĐúng ${r.correct}/25 câu.\nHệ thống đã gửi thông báo đến app của bạn, sau 15 phút tài khoản sẽ tự động đăng xuất.`);
+    }
     employee = res.employee;
     localStorage.setItem('emp_data', JSON.stringify(employee));
     loadElearning(); loadHome();
-  }catch(e){ alert(e.message); }
+  }catch(e){ alert(e.message); startQTimer(); }
 }
 
 // Notifications

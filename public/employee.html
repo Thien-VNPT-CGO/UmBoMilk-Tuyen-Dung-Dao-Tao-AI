@@ -623,8 +623,9 @@ button { min-height:44px; }
     <div class="bg-white rounded-3xl shadow-2xl w-full max-w-3xl max-h-[92vh] overflow-hidden flex flex-col" style="box-shadow:0 24px 80px rgba(0,0,0,.3)">
       <div class="px-6 py-4 flex items-center justify-between text-white" style="background:linear-gradient(135deg,#a855f7,#ec4899,#f43f5e)">
         <div>
-          <div class="font-black text-base">BÀI TEST ĐẦU RA</div>
-          <div class="text-xs opacity-80 mt-0.5"><span id="testTimer">00:00</span> • <span id="testProgress">1/20</span> • Tối thiểu <span id="testMin">100</span>s</div>
+          <div class="font-black text-base">BÀI TEST ĐẦU RA — 25 CÂU • 5S/CÂU • THANG 10Đ</div>
+          <div id="testEmpInfo" class="text-xs font-bold opacity-90 mt-0.5"></div>
+          <div class="text-xs opacity-80 mt-0.5"><span id="testTimer">00:00</span> • <span id="testProgress">1/25</span> • Tối thiểu <span id="testMin">125</span>s • ⏱ Câu này: <span id="testQTimer" class="font-black">5</span>s</div>
         </div>
         <button onclick="closeTest()" class="w-9 h-9 bg-white/20 rounded-xl flex items-center justify-center hover:bg-white/30 transition-all"><i class="fa-solid fa-xmark"></i></button>
       </div>

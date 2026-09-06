@@ -3073,6 +3073,13 @@ function openTestOptionModal(employeeId) {
         </div>
       </div>
 
+      <div class="bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-300 rounded-2xl p-4">
+        <div class="font-black text-sm text-amber-900 flex items-center gap-2"><i class="fa-solid fa-list-check text-amber-600"></i> 3. Mở TEST trắc nghiệm trực tuyến (25 câu random)</div>
+        <div class="text-xs text-slate-600 mt-1">Random 25 câu từ ngân hàng đề • Mỗi câu 5 giây • Thang 10đ • <b>≥8 ĐẠT</b> • <b>5–&lt;8 thi lại</b> • <b>&lt;5 LOẠI</b> (logout sau 15p). NV làm bài trên web app Training.</div>
+        <label class="mt-2 flex items-center gap-2 text-xs font-bold text-amber-700"><input type="checkbox" id="quizForceOpen" class="rounded accent-amber-500"> Mở ép (NV chưa đủ 7 ngày training)</label>
+        <button onclick="openOnlineQuiz('${employeeId}')" class="mt-2 w-full text-xs font-black bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white py-2.5 rounded-xl transition shadow">Mở đề 25 câu cho NV ➔</button>
+      </div>
+
       <div class="text-right">
         <button onclick="closeModal()" class="px-4 py-2 bg-slate-100 text-slate-700 font-bold text-xs rounded-xl">Đóng</button>
       </div>
@@ -4594,6 +4601,7 @@ async function loadElearning(){
   testResults = await api('/api/test-results');
   employees = await api('/api/employees'); // refresh for test scores
   renderCoursesAdmin();
+  updateQuizBankInfo();
   renderTestResultsAdmin();
 }
 function renderCoursesAdmin(){
@@ -4614,6 +4622,76 @@ function renderCoursesAdmin(){
       </div>
     </div>
   `).join('');
+}
+function updateQuizBankInfo(){
+  const el=document.getElementById('quizBankInfo');
+  if(!el) return;
+  const bank=(testCourses||[]).find(c=>c.id==='course_001')||(testCourses||[])[0];
+  const n=bank?(bank.questions||[]).length:0;
+  el.textContent = bank?`Ngân hàng đề "${bank.title}": ${n} câu${n>=25?' — đủ mở đề 25 câu':' — CHƯA đủ 25 câu, cần import thêm'}`:'Chưa có ngân hàng đề';
+}
+function downloadQuizTemplate(){
+  try{
+    const rows=[['Câu hỏi','A','B','C','D','E','Đáp án (1-5 hoặc A-E)','Giải thích'],
+      ['Trà sữa Ụm Bò truyền thống gồm những thành phần chính nào?','Trà đen + Sữa tươi + Trân châu','Trà xanh + Sữa đặc','Cà phê + Sữa','Nước lọc + Đường','Trà herbal + Sữa hạt',1,'Đáp án đúng là A'],
+      ['Khách hỏi "trà sữa có béo quá không em?" NV nên làm gì trước?','Hỏi nhu cầu đá/đường của khách','Nói không béo đâu','Im lặng pha chế','Đổi món khác','Gọi quản lý','A','Hiểu nhu cầu trước']];
+    const ws=XLSX.utils.aoa_to_sheet(rows);
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,'CAU_HOI');
+    XLSX.writeFile(wb,'mau-cau-hoi-ubm.xlsx');
+  }catch(e){ showToast('Không tạo được file mẫu: '+e.message,'error'); }
+}
+async function importQuizFile(){
+  const inp=document.getElementById('quizFileInput');
+  const st=document.getElementById('quizImportStatus');
+  const f=inp&&inp.files&&inp.files[0];
+  if(!f){ showToast('Chọn file Excel/CSV/JSON trước','error'); return; }
+  if(st) st.textContent='Đang đọc file...';
+  try{
+    let questions=[];
+    if(/\.json$/i.test(f.name)){
+      const txt=await f.text();
+      const data=JSON.parse(txt);
+      const arr=Array.isArray(data)?data:(Array.isArray(data.questions)?data.questions:[]);
+      questions=arr.map(r=>({question:r.question||r['Câu hỏi']||'', options:r.options||[r.A,r.B,r.C,r.D,r.E], correct:r.correct??r['Đáp án'], explanation:r.explanation||r['Giải thích']||''}));
+    } else {
+      const buf=await f.arrayBuffer();
+      const wb=XLSX.read(buf,{type:'array'});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+      const normCell=s=>String(s||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,'').trim();
+      let hi=-1, map=null;
+      for(let r=0;r<Math.min(3,rows.length);r++){
+        const cells=(rows[r]||[]).map(normCell);
+        const m={};
+        cells.forEach((c,i)=>{
+          if(!m.q && (c.includes('cau hoi')||c==='question'||c.includes('cauhoi'))) m.q=i;
+          else if(c==='a') m.A=i; else if(c==='b') m.B=i; else if(c==='c') m.C=i; else if(c==='d') m.D=i; else if(c==='e') m.E=i;
+          else if(c.includes('dap an')||c==='answer'||c.includes('dapan')) m.ans=i;
+          else if(c.includes('giai thich')||c.includes('explanation')||c==='note') m.exp=i;
+        });
+        if(m.q!==undefined && m.A!==undefined && m.ans!==undefined){ hi=r; map=m; break; }
+      }
+      if(hi<0){ map={q:0,A:1,B:2,C:3,D:4,E:5,ans:6,exp:7}; hi=-1; }
+      questions=rows.slice(hi+1).map(r=>({question:String(r[map.q]??'').trim(), options:[r[map.A],r[map.B],r[map.C],r[map.D],r[map.E]].map(x=>String(x??'').trim()), correct:String(r[map.ans]??'').trim(), explanation:map.exp!==undefined?String(r[map.exp]??''):''})).filter(r=>r.question);
+    }
+    if(st) st.textContent=`Đã đọc ${questions.length} dòng — đang gửi server...`;
+    const res=await api('/api/courses/import',{method:'POST', body:JSON.stringify({questions})});
+    if(st) st.textContent=`Đã nhập ${res.added} câu mới (tổng ${res.total})`;
+    showToast(`Đã nhập ${res.added} câu mới — ngân hàng có ${res.total} câu`,'success');
+    inp.value='';
+    loadElearning();
+  }catch(e){ if(st) st.textContent=''; showToast(e.message||'Lỗi import','error'); }
+}
+async function openOnlineQuiz(employeeId){
+  const force=document.getElementById('quizForceOpen')?.checked;
+  if(!confirm(`Mở TEST trắc nghiệm đầu ra cho NV ${employeeId}?\n\n• Random 25 câu từ ngân hàng, mỗi câu 5 giây, thang 10đ\n• NV làm bài trên web app Training\n• ≥8 ĐẠT • 5–<8 thi lại • <5 LOẠI (logout sau 15p)`)) return;
+  try{
+    const res=await api('/api/quiz/open',{method:'POST', body:JSON.stringify({employeeId, force:!!force, openedBy:(currentUser&&(currentUser.displayName||currentUser.username))||'HR'})});
+    closeModal();
+    showToast(`Đã mở đề 25 câu cho ${res.employee.name} (${res.employee.employeeId}) — NV vào app Training làm bài`,'success');
+    loadEmployees(); loadElearning();
+  }catch(e){ showToast(e.message,'error'); }
 }
 function renderTestResultsAdmin(){
   const el=document.getElementById('testResultsAdmin');
