@@ -7188,17 +7188,44 @@ app.get('/api/dashboard/charts', authMiddleware, (req,res)=>{
 });
 
 // ============ SYSTEM RESET ============
-app.post('/api/system/reset', authMiddleware, roleCheck(['Admin']), (req,res)=>{
+// RÀNG BUỘC: scope ALL xóa vĩnh viễn cả web app LẪN Google Sheet 17iXM
+// (toàn bộ dòng dữ liệu mọi tab, giữ hàng header). Chỉ Admin gọi được, có audit.
+app.post('/api/system/reset', authMiddleware, roleCheck(['Admin']), async (req,res)=>{
   const { scope } = req.body; // ALL = reset mọi dữ liệu vận hành, giữ settings
+  let sheetResult = null;
   if(scope==='ALL'){
     const keepSettings = db.settings;
     db.employees=[]; db.applicants=[]; db.interviews=[]; db.attendances=[]; db.schedules=[]; db.offRequests=[]; db.emergencyRequests=[]; db.deviceRequests=[]; db.trainingShiftRequests=[]; db.shiftSwapRequests=[]; db.testResults=[]; db.keys=[]; db.zaloRecords=[]; db.notifications=[]; db.syncQueue=[]; db.auditLogs=[];
     db.driveFiles=[]; db.payrollSnapshots=[]; db.overtimeRequests=[]; db.leaveRequests=[]; db.payrollPeriods=[]; db.attendanceAdjustments=[]; db.penalties=[]; db.financeKeys=[];
     db.settings = keepSettings || DEFAULT_SETTINGS;
+    // Xóa vĩnh viễn dòng dữ liệu (A2:Z5000) từng tab trên Sheet 17iXM — giữ header dòng 1
+    try{
+      const spreadsheetId = db.settings?.googleSheet?.spreadsheetId || '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w';
+      const token = await getGoogleAccessToken();
+      if(!token){
+        sheetResult = { cleared:false, error:'Chưa cấu hình ServiceAccount — Sheet 17iXM GIỮ NGUYÊN, chỉ web bị reset' };
+      } else {
+        const tabs = Object.values(SHEET_DEFINITIONS).map(d=>d.sheetName);
+        let ok=0; const errors=[];
+        for(const tab of tabs){
+          try{
+            const clr = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(tab)}!A2:Z5000:clear`, {
+              method:'POST', headers:{ Authorization:`Bearer ${token}` }
+            });
+            const cj = await clr.json().catch(()=>({}));
+            if(cj.error) errors.push(`${tab}: ${cj.error.message}`);
+            else ok++;
+          }catch(e){ errors.push(`${tab}: ${e.message}`); }
+          await new Promise(r=>setTimeout(r,150)); // throttle
+        }
+        sheetResult = { cleared: ok, total: tabs.length, errors };
+        console.log(`[SYSTEM RESET] Đã xóa Sheet 17iXM: ${ok}/${tabs.length} tab`);
+      }
+    }catch(e){ sheetResult = { cleared:false, error:e.message }; }
   } else if(scope==='EMPLOYEES'){
     db.employees=[]; db.keys=[]; db.attendances=[]; db.schedules=[];
   }
-  audit(req.user.username,'SYSTEM_RESET','SYSTEM', {scope, before: 'snapshot'}, {scope}, req.ip);
+  audit(req.user.username,'SYSTEM_RESET','SYSTEM', {scope, before: 'snapshot'}, {scope, sheet: sheetResult}, req.ip);
   saveDB();
   io.emit('system:reset', {scope});
   // Đảm bảo interviews cũng được xóa khi reset ALL (fix lỗi 1 NV vướng)
@@ -7208,7 +7235,7 @@ app.post('/api/system/reset', authMiddleware, roleCheck(['Admin']), (req,res)=>{
     io.emit('applicants:update', db.applicants);
     io.emit('employees:update', db.employees);
   }
-  res.json({success:true});
+  res.json({success:true, sheet: sheetResult});
 });
 // Fix triệt để 1 NV vướng lịch phỏng vấn sau reset - Admin có thể gọi riêng
 app.post('/api/interviews/clear-all', authMiddleware, roleCheck(['Admin']), (req,res)=>{

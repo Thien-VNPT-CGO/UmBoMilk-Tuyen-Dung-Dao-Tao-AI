@@ -4950,8 +4950,10 @@ async function deleteUser(id){
 async function resetSystem(){
   if(!confirm('Reset sẽ xóa dữ liệu (giữ Settings). Tiếp tục?')) return;
   const scope=prompt('Nhập scope: ALL hoặc EMPLOYEES','EMPLOYEES');
-  await api('/api/system/reset', {method:'POST', body:JSON.stringify({scope}), headers:{Authorization:'Bearer '+token}});
-  showToast('Đã reset: '+scope,'success');
+  if(scope==='ALL' && !confirm('⚠️ Scope ALL sẽ XÓA VĨNH VIỄN toàn bộ dòng dữ liệu trên Google Sheet 17iXM (mọi tab, giữ header) LẪN web app.\n\nKhông thể khôi phục! Bạn chắc chắn?')) return;
+  const res=await api('/api/system/reset', {method:'POST', body:JSON.stringify({scope}), headers:{Authorization:'Bearer '+token}});
+  if(scope==='ALL' && res.sheet) showToast(`Đã reset ALL — Sheet 17iXM: xóa ${res.sheet.cleared??0}/${res.sheet.total??0} tab${res.sheet.errors?.length?` (lỗi ${res.sheet.errors.length} tab)`:''}${res.sheet.error?` — ${res.sheet.error}`:''}`, res.sheet.error?'warning':'success');
+  else showToast('Đã reset: '+scope,'success');
   loadDashboard();
 }
 
