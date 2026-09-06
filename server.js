@@ -5943,6 +5943,17 @@ setInterval(()=>{
   const isOpen = isOffWindowOpen();
   io.emit('offWindow:update', { isOpen, vipTest: !!db.settings?.off?.vipTestMode, now: getVietnamISOString(), aiAuto:true });
 }, 60*1000);
+// AI tự cân lịch chống trùng ca định kỳ (tuần này + tuần sau): vá mọi lịch hiện có,
+// kể cả lịch tạo trước khi có tính năng hoặc admin sửa tay — không cần bấm nút
+function autoCoordinateComingWeeks(){
+  try{
+    const m1 = getMonday(getVietnamNow());
+    const m2 = getMonday(new Date(getVietnamNow().getTime()+7*24*60*60*1000));
+    for(const w of [toVietnamDateStr(m1), toVietnamDateStr(m2)]) coordinateBranchShifts(w, 'AUTO_INTERVAL');
+  }catch(e){ console.error('[COORDINATE] auto error', e.message); }
+}
+setInterval(autoCoordinateComingWeeks, 10*60*1000);
+setTimeout(()=>{ autoCoordinateComingWeeks(); }, 45000);
 // Admin bật/tắt chế độ VIP test đăng ký OFF 2 ngày/tuần cho NV chính thức
 app.post('/api/admin/off-vip', authMiddleware, roleCheck(['Admin']), (req,res)=>{
   const enabled = !!req.body.enabled;
