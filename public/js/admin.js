@@ -3781,13 +3781,16 @@ function isScheduleInCategory(sched, cat){
 }
 async function coordinateWeek(){
   const weekVal = document.getElementById('scheduleWeek')?.value || '';
-  const weekStart = getMondayStr(weekVal);
-  if(!confirm(`AI cân lịch tuần ${weekStart}?\n\n• Cùng CN + cùng ngày + cùng ca → giữ tối đa 1 NV WORKING\n• Ưu tiên ai được duyệt OFF trước (FCFS)\n• Không đẩy ai dưới 12 ngày làm/tháng (ngày đó giữ nguyên, báo HR)`)) return;
+  // Ô ngày trống thì lấy Thứ 2 của tuần hiện tại (getMondayStr('') trả ngày hôm nay — sai tuần)
+  const weekStart = weekVal ? getMondayStr(weekVal) : getMondayStr(getVietnamTodayStr());
+  if(!confirm(`AI cân lịch tuần ${weekStart}?\n\n• Cùng CN + cùng ngày + cùng ca → giữ tối đa 1 NV WORKING\n• Ưu tiên người ít ngày làm, hòa thì ai duyệt OFF trước\n• Không đẩy ai dưới 12 ngày làm/tháng (ngày đó giữ nguyên, báo HR)`)) return;
   try{
     const res = await api('/api/schedules/coordinate', {method:'POST', body:JSON.stringify({weekStart})});
-    showToast(`AI cân xong tuần ${weekStart}: ${res.groups||0} nhóm trùng → ${res.resolved.length} ca chuyển OFF${res.skippedMin12.length?` • ${res.skippedMin12.length} ca giữ (bảo vệ 12 ngày/tháng)`:''}${res.keptForCoverage?.length?` • ${res.keptForCoverage.length} ca giữ (chống hở ca)`:''}`, res.resolved.length?'success':'info');
+    console.log('[COORDINATE] result', res);
+    if(!res.groups) showToast(`Tuần ${weekStart}: không thấy nhóm trùng nào — kiểm tra: (1) đang xem đúng tuần có lịch, (2) NV là Chính thức, (3) Render đã deploy bản mới (không báo 404)`, 'warning');
+    else showToast(`AI cân xong tuần ${weekStart}: ${res.groups||0} nhóm trùng → ${res.resolved.length} ca chuyển OFF${res.skippedMin12.length?` • ${res.skippedMin12.length} ca giữ (bảo vệ 12 ngày/tháng)`:''}${res.keptForCoverage?.length?` • ${res.keptForCoverage.length} ca giữ (chống hở ca)`:''}`, res.resolved.length?'success':'info');
     loadSchedules();
-  }catch(e){ showToast(e.message,'error'); }
+  }catch(e){ showToast(e.message+' (nếu 404: Render chưa deploy bản mới — chờ vài phút rồi bấm lại)','error'); }
 }
 function changeScheduleWeek(offsetDays) {
   const weekInput = document.getElementById('scheduleWeek');
