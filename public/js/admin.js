@@ -3783,7 +3783,7 @@ async function coordinateWeek(){
   if(!confirm(`AI cân lịch tuần ${weekStart}?\n\n• Cùng CN + cùng ngày + cùng ca → giữ tối đa 1 NV WORKING\n• Ưu tiên ai được duyệt OFF trước (FCFS)\n• Không đẩy ai dưới 12 ngày làm/tháng (ngày đó giữ nguyên, báo HR)`)) return;
   try{
     const res = await api('/api/schedules/coordinate', {method:'POST', body:JSON.stringify({weekStart})});
-    showToast(`AI cân xong tuần ${weekStart}: ${res.groups||0} nhóm trùng → ${res.resolved.length} ca chuyển OFF${res.skippedMin12.length?` • ${res.skippedMin12.length} ca giữ nguyên (bảo vệ 12 ngày/tháng, HR xử tay)`:''}`, res.resolved.length?'success':'info');
+    showToast(`AI cân xong tuần ${weekStart}: ${res.groups||0} nhóm trùng → ${res.resolved.length} ca chuyển OFF${res.skippedMin12.length?` • ${res.skippedMin12.length} ca giữ (bảo vệ 12 ngày/tháng)`:''}${res.keptForCoverage?.length?` • ${res.keptForCoverage.length} ca giữ (chống hở ca)`:''}`, res.resolved.length?'success':'info');
     loadSchedules();
   }catch(e){ showToast(e.message,'error'); }
 }

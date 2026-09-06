@@ -5750,6 +5750,19 @@ app.post('/api/off-requests', (req,res)=>{
   for(const date of dates){
     const conflict = checkOffConflict(emp.branchId, emp.shift, date);
     if(conflict) return res.status(409).json({error:`[TH1] Ngày ${date} đã có nhân viên cùng chi nhánh + cùng ca OFF (${conflict.employeeName||conflict.employeeId}). Cùng CN cùng ca không được trùng OFF trong 1 ngày.`, conflict});
+    // TH1 mở rộng: ngày OFF đã nằm trên LỊCH (kể cả AI cân lật autoOff) của NV cùng CN+ca khác
+    // cũng tính là trùng — nếu không, lịch sẽ hở ca (2 người cùng OFF 1 ngày)
+    const schedHit = db.schedules.find(s=>{
+      if(s.employeeId===employeeId) return false;
+      const o = db.employees.find(e=>e.employeeId===s.employeeId);
+      if(!o || o.branchId!==emp.branchId || (o.shift||'')!==(emp.shift||'')) return false;
+      if(!(o.type==='OFFICIAL'||o.status==='OFFICIAL')) return false;
+      return (s.days||[]).some(d=>d.date===date && d.status==='OFF');
+    });
+    if(schedHit){
+      const o = db.employees.find(e=>e.employeeId===schedHit.employeeId);
+      return res.status(409).json({error:`[TH1] Ngày ${date} đã OFF trên lịch của ${o?o.name+' ('+o.employeeId+')':schedHit.employeeId} (cùng chi nhánh + cùng ca). Cùng CN cùng ca không được trùng OFF trong 1 ngày.`});
+    }
   }
   // TH1/TH2: Đảm bảo 1 tháng tối thiểu 12 ngày làm việc (OFFICIAL)
   const monthlyCheck = validateOfficialMonthlyMin12(employeeId, dates[0].slice(0,7), dates);
@@ -5852,6 +5865,9 @@ function coordinateBranchShifts(weekStart, actor){
       list.sort((a,b)=> firstApproved(a.emp.employeeId)-firstApproved(b.emp.employeeId));
       const [keeper, ...rest] = list;
       for(const it of rest){
+        // RÀNG BUỘC HỞ CA: lật ngày này mà slot không còn ai trực (0 WORKING) thì GIỮ NGUYÊN + báo HR
+        const stillWorking = list.filter(x=>x!==it && x.day.status==='WORKING').length;
+        if(stillWorking<1){ result.keptForCoverage = result.keptForCoverage||[]; result.keptForCoverage.push({ employeeId: it.emp.employeeId, name: it.emp.name, date: it.day.date, slot: key }); continue; }
         // Safeguard: đếm ngày WORKING còn lại trong tháng (trừ chính ngày này), dưới 12 thì giữ nguyên
         const m = it.day.date.slice(0,7);
         let working = 0;
