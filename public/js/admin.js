@@ -3584,13 +3584,13 @@ async function confirmTransitionOfficial(employeeId) {
   }
 }
 async function deleteEmp(id){
-  if(!confirm('Chuyển ARCHIVED (không xóa vĩnh viễn)?')) return;
+  if(!confirm('Chuyển ARCHIVED (dữ liệu vẫn giữ trên Google Sheet 17iXM, không xóa vĩnh viễn)?')) return;
   await api('/api/employees/'+id, {method:'DELETE', headers:{Authorization:'Bearer '+token}});
   showToast('Đã chuyển ARCHIVED','success');
   loadEmployees();
 }
 async function hardDeleteOfficial(id, employeeId, name){
-  if(!confirm(`⚠️ Admin: Xoá VĨNH VIỄN nhân viên Chính thức "${name}" (${employeeId})?\n\n• Dữ liệu import sẽ bị xoá khỏi DB, Keys, Schedules, Chấm công, OFF\n• Không thể khôi phục!`)) return;
+  if(!confirm(`⚠️ Admin: Xoá VĨNH VIỄN nhân viên Chính thức "${name}" (${employeeId})?\n\n• Dữ liệu import sẽ bị xoá khỏi DB, Keys, Schedules, Chấm công, OFF\n• Không thể khôi phục!\n• ⚠️ Lưu ý: Dữ liệu trên Google Sheet 17iXM vẫn giữ lại (1 chiều, không bị ảnh hưởng)`)) return;
   try{
     await api('/api/employees/'+id+'?hard=true', {method:'DELETE', headers:{Authorization:'Bearer '+token}});
     showToast(`Đã xoá vĩnh viễn ${name} (${employeeId})`,'success');
