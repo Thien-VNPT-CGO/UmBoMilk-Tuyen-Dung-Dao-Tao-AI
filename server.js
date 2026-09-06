@@ -269,7 +269,7 @@ function loadDB() {
       // ensure branches correct (CN2 fix)
       db.branches = DEFAULT_BRANCHES;
       if (!db.settings) db.settings = DEFAULT_SETTINGS;
-      else db.settings = { ...DEFAULT_SETTINGS, ...db.settings, googleSheet: { ...DEFAULT_SETTINGS.googleSheet, ...(db.settings.googleSheet||{}) }, quizBank: { ...DEFAULT_SETTINGS.quizBank, ...(db.settings.quizBank||{}) }, ai: { ...DEFAULT_SETTINGS.ai, ...(db.settings.ai||{}) }, zalo: { ...DEFAULT_SETTINGS.zalo, ...(db.settings.zalo||{}) }, calendar: { ...DEFAULT_SETTINGS.calendar, ...(db.settings.calendar||{}) }, attendance: { ...DEFAULT_SETTINGS.attendance, ...(db.settings.attendance||{}) } };
+      else db.settings = { ...DEFAULT_SETTINGS, ...db.settings, googleSheet: { ...DEFAULT_SETTINGS.googleSheet, ...(db.settings.googleSheet||{}) }, quizBank: { ...DEFAULT_SETTINGS.quizBank, ...(db.settings.quizBank||{}) }, ai: { ...DEFAULT_SETTINGS.ai, ...(db.settings.ai||{}) }, zalo: { ...DEFAULT_SETTINGS.zalo, ...(db.settings.zalo||{}) }, calendar: { ...DEFAULT_SETTINGS.calendar, ...(db.settings.calendar||{}) }, attendance: { ...DEFAULT_SETTINGS.attendance, ...(db.settings.attendance||{}) }, off: { ...DEFAULT_SETTINGS.off, ...(db.settings.off||{}) } };
       // ensure payroll shifts
       if (!db.settings.payroll) db.settings.payroll = DEFAULT_SETTINGS.payroll;
       if (!db.payrollPeriods) db.payrollPeriods = [];
@@ -289,6 +289,14 @@ function loadDB() {
     }
   } catch (e) {
     console.error('Load DB error', e);
+    // RÀNG BUỘC GIỮ SESSION: DB lỗi không được xóa câm — lưu file hỏng để cứu hộ rồi mới khởi tạo rỗng
+    try{
+      if (fs.existsSync(DATA_FILE)){
+        const bad = path.join(path.dirname(DATA_FILE), `db_corrupt_${Date.now()}.json`);
+        fs.renameSync(DATA_FILE, bad);
+        console.error(`[DB] Đã giữ file lỗi tại ${bad} để cứu hộ`);
+      }
+    }catch(_){}
     initEmpty();
   }
 }
