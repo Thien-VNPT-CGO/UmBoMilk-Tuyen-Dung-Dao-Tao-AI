@@ -7194,6 +7194,46 @@ app.get('/api/dashboard/charts', authMiddleware, (req,res)=>{
   res.json({ branches, testDist, lateMonthly });
 });
 
+// Admin kiểm tra quyền ghi Sheet 17iXM trước khi reset: config → token → đọc → ghi thử (tạo+xóa tab tạm, không chạm dữ liệu)
+app.post('/api/admin/test-sheet-access', authMiddleware, roleCheck(['Admin']), async (req,res)=>{
+  const checks = { hasEmail: false, hasKey: false, token: false, read: false, write: false, tabs: 0 };
+  let error = '';
+  try{
+    const cfg = db.settings?.googleSheet || {};
+    // ENV Render đè lên settings nếu có
+    const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || cfg.serviceAccountEmail;
+    const key = process.env.GOOGLE_PRIVATE_KEY || cfg.privateKey;
+    checks.hasEmail = !!email;
+    checks.hasKey = !!key;
+    if(!email || !key){ error = 'Thiếu ServiceAccount (email/key) — set GOOGLE_PRIVATE_KEY + GOOGLE_SERVICE_ACCOUNT_EMAIL trên Render Dashboard → Environment'; return res.json({ success:false, checks, error }); }
+    const token = await getGoogleAccessToken();
+    checks.token = !!token;
+    if(!token){ error = 'Không lấy được access token — sai private key hoặc key chưa đúng định dạng 1 dòng (\\n)'; return res.json({ success:false, checks, error }); }
+    const spreadsheetId = db.settings?.googleSheet?.spreadsheetId || '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w';
+    const meta = await (await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties.title`, { headers:{ Authorization:`Bearer ${token}` }})).json();
+    if(meta.error){ error = 'Đọc Sheet lỗi: '+meta.error.message+' (SA chưa được share file hoặc sai ID)'; return res.json({ success:false, checks, error }); }
+    checks.read = true;
+    checks.tabs = (meta.sheets||[]).length;
+    // Ghi thử: tạo tab tạm rồi xóa ngay
+    const tmp = '_CHECK_'+Date.now().toString(36).toUpperCase();
+    const add = await (await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
+      method:'POST', headers:{ Authorization:`Bearer ${token}`, 'Content-Type':'application/json' },
+      body: JSON.stringify({ requests:[{ addSheet:{ properties:{ title: tmp } } }] })
+    })).json();
+    if(add.error){ error = 'Ghi Sheet lỗi: '+add.error.message+' (SA chỉ có quyền xem — cần quyền Biên tập viên)'; return res.json({ success:false, checks, error }); }
+    const newId = add.replies?.[0]?.addSheet?.properties?.sheetId;
+    if(newId!==undefined){
+      await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
+        method:'POST', headers:{ Authorization:`Bearer ${token}`, 'Content-Type':'application/json' },
+        body: JSON.stringify({ requests:[{ deleteSheet:{ sheetId: newId } }] })
+      });
+    }
+    checks.write = true;
+    audit(req.user.username,'TEST_SHEET_ACCESS','SHEET',null,{spreadsheetId, tabs:checks.tabs}, req.ip);
+    res.json({ success:true, checks });
+  }catch(e){ res.json({ success:false, checks, error: e.message }); }
+});
+
 // ============ SYSTEM RESET ============
 // RÀNG BUỘC: scope ALL xóa vĩnh viễn cả web app LẪN Google Sheet 17iXM
 // (toàn bộ dòng dữ liệu mọi tab, giữ hàng header). Chỉ Admin gọi được, có audit.

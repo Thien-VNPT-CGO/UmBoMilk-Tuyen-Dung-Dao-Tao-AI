@@ -768,8 +768,10 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
         <div class="mt-4 flex gap-2">
           <button onclick="saveSettings()" class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white font-black text-sm shadow"><i class="fa-solid fa-floppy-disk"></i> Lưu cài đặt (Nhật ký hệ thống)</button>
           <button onclick="loadSettings()" class="px-6 py-2.5 rounded-xl bg-white border border-pink-200 font-bold text-sm text-pink-700">Tải lại</button>
+          <button onclick="testSheetAccess()" class="px-6 py-2.5 rounded-xl bg-white border border-blue-200 hover:bg-blue-50 text-blue-600 font-bold text-sm"><i class="fa-solid fa-plug-circle-check"></i> Kiểm tra ghi Sheet 17iXM</button>
           <button onclick="resetSystem()" class="ml-auto px-6 py-2.5 rounded-xl bg-white border border-rose-200 hover:bg-rose-50 text-rose-600 font-bold text-sm"><i class="fa-solid fa-triangle-exclamation"></i> Đặt lại hệ thống</button>
         </div>
+        <div id="sheetAccessResult" class="mt-2 text-xs font-bold"></div>
         <div class="mt-4 grid lg:grid-cols-2 gap-4">
           <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm">
             <div class="font-bold text-sm text-pink-900">Tài khoản & Phân quyền</div>

@@ -4947,6 +4947,20 @@ async function deleteUser(id){
   await api('/api/users/'+id, {method:'DELETE', headers:{Authorization:'Bearer '+token}});
   showToast('Đã xóa','success'); loadUsers();
 }
+async function testSheetAccess(){
+  const el=document.getElementById('sheetAccessResult');
+  if(el) el.textContent='Đang kiểm tra kết nối Sheet 17iXM...';
+  try{
+    const res=await api('/api/admin/test-sheet-access',{method:'POST'});
+    if(res.success){
+      if(el) el.innerHTML=`<span class="text-emerald-600">✓ Kết nối OK — đọc + ghi được (${res.checks.tabs} tab). Reset ALL sẽ xóa được Sheet.</span>`;
+      showToast('Kết nối Sheet OK — reset ALL sẽ xóa được dữ liệu','success');
+    } else {
+      if(el) el.innerHTML=`<span class="text-rose-600">✗ ${res.error}</span><div class="mt-1 text-slate-500 font-normal">Chi tiết: email ${res.checks.hasEmail?'✓':'✗'} • key ${res.checks.hasKey?'✓':'✗'} • token ${res.checks.token?'✓':'✗'} • đọc ${res.checks.read?'✓':'✗'} • ghi ${res.checks.write?'✓':'✗'}</div>`;
+      showToast(res.error,'error');
+    }
+  }catch(e){ if(el) el.textContent=''; showToast(e.message,'error'); }
+}
 async function resetSystem(){
   if(!confirm('Reset sẽ xóa dữ liệu (giữ Settings). Tiếp tục?')) return;
   const scope=prompt('Nhập scope: ALL hoặc EMPLOYEES','EMPLOYEES');
