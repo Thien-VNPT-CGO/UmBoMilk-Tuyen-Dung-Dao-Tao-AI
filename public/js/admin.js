@@ -4617,6 +4617,9 @@ function renderCoursesAdmin(){
   `).join('');
 }
 async function updateQuizBankInfo(){
+  // Khóa nguồn Sheet đề: chỉ Admin được đổi ID/tab — HR chỉ xem + bấm Đồng bộ
+  const cfgRow=document.getElementById('quizBankConfigRow');
+  if(cfgRow) cfgRow.style.display=(currentUser&&(currentUser.role==='Admin'||currentUser.username==='admin'))?'':'none';
   const el=document.getElementById('quizBankInfo');
   if(!el) return;
   try{
@@ -4645,6 +4648,7 @@ async function syncQuizBankNow(){
   }catch(e){ if(st) st.textContent=''; showToast(e.message||'Lỗi đồng bộ','error'); }
 }
 async function saveQuizBankConfig(){
+  if(!(currentUser&&(currentUser.role==='Admin'||currentUser.username==='admin'))) return showToast('Chỉ Admin được đổi nguồn Sheet đề','error');
   const spreadsheetId=document.getElementById('quizSheetId')?.value?.trim();
   const sheetName=document.getElementById('quizSheetName')?.value?.trim()||'';
   if(!spreadsheetId) return showToast('Nhập Spreadsheet ID','error');
