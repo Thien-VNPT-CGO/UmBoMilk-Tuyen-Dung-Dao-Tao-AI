@@ -7252,42 +7252,78 @@ app.post('/api/system/reset', authMiddleware, roleCheck(['Admin']), async (req,r
       if(!token){
         sheetResult = { cleared:false, error:'Chưa cấu hình ServiceAccount — Sheet 17iXM GIỮ NGUYÊN, chỉ web bị reset' };
       } else {
-        // Xóa + đọc lại VERIFY từng tab (retry 3 lần) — tab nào còn dòng là báo lỗi chi tiết
-        const clearAndVerify = async (sid, tab)=>{
-          const range = `${encodeURIComponent(tab)}!A2:Z5000`;
+        // Xóa + đọc lại VERIFY từng tab — 3 tầng: clear thường → gỡ protected ranges → xóa sheet tạo lại
+        const isTabEmpty = async (sid, tab)=>{
+          const vr = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sid}/values/${encodeURIComponent(tab)}!A2:A5000`, {
+            headers:{ Authorization:`Bearer ${token}` }
+          });
+          const vj = await vr.json().catch(()=>({}));
+          if(vj.error) throw new Error(vj.error.message);
+          return (vj.values||[]).filter(r=>String(r[0]||'').trim()!=='').length===0;
+        };
+        const clearRange = async (sid, tab)=>{
+          const clr = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sid}/values/${encodeURIComponent(tab)}!A2:Z5000:clear`, {
+            method:'POST', headers:{ Authorization:`Bearer ${token}` }
+          });
+          const cj = await clr.json().catch(()=>({}));
+          if(cj.error) throw new Error(cj.error.message);
+        };
+        const clearAndVerify = async (sid, tab, headers)=>{
           let lastErr = '';
-          for(let attempt=1; attempt<=3; attempt++){
-            try{
-              const clr = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sid}/values/${range}:clear`, {
-                method:'POST', headers:{ Authorization:`Bearer ${token}` }
-              });
-              const cj = await clr.json().catch(()=>({}));
-              if(cj.error){ lastErr = cj.error.message; }
-              else {
-                // Đọc lại cột A để verify thật sự trống
-                const vr = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sid}/values/${encodeURIComponent(tab)}!A2:A5000`, {
-                  headers:{ Authorization:`Bearer ${token}` }
-                });
-                const vj = await vr.json().catch(()=>({}));
-                if(vj.error){ lastErr = vj.error.message; }
-                else {
-                  const left = (vj.values||[]).filter(r=>String(r[0]||'').trim()!=='').length;
-                  if(left===0) return { tab, ok:true, attempts: attempt };
-                  lastErr = `vẫn còn ${left} dòng sau khi xóa (lần ${attempt})`;
-                }
-              }
-            }catch(e){ lastErr = e.message; }
+          // Tầng 1: clear thường (retry 2 lần)
+          for(let attempt=1; attempt<=2; attempt++){
+            try{ await clearRange(sid, tab); if(await isTabEmpty(sid, tab)) return { tab, ok:true, via:'clear' }; lastErr = 'vẫn còn dòng sau khi xóa'; }
+            catch(e){ lastErr = e.message; }
             await new Promise(r=>setTimeout(r, 400));
           }
+          // Tầng 2: tab bị protected (TAI_KHOAN/AUDIT_LOG/...) → gỡ protection rồi clear lại
+          try{
+            const meta = await (await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sid}?fields=sheets(properties.title,protectedRanges(protectedRangeId))`, { headers:{ Authorization:`Bearer ${token}` }})).json();
+            if(meta.error) throw new Error(meta.error.message);
+            const sheet = (meta.sheets||[]).find(s=>s.properties && s.properties.title===tab);
+            const prs = (sheet && sheet.protectedRanges) || [];
+            if(prs.length>0){
+              const dr = await (await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sid}:batchUpdate`, {
+                method:'POST', headers:{ Authorization:`Bearer ${token}`, 'Content-Type':'application/json' },
+                body: JSON.stringify({ requests: prs.map(p=>({ deleteProtectedRange:{ protectedRangeId: p.protectedRangeId } })) })
+              })).json();
+              if(dr.error) throw new Error('Gỡ protection lỗi: '+dr.error.message);
+              console.log(`[SYSTEM RESET] Đã gỡ ${prs.length} protection trên tab ${tab}`);
+              await clearRange(sid, tab);
+              if(await isTabEmpty(sid, tab)) return { tab, ok:true, via:'unprotect+clear' };
+              lastErr = 'vẫn còn dòng sau khi gỡ protection';
+            }
+          }catch(e){ lastErr = e.message; }
+          // Tầng 3: xóa sheet + tạo lại + ghi header (diệt mọi protection còn sót)
+          try{
+            const meta2 = await (await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sid}?fields=sheets(properties(title,sheetId))`, { headers:{ Authorization:`Bearer ${token}` }})).json();
+            if(meta2.error) throw new Error(meta2.error.message);
+            const target = (meta2.sheets||[]).map(s=>s.properties).find(p=>p.title===tab);
+            if(!target) throw new Error('Không thấy tab (có thể đã bị xóa tay)');
+            const bu = await (await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sid}:batchUpdate`, {
+              method:'POST', headers:{ Authorization:`Bearer ${token}`, 'Content-Type':'application/json' },
+              body: JSON.stringify({ requests:[{ deleteSheet:{ sheetId: target.sheetId } }, { addSheet:{ properties:{ title: tab } } }] })
+            })).json();
+            if(bu.error) throw new Error(bu.error.message);
+            if(Array.isArray(headers) && headers.length){
+              await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sid}/values/${encodeURIComponent(tab)}!A1:Z1?valueInputOption=RAW`, {
+                method:'PUT', headers:{ Authorization:`Bearer ${token}`, 'Content-Type':'application/json' },
+                body: JSON.stringify({ values:[headers] })
+              });
+            }
+            if(await isTabEmpty(sid, tab)) return { tab, ok:true, via:'recreate' };
+            lastErr = 'tạo lại tab nhưng vẫn còn dòng';
+          }catch(e){ lastErr = e.message; }
           return { tab, ok:false, error: lastErr };
         };
-        const tabs = Object.values(SHEET_DEFINITIONS).map(d=>d.sheetName);
+        const tabDefs = Object.values(SHEET_DEFINITIONS);
+        const tabs = tabDefs.map(d=>d.sheetName);
         const tabResults = [];
-        for(const tab of tabs){
-          const r = await clearAndVerify(spreadsheetId, tab);
+        for(const def of tabDefs){
+          const r = await clearAndVerify(spreadsheetId, def.sheetName, def.headers);
           tabResults.push(r);
-          if(r.ok) console.log(`[SYSTEM RESET] Đã xóa sạch tab ${tab}`);
-          else console.log(`[SYSTEM RESET] Tab ${tab} XÓA THẤT BẠI: ${r.error}`);
+          if(r.ok) console.log(`[SYSTEM RESET] Đã xóa sạch tab ${def.sheetName} (${r.via})`);
+          else console.log(`[SYSTEM RESET] Tab ${def.sheetName} XÓA THẤT BẠI: ${r.error}`);
           await new Promise(r2=>setTimeout(r2,150)); // throttle
         }
         const ok = tabResults.filter(t=>t.ok).length;
@@ -7298,11 +7334,12 @@ app.post('/api/system/reset', authMiddleware, roleCheck(['Admin']), async (req,r
         try{
           const formSid = db.settings?.googleSheet?.formResponsesSheetId || '1rcqEKraSRhr-Tn9qwlhADlkQUei8j65bXeHF_Tmkd38';
           const formTab = db.settings?.googleSheet?.formSheetName || 'FROM_NHAN_VIEN';
-          const fr = await clearAndVerify(formSid, formTab);
+          const fr = await clearAndVerify(formSid, formTab, null);
           if(fr.ok){ formCleared = true; console.log(`[SYSTEM RESET] Đã xóa Sheet Form ${formSid}/${formTab}`); }
           else errors.push(`FORM ${formTab}: ${fr.error}`);
         }catch(e){ errors.push(`FORM: ${e.message}`); }
-        sheetResult = { cleared: ok, total: tabs.length, errors, formCleared, tabs: tabResults.map(t=>({tab:t.tab, ok:t.ok, error:t.error||null})) };
+        const needOwner = errors.some(e=>/protect|permission|denied|forbidden/i.test(e));
+        sheetResult = { cleared: ok, total: tabs.length, errors, formCleared, tabs: tabResults.map(t=>({tab:t.tab, ok:t.ok, via:t.via||null, error:t.error||null})), hint: needOwner ? 'Một số tab bị chủ file ĐẶT PROTECTION — nếu code không tự gỡ được, mở Sheet → Dữ liệu → Phạm vi được bảo vệ → xóa protection các tab đó (hoặc cấp SA quyền Biên tập viên trên protection) rồi reset lại' : null };
         console.log(`[SYSTEM RESET] Đã xóa Sheet 17iXM: ${ok}/${tabs.length} tab (verify từng tab)`);
       }
     }catch(e){ sheetResult = { cleared:false, error:e.message }; }

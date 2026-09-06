@@ -4971,7 +4971,7 @@ async function resetSystem(){
     if(failed.length===0 && res.sheet.formCleared) showToast(`Đã reset ALL — Sheet 17iXM: sạch ${res.sheet.cleared??0}/${res.sheet.total??0} tab (verify từng tab) • Form: đã xóa`,'success');
     else{
       console.error('[RESET] Tabs xóa thất bại:', res.sheet.tabs, res.sheet.errors);
-      showToast(`Reset ALL: sạch ${res.sheet.cleared??0}/${res.sheet.total??0} tab • Form: ${res.sheet.formCleared?'đã xóa':'LỖI'} • Tab lỗi: ${failed.map(t=>t.tab).join(', ')||res.sheet.error||'xem console (F12)'} — chụp màn hình báo lại`,'error');
+      showToast(`Reset ALL: sạch ${res.sheet.cleared??0}/${res.sheet.total??0} tab • Form: ${res.sheet.formCleared?'đã xóa':'LỖI'} • Tab lỗi: ${failed.map(t=>t.tab).join(', ')||res.sheet.error||'xem console (F12)'}${res.sheet.hint?` — ${res.sheet.hint}`:' — chụp màn hình báo lại'}`,'error');
     }
   }
   else showToast('Đã reset: '+scope,'success');
