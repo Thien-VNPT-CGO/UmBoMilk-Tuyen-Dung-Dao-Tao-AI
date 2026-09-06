@@ -4730,6 +4730,7 @@ async function loadSettings(){
     if (document.getElementById('setPenaltyLate')) document.getElementById('setPenaltyLate').value = s.attendance?.penaltyLate || 30000;
     if (document.getElementById('setPenaltyAbsent')) document.getElementById('setPenaltyAbsent').value = s.attendance?.penaltyAbsent || 100000;
     if (document.getElementById('setOffMax')) document.getElementById('setOffMax').value = s.off?.maxPerWeek || 2;
+    if (document.getElementById('setOffVip')) document.getElementById('setOffVip').checked = !!s.off?.vipTestMode;
     if (document.getElementById('setTestMin')) document.getElementById('setTestMin').value = s.test?.minPerQuestion || 5;
     // ENV lock - khóa khi dùng Render ENV (server.js:386)
     const envLocked = data.envLocked || {};
@@ -4870,6 +4871,16 @@ async function saveSettings(){
       showToast(e.message,'error');
     } else throw e;
   }
+}
+
+async function toggleOffVip(){
+  if(currentUser.role!=='Admin') return showToast('Chỉ Admin được bật/tắt VIP test OFF','error');
+  const enabled=document.getElementById('setOffVip')?.checked;
+  if(enabled && !confirm('BẬT chế độ VIP test đăng ký OFF 2 ngày/tuần?\n\n• NV chính thức đăng ký được mọi lúc (bỏ qua khung T6 12:00–T7 15:00)\n• Mọi ràng buộc TH1/TH2 giữ nguyên để test đúng luật')){ document.getElementById('setOffVip').checked=false; return; }
+  try{
+    const res=await api('/api/admin/off-vip',{method:'POST', body:JSON.stringify({enabled:!!enabled})});
+    showToast(res.vipTestMode?'Đã BẬT VIP test OFF — NV chính thức đăng ký được mọi lúc':'Đã TẮT VIP test OFF — về khung giờ T6 12:00–T7 15:00','success');
+  }catch(e){ showToast(e.message,'error'); loadSettings(); }
 }
 
 // testNotificationChannel removed - Email & SMS notification feature removed from project

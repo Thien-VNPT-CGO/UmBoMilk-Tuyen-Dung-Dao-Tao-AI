@@ -763,6 +763,10 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
                 <div><label class="text-[11px] font-bold text-pink-700">Sớm trước (phút)</label><input id="setEarlyTh" type="number" class="w-full mt-1 px-2 py-2 rounded-xl border border-pink-200 text-sm"></div>
                 <div><label class="text-[11px] font-bold text-pink-700">TEST min/câu (s)</label><input id="setTestMin" type="number" class="w-full mt-1 px-2 py-2 rounded-xl border border-pink-200 text-sm"></div>
               </div>
+              <label class="mt-1 flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 cursor-pointer">
+                <input type="checkbox" id="setOffVip" onchange="toggleOffVip()" class="rounded accent-amber-500 w-4 h-4">
+                <span class="text-[11px] font-black text-amber-800">VIP test OFF 2 ngày/tuần <span class="font-medium text-amber-600">(Admin bật → NV chính thức đăng ký mọi lúc, giữ nguyên TH1/TH2; tắt → về khung T6 12:00–T7 15:00)</span></span>
+              </label>
             </div>
           </div>
         </div>

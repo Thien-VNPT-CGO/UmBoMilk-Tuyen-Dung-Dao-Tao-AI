@@ -615,6 +615,19 @@ function connectSocket(){
     if(active==='tab-emergency') loadEmergency();
     if(active==='tab-notifs') loadNotifications();
   }));
+  // Realtime cờ VIP test OFF: Admin bật/tắt là NV thấy tab OFF mở/đóng ngay
+  socket.on('offWindow:update', (data)=>{
+    window._offVipTest = !!(data && data.vipTest);
+    try{ refreshNavVisibility(); }catch(e){}
+    try{
+      const badge=document.getElementById('offWindowBadge');
+      if(badge){
+        const open=isOffWindowOpen();
+        badge.textContent=open?(window._offVipTest?'ĐANG MỞ (VIP TEST)':'ĐANG MỞ (T6 12:00→T7 15:00)'):'ĐÃ ĐÓNG';
+        badge.className='text-xs font-black px-3 py-1 rounded-full '+(open?'bg-pink-500 text-white':'bg-slate-200 text-slate-600');
+      }
+    }catch(e){}
+  });
   // Ràng buộc: Nếu tài khoản không tồn tại thì force logout về đăng nhập
   socket.on('employee:forceLogout', (data)=>{
     if(!employee) return;
@@ -871,11 +884,13 @@ function updateClock(){
   const badge=document.getElementById('offWindowBadge');
   if(badge){
     const isOpen = isOffWindowOpen();
-    badge.textContent=isOpen?'ĐANG MỞ (T6 12:00→T7 15:00)':'ĐÃ ĐÓNG';
+    badge.textContent=isOpen?(window._offVipTest?'ĐANG MỞ (VIP TEST)':'ĐANG MỞ (T6 12:00→T7 15:00)'):'ĐÃ ĐÓNG';
     badge.className='text-xs font-black px-3 py-1 rounded-full '+(isOpen?'bg-pink-500 text-white':'bg-slate-200 text-slate-600');
   }
 }
 function isOffWindowOpen(){
+  // Admin bật VIP test là mở mọi lúc (cờ realtime từ server, tắt là về khung giờ)
+  if(window._offVipTest) return true;
   const now=getVietnamNow(); const day=now.getDay(); const hour=now.getHours()+now.getMinutes()/60;
   if(day===5 && hour>=12) return true;
   if(day===6 && hour<15) return true;
@@ -1425,7 +1440,9 @@ async function loadOff(){
 
     const bypass=document.getElementById('bypassWindow')?.checked;
     const isOpen = win.isOpen || bypass;
-    statusEl.textContent = isOpen? '🟢 AI đang MỞ đăng ký OFF (T6 12:00 → T7 15:00) - Auto Approve FCFS' : '🔴 AI đã ĐÓNG đăng ký OFF - ngoài khung giờ (sẽ bị từ chối)';
+    window._offVipTest = !!win.vipTest;
+    try{ refreshNavVisibility(); }catch(e){}
+    statusEl.textContent = isOpen? (win.vipTest?'🟢 AI đang MỞ đăng ký OFF (VIP TEST — Admin mở, TH1/TH2 giữ nguyên) - Auto Approve FCFS':'🟢 AI đang MỞ đăng ký OFF (T6 12:00 → T7 15:00) - Auto Approve FCFS') : '🔴 AI đã ĐÓNG đăng ký OFF - ngoài khung giờ (sẽ bị từ chối)';
     statusEl.className='mt-3 text-xs font-bold rounded-xl px-3 py-2 '+(isOpen?'bg-emerald-50 text-emerald-700 border border-emerald-200':'bg-red-100 text-red-700 border border-red-200');
     if(aiEl){
       aiEl.classList.remove('hidden');
@@ -1476,9 +1493,11 @@ async function loadOff(){
     if(!window._offWindowSocketBound && typeof socket!=='undefined' && socket){
       window._offWindowSocketBound=true;
       socket.on('offWindow:update', (data)=>{
+        window._offVipTest = !!(data && data.vipTest);
         const open = data.isOpen || document.getElementById('bypassWindow')?.checked;
-        statusEl.textContent = open? '🟢 AI đang MỞ đăng ký OFF - Cập nhật trực tiếp' : '🔴 AI đã ĐÓNG - Cập nhật trực tiếp';
+        statusEl.textContent = open? (window._offVipTest?'🟢 AI đang MỞ đăng ký OFF (VIP TEST) - Cập nhật trực tiếp':'🟢 AI đang MỞ đăng ký OFF - Cập nhật trực tiếp') : '🔴 AI đã ĐÓNG - Cập nhật trực tiếp';
         statusEl.className='mt-3 text-xs font-bold rounded-xl px-3 py-2 '+(open?'bg-emerald-50 text-emerald-700 border border-emerald-200':'bg-red-100 text-red-700 border border-red-200');
+        try{ refreshNavVisibility(); }catch(e){}
       });
     }
   }catch(e){}

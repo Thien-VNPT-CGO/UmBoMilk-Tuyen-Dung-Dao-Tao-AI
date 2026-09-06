@@ -130,7 +130,7 @@ const DEFAULT_SETTINGS = {
   scoring: { criteria: [{ name: 'Kinh nghiệm', weight: 30 }, { name: 'Giao tiếp', weight: 25 }, { name: 'Thái độ', weight: 25 }, { name: 'Sẵn sàng ca', weight: 20 }], passThreshold: 70 },
   attendance: { checkInOpenBefore: 30, checkInCloseAfter: 60, lateThreshold: 15, earlyLeaveThreshold: 15, penaltyLate: 30000, penaltyAbsent: 100000, penaltyNoCheckout: 50000 },
   payroll: { trainingRate: 21000, officialRate: 25500, shifts: DEFAULT_SHIFTS },
-  off: { openDay: 5, openHour: 12, closeDay: 6, closeHour: 15, maxPerWeek: 2 },
+  off: { openDay: 5, openHour: 12, closeDay: 6, closeHour: 15, maxPerWeek: 2, vipTestMode: false },
   test: { minPerQuestion: 5, totalQuestions: 25, passScore: 8, retakeMin: 5, maxRetest: 3 },
   security: { sessionTimeout: 120, deviceBind: true }
 };
@@ -943,6 +943,9 @@ function generateEmployeeId(branchId){
   throw new Error('Không thể tạo mã nhân viên duy nhất');
 }
 function isOffWindowOpen(){
+  // Chế độ VIP test (Admin bật): luôn mở cửa sổ OFF cho NV chính thức để test,
+  // mọi ràng buộc TH1/TH2 khi đăng ký giữ nguyên. Tắt là về khung giờ T6 12:00–T7 15:00.
+  if(db.settings?.off?.vipTestMode) return true;
   // Dùng giờ Việt Nam (Asia/Ho_Chi_Minh, UTC+7) để realtime đúng với client VN
   const nowUtc = new Date();
   const vietnamTime = new Date(nowUtc.toLocaleString('en-US', {timeZone: 'Asia/Ho_Chi_Minh'}));
@@ -5850,10 +5853,12 @@ app.get('/api/off-window', (req,res)=>{
     return { nextOpen: nextOpen.toISOString(), nextClose: nextClose.toISOString(), isOpen:false };
   }
   const win = getNextWindow();
-  res.json({ 
-    isOpen, 
+  const vipTest = !!db.settings?.off?.vipTestMode;
+  res.json({
+    isOpen,
+    vipTest,
     isOfficialOnly: true,
-    aiStatus: isOpen ? 'AI đang MỞ đăng ký OFF cho Nhân viên Chính thức (T6 12:00 → T7 15:00)' : 'AI đã ĐÓNG đăng ký OFF - ngoài khung giờ',
+    aiStatus: vipTest ? 'AI đang MỞ đăng ký OFF (chế độ VIP test — Admin mở, bỏ qua khung giờ)' : (isOpen ? 'AI đang MỞ đăng ký OFF cho Nhân viên Chính thức (T6 12:00 → T7 15:00)' : 'AI đã ĐÓNG đăng ký OFF - ngoài khung giờ'),
     aiAuto: true,
     rule: db.settings.off, 
     now: now.toISOString(),
@@ -5865,8 +5870,20 @@ app.get('/api/off-window', (req,res)=>{
 // Broadcast OFF window AI status every minute
 setInterval(()=>{
   const isOpen = isOffWindowOpen();
-  io.emit('offWindow:update', { isOpen, now: getVietnamISOString(), aiAuto:true });
+  io.emit('offWindow:update', { isOpen, vipTest: !!db.settings?.off?.vipTestMode, now: getVietnamISOString(), aiAuto:true });
 }, 60*1000);
+// Admin bật/tắt chế độ VIP test đăng ký OFF 2 ngày/tuần cho NV chính thức
+app.post('/api/admin/off-vip', authMiddleware, roleCheck(['Admin']), (req,res)=>{
+  const enabled = !!req.body.enabled;
+  if(!db.settings.off) db.settings.off = { maxPerWeek: 2 };
+  const before = !!db.settings.off.vipTestMode;
+  db.settings.off.vipTestMode = enabled;
+  audit(req.user.username,'OFF_VIP_TEST','SETTINGS',{vipTestMode:before},{vipTestMode:enabled}, req.ip);
+  saveDB();
+  io.emit('offWindow:update', { isOpen: isOffWindowOpen(), vipTest: enabled, now: getVietnamISOString(), aiAuto:true });
+  console.log(`[OFF VIP] ${req.user.username} ${enabled?'BẬT':'TẮT'} chế độ VIP test đăng ký OFF`);
+  res.json({ success:true, vipTestMode: enabled });
+});
 
 // ============ EMERGENCY OFF ============
 app.get('/api/emergency-requests', authMiddleware, (req,res)=>{
