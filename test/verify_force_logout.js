@@ -206,4 +206,18 @@ async function run(){
   console.log('\n========== ALL TESTS PASSED ==========');
   console.log('Ràng buộc realtime: HR xóa/tồn tại false -> nhân viên bị thoát ngay (401 forceLogout + socket)');
 }
-run().catch(e=>{ console.error('Test failed', e); process.exit(1); });
+
+run()
+  .catch(e => { console.error('Test failed', e); process.exit(1); })
+  .finally(() => {
+    try {
+      const fs = require('fs');
+      if (fs.existsSync('./data/db.json')) {
+        const db = JSON.parse(fs.readFileSync('./data/db.json', 'utf8'));
+        db.employees = (db.employees || []).filter(e => !(e.name || '').toLowerCase().includes('test'));
+        db.keys = (db.keys || []).filter(k => !(k.employeeId || '').includes('Test'));
+        db.syncQueue = (db.syncQueue || []).filter(q => !JSON.stringify(q).toLowerCase().includes('test'));
+        fs.writeFileSync('./data/db.json', JSON.stringify(db, null, 2), 'utf8');
+      }
+    } catch(e) {}
+  });
