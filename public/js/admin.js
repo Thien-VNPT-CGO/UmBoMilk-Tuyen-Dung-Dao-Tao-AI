@@ -567,7 +567,7 @@ function connectSocket(){
     safeCall(loadAttendances());
     safeCall(loadRequests());
   });
-  const refreshEvents = ['employees:update','applicants:update','attendances:update','schedules:update','offRequests:update','emergencyRequests:update','deviceRequests:update','zalo:update','audit:new','sync:update','keys:update','notifications:update','testResults:update','settings:update','interviews:update','drive:update','overtime:update','leave:update','payrollPeriods:update','payrollSnapshots:update','financeKeys:update'];
+  const refreshEvents = ['employees:update','applicants:update','attendances:update','schedules:update','offRequests:update','emergencyRequests:update','deviceRequests:update','trainingShiftRequests:update','shiftSwapRequests:update','shiftSwap:update','zalo:update','audit:new','sync:update','keys:update','notifications:update','testResults:update','settings:update','interviews:update','drive:update','overtime:update','leave:update','payrollPeriods:update','payrollSnapshots:update','financeKeys:update'];
   refreshEvents.forEach(ev=>{
     socket.on(ev, (data)=>{
       // debounce refresh current tab
@@ -664,6 +664,45 @@ function connectSocket(){
   socket.on('hr:action', (data) => {
     if(!data) return;
     hrToast(data.action, data.success !== false, data.detail);
+  });
+  // Realtime notification từ mọi thao tác của Nhân viên trên Web App
+  socket.on('employee:action', (data) => {
+    if(!data) return;
+    const icons = {
+      checkin: '📍',
+      checkout: '🚪',
+      register_off_training: '🏖️',
+      register_off_official: '🏖️',
+      training_shift_swap_off: '🔄',
+      training_shift_change: '🔄',
+      training_add_shift: '➕',
+      training_shift_approved: '✅',
+      training_shift_rejected: '❌',
+      shift_swap_request: '🔄',
+      shift_swap_accepted: '🤝',
+      shift_swap_th2_accepted: '🤝',
+      shift_swap_approved: '✅',
+      shift_swap_rejected: '❌',
+      emergency_request: '🚨',
+      emergency_accepted: '🚑',
+      device_request: '📱',
+      quiz_submitted: '📝'
+    };
+    const icon = icons[data.action] || '🔔';
+    const toastType = data.type || 'info';
+    showToast(`${icon} [${data.title || 'Nhân viên'}] ${data.message || ''}`, toastType);
+
+    // Tự động cập nhật số lượng chờ duyệt và làm mới tab liên quan
+    updatePendingCount();
+    const active = document.querySelector('.tab-section:not(.hidden)')?.id?.replace('tab-','');
+    if(active === 'requests') safeCall(loadRequests());
+    if(active === 'attendance' && (data.action === 'checkin' || data.action === 'checkout')) safeCall(loadAttendances());
+    if(active === 'dashboard') safeCall(loadDashboard());
+    if(active === 'schedule') safeCall(loadSchedules());
+    if(active === 'elearning' && data.action === 'quiz_submitted') safeCall(loadElearning());
+  });
+  socket.on('admin:notification', () => {
+    updatePendingCount();
   });
   // Realtime Render Environment (18 biến) Update
   socket.on('render:env:update', (data) => {

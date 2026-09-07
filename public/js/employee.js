@@ -1432,22 +1432,93 @@ async function loadTrainingShiftHistoryModal(){
   }
 }
 
+function getDayOfWeekVi(dStr){
+  if(!dStr) return '';
+  const parts = dStr.split('T')[0].split('-').map(Number);
+  const dt = (parts.length===3 && !isNaN(parts[0])) ? new Date(parts[0], parts[1]-1, parts[2]) : new Date(dStr);
+  return ['CN','T2','T3','T4','T5','T6','T7'][dt.getDay()] || '';
+}
+
 function openTrainingShiftModal(weekStart){
   if(!employee) return;
-  const dates = mySchedules.find(s=>s.weekStart===weekStart)?.days || [];
-  if(dates.length===0) return showToast('Không có lịch tuần này','error');
-  const options = dates.map(d=> `<option value="${d.date}">${fmtDMY(d.date)} (${d.dayName}) - ${getShiftVi(normalizeShift(d.shift))} [${getStatusVi(d.status)}]</option>`).join('');
+  // Lấy toàn bộ các ngày trong chu kỳ 12 ngày thử việc
+  const startDateStr = employee.startDate || getVietnamTodayStr();
+  const parts = startDateStr.split('T')[0].split('-').map(Number);
+  const startD = (parts.length === 3 && !isNaN(parts[0])) ? new Date(parts[0], parts[1] - 1, parts[2]) : getVietnamNow();
+  const trialDates = [];
+  for(let i=0; i<12; i++){
+    const curr = new Date(startD);
+    curr.setDate(startD.getDate() + i);
+    trialDates.push(toVietnamDateStr(curr));
+  }
+
+  const allDays = (mySchedules || []).flatMap(s => s.days || []);
+  const dayMap = {};
+  allDays.forEach(d => { dayMap[d.date] = d; });
+
+  const registeredOffs = Array.isArray(employee.registeredOffDates) ? employee.registeredOffDates : [];
+
+  // Danh sách các ngày đang CÓ CA LÀM VIỆC (WORKING) để chọn đổi TỪ
+  const workingDays = trialDates.filter(dStr => {
+    const dRec = dayMap[dStr];
+    if(dRec && dRec.status === 'WORKING') return true;
+    if(!registeredOffs.includes(dStr) && (!dRec || dRec.status !== 'OFF')) return true;
+    return false;
+  });
+
+  const fromOptions = workingDays.map(dStr => {
+    const dRec = dayMap[dStr];
+    const shiftName = getShiftVi(normalizeShift(dRec?.shift || employee.shift));
+    const dayOfWeek = getDayOfWeekVi(dStr);
+    return `<option value="${dStr}">${fmtDMY(dStr)} (${dayOfWeek}) - ${shiftName}</option>`;
+  }).join('');
+
+  // Danh sách 12 ngày thử việc để chọn CHUYỂN SANG
+  const toOptions = trialDates.map(dStr => {
+    const dRec = dayMap[dStr];
+    const isOff = registeredOffs.includes(dStr) || (dRec && dRec.status === 'OFF');
+    const dayOfWeek = getDayOfWeekVi(dStr);
+    const label = isOff 
+      ? `${fmtDMY(dStr)} (${dayOfWeek}) - [NGÀY NGHỈ OFF] ✨ Tự động hoán đổi`
+      : `${fmtDMY(dStr)} (${dayOfWeek}) - [Đang làm: ${getShiftVi(normalizeShift(dRec?.shift || employee.shift))}]`;
+    return `<option value="${dStr}" data-is-off="${isOff ? '1' : '0'}">${label}</option>`;
+  }).join('');
+
   const modalHtml = `
     <div id="trainingShiftModal" class="fixed inset-0 z-[100] bg-black/50 flex items-center justify-center p-4">
       <div class="bg-white rounded-2xl w-full max-w-lg p-5 shadow-xl max-h-[90vh] overflow-y-auto">
-        <div class="font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-rotate text-pink-600"></i> Đổi ca Training (12h trước)</div>
-        <div class="text-xs text-slate-500 mt-1">Chọn ngày và ca mới. HR có 15 phút duyệt, quá hạn tự động duyệt. 1 ngày 2 ca giúp rút ngắn 7→6 ngày.</div>
+        <div class="font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-rotate text-pink-600"></i> Đổi ca làm việc Training</div>
+        <div class="text-xs text-slate-500 mt-1">Chọn ngày cần đổi ca và ngày chuyển sang. Nếu chọn chuyển sang ngày đã đăng ký OFF, hệ thống tự động hoán đổi ngày OFF để duy trì đủ <b>7 ngày training và 5 ngày OFF</b> trong 12 ngày thử việc.</div>
         <div class="mt-3 space-y-3">
-          <div><label class="text-xs font-bold">Ngày</label><select id="shiftDate" class="w-full mt-1 px-3 py-2 rounded-xl border text-sm">${options}</select></div>
-          <div><label class="text-xs font-bold">Ca mới</label><select id="shiftTo" class="w-full mt-1 px-3 py-2 rounded-xl border text-sm"><option value="CA_SANG">Ca Sáng (07:00-12:00)</option><option value="CA_CHIEU">Ca Chiều (12:00-18:00)</option><option value="CA_TOI">Ca Tối (18:00-23:00)</option></select></div>
-          <div><label class="text-xs font-bold">Lý do <span class="text-red-500">*</span> (bắt buộc)</label><input id="shiftReason" class="w-full mt-1 px-3 py-2 rounded-xl border text-sm focus:border-pink-400" placeholder="Nhập lý do (bắt buộc)..."></div>
+          <div>
+            <label class="text-xs font-bold text-slate-700">Ngày cần đổi ca (TỪ):</label>
+            <select id="shiftFromDate" class="w-full mt-1 px-3 py-2 rounded-xl border text-sm font-semibold">${fromOptions || '<option value="">Chưa có ngày làm việc</option>'}</select>
+          </div>
+          <div>
+            <label class="text-xs font-bold text-slate-700">Chuyển sang ngày (ĐẾN):</label>
+            <select id="shiftToDate" onchange="checkSelectedToDate()" class="w-full mt-1 px-3 py-2 rounded-xl border text-sm font-semibold">${toOptions}</select>
+          </div>
+          <div id="swapOffNotice" class="hidden text-xs bg-emerald-50 text-emerald-800 border border-emerald-300 p-2.5 rounded-xl font-bold flex items-center gap-2">
+            <i class="fa-solid fa-wand-magic-sparkles text-emerald-600 text-sm flex-shrink-0"></i>
+            <span><b>Tự động hoán đổi ngày OFF:</b> Ngày này sẽ trở thành ngày đi làm, và ngày cũ sẽ tự động trở thành ngày Nghỉ OFF. Luôn bảo toàn đúng <b>7 ngày training & 5 ngày OFF</b>!</span>
+          </div>
+          <div>
+            <label class="text-xs font-bold text-slate-700">Ca làm việc mới:</label>
+            <select id="shiftTo" class="w-full mt-1 px-3 py-2 rounded-xl border text-sm font-semibold">
+              <option value="CA_SANG">Ca Sáng (07:00-12:00)</option>
+              <option value="CA_CHIEU">Ca Chiều (12:00-18:00)</option>
+              <option value="CA_TOI">Ca Tối (18:00-23:00)</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-xs font-bold text-slate-700">Lý do đổi ca <span class="text-red-500">*</span> (bắt buộc):</label>
+            <input id="shiftReason" class="w-full mt-1 px-3 py-2 rounded-xl border text-sm focus:border-pink-400" placeholder="Nhập lý do đổi ca...">
+          </div>
         </div>
-        <div class="mt-4 flex gap-2"><button onclick="submitTrainingShift(false)" class="flex-1 bg-gradient-to-r from-pink-500 to-rose-500 text-white font-black py-2.5 rounded-xl shadow hover:from-pink-600 hover:to-rose-600">Gửi yêu cầu đổi ca</button><button onclick="document.getElementById('trainingShiftModal').remove()" class="px-4 bg-slate-100 font-bold py-2.5 rounded-xl">Đóng</button></div>
+        <div class="mt-4 flex gap-2">
+          <button onclick="submitTrainingShift(false)" class="flex-1 bg-gradient-to-r from-pink-500 to-rose-500 text-white font-black py-2.5 rounded-xl shadow hover:from-pink-600 hover:to-rose-600">Xác nhận đổi ca</button>
+          <button onclick="document.getElementById('trainingShiftModal').remove()" class="px-4 bg-slate-100 font-bold py-2.5 rounded-xl hover:bg-slate-200">Đóng</button>
+        </div>
         <div class="mt-4 pt-3 border-t border-slate-200">
           <div class="font-black text-xs text-pink-900 flex items-center justify-between mb-2">
             <span><i class="fa-solid fa-clock-rotate-left text-pink-600"></i> Lịch sử yêu cầu Đổi ca / Thêm ca</span>
@@ -1460,7 +1531,21 @@ function openTrainingShiftModal(weekStart){
       </div>
     </div>`;
   document.body.insertAdjacentHTML('beforeend', modalHtml);
+  checkSelectedToDate();
   loadTrainingShiftHistoryModal();
+}
+
+function checkSelectedToDate(){
+  const sel = document.getElementById('shiftToDate');
+  const notice = document.getElementById('swapOffNotice');
+  if(!sel || !notice) return;
+  const opt = sel.options[sel.selectedIndex];
+  const isOff = opt?.getAttribute('data-is-off') === '1';
+  if(isOff){
+    notice.classList.remove('hidden');
+  } else {
+    notice.classList.add('hidden');
+  }
 }
 
 function openTrainingAddShiftModal(weekStart){
@@ -1495,19 +1580,36 @@ function openTrainingAddShiftModal(weekStart){
 }
 
 async function submitTrainingShift(isAdd){
-  const date = document.getElementById('shiftDate')?.value;
+  const fromDate = document.getElementById('shiftFromDate')?.value;
+  const toDate = isAdd ? document.getElementById('shiftDate')?.value : document.getElementById('shiftToDate')?.value;
+  const date = toDate || document.getElementById('shiftDate')?.value;
   const toShift = document.getElementById('shiftTo')?.value;
   const reason = document.getElementById('shiftReason')?.value.trim() || '';
-  if(!date || !toShift) return showToast('Thiếu ngày/ca','error');
+
+  if(!date || !toShift) return showToast('Thiếu ngày hoặc ca làm việc','error');
   if(!reason) return showToast('Vui lòng nhập lý do (bắt buộc)','error');
   try{
     const endpoint = '/api/training/shift-change';
     const bodyReason = isAdd ? `[THÊM CA] ${reason}` : reason;
-    const res = await api(endpoint, {method:'POST', body:JSON.stringify({employeeId:employee.employeeId, date, toShift, reason: bodyReason, isAdd})});
-    showToast(res.message || (isAdd ? 'Đã gửi yêu cầu thêm ca - chờ HR 15p' : 'Đã gửi yêu cầu đổi ca - chờ HR 15p'), 'success');
+    const res = await api(endpoint, {
+      method:'POST',
+      body: JSON.stringify({
+        employeeId: employee.employeeId,
+        fromDate: isAdd ? date : fromDate,
+        toDate: date,
+        date,
+        toShift,
+        reason: bodyReason,
+        isAdd
+      })
+    });
+    showToast(res.message || (isAdd ? 'Đã gửi yêu cầu thêm ca - chờ HR duyệt' : 'Đổi ca thành công'), 'success');
+    if(res.registeredOffDates && Array.isArray(res.registeredOffDates)){
+      employee.registeredOffDates = res.registeredOffDates;
+    }
     loadTrainingShiftHistoryModal();
     if(document.getElementById('shiftReason')) document.getElementById('shiftReason').value = '';
-    loadSchedule();
+    await loadSchedule();
   }catch(e){ showToast(e.message,'error'); }
 }
 

@@ -773,6 +773,42 @@ function emitForceLogout(employeeId, reason='Tài khoản không tồn tại'){
   console.log(`[FORCE_LOGOUT] ${employeeId} reason: ${reason}`);
 }
 
+// Thông báo Realtime cho Admin và HR khi nhân viên thao tác
+function notifyAdminAndHR({ action, employeeId, employeeName, branchId, title, message, type='info', data=null }){
+  const notifId = uuidv4();
+  const createdAt = getVietnamISOString();
+  const notif = {
+    id: notifId,
+    to: 'HR',
+    role: 'HR',
+    action: action || 'EMPLOYEE_ACTION',
+    employeeId: employeeId || 'ANONYMOUS',
+    employeeName: employeeName || 'Nhân viên',
+    branchId: branchId || '',
+    title: title || 'Thông báo mới từ nhân viên',
+    content: message || '',
+    message: message || '',
+    type,
+    createdAt,
+    read: false,
+    data: data || {}
+  };
+  if(!db.notifications) db.notifications = [];
+  db.notifications.unshift(notif);
+  if(db.notifications.length > 500) db.notifications = db.notifications.slice(0, 500);
+
+  // Phát 3 kênh realtime để đảm bảo mọi client Admin/HR đều nhận ngay lập tức:
+  io.emit('employee:action', notif);
+  io.emit('admin:notification', notif);
+  io.emit('notifications:update', db.notifications);
+
+  try {
+    audit(employeeId || 'EMPLOYEE', `NOTIF_${(action||'ACTION').toUpperCase()}`, 'NOTIFICATION', null, { title, message }, 'web_employee');
+  } catch(e){}
+
+  return notif;
+}
+
 // ============ RÀNG BUỘC TUYỆT ĐỐI: CHẶN DỮ LIỆU TEST LÊN GOOGLE SHEET ============
 // Google Sheet 17iXM là 100% dữ liệu thật đang vận hành của công ty.
 // Tuyệt đối không lưu, không ghi đè, không đồng bộ bất kỳ bản ghi test/thử nghiệm nào lên Sheet thật.
@@ -1215,6 +1251,16 @@ app.post('/api/auth/device-request', (req,res)=>{
   addSyncQueue('DEVICE_REQUEST','CREATE',dr, employeeId, 'WEB_EMPLOYEE');
   saveDB();
   io.emit('deviceRequests:update', db.deviceRequests);
+  notifyAdminAndHR({
+    action: 'device_request',
+    employeeId,
+    employeeName: emp.name,
+    branchId: emp.branchId,
+    title: `Yêu cầu Đổi thiết bị: ${emp.name}`,
+    message: `${emp.name} (${employeeId}) vừa gửi yêu cầu đổi máy chấm công. Lý do: "${reason}". Hết hạn 30 phút.`,
+    type: 'warning',
+    data: { requestId: reqId, reason, deviceId }
+  });
   // Realtime auto-expire handled by persistent poller (realtimeAutomationPoller) every 20s - survives restart
   res.json({ success:true, request: dr });
 });
@@ -3807,9 +3853,20 @@ app.post('/api/employee/register-off', (req, res) => {
   }
 
   emp.registeredOffDates = offDates;
+  emp.trainingOffDays = 5;
   saveDB();
   io.emit('schedules:update', db.schedules);
   io.emit('employees:update', db.employees);
+  notifyAdminAndHR({
+    action: 'register_off_training',
+    employeeId,
+    employeeName: emp.name,
+    branchId: emp.branchId,
+    title: `NV Training ${emp.name} đăng ký 5 ngày OFF`,
+    message: `${emp.name} (${emp.employeeId}) đã chọn 5 ngày OFF trong 12 ngày thử việc: ${offDates.map(d=>fmtDMY(d)).join(', ')}. Lịch làm việc 7 ngày training đã được tự động tạo.`,
+    type: 'success',
+    data: { employeeId, offDates, workingDaysCount: 7 }
+  });
 
   res.json({ success: true, registeredOffDates: offDates, workingDaysCount: 7 });
 });
@@ -4868,6 +4925,17 @@ app.post('/api/attendance/checkin', (req,res)=>{
   io.emit('attendances:update', db.attendances);
   if (penaltyObj) io.emit('penalties:update', db.penalties);
 
+  notifyAdminAndHR({
+    action: 'checkin',
+    employeeId,
+    employeeName: emp.name,
+    branchId: emp.branchId,
+    title: `Điểm danh Vào ca: ${emp.name}`,
+    message: `${emp.name} (${emp.employeeId} • ${emp.branchId}) vừa Check-in ca ${newRec.shift} lúc ${newRec.checkIn.time} (${violations.length ? 'Trễ: ' + violations.join(', ') : 'Đúng giờ'})`,
+    type: violations.length ? 'warning' : 'success',
+    data: { attendanceId: newRec.id, shift: newRec.shift, time: newRec.checkIn.time, violations }
+  });
+
   const zr = { id: uuidv4(), sent_at: now.toISOString(), receiver: emp.phone, type:'CHECKIN', content:`${emp.name} đã Check-in lúc ${newRec.checkIn.time} ${violations.length ? '— TRỄ CA ('+violations[0]+')' : '— ĐÚNG GIỜ'}`, status:'SENT', error:'' };
   db.zaloRecords.unshift(zr);
   io.emit('zalo:update', db.zaloRecords);
@@ -4953,6 +5021,17 @@ app.post('/api/attendance/checkout', (req,res)=>{
   addSyncQueue('ATTENDANCE','UPDATE',record, employeeId, 'WEB_EMPLOYEE');
   saveDB();
   io.emit('attendances:update', db.attendances);
+
+  notifyAdminAndHR({
+    action: 'checkout',
+    employeeId,
+    employeeName: emp.name,
+    branchId: emp.branchId,
+    title: `Điểm danh Ra ca: ${emp.name}`,
+    message: `${emp.name} (${emp.employeeId} • ${emp.branchId}) vừa Check-out ca ${currentShift} lúc ${record.checkOut.time} (${record.violations?.length ? 'Vi phạm: ' + record.violations.join(', ') : 'Hoàn thành ca'})`,
+    type: record.violations?.length ? 'warning' : 'success',
+    data: { attendanceId: record.id, shift: currentShift, time: record.checkOut.time, violations: record.violations }
+  });
 
   const zr = { id: uuidv4(), sent_at: now.toISOString(), receiver: emp.phone, type:'CHECKOUT', content:`${emp.name} đã Check-out lúc ${record.checkOut.time} — Hoàn thành ca làm việc`, status:'SENT', error:'' };
   db.zaloRecords.unshift(zr);
@@ -5530,39 +5609,186 @@ app.post('/api/schedules/auto-training', authMiddleware, roleCheck(['Admin','HR'
 // Employee Training đổi ca - cách nhau 12 tiếng
 app.post('/api/training/shift-change', (req,res)=>{
   const employeeId = req.body.employeeId || req.user?.employeeId;
-  const { date, fromShift, toShift, reason } = req.body;
+  const { date, fromDate: reqFromDate, toDate: reqToDate, fromShift, toShift, reason } = req.body;
   const emp = db.employees.find(e=> e.employeeId===employeeId);
   if(!emp) return res.status(404).json({ error:'Không tìm thấy nhân viên' });
   if(emp.type!=='TRAINING' && emp.status!=='TRAINING') return res.status(403).json({ error:'Chỉ nhân viên Training mới được đổi ca linh hoạt' });
-  if(!date || !toShift) return res.status(400).json({ error:'Thiếu ngày hoặc ca mới' });
+
+  const fromDate = reqFromDate || date;
+  const toDate = reqToDate || date || fromDate;
+  if(!fromDate || !toDate || !toShift) return res.status(400).json({ error:'Thiếu ngày hoặc ca mới' });
   if(!reason || !String(reason).trim()) return res.status(400).json({ error:'Lý do là bắt buộc - vui lòng nhập lý do đổi ca' });
   if(!['CA_SANG','CA_CHIEU','CA_TOI'].includes(toShift)) return res.status(400).json({ error:'Ca mới không hợp lệ (CA_SANG/CHIEU/TOI)' });
   const isAdd = req.body.isAdd || (reason && reason.startsWith('[THÊM CA]'));
-  // Tìm ca hiện tại trên lịch
-  const sched = db.schedules.find(s=> s.employeeId===employeeId && s.days.some(d=> d.date===date));
-  const day = sched ? sched.days.find(d=> d.date===date) : null;
-  const currentShift = fromShift || day?.shift || emp.shift;
-  if(!isAdd && currentShift===toShift) return res.status(400).json({ error:'Ca mới trùng ca hiện tại' });
-  // Điều kiện 12 tiếng: request phải cách giờ bắt đầu ca mới ít nhất 12h
+
+  // 12 ngày thử việc của nhân viên Training
+  const startDateStr = emp.startDate || getVietnamTodayStr();
+  const parts = startDateStr.split('T')[0].split('-').map(Number);
+  const startD = (parts.length === 3 && !isNaN(parts[0])) ? new Date(parts[0], parts[1] - 1, parts[2]) : getVietnamNow();
+  const trialDates = [];
+  for (let i = 0; i < 12; i++) {
+    const curr = new Date(startD);
+    curr.setDate(startD.getDate() + i);
+    const y = curr.getFullYear();
+    const m = String(curr.getMonth() + 1).padStart(2, '0');
+    const d = String(curr.getDate()).padStart(2, '0');
+    trialDates.push(`${y}-${m}-${d}`);
+  }
+
+  let currentOffDates = Array.isArray(emp.registeredOffDates) ? [...emp.registeredOffDates] : [];
+  if (currentOffDates.length === 0) {
+    currentOffDates = trialDates.filter(td => db.schedules.some(s => s.employeeId === employeeId && s.days.some(d => d.date === td && d.status === 'OFF')));
+  }
+
+  const fromSched = db.schedules.find(s=> s.employeeId===employeeId && s.days.some(d=> d.date===fromDate));
+  const fromDay = fromSched ? fromSched.days.find(d=> d.date===fromDate) : null;
+  const currentShift = fromShift || fromDay?.shift || emp.shift;
+
+  // Kiểm tra nếu toDate là ngày OFF:
+  const isToDateOff = currentOffDates.includes(toDate) || db.schedules.some(s => s.employeeId === employeeId && s.days.some(d => d.date === toDate && d.status === 'OFF'));
+
+  if(isToDateOff && fromDate !== toDate && !isAdd){
+    // ============ TỰ ĐỘNG HOÁN ĐỔI NGÀY OFF & BẢO TOÀN 7 TRAINING + 5 OFF ============
+    let newOffDates = currentOffDates.filter(d => d !== toDate);
+    if(!newOffDates.includes(fromDate)) newOffDates.push(fromDate);
+    newOffDates = [...new Set(newOffDates)].sort();
+
+    // Chuẩn hóa đúng 5 ngày OFF trong 12 ngày thử việc
+    if(newOffDates.length !== 5){
+      const candidateOffs = trialDates.filter(d => d !== toDate && (d === fromDate || newOffDates.includes(d)));
+      while(candidateOffs.length < 5){
+        const extra = trialDates.find(d => d !== toDate && d !== fromDate && !candidateOffs.includes(d));
+        if(extra) candidateOffs.push(extra);
+        else break;
+      }
+      newOffDates = candidateOffs.slice(0, 5).sort();
+    }
+
+    emp.registeredOffDates = newOffDates;
+    emp.trainingOffDays = 5;
+
+    let offReq = db.offRequests.find(r => r.employeeId === employeeId && (r.type === 'TRAINING_OFF' || r.type === 'TRAINING'));
+    if(offReq){
+      offReq.dates = newOffDates;
+      offReq.updated_at = getVietnamISOString();
+    } else {
+      offReq = {
+        id: uuidv4(), employeeId, employeeName: emp.name, branchId: emp.branchId, shift: emp.shift,
+        dates: newOffDates, type: 'TRAINING_OFF', status: 'APPROVED', autoApproved: true,
+        createdAt: getVietnamISOString(), version: 1, sync_status: 'SYNCED'
+      };
+      db.offRequests.push(offReq);
+    }
+
+    // Cập nhật ngày fromDate thành OFF
+    if(fromSched && fromDay){
+      fromDay.status = 'OFF';
+      fromDay.shift = 'OFF';
+      fromSched.version = (fromSched.version || 1) + 1;
+      fromSched.updated_at = getVietnamISOString();
+      addSyncQueue('SCHEDULE', 'UPDATE', fromSched, employeeId, 'WEB_EMPLOYEE');
+    }
+
+    // Cập nhật ngày toDate thành WORKING
+    let toSched = db.schedules.find(s=> s.employeeId===employeeId && s.days.some(d=> d.date===toDate));
+    if(toSched){
+      const toDay = toSched.days.find(d=> d.date===toDate);
+      if(toDay){
+        toDay.status = 'WORKING';
+        toDay.shift = toShift;
+      }
+      toSched.version = (toSched.version || 1) + 1;
+      toSched.updated_at = getVietnamISOString();
+      addSyncQueue('SCHEDULE', 'UPDATE', toSched, employeeId, 'WEB_EMPLOYEE');
+    } else {
+      const monday = getMonday(new Date(toDate));
+      const wy=monday.getFullYear(); const wm=String(monday.getMonth()+1).padStart(2,'0'); const wd=String(monday.getDate()).padStart(2,'0');
+      const weekStart=`${wy}-${wm}-${wd}`;
+      const dayNames = ['T2','T3','T4','T5','T6','T7','CN'];
+      const days = [];
+      for(let i=0; i<7; i++){
+        const cur = new Date(monday); cur.setDate(monday.getDate()+i);
+        const y=cur.getFullYear(); const m=String(cur.getMonth()+1).padStart(2,'0'); const d=String(cur.getDate()).padStart(2,'0');
+        const dStr = `${y}-${m}-${d}`;
+        const isTarget = dStr === toDate;
+        const isDayOff = newOffDates.includes(dStr);
+        days.push({
+          date: dStr,
+          dayName: dayNames[i],
+          shift: isTarget ? toShift : (isDayOff ? 'OFF' : emp.shift),
+          status: isTarget ? 'WORKING' : (isDayOff ? 'OFF' : 'WORKING'),
+          substituteFor: null
+        });
+      }
+      toSched = { id: uuidv4(), employeeId, weekStart, days, version: 1, updated_at: getVietnamISOString(), approvalStatus: 'APPROVED' };
+      db.schedules.push(toSched);
+      addSyncQueue('SCHEDULE', 'CREATE', toSched, employeeId, 'WEB_EMPLOYEE');
+    }
+
+    const reqId = uuidv4();
+    const createdAt = getVietnamISOString();
+    const newReq = {
+      id: reqId, employeeId, employeeName: emp.name, branchId: emp.branchId,
+      date: toDate, fromDate, toDate, fromShift: currentShift, toShift, reason: reason||'',
+      type: 'CHANGE_SHIFT', status: 'APPROVED',
+      approvedBy: 'HỆ THỐNG TỰ ĐỘNG (Auto-Swap OFF)', approvedAt: createdAt,
+      autoSwappedOff: true, oldOffDate: toDate, newOffDate: fromDate,
+      createdAt, version: 1
+    };
+    db.trainingShiftRequests.unshift(newReq);
+    audit(employeeId, 'SWAP_OFF_TRAINING_SHIFT', 'TRAINING_SHIFT', null, newReq, req.ip);
+    addSyncQueue('TRAINING_SHIFT', 'CREATE', newReq, employeeId, 'WEB_EMPLOYEE');
+    saveDB();
+
+    io.emit('schedules:update', db.schedules);
+    io.emit('offRequests:update', db.offRequests);
+    io.emit('employees:update', db.employees);
+    io.emit('trainingShiftRequests:update', db.trainingShiftRequests);
+
+    notifyAdminAndHR({
+      action: 'training_shift_swap_off',
+      employeeId,
+      employeeName: emp.name,
+      branchId: emp.branchId,
+      title: `Tự động đổi ca: NV Training ${emp.name} sang ngày OFF`,
+      message: `${emp.name} (${employeeId}) đã đổi ca làm từ ${fmtDMY(fromDate)} sang ngày OFF ${fmtDMY(toDate)} (${toShift}). Hệ thống đã tự động hoán đổi ngày OFF (ngày ${fmtDMY(fromDate)} thành OFF, ngày ${fmtDMY(toDate)} thành ĐI LÀM) để duy trì đúng 7 ngày training và 5 ngày OFF trong 12 ngày thử việc.`,
+      type: 'success',
+      data: { requestId: reqId, fromDate, toDate, toShift, registeredOffDates: newOffDates }
+    });
+
+    return res.json({
+      success: true,
+      request: newReq,
+      isAutoSwap: true,
+      autoApproved: true,
+      autoSwappedOff: true,
+      registeredOffDates: newOffDates,
+      message: `Đã đổi ca thành công! Ngày ${fmtDMY(toDate)} chuyển thành ngày làm việc và ngày ${fmtDMY(fromDate)} tự động chuyển thành ngày nghỉ OFF (đảm bảo đúng 7 ngày làm và 5 ngày OFF trong 12 ngày thử việc).`
+    });
+  }
+
+  // Trường hợp đổi ca cùng ngày hoặc thêm ca:
+  if(!isAdd && currentShift===toShift && fromDate===toDate) return res.status(400).json({ error:'Ca mới trùng ca hiện tại' });
   const shiftInfo = db.settings.payroll.shifts[toShift] || DEFAULT_SHIFTS[toShift];
   const [sh, sm] = shiftInfo.start.split(':').map(Number);
-  const shiftStart = new Date(date); shiftStart.setHours(sh, sm, 0,0);
+  const shiftStart = new Date(toDate); shiftStart.setHours(sh, sm, 0,0);
   const now = getVietnamNow();
   const diffMs = shiftStart.getTime() - now.getTime();
   const diffHours = diffMs / (1000*60*60);
-  if(diffHours <12){
-    return res.status(400).json({ error:`Phải đổi ca trước giờ bắt đầu ca mới ít nhất 12 tiếng. Ca ${toShift} ${shiftInfo.start} ngày ${date} chỉ còn ${diffHours.toFixed(1)}h`, need12h:true });
+  if(diffHours < 12){
+    return res.status(400).json({ error:`Phải đổi ca trước giờ bắt đầu ca mới ít nhất 12 tiếng. Ca ${toShift} ${shiftInfo.start} ngày ${toDate} chỉ còn ${diffHours.toFixed(1)}h`, need12h:true });
   }
-  if(new Date(date) < new Date(getVietnamTodayStr())) return res.status(400).json({ error:'Không thể đổi ca cho ngày đã qua' });
-  // Kiểm tra đã có request pending cho ngày này chưa
-  const existingPending = db.trainingShiftRequests.find(r=> r.employeeId===employeeId && r.date===date && r.status==='PENDING');
+  if(new Date(toDate) < new Date(getVietnamTodayStr())) return res.status(400).json({ error:'Không thể đổi ca cho ngày đã qua' });
+
+  const existingPending = db.trainingShiftRequests.find(r=> r.employeeId===employeeId && (r.date===toDate || r.date===fromDate) && r.status==='PENDING');
   if(existingPending) return res.status(409).json({ error:'Đã có phiếu đổi ca đang chờ duyệt cho ngày này', request: existingPending });
+
   const reqId = uuidv4();
   const createdAt = getVietnamISOString();
   const expiresAt = new Date(Date.now() + 15*60*1000).toISOString(); // 15 phút
   const newReq = {
     id: reqId, employeeId, employeeName: emp.name, branchId: emp.branchId,
-    date, fromShift: currentShift, toShift, reason: reason||'',
+    date: toDate, fromDate, toDate, fromShift: currentShift, toShift, reason: reason||'',
     type: isAdd ? 'ADD_SHIFT' : 'CHANGE_SHIFT',
     status:'PENDING', createdAt, expiresAt, version:1
   };
@@ -5571,10 +5797,18 @@ app.post('/api/training/shift-change', (req,res)=>{
   addSyncQueue('TRAINING_SHIFT','CREATE', newReq, employeeId, 'WEB_EMPLOYEE');
   saveDB();
   io.emit('trainingShiftRequests:update', db.trainingShiftRequests);
-  // Gửi thông báo tới HR
-  const notifHR = { id: uuidv4(), to: 'HR', type:'TRAINING_SHIFT_REQUEST', title:`Training ${emp.name} xin ${isAdd?'thêm':'đổi'} ca ${date}`, content:`${emp.name} (${employeeId}) xin ${isAdd?'thêm ca':'đổi'} ${currentShift} -> ${toShift} ngày ${date}. Lý do: ${reason||'Không có'}. Hết hạn 15 phút.`, createdAt, read:false, requestId: reqId };
-  db.notifications.push(notifHR);
-  io.emit('notifications:update', db.notifications);
+
+  notifyAdminAndHR({
+    action: isAdd ? 'training_add_shift' : 'training_shift_change',
+    employeeId,
+    employeeName: emp.name,
+    branchId: emp.branchId,
+    title: `Training ${emp.name} xin ${isAdd?'thêm':'đổi'} ca`,
+    message: `${emp.name} (${employeeId}) xin ${isAdd?'thêm ca':'đổi'} ${currentShift} -> ${toShift} ngày ${fmtDMY(toDate)}. Lý do: ${reason||'Không có'}. Hết hạn 15 phút.`,
+    type: 'info',
+    data: { requestId: reqId, request: newReq }
+  });
+
   res.json({ success:true, request: newReq, message:`Đã gửi phiếu ${isAdd?'thêm ca':'đổi ca'} tới HR, HR có 15 phút để duyệt, quá hạn tự động duyệt` });
 });
 app.get(['/api/training/shift-change', '/api/training/shift-requests'], authMiddleware, (req,res)=>{
@@ -5668,6 +5902,16 @@ app.post(['/api/training/shift-change/:id/approve', '/api/training/shift-request
   io.emit('notifications:update', db.notifications);
   audit(req.user.username,'APPROVE_TRAINING_SHIFT','TRAINING_SHIFT', null, r, req.ip);
   addSyncQueue('TRAINING_SHIFT','UPDATE', r, req.user.username, 'WEB_HR');
+  notifyAdminAndHR({
+    action: 'training_shift_approved',
+    employeeId: r.employeeId,
+    employeeName: r.employeeName,
+    branchId: r.branchId,
+    title: `Đã duyệt đơn Training: ${r.employeeName}`,
+    message: `${req.user.username} đã duyệt đơn ${r.type === 'ADD_SHIFT' ? 'thêm ca' : 'đổi ca'} (${r.fromShift} -> ${r.toShift}) ngày ${fmtDMY(r.date)} của ${r.employeeName}`,
+    type: 'success',
+    data: { requestId: r.id }
+  });
   res.json({ success:true, request: r });
 });
 app.post(['/api/training/shift-change/:id/reject', '/api/training/shift-requests/:id/reject'], authMiddleware, roleCheck(['Admin','HR','Manager']), (req,res)=>{
@@ -5683,6 +5927,16 @@ app.post(['/api/training/shift-change/:id/reject', '/api/training/shift-requests
   const notif={ id: uuidv4(), to: r.employeeId, type:'TRAINING_SHIFT_REJECTED', title:`Đổi ca ${r.date} bị từ chối`, content:`Yêu cầu đổi ${r.fromShift}->${r.toShift} ngày ${r.date} bị từ chối. Lý do: ${r.reasonReject}`, createdAt: getVietnamISOString(), read:false };
   db.notifications.push(notif);
   io.emit('notifications:update', db.notifications);
+  notifyAdminAndHR({
+    action: 'training_shift_rejected',
+    employeeId: r.employeeId,
+    employeeName: r.employeeName,
+    branchId: r.branchId,
+    title: `Từ chối đơn Training: ${r.employeeName}`,
+    message: `${req.user.username} đã từ chối đơn ${r.type === 'ADD_SHIFT' ? 'thêm ca' : 'đổi ca'} ngày ${fmtDMY(r.date)} của ${r.employeeName}. Lý do: ${r.reasonReject}`,
+    type: 'warning',
+    data: { requestId: r.id }
+  });
   res.json({ success:true, request: r });
 });
 
@@ -5730,6 +5984,7 @@ app.post('/api/shift-swap', (req,res)=>{
   addSyncQueue('SHIFT_SWAP','CREATE',newReq, requesterId, 'WEB_EMPLOYEE');
   saveDB();
   io.emit('shiftSwap:update', db.shiftSwapRequests);
+  io.emit('shiftSwapRequests:update', db.shiftSwapRequests);
   // Gửi thông báo
   if(isDirect){
     const notif = { id: uuidv4(), to: targetEmployeeId, type:'SHIFT_SWAP_INVITE', title:`${emp.name} mời đổi ca ${date}`, content:`${emp.name} (${requesterId}) muốn đổi ${curShift}→${finalToShift} ngày ${fmtDMY(date)}. Lý do: ${reason||'—'}. Vui lòng chấp nhận/từ chối.`, createdAt: now.toISOString(), read:false, requestId: reqId };
@@ -5744,6 +5999,16 @@ app.post('/api/shift-swap', (req,res)=>{
       db.notifications.push(notif);
     });
   }
+  notifyAdminAndHR({
+    action: 'shift_swap_request',
+    employeeId: requesterId,
+    employeeName: emp.name,
+    branchId: emp.branchId,
+    title: `NV Chính thức ${emp.name} xin đổi ca`,
+    message: `${emp.name} (${requesterId}) xin đổi ca ngày ${fmtDMY(date)} (${curShift} -> ${finalToShift}). ${targetEmp ? 'Đổi trực tiếp với: ' + targetEmp.name : 'Gửi toàn chi nhánh'}. Lý do: ${reason}`,
+    type: 'info',
+    data: { requestId: reqId, date, fromShift: curShift, toShift: finalToShift }
+  });
   io.emit('notifications:update', db.notifications);
   io.emit('zalo:update', db.zaloRecords);
   res.json({success:true, request:newReq, message: isDirect ? 'Đã gửi tới NV được chọn (TH1) - chờ họ chấp nhận' : 'Đã gửi tới toàn chi nhánh (TH2) - chờ 24h AI tự duyệt nếu có người nhận'});
@@ -5814,11 +6079,22 @@ app.post('/api/shift-swap/:id/respond', (req,res)=>{
       });
       saveDB();
       io.emit('shiftSwap:update', db.shiftSwapRequests);
+      io.emit('shiftSwapRequests:update', db.shiftSwapRequests);
       io.emit('schedules:update', db.schedules);
       // Thông báo 2 bên
       const notif1 = { id: uuidv4(), to: r.requesterId, type:'SHIFT_SWAP_APPROVED', title:`Đổi ca ${r.date} đã duyệt (TH1)`, content:`${emp.name} đã chấp nhận đổi ${r.fromShift}→${r.toShift} ngày ${r.date}. Lịch đã cập nhật.`, createdAt: getVietnamISOString(), read:false };
       const notif2 = { id: uuidv4(), to: r.targetEmployeeId, type:'SHIFT_SWAP_APPROVED', title:`Đổi ca ${r.date} đã duyệt`, content:`Bạn đã chấp nhận đổi ca với ${r.requesterName} ngày ${r.date}. Lịch đã cập nhật.`, createdAt: getVietnamISOString(), read:false };
       db.notifications.push(notif1, notif2);
+      notifyAdminAndHR({
+        action: 'shift_swap_accepted',
+        employeeId: emp.employeeId,
+        employeeName: emp.name,
+        branchId: emp.branchId,
+        title: `Đổi ca TH1: ${emp.name} chấp nhận đổi ca`,
+        message: `${emp.name} đã chấp nhận đổi ca với ${r.requesterName} ngày ${fmtDMY(r.date)}. AI đã tự động cập nhật lịch làm việc 2 nhân viên.`,
+        type: 'success',
+        data: { requestId: r.id, requesterId: r.requesterId, targetEmployeeId: r.targetEmployeeId }
+      });
       io.emit('notifications:update', db.notifications);
       audit(employeeId,'ACCEPT_SHIFT_SWAP_TH1','SHIFT_SWAP',null,r, req.ip);
       addSyncQueue('SHIFT_SWAP','UPDATE',r, employeeId, 'WEB_EMPLOYEE');
@@ -5833,8 +6109,19 @@ app.post('/api/shift-swap/:id/respond', (req,res)=>{
       addSyncQueue('SHIFT_SWAP','UPDATE',r, employeeId, 'WEB_EMPLOYEE');
       saveDB();
       io.emit('shiftSwap:update', db.shiftSwapRequests);
+      io.emit('shiftSwapRequests:update', db.shiftSwapRequests);
       const notif = { id: uuidv4(), to: r.requesterId, type:'SHIFT_SWAP_TH2_ACCEPTED', title:`Có người nhận đổi ca ${r.date} (TH2)`, content:`${emp.name} đã nhận đổi ca ${r.fromShift}→${r.toShift} ngày ${r.date}. AI sẽ tự duyệt sau 24h kể từ lúc gửi yêu cầu (${fmtDMY?fmtDMY(r.date):r.date}).`, createdAt: getVietnamISOString(), read:false };
       db.notifications.push(notif);
+      notifyAdminAndHR({
+        action: 'shift_swap_th2_accepted',
+        employeeId: emp.employeeId,
+        employeeName: emp.name,
+        branchId: emp.branchId,
+        title: `Đổi ca TH2: ${emp.name} nhận thế ca`,
+        message: `${emp.name} đã nhận thế ca ngày ${fmtDMY(r.date)} của ${r.requesterName}. AI sẽ tự duyệt sau 24h.`,
+        type: 'info',
+        data: { requestId: r.id, requesterId: r.requesterId, acceptedBy: emp.employeeId }
+      });
       io.emit('notifications:update', db.notifications);
       return res.json({success:true, request:r, message:'Đã ghi nhận chấp nhận TH2 - AI sẽ tự duyệt sau 24h'});
     }
@@ -5923,6 +6210,7 @@ app.post('/api/shift-swap/:id/approve', authMiddleware, roleCheck(['Admin','HR',
   addSyncQueue('SHIFT_SWAP','UPDATE',r,req.user.username,'WEB_HR');
   saveDB();
   io.emit('shiftSwap:update', db.shiftSwapRequests);
+  io.emit('shiftSwapRequests:update', db.shiftSwapRequests);
   io.emit('schedules:update', db.schedules);
 
   const notif1 = { id: uuidv4(), to: r.requesterId, type:'SHIFT_SWAP_APPROVED', title:`Đổi ca ${r.date} đã được HR duyệt`, content:`Yêu cầu đổi ${r.fromShift}→${r.toShift} ngày ${r.date} đã được ${req.user.username} phê duyệt. Lịch đã cập nhật.`, createdAt: getVietnamISOString(), read:false };
@@ -5931,6 +6219,16 @@ app.post('/api/shift-swap/:id/approve', authMiddleware, roleCheck(['Admin','HR',
     const notif2 = { id: uuidv4(), to: targetId, type:'SHIFT_SWAP_APPROVED', title:`Đổi ca ${r.date} đã được HR duyệt`, content:`Đổi ca với ${r.requesterName} ngày ${r.date} đã được ${req.user.username} phê duyệt. Lịch đã cập nhật.`, createdAt: getVietnamISOString(), read:false };
     db.notifications.push(notif2);
   }
+  notifyAdminAndHR({
+    action: 'shift_swap_approved',
+    employeeId: r.requesterId,
+    employeeName: r.requesterName,
+    branchId: r.branchId,
+    title: `HR đã duyệt đổi ca: ${r.requesterName}`,
+    message: `${req.user.username} đã duyệt đổi ca ngày ${fmtDMY(r.date)} cho ${r.requesterName}. Lịch đã cập nhật.`,
+    type: 'success',
+    data: { requestId: r.id }
+  });
   io.emit('notifications:update', db.notifications);
   res.json({success:true, request:r, message:'HR đã duyệt yêu cầu đổi ca'});
 });
@@ -5951,9 +6249,20 @@ app.post('/api/shift-swap/:id/reject', authMiddleware, roleCheck(['Admin','HR','
   addSyncQueue('SHIFT_SWAP','UPDATE',r,req.user.username,'WEB_HR');
   saveDB();
   io.emit('shiftSwap:update', db.shiftSwapRequests);
+  io.emit('shiftSwapRequests:update', db.shiftSwapRequests);
 
   const notif = { id: uuidv4(), to: r.requesterId, type:'SHIFT_SWAP_REJECTED', title:`Đổi ca ${r.date} bị HR từ chối`, content:`Yêu cầu đổi ca ngày ${r.date} bị ${req.user.username} từ chối. Lý do: ${r.reasonReject||'Không có'}`, createdAt: getVietnamISOString(), read:false };
   db.notifications.push(notif);
+  notifyAdminAndHR({
+    action: 'shift_swap_rejected',
+    employeeId: r.requesterId,
+    employeeName: r.requesterName,
+    branchId: r.branchId,
+    title: `HR từ chối đổi ca: ${r.requesterName}`,
+    message: `${req.user.username} đã từ chối yêu cầu đổi ca ngày ${fmtDMY(r.date)} của ${r.requesterName}. Lý do: ${r.reasonReject||'Không có'}`,
+    type: 'warning',
+    data: { requestId: r.id }
+  });
   io.emit('notifications:update', db.notifications);
   res.json({success:true, request:r, message:'HR đã từ chối yêu cầu đổi ca'});
 });
@@ -6426,6 +6735,17 @@ app.post('/api/off-requests', (req,res)=>{
   io.emit('offRequests:update', db.offRequests);
   io.emit('schedules:update', db.schedules);
 
+  notifyAdminAndHR({
+    action: isTraining ? 'register_off_training' : 'register_off_official',
+    employeeId,
+    employeeName: emp.name,
+    branchId: emp.branchId,
+    title: isTraining ? `NV Training ${emp.name} đăng ký OFF` : `NV Chính thức ${emp.name} đăng ký OFF`,
+    message: `${emp.name} (${employeeId}) vừa đăng ký ${dates.length} ngày OFF: ${dates.map(d=>fmtDMY(d)).join(', ')}. AI đã tự động duyệt và xếp lịch.`,
+    type: 'info',
+    data: { requestId: reqId, dates }
+  });
+
   // Kích hoạt đồng bộ realtime tức thì sang Google Sheet 17iXM
   triggerRealtimeSheetSync('PHIEU_OFF_HANG_TUAN');
   triggerRealtimeSheetSync('LICH_LAM_VIEC');
@@ -6669,6 +6989,16 @@ app.post('/api/emergency-requests', (req,res)=>{
   audit(employeeId,'EMERGENCY_REQUEST','OFF_REQUEST',null,er, req.ip);
   saveDB();
   io.emit('emergencyRequests:update', db.emergencyRequests);
+  notifyAdminAndHR({
+    action: 'emergency_request',
+    employeeId,
+    employeeName: emp.name,
+    branchId: emp.branchId,
+    title: `Đơn khẩn cấp: ${emp.name}`,
+    message: `${emp.name} (${employeeId}) vừa gửi đơn xin nghỉ đột xuất ngày ${fmtDMY(date)}: "${reason}". AI đang tự động tìm người thế ca.`,
+    type: 'error',
+    data: { requestId: reqId, date, reason }
+  });
   // Trigger cascade search TH3
   handleEmergencyCascade(er);
   res.json(er);
@@ -6824,6 +7154,16 @@ app.post('/api/emergency-requests/:id/respond', (req,res)=>{
   saveDB();
   io.emit('emergencyRequests:update', db.emergencyRequests);
   io.emit('schedules:update', db.schedules);
+  notifyAdminAndHR({
+    action: 'emergency_accepted',
+    employeeId: substituteId,
+    employeeName: subEmp.name,
+    branchId: subEmp.branchId,
+    title: `Đã có người thay ca khẩn cấp: ${subEmp.name}`,
+    message: `${subEmp.name} đã chấp nhận thay ca ngày ${fmtDMY(er.date)} cho ${er.employeeName}. Lịch đã được cập nhật.`,
+    type: 'success',
+    data: { requestId: er.id, substituteId, originalEmployeeId: er.employeeId }
+  });
   const zr = { id: uuidv4(), sent_at: getVietnamISOString(), receiver: db.employees.find(e=>e.employeeId===er.employeeId)?.phone, type:'EMERGENCY_APPROVED', content:`OFF đột xuất ngày ${er.date} đã được duyệt, người thay: ${subEmp.name}`, status:'SENT', error:'' };
   db.zaloRecords.unshift(zr);
   io.emit('zalo:update', db.zaloRecords);
@@ -7156,6 +7496,18 @@ app.post('/api/courses/:id/submit', (req,res)=>{
   io.emit('testResults:update', db.testResults);
   io.emit('employees:update', db.employees);
   io.emit('notifications:update', db.notifications);
+
+  notifyAdminAndHR({
+    action: 'quiz_submitted',
+    employeeId,
+    employeeName: emp.name,
+    branchId: emp.branchId,
+    title: `Bài TEST Đào tạo: ${emp.name} (${result === 'DAT' ? 'ĐẠT' : result === 'CHUA_DU_DK' ? 'THI LẠI' : 'LOẠI'})`,
+    message: `${emp.name} (${employeeId}) vừa nộp bài test: ${rounded}/10 điểm (${correct}/25 câu). Kết quả: ${result === 'DAT' ? 'ĐẠT (Chờ duyệt chính thức) ✅' : result === 'CHUA_DU_DK' ? 'Thi lại ⚠️' : 'LOẠI ❌'}.`,
+    type: result === 'DAT' ? 'success' : result === 'CHUA_DU_DK' ? 'warning' : 'error',
+    data: { score: rounded, correct, total: 25, result }
+  });
+
   res.json({ success: true, testResult: testRes, employee: emp, passed: result==='DAT', score: rounded });
 });
 
