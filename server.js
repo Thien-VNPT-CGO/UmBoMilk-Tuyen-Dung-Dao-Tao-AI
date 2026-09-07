@@ -8156,19 +8156,374 @@ app.get('/api/finance/export/payroll-input', financeAuthMiddleware, (req,res)=>{
   res.setHeader('Content-Disposition',`attachment; filename="Du_lieu_tinh_luong_${m.replace('-','_')}_FINANCE.csv"`);
   return res.send('\uFEFF'+header+rows);
 });
-// Finance 4 sheets - hiển thị trên web finance
+// === MA TRẬN CHẤM CÔNG THÁNG (Mẫu 1: Grid 1 -> 31 ngày) ===
+app.get('/api/finance/reports/matrix', financeAuthMiddleware, (req,res)=>{
+  const { month, branch } = req.query;
+  const m = month || getVietnamTodayStr().slice(0,7);
+  const [yearStr, monthStr] = m.split('-');
+  const y = parseInt(yearStr, 10);
+  const mon = parseInt(monthStr, 10);
+  const daysInMonth = new Date(y, mon, 0).getDate();
+
+  const branchOrder = ['CN3', 'CN2', 'CN1', 'CN4'];
+  const branchMeta = {
+    'CN3': { name: '120 Hoàng Diệu 2', shortCode: '120' },
+    'CN2': { name: '261 Tô Hiến Thành', shortCode: '261' },
+    'CN1': { name: '130 Vạn Kiếp', shortCode: '130' },
+    'CN4': { name: '111 Tôn Đản', shortCode: '111' }
+  };
+
+  let emps = [...db.employees].filter(e=> e.status!=='ARCHIVED');
+  if(branch) emps = emps.filter(e=> e.branchId===branch);
+
+  emps.sort((a,b)=>{
+    const ordA = branchOrder.indexOf(a.branchId);
+    const ordB = branchOrder.indexOf(b.branchId);
+    if(ordA!==-1 && ordB!==-1 && ordA!==ordB) return ordA - ordB;
+    return (a.employeeId||'').localeCompare(b.employeeId||'');
+  });
+
+  const branchCounters = {};
+  let totalHoursAll = 0;
+  let totalDaysAll = 0;
+
+  const rows = emps.map(emp=>{
+    const bId = emp.branchId || 'CN3';
+    branchCounters[bId] = (branchCounters[bId] || 0) + 1;
+    const bMeta = branchMeta[bId] || { name: bId, shortCode: bId.replace(/\D/g,'')||'100' };
+    const cnCode = `${bMeta.shortCode}.${branchCounters[bId]}`;
+
+    const isTrainingEmp = (emp.status==='TRAINING' || emp.type==='TRAINING' || (emp.officialStartDate && emp.officialStartDate > `${m}-01`));
+    const luongHocViec = isTrainingEmp ? 21000 : null;
+    const mucLuong = 25500;
+
+    const days = [];
+    let empTotalHours = 0;
+    let empTotalDays = 0;
+
+    for(let d=1; d<=daysInMonth; d++){
+      const dateStr = `${m}-${String(d).padStart(2,'0')}`;
+      const atts = db.attendances.filter(a=> a.employeeId===emp.employeeId && a.date===dateStr);
+      let dayHours = 0;
+      atts.forEach(att=>{
+        if(att.checkIn){
+          if(att.actualHours) dayHours += Number(att.actualHours);
+          else {
+            const shiftCfg = db.settings?.payroll?.shifts?.[att.shift || emp.shift];
+            dayHours += (shiftCfg?.hours || 5);
+          }
+        }
+      });
+      if(dayHours===0){
+        const sched = db.schedules.find(s=> s.employeeId===emp.employeeId);
+        const schedDay = sched?.days?.find(sd=> sd.date===dateStr);
+        if(schedDay && (schedDay.status==='WORKING'||schedDay.status==='SUBSTITUTE')){
+          const hasAtt = db.attendances.find(a=> a.employeeId===emp.employeeId && a.date===dateStr && a.checkIn);
+          if(hasAtt){
+            const shiftCfg = db.settings?.payroll?.shifts?.[schedDay.shift || emp.shift];
+            dayHours = (shiftCfg?.hours || 5);
+          }
+        }
+      }
+
+      const isDayTraining = isTrainingEmp && (!emp.officialStartDate || dateStr < emp.officialStartDate);
+
+      if(dayHours > 0){
+        empTotalHours += dayHours;
+        empTotalDays++;
+        days.push({ day: d, date: dateStr, hours: Math.round(dayHours*10)/10, isTraining: isDayTraining });
+      } else {
+        days.push({ day: d, date: dateStr, hours: null, isTraining: false });
+      }
+    }
+
+    totalHoursAll += empTotalHours;
+    totalDaysAll += empTotalDays;
+
+    return {
+      branchName: bMeta.name,
+      branchId: bId,
+      code: emp.employeeId,
+      cn: cnCode,
+      name: (emp.name || '').toUpperCase(),
+      luongHocViec,
+      mucLuong,
+      days,
+      tongGio: Math.round(empTotalHours*10)/10,
+      ngayCong: empTotalDays,
+      isSpecial: (emp.isSpecial || (emp.notes && emp.notes.includes('Đặc biệt')))
+    };
+  });
+
+  res.json({
+    month: m,
+    daysInMonth,
+    title: `BẢNG CHẤM CÔNG THÁNG ${monthStr}.${yearStr}`,
+    rows,
+    summary: {
+      totalEmployees: rows.length,
+      totalHours: Math.round(totalHoursAll*10)/10,
+      totalDays: totalDaysAll
+    }
+  });
+});
+
+// === THEO DÕI HOÀN TIỀN ĐỒNG PHỤC (Mẫu 2) ===
+app.get('/api/finance/reports/dong-phuc', financeAuthMiddleware, (req,res)=>{
+  if(!db.financeDongPhuc) db.financeDongPhuc = [];
+  const branchMeta = {
+    'CN3': '120 Hoàng Diệu 2',
+    'CN2': '261 Tô Hiến Thành',
+    'CN1': '130 Vạn Kiếp',
+    'CN4': '111 Tôn Đản'
+  };
+  const list = db.employees.map(emp=>{
+    const existing = db.financeDongPhuc.find(r=> r.bhCode===emp.employeeId) || {};
+    const bName = branchMeta[emp.branchId] || emp.branchId || '120 Hoàng Diệu 2';
+    const statusText = emp.status==='ARCHIVED'?'Nghỉ việc':emp.status==='TRAINING'?'Thử việc':'Đang làm';
+    return {
+      bhCode: emp.employeeId,
+      ngayLamViec: emp.startDate || '',
+      ngayNghi: emp.resignationDate || (emp.status==='ARCHIVED'?'Đã nghỉ':''),
+      trangThai: statusText,
+      hoTen: (emp.name||'').toUpperCase(),
+      chiNhanh: bName,
+      branchId: emp.branchId,
+      soTien: existing.soTien !== undefined ? existing.soTien : 300000,
+      tienHoan: existing.tienHoan !== undefined ? existing.tienHoan : 300000,
+      kiHoan: existing.kiHoan || '',
+      hoanDot1: existing.hoanDot1 || 'Hoàn thành',
+      ghiChu: existing.ghiChu || ''
+    };
+  });
+  db.financeDongPhuc.forEach(r=>{
+    if(!list.some(l=> l.bhCode===r.bhCode)){
+      list.push({
+        bhCode: r.bhCode,
+        ngayLamViec: r.ngayLamViec || '',
+        ngayNghi: r.ngayNghi || '',
+        trangThai: r.trangThai || 'Nghỉ việc',
+        hoTen: (r.hoTen||'').toUpperCase(),
+        chiNhanh: r.chiNhanh || '120 Hoàng Diệu 2',
+        soTien: r.soTien || 300000,
+        tienHoan: r.tienHoan !== undefined ? r.tienHoan : (r.soTien || 300000),
+        kiHoan: r.kiHoan || '',
+        hoanDot1: r.hoanDot1 || 'Hoàn thành',
+        ghiChu: r.ghiChu || ''
+      });
+    }
+  });
+  res.json({ rows: list });
+});
+
+app.post('/api/finance/reports/dong-phuc', financeAuthMiddleware, (req,res)=>{
+  const { bhCode, soTien, tienHoan, kiHoan, hoanDot1, ghiChu, ngayLamViec, ngayNghi, trangThai, hoTen, chiNhanh } = req.body;
+  if(!bhCode) return res.status(400).json({ error:'Thiếu Mã NV' });
+  if(!db.financeDongPhuc) db.financeDongPhuc = [];
+  let row = db.financeDongPhuc.find(r=> r.bhCode===bhCode);
+  if(row){
+    Object.assign(row, {
+      soTien: Number(soTien)||0,
+      tienHoan: Number(tienHoan)||0,
+      kiHoan: kiHoan || row.kiHoan || '',
+      hoanDot1: hoanDot1 || row.hoanDot1 || 'Hoàn thành',
+      ghiChu: ghiChu !== undefined ? ghiChu : row.ghiChu,
+      updatedAt: getVietnamISOString()
+    });
+  } else {
+    row = {
+      bhCode,
+      hoTen: hoTen || '',
+      chiNhanh: chiNhanh || '',
+      ngayLamViec: ngayLamViec || '',
+      ngayNghi: ngayNghi || '',
+      trangThai: trangThai || 'Đang làm',
+      soTien: Number(soTien)||300000,
+      tienHoan: Number(tienHoan)||300000,
+      kiHoan: kiHoan || '',
+      hoanDot1: hoanDot1 || 'Hoàn thành',
+      ghiChu: ghiChu || '',
+      createdAt: getVietnamISOString()
+    };
+    db.financeDongPhuc.push(row);
+  }
+  saveDB();
+  io.emit('finance:dongPhuc:update', db.financeDongPhuc);
+  res.json({ success:true, row });
+});
+
+// === THEO DÕI HOÀN TIỀN KHÁM SỨC KHỎE (Mẫu 3) ===
+app.get('/api/finance/reports/kham-suc-khoe', financeAuthMiddleware, (req,res)=>{
+  if(!db.financeKhamSK) db.financeKhamSK = [];
+  const branchMeta = {
+    'CN3': { name: '120 Hoàng Diệu 2', color: 'blue' },
+    'CN2': { name: '261 Tô Hiến Thành', color: 'purple' },
+    'CN1': { name: '130 Vạn Kiếp', color: 'emerald' },
+    'CN4': { name: '111 Tôn Đản', color: 'indigo' }
+  };
+  let stt = 1;
+  const list = db.employees.map(emp=>{
+    const existing = db.financeKhamSK.find(r=> r.bhCode===emp.employeeId) || {};
+    const bMeta = branchMeta[emp.branchId] || { name: emp.branchId||'120 Hoàng Diệu 2', color: 'slate' };
+    const ngayKiHD = existing.ngayKiHD || emp.officialStartDate || emp.startDate || '';
+    let ngayHoan = existing.ngayHoan;
+    if(!ngayHoan && ngayKiHD){
+      try{
+        const p = ngayKiHD.split('-');
+        if(p.length===3){
+          const d = new Date(parseInt(p[0]), parseInt(p[1])-1 + 6, parseInt(p[2]));
+          ngayHoan = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
+        }
+      }catch(_){}
+    }
+    return {
+      stt: stt++,
+      bhCode: emp.employeeId,
+      hoTen: (emp.name||'').toUpperCase(),
+      chiNhanh: bMeta.name,
+      branchId: emp.branchId,
+      branchColor: bMeta.color,
+      ngayKiHD,
+      ngayHoan: ngayHoan || '',
+      ngayKham: existing.ngayKham || '',
+      tienKham: existing.tienKham !== undefined ? existing.tienKham : (existing.soTien || 160000),
+      mucDuyet: existing.mucDuyet !== undefined ? existing.mucDuyet : 160000,
+      tinhTrangHoan: existing.tinhTrangHoan || 'CHƯA HOÀN TRẢ GIẤY KHÁM',
+      ghiChu: existing.ghiChu || 'HOÀN 100% CHO NHÂN SỰ'
+    };
+  });
+  db.financeKhamSK.forEach(r=>{
+    if(!list.some(l=> l.bhCode===r.bhCode)){
+      list.push({
+        stt: stt++,
+        bhCode: r.bhCode,
+        hoTen: (r.hoTen||'').toUpperCase(),
+        chiNhanh: r.chiNhanh || '261 Tô Hiến Thành',
+        branchId: r.branchId || 'CN2',
+        branchColor: 'purple',
+        ngayKiHD: r.ngayKiHD || '',
+        ngayHoan: r.ngayHoan || '',
+        ngayKham: r.ngayKham || '',
+        tienKham: r.tienKham !== undefined ? r.tienKham : (r.soTien || 160000),
+        mucDuyet: r.mucDuyet !== undefined ? r.mucDuyet : 160000,
+        tinhTrangHoan: r.tinhTrangHoan || 'CHƯA HOÀN TRẢ GIẤY KHÁM',
+        ghiChu: r.ghiChu || ''
+      });
+    }
+  });
+  res.json({ rows: list });
+});
+
+app.post('/api/finance/reports/kham-suc-khoe', financeAuthMiddleware, (req,res)=>{
+  const { bhCode, ngayKiHD, ngayHoan, ngayKham, tienKham, mucDuyet, tinhTrangHoan, ghiChu, hoTen, chiNhanh } = req.body;
+  if(!bhCode) return res.status(400).json({ error:'Thiếu Mã NV' });
+  if(!db.financeKhamSK) db.financeKhamSK = [];
+  let row = db.financeKhamSK.find(r=> r.bhCode===bhCode);
+  if(row){
+    Object.assign(row, {
+      ngayKiHD: ngayKiHD !== undefined ? ngayKiHD : row.ngayKiHD,
+      ngayHoan: ngayHoan !== undefined ? ngayHoan : row.ngayHoan,
+      ngayKham: ngayKham !== undefined ? ngayKham : row.ngayKham,
+      tienKham: Number(tienKham)||0,
+      mucDuyet: Number(mucDuyet)||0,
+      tinhTrangHoan: tinhTrangHoan || row.tinhTrangHoan || 'CHƯA HOÀN TRẢ GIẤY KHÁM',
+      ghiChu: ghiChu !== undefined ? ghiChu : row.ghiChu,
+      updatedAt: getVietnamISOString()
+    });
+  } else {
+    row = {
+      bhCode,
+      hoTen: hoTen || '',
+      chiNhanh: chiNhanh || '',
+      ngayKiHD: ngayKiHD || '',
+      ngayHoan: ngayHoan || '',
+      ngayKham: ngayKham || '',
+      tienKham: Number(tienKham)||0,
+      mucDuyet: Number(mucDuyet)||0,
+      tinhTrangHoan: tinhTrangHoan || 'CHƯA HOÀN TRẢ GIẤY KHÁM',
+      ghiChu: ghiChu || '',
+      createdAt: getVietnamISOString()
+    };
+    db.financeKhamSK.push(row);
+  }
+  saveDB();
+  io.emit('finance:khamSK:update', db.financeKhamSK);
+  res.json({ success:true, row });
+});
+
+// === BẢNG TÍNH LƯƠNG TỔNG HỢP ===
+app.get('/api/finance/reports/payroll-summary', financeAuthMiddleware, (req,res)=>{
+  const { month, branch } = req.query;
+  const m = month || getVietnamTodayStr().slice(0,7);
+  const start = m+'-01'; const end = m+'-31';
+  let emps = [...db.employees].filter(e=> e.status!=='ARCHIVED');
+  if(branch) emps = emps.filter(e=> e.branchId===branch);
+
+  const branchMeta = {
+    'CN3': '120 Hoàng Diệu 2',
+    'CN2': '261 Tô Hiến Thành',
+    'CN1': '130 Vạn Kiếp',
+    'CN4': '111 Tôn Đản'
+  };
+
+  const rows = emps.map(emp=>{
+    const isTraining = (emp.status==='TRAINING' || emp.type==='TRAINING');
+    const atts = db.attendances.filter(a=> a.employeeId===emp.employeeId && a.date>=start && a.date<=end && a.checkIn);
+    
+    let trainingHours = 0;
+    let officialHours = 0;
+
+    atts.forEach(a=>{
+      const shiftHours = (db.settings.payroll.shifts[a.shift || emp.shift]?.hours) || 5;
+      const h = a.actualHours ? Number(a.actualHours) : shiftHours;
+      const isDayTraining = isTraining && (!emp.officialStartDate || a.date < emp.officialStartDate);
+      if(isDayTraining) trainingHours += h;
+      else officialHours += h;
+    });
+
+    const luongHocViec = Math.round(trainingHours * 21000);
+    const luongChinhThuc = Math.round(officialHours * 25500);
+
+    const dp = (db.financeDongPhuc||[]).find(d=> d.bhCode===emp.employeeId);
+    const hoanDongPhuc = (dp && dp.hoanDot1==='Hoàn thành') ? (Number(dp.tienHoan)||0) : 0;
+
+    const ksk = (db.financeKhamSK||[]).find(k=> k.bhCode===emp.employeeId);
+    const hoanKhamSK = (ksk && (ksk.tinhTrangHoan==='ĐÃ HOÀN TRẢ GIẤY KHÁM'||ksk.tinhTrangHoan==='ĐÃ HOÀN TIỀN')) ? (Number(ksk.mucDuyet)||0) : 0;
+
+    let giamTru = 0;
+    atts.forEach(a=>{
+      if(a.violations && a.violations.includes('LATE')) giamTru += 20000;
+    });
+
+    const thucLinh = luongHocViec + luongChinhThuc + hoanDongPhuc + hoanKhamSK - giamTru;
+
+    return {
+      employeeId: emp.employeeId,
+      name: (emp.name||'').toUpperCase(),
+      branchName: branchMeta[emp.branchId] || emp.branchId,
+      trainingHours: Math.round(trainingHours*10)/10,
+      officialHours: Math.round(officialHours*10)/10,
+      totalHours: Math.round((trainingHours+officialHours)*10)/10,
+      luongHocViec,
+      luongChinhThuc,
+      hoanDongPhuc,
+      hoanKhamSK,
+      giamTru,
+      thucLinh
+    };
+  });
+
+  res.json({ month: m, rows });
+});
+
+// Finance 4 sheets - backward compatibility
 app.get('/api/finance/sheets/master-data', financeAuthMiddleware, async (req,res)=>{
-  // Thử lấy từ Google Sheets Finance nếu cấu hình, fallback DB
-  const financeId = process.env.FINANCE_MASTER_ID || db.settings.finance?.spreadsheetId || 'FINANCE_MASTER_ID';
-  let rows=[];
-  // Fallback: lấy từ MASTER_DATA local (db.employees)
-  rows = db.employees.filter(e=> e.status!=='ARCHIVED').map(e=> ({
+  const rows = db.employees.filter(e=> e.status!=='ARCHIVED').map(e=> ({
     bhCode: e.employeeId, hoTen: e.name, branchGoc: e.branchId, status: e.status, ngayLenChinhThuc: e.officialStartDate || e.startDate || '', donGia: e.status==='OFFICIAL'?25500:21000
   }));
   res.json({ sheet:'MASTER_DATA', rows, source:'DB_FALLBACK' });
 });
 app.get('/api/finance/sheets/dong-phuc', financeAuthMiddleware, (req,res)=>{
-  // DONG_PHUC: hoàn cọc đồng phục, lấy từ DB hoặc Google Sheets thật
   const rows = (db.financeDongPhuc||[]).map(r=> ({ bhCode:r.bhCode, hoTen:r.hoTen, soTien:r.soTien, ngay:r.ngay }));
   res.json({ sheet:'DONG_PHUC', rows });
 });

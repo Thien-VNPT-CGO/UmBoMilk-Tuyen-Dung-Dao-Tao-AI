@@ -1,64 +1,80 @@
 // === VIETNAM TIMEZONE REALTIME - Asia/Ho_Chi_Minh UTC+7 ===
 function getVietnamTodayStr(){ return new Date().toLocaleDateString('en-CA', {timeZone: 'Asia/Ho_Chi_Minh'}); }
 function getVietnamNow(){ return new Date(new Date().toLocaleString('en-US', {timeZone: 'Asia/Ho_Chi_Minh'})); }
-function toVietnamDateStr(d){ const date = d instanceof Date ? d : new Date(d); return date.toLocaleDateString('en-CA', {timeZone: 'Asia/Ho_Chi_Minh'}); }
 
 let financeToken = localStorage.getItem('finance_token');
 let financeKey = JSON.parse(localStorage.getItem('finance_key')||'null');
 let financeExpires = localStorage.getItem('finance_expires');
+let currentTab = 'matrix';
 
-function fmtDMY(d){ if(!d) return '—'; const p=String(d).split('T')[0].split('-'); if(p.length===3) return `${p[2]}/${p[1]}/${p[0]}`; return d; }
-function fmtMonth(m){ if(!m) return '—'; const p=String(m).split('-'); return `${p[1]}/${p[0]}`; }
-function viType(t){ if(!t) return '—'; const m={WEEK:'Tuần',MONTH:'Tháng',YEAR:'Năm'}; return m[t]||t; }
-function viStatus(s){ const v=(s||'').toUpperCase(); if(v==='OFFICIAL') return 'Chính thức'; if(v==='TRAINING'||v==='THU_VIEC') return 'Thử việc'; if(v==='CHINH_THUC') return 'Chính thức'; return s||'—'; }
-function viAnomalyType(t){
-  const map={MISSING_CHECK_IN:'Thiếu giờ vào',MISSING_CHECK_OUT:'Thiếu giờ ra',NO_SCHEDULE:'Không có lịch',OT_PENDING:'Tăng ca chờ duyệt',LATE:'Đi trễ'};
-  return map[t]||t;
+// Cache dữ liệu để tìm kiếm nhanh
+let matrixCache = null;
+let dongphucCache = [];
+let khamskCache = [];
+let payrollCache = [];
+
+function fmtMoney(n){
+  if(n==null || n==='') return '—';
+  const num = Number(n);
+  if(isNaN(num)) return n;
+  return num.toLocaleString('vi-VN');
 }
-function viDailyStatus(s){
-  const map={PRESENT:'Có mặt',ABSENT:'Vắng',LATE:'Đi trễ',MISSING_CHECKOUT:'Thiếu giờ ra',OFF:'Nghỉ','—':'—'};
-  return map[s]||s;
+
+function fmtDMY(d){
+  if(!d) return '—';
+  const p = String(d).split('T')[0].split('-');
+  if(p.length===3) return `${p[2]}/${p[1]}/${p[0]}`;
+  return d;
 }
-function viSchedStatus(s){
-  const map={WORKING:'Làm việc',OFF:'Nghỉ',SUBSTITUTE:'Làm thay'};
-  return map[s]||s||'—';
+
+function viType(t){
+  const m = { WEEK:'Tuần', MONTH:'Tháng', YEAR:'Năm' };
+  return m[t] || t || '—';
 }
 
 async function api(path, opts={}){
-  const headers={'Content-Type':'application/json'};
-  if(financeToken) headers['Authorization']='Bearer '+financeToken;
-  const res = await fetch(path, {...opts, headers:{...headers, ...(opts.headers||{})}});
+  const headers = { 'Content-Type': 'application/json' };
+  if(financeToken) headers['Authorization'] = 'Bearer ' + financeToken;
+  const res = await fetch(path, { ...opts, headers: { ...headers, ...(opts.headers||{}) } });
   const data = await res.json().catch(()=>({}));
   if(!res.ok){
     if(data.needLogin || data.expired || res.status===401){
       logout(true);
-      throw new Error(data.error||'Key hết hạn - vui lòng đăng nhập lại');
+      throw new Error(data.error || 'Phiên làm việc hết hạn - vui lòng đăng nhập lại');
     }
-    throw new Error(data.error||'Đã xảy ra lỗi');
+    throw new Error(data.error || 'Đã xảy ra lỗi kết nối');
   }
   return data;
 }
 
+// Đăng nhập
 document.getElementById('loginForm')?.addEventListener('submit', async (e)=>{
   e.preventDefault();
-  const key=document.getElementById('financeKey').value.trim();
-  const err=document.getElementById('loginError');
-  const info=document.getElementById('keyInfo');
+  const key = document.getElementById('financeKey').value.trim();
+  const err = document.getElementById('loginError');
+  const info = document.getElementById('keyInfo');
   try{
-    const data = await fetch('/api/auth/finance-login', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({key})}).then(r=>r.json().then(d=>({ok:r.ok, d})));
-    if(!data.ok) throw new Error(data.d.error||'Key không hợp lệ - vui lòng kiểm tra lại');
-    financeToken=data.d.token;
-    financeKey=data.d.key;
-    financeExpires=data.d.expiresAt;
+    const res = await fetch('/api/auth/finance-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key })
+    });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error || 'Khóa tài chính không hợp lệ');
+
+    financeToken = data.token;
+    financeKey = data.key;
+    financeExpires = data.expiresAt;
     localStorage.setItem('finance_token', financeToken);
     localStorage.setItem('finance_key', JSON.stringify(financeKey));
     localStorage.setItem('finance_expires', financeExpires);
+
     err.classList.add('hidden');
     info.classList.remove('hidden');
-    info.innerHTML=`<div class="font-bold text-sky-700">Key ${financeKey.key} • ${viType(financeKey.type)} • Hết hạn: ${new Date(financeExpires).toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'})}</div>`;
-    setTimeout(showApp, 500);
+    info.innerHTML = `<i class="fa-solid fa-circle-check mr-1.5"></i> Đăng nhập thành công • Hết hạn: ${new Date(financeExpires).toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'})}`;
+    setTimeout(showApp, 400);
   }catch(err2){
-    err.textContent=err2.message;
+    err.textContent = err2.message;
     err.classList.remove('hidden');
   }
 });
@@ -69,18 +85,20 @@ function showApp(){
     document.getElementById('app').classList.add('hidden');
     return;
   }
-  // kiểm tra hết hạn
   if(new Date(financeExpires).getTime() <= Date.now()){
     logout(true);
     return;
   }
   document.getElementById('loginOverlay').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
-  document.getElementById('keyLabel').textContent = financeKey.key + ' • ' + viType(financeKey.type);
+  document.getElementById('keyLabel').textContent = `${financeKey.key} • ${viType(financeKey.type)}`;
   document.getElementById('keyExpiry').textContent = new Date(financeExpires).toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'});
-  document.getElementById('reportMonth').value = getVietnamTodayStr().slice(0,7);
+  
+  if(!document.getElementById('reportMonth').value){
+    document.getElementById('reportMonth').value = getVietnamTodayStr().slice(0,7);
+  }
   startCountdown();
-  loadAll();
+  switchTab('matrix');
   loadEmployeesForDaily();
 }
 
@@ -88,277 +106,699 @@ function logout(isExpired){
   localStorage.removeItem('finance_token');
   localStorage.removeItem('finance_key');
   localStorage.removeItem('finance_expires');
-  financeToken=null; financeKey=null; financeExpires=null;
+  financeToken = null; financeKey = null; financeExpires = null;
   document.getElementById('app').classList.add('hidden');
   document.getElementById('loginOverlay').classList.remove('hidden');
   if(isExpired){
-    const err=document.getElementById('loginError');
-    if(err){ err.textContent='Key đã hết hạn - vui lòng xin key mới từ Quản trị'; err.classList.remove('hidden'); }
+    const err = document.getElementById('loginError');
+    if(err){
+      err.textContent = 'Khóa Tài chính đã hết hạn - vui lòng liên hệ Admin để cấp Key mới';
+      err.classList.remove('hidden');
+    }
   }
   if(window._countdown) clearInterval(window._countdown);
 }
 
 function startCountdown(){
-  const el=document.getElementById('countdown');
+  const el = document.getElementById('countdown');
   if(!el) return;
   el.classList.remove('hidden');
   function tick(){
     const diff = new Date(financeExpires).getTime() - Date.now();
-    if(diff<=0){ el.textContent='ĐÃ HẾT HẠN'; el.className='text-xs font-black bg-red-500 text-white px-3 py-1 rounded-full'; logout(true); return; }
-    const d=Math.floor(diff/86400000), h=Math.floor(diff%86400000/3600000), m=Math.floor(diff%3600000/60000);
-    el.textContent=`Còn ${d>0?d+' ngày ':''}${h} giờ ${m} phút`;
-    if(diff<86400000) el.className='text-xs font-black bg-amber-500 text-white px-3 py-1 rounded-full animate-pulse';
-    else el.className='text-xs font-black bg-emerald-500 text-white px-3 py-1 rounded-full';
+    if(diff <= 0){
+      el.textContent = 'ĐÃ HẾT HẠN';
+      el.className = 'text-xs font-black bg-red-500 text-white px-3 py-1 rounded-full';
+      logout(true);
+      return;
+    }
+    const d = Math.floor(diff/86400000);
+    const h = Math.floor((diff%86400000)/3600000);
+    const m = Math.floor((diff%3600000)/60000);
+    el.textContent = `Còn ${d>0?d+' ngày ':''}${h}h ${m}m`;
+    if(diff < 86400000) el.className = 'text-xs font-black bg-amber-500 text-white px-3 py-1 rounded-full animate-pulse';
+    else el.className = 'text-xs font-black bg-emerald-500 text-white px-3 py-1 rounded-full';
   }
   tick();
   if(window._countdown) clearInterval(window._countdown);
-  window._countdown=setInterval(tick, 60000);
-  // tự động đăng xuất đúng thời điểm hết hạn
-  const ms = new Date(financeExpires).getTime() - Date.now();
-  if(ms>0 && ms<2147483647){
-    setTimeout(()=>{ logout(true); alert('Key Tài chính đã hết hạn - tự động đăng xuất'); }, ms+1000);
-  }
+  window._countdown = setInterval(tick, 60000);
 }
 
 function switchTab(id){
-  document.querySelectorAll('.tab-section').forEach(s=>s.classList.add('hidden'));
-  document.getElementById('tab-'+id)?.classList.remove('hidden');
-  document.querySelectorAll('[id^="tabBtn-"]').forEach(b=>{ b.className='flex-1 min-w-[120px] px-3 py-2 rounded-xl text-sm font-bold bg-white border border-sky-100'; });
-  const active=document.getElementById('tabBtn-'+id);
-  if(active) active.className='flex-1 min-w-[120px] px-3 py-2 rounded-xl text-sm font-black bg-pink-600 text-white';
-  if(id==='overview') loadOverview();
-  if(id==='monthly') loadMonthly();
-  if(id==='daily') loadDaily();
-  if(id==='anomalies') loadAnomalies();
-  if(id==='master') loadMaster();
-  if(id==='template') loadTemplate();
-  if(id==='dongphuc') loadDongPhuc();
-  if(id==='khamsk') loadKhamSK();
+  currentTab = id;
+  document.querySelectorAll('.tab-section').forEach(s => s.classList.add('hidden'));
+  document.getElementById('tab-' + id)?.classList.remove('hidden');
+
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    b.classList.remove('active');
+    b.classList.remove('bg-slate-900', 'text-white');
+  });
+  const activeBtn = document.getElementById('tabBtn-' + id);
+  if(activeBtn){
+    activeBtn.classList.add('active');
+  }
+
+  if(id === 'matrix') loadMatrix();
+  else if(id === 'dongphuc') loadDongPhuc();
+  else if(id === 'khamsk') loadKhamSK();
+  else if(id === 'payroll') loadPayrollSummary();
+  else if(id === 'daily') loadDaily();
+  else if(id === 'anomalies') loadAnomalies();
 }
 
 async function loadAll(){
-  await Promise.all([loadOverview(), loadMonthly(), loadAnomalies()]);
-}
-async function loadOverview(){
-  const month=document.getElementById('reportMonth').value || getVietnamTodayStr().slice(0,7);
-  const branch=document.getElementById('reportBranch').value || '';
-  try{
-    const kpi = await api(`/api/finance/reports/overview?month=${month}&branch=${branch}`);
-    const items=[
-      {label:'Tổng NV', value:kpi.totalEmployees, sub:'trong kỳ', color:'bg-sky-500'},
-      {label:'Tiêu chuẩn', value:kpi.totalScheduledDays, sub:kpi.totalScheduledHours+' giờ', color:'bg-slate-700'},
-      {label:'Thực tế', value:kpi.totalActualDays, sub:kpi.totalActualHours+' giờ', color:'bg-emerald-500'},
-      {label:'Tính lương', value:kpi.totalPayableDays, sub:kpi.totalPayableHours+' giờ', color:'bg-blue-600'},
-      {label:'Đi trễ', value:kpi.lateCount, sub:kpi.lateMinutes+" phút", color:'bg-orange-500'},
-      {label:'Thiếu giờ vào', value:kpi.missingCheckIn, sub:'lỗi', color:'bg-red-500'},
-      {label:'Thiếu giờ ra', value:kpi.missingCheckOut, sub:'lỗi', color:'bg-red-400'},
-    ];
-    document.getElementById('kpiGrid').innerHTML=items.map(it=>`
-      <div class="bg-white rounded-2xl border border-sky-100 p-3 flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl ${it.color} text-white flex items-center justify-center text-sm"><i class="fa-solid fa-chart-simple"></i></div>
-        <div><div class="text-[11px] font-bold text-slate-500">${it.label}</div><div class="text-lg font-black">${it.value}</div><div class="text-[11px] text-slate-400">${it.sub}</div></div>
-      </div>
-    `).join('');
-  }catch(e){ console.error(e); }
-}
-async function loadMonthly(){
-  const month=document.getElementById('reportMonth').value || getVietnamTodayStr().slice(0,7);
-  const branch=document.getElementById('reportBranch').value || '';
-  try{
-    const rows=await api(`/api/finance/reports/monthly?month=${month}&branch=${branch}`);
-    const tbody=document.getElementById('monthlyTbody');
-    if(!tbody) return;
-    if(rows.length===0) return tbody.innerHTML='<tr><td colspan="6" class="text-center py-8 text-slate-400">Không có dữ liệu</td></tr>';
-    tbody.innerHTML=rows.map(r=>`
-      <tr class="border-b hover:bg-sky-50/30 text-xs">
-        <td class="px-3 py-2"><div class="font-mono font-bold text-sky-700">${r.employeeId}</div><div class="font-bold">${r.name}</div><div class="text-[11px] text-slate-500">${r.branchName} • ${r.shift}</div></td>
-        <td class="px-2 py-2 text-center font-bold">${r.scheduledDays}</td>
-        <td class="px-2 py-2 text-center font-bold text-emerald-600">${r.actualDays}</td>
-        <td class="px-2 py-2 text-center font-black text-blue-600">${r.payableDays}</td>
-        <td class="px-2 py-2 text-center"><span class="${r.lateCount?'bg-orange-100 text-orange-700':'bg-slate-100 text-slate-500'} px-2 py-0.5 rounded-full font-bold">${r.lateCount}</span></td>
-        <td class="px-2 py-2 text-center"><span class="${(r.missingIn+r.missingOut)?'bg-red-100 text-red-700':'bg-emerald-50 text-emerald-700'} px-2 py-0.5 rounded-full font-bold">${r.missingIn+r.missingOut}</span></td>
-      </tr>
-    `).join('');
-  }catch(e){ console.error(e); }
-}
-async function loadEmployeesForDaily(){
-  try{
-    // Lấy danh sách nhân viên qua báo cáo tháng (có tên) - finance không gọi /api/employees trực tiếp
-    const month=document.getElementById('reportMonth').value || getVietnamTodayStr().slice(0,7);
-    const rows=await api(`/api/finance/reports/monthly?month=${month}`);
-    const sel=document.getElementById('dailyEmp');
-    if(sel) sel.innerHTML=rows.map(r=>`<option value="${r.employeeId}">${r.employeeId} - ${r.name}</option>`).join('');
-    if(sel && sel.options.length) loadDaily();
-  }catch(e){}
-}
-async function loadDaily(){
-  const empId=document.getElementById('dailyEmp')?.value;
-  const month=document.getElementById('reportMonth').value || getVietnamTodayStr().slice(0,7);
-  if(!empId) return;
-  try{
-    const rows=await api(`/api/finance/reports/daily?employeeId=${empId}&month=${month}`);
-    const tbody=document.getElementById('dailyTbody');
-    tbody.innerHTML=rows.map(r=>`
-      <tr class="border-b hover:bg-sky-50/30 text-xs">
-        <td class="px-2 py-2"><div class="font-bold">${fmtDMY(r.date)} ${r.dayName}</div><div class="text-[11px] text-slate-500">${viSchedStatus(r.schedStatus||r.status)}</div></td>
-        <td class="px-2 py-2 text-center">${r.shift}</td>
-        <td class="px-2 py-2 text-center font-mono">${r.checkIn||'—'}</td>
-        <td class="px-2 py-2 text-center font-mono">${r.checkOut||'—'}</td>
-        <td class="px-2 py-2 text-center"><span class="px-2 py-0.5 rounded-full text-[11px] font-bold ${r.status==='PRESENT'?'bg-emerald-100 text-emerald-700':r.status==='ABSENT'?'bg-red-100 text-red-700':'bg-amber-100 text-amber-700'}">${viDailyStatus(r.status)}</span></td>
-      </tr>
-    `).join('');
-  }catch(e){ console.error(e); }
-}
-async function loadAnomalies(){
-  const month=document.getElementById('reportMonth').value || getVietnamTodayStr().slice(0,7);
-  const branch=document.getElementById('reportBranch').value || '';
-  try{
-    const list=await api(`/api/finance/reports/anomalies?month=${month}&branch=${branch}`);
-    const el=document.getElementById('anomalyList');
-    if(list.length===0) return el.innerHTML='<div class="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center text-sm text-emerald-700">✔ Không có sai lệch</div>';
-    el.innerHTML=list.slice(0,50).map(a=>`
-      <div class="bg-white border border-amber-200 rounded-xl p-3 flex justify-between items-center">
-        <div><div class="font-bold text-sm">${a.name} • ${a.employeeId} • ${fmtDMY(a.date)}</div><div class="text-xs text-slate-600">${viAnomalyType(a.type)} — ${a.desc}</div></div>
-        <span class="text-[11px] font-black px-2 py-1 rounded-full bg-amber-100 text-amber-700">${viAnomalyType(a.type)}</span>
-      </div>
-    `).join('');
-  }catch(e){ console.error(e); }
-}
-async function loadMaster(){
-  try{
-    const data=await api('/api/finance/sheets/master-data');
-    const tbody=document.getElementById('masterTbody');
-    if(!tbody) return;
-    if(!data.rows.length) return tbody.innerHTML='<tr><td colspan="7" class="text-center py-8 text-slate-400">Chưa có dữ liệu Dữ liệu gốc</td></tr>';
-    tbody.innerHTML=data.rows.map(r=>`<tr class="border-b hover:bg-sky-50/30 text-xs"><td class="px-2 py-2 font-mono font-bold text-sky-700">${r.bhCode}</td><td class="px-2 py-2">${r.hoTen}</td><td class="px-2 py-2">${r.branchGoc}</td><td class="px-2 py-2"><span class="px-2 py-0.5 rounded-full text-[11px] font-bold ${r.status==='OFFICIAL'||r.status==='Chính thức'?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}">${viStatus(r.status)}</span></td><td class="px-2 py-2">${r.ngayLenChinhThuc?fmtDMY(r.ngayLenChinhThuc):'—'}</td><td class="px-2 py-2 font-bold">${r.donGia.toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'})}đ</td><td class="px-2 py-2"><button onclick="editMaster('${r.bhCode}')" class="text-xs bg-white border border-sky-200 text-sky-700 px-2 py-1 rounded-lg">Sửa</button></td></tr>`).join('');
-  }catch(e){ console.error(e); }
-}
-function editMaster(bhCode){ document.getElementById('masterBh').value=bhCode; document.getElementById('masterBh').focus(); }
-async function saveMaster(){
-  const bhCode=document.getElementById('masterBh').value.trim();
-  const hoTen=document.getElementById('masterHoTen').value.trim();
-  const branchGoc=document.getElementById('masterBranch').value.trim();
-  const status=document.getElementById('masterStatus').value;
-  const ngayLenChinhThuc=document.getElementById('masterNgay').value;
-  if(!bhCode) return alert('Thiếu Mã NV (BH_Code)');
-  try{ await api('/api/finance/sheets/master-data', {method:'POST', body:JSON.stringify({bhCode, hoTen, branchGoc, status, ngayLenChinhThuc})}); alert('Đã lưu Dữ liệu gốc → Trang tính'); loadMaster(); }catch(e){ alert(e.message); }
-}
-async function loadDongPhuc(){
-  try{
-    const data=await api('/api/finance/sheets/dong-phuc');
-    const tbody=document.getElementById('dongphucTbody');
-    if(!tbody) return;
-    if(!data.rows.length) return tbody.innerHTML='<tr><td colspan="5" class="text-center py-8 text-slate-400">Chưa có dữ liệu Đồng phục</td></tr>';
-    tbody.innerHTML=data.rows.map(r=>`<tr class="border-b hover:bg-amber-50/30 text-xs"><td class="px-2 py-2 font-mono">${r.bhCode}</td><td class="px-2 py-2">${r.hoTen}</td><td class="px-2 py-2 font-bold text-amber-700">${r.soTien.toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'})}đ</td><td class="px-2 py-2">${r.ngay?fmtDMY(r.ngay):'—'}</td><td class="px-2 py-2"><button onclick="editDong('${r.bhCode}','${r.hoTen}',${r.soTien},'${r.ngay}')" class="text-xs bg-white border border-amber-200 text-amber-700 px-2 py-1 rounded-lg">Sửa</button></td></tr>`).join('');
-  }catch(e){ console.error(e); }
-}
-function editDong(bhCode,hoTen,soTien,ngay){ document.getElementById('dongBh').value=bhCode; document.getElementById('dongHoTen').value=hoTen; document.getElementById('dongTien').value=soTien; document.getElementById('dongNgay').value=ngay?ngay.split('T')[0]:''; }
-async function saveDongPhuc(){
-  const bhCode=document.getElementById('dongBh').value.trim();
-  const hoTen=document.getElementById('dongHoTen').value.trim();
-  const soTien=document.getElementById('dongTien').value;
-  const ngay=document.getElementById('dongNgay').value;
-  if(!bhCode) return alert('Thiếu Mã NV (BH_Code)');
-  try{ await api('/api/finance/sheets/dong-phuc', {method:'POST', body:JSON.stringify({bhCode, hoTen, soTien, ngay})}); alert('Đã lưu Đồng phục → Trang tính'); loadDongPhuc(); }catch(e){ alert(e.message); }
-}
-async function loadKhamSK(){
-  try{
-    const data=await api('/api/finance/sheets/kham-suc-khoe');
-    const tbody=document.getElementById('khamskTbody');
-    if(!tbody) return;
-    if(!data.rows.length) return tbody.innerHTML='<tr><td colspan="5" class="text-center py-8 text-slate-400">Chưa có dữ liệu Khám sức khỏe</td></tr>';
-    tbody.innerHTML=data.rows.map(r=>`<tr class="border-b hover:bg-emerald-50/30 text-xs"><td class="px-2 py-2 font-mono">${r.bhCode}</td><td class="px-2 py-2">${r.hoTen}</td><td class="px-2 py-2 font-bold text-emerald-700">${r.soTien.toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'})}đ</td><td class="px-2 py-2">${r.ngay?fmtDMY(r.ngay):'—'}</td><td class="px-2 py-2"><button onclick="editKham('${r.bhCode}','${r.hoTen}',${r.soTien},'${r.ngay}')" class="text-xs bg-white border border-emerald-200 text-emerald-700 px-2 py-1 rounded-lg">Sửa</button></td></tr>`).join('');
-  }catch(e){ console.error(e); }
-}
-function editKham(bhCode,hoTen,soTien,ngay){ document.getElementById('khamBh').value=bhCode; document.getElementById('khamHoTen').value=hoTen; document.getElementById('khamTien').value=soTien; document.getElementById('khamNgay').value=ngay?ngay.split('T')[0]:''; }
-async function saveKhamSK(){
-  const bhCode=document.getElementById('khamBh').value.trim();
-  const hoTen=document.getElementById('khamHoTen').value.trim();
-  const soTien=document.getElementById('khamTien').value;
-  const ngay=document.getElementById('khamNgay').value;
-  if(!bhCode) return alert('Thiếu Mã NV (BH_Code)');
-  try{ await api('/api/finance/sheets/kham-suc-khoe', {method:'POST', body:JSON.stringify({bhCode, hoTen, soTien, ngay})}); alert('Đã lưu Khám sức khỏe → Trang tính'); loadKhamSK(); }catch(e){ alert(e.message); }
-}
-async function loadTemplate(){
-  try{
-    const data=await api('/api/finance/sheets/template-info');
-    const el=document.getElementById('templateInfo');
-    if(!el) return;
-    el.innerHTML=`<div class="font-bold text-sky-700">Trang tính ẩn: ${data.sheet} ${data.hidden?'(ẩn)':''}</div><div class="mt-2 space-y-1">${Object.entries(data.formulas).map(([k,v])=>`<div><span class="font-bold">${k}:</span> <span class="font-mono bg-white px-1 rounded">${v}</span></div>`).join('')}<div class="mt-2 text-slate-500">${data.note}</div></div>`;
-  }catch(e){ console.error(e); }
-}
-async function exportFinance(){
-  const month=document.getElementById('reportMonth').value || getVietnamTodayStr().slice(0,7);
-  const branch=document.getElementById('reportBranch').value || '';
-  const res=await fetch(`/api/finance/export/payroll-input?month=${month}&branch=${branch}`, {headers:{Authorization:'Bearer '+financeToken}});
-  if(!res.ok) return alert('Lỗi xuất file - vui lòng thử lại');
-  const blob=await res.blob();
-  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`Du_lieu_tinh_luong_${month.replace('-','_')}_FINANCE.csv`; a.click();
+  if(currentTab === 'matrix') await loadMatrix();
+  else if(currentTab === 'dongphuc') await loadDongPhuc();
+  else if(currentTab === 'khamsk') await loadKhamSK();
+  else if(currentTab === 'payroll') await loadPayrollSummary();
+  else if(currentTab === 'daily') await loadDaily();
+  else if(currentTab === 'anomalies') await loadAnomalies();
 }
 
-// khởi tạo
-(function(){
-  // kiểm tra hết hạn token mỗi 30 giây
-  setInterval(()=>{
-    if(financeExpires && new Date(financeExpires).getTime() <= Date.now()){
-      logout(true);
+// =========================================================================
+// TAB 1: BẢNG CHẤM CÔNG THÁNG (MA TRẬN 1 - 31 NGÀY THEO ẢNH 1)
+// =========================================================================
+async function loadMatrix(){
+  const month = document.getElementById('reportMonth').value || getVietnamTodayStr().slice(0,7);
+  const branch = document.getElementById('reportBranch').value || '';
+  try{
+    const data = await api(`/api/finance/reports/matrix?month=${month}&branch=${branch}`);
+    matrixCache = data;
+    renderMatrix(data);
+  }catch(e){
+    console.error('loadMatrix error', e);
+  }
+}
+
+function renderMatrix(data){
+  if(!data) return;
+  const { daysInMonth, title, rows, summary } = data;
+  document.getElementById('matrixHeaderTitle').textContent = title;
+
+  // Render thead
+  const theadRow = document.getElementById('matrixTheadRow');
+  let theadHtml = `
+    <th class="p-2 text-center sticky-col-1 bg-amber-300 min-w-[110px]">Chi nhánh</th>
+    <th class="p-2 text-center sticky-col-2 bg-amber-300 min-w-[65px]">Mã</th>
+    <th class="p-2 text-center sticky-col-3 bg-amber-300 min-w-[55px]">CN</th>
+    <th class="p-2 text-left sticky-col-4 bg-amber-300 min-w-[170px]">Tên nhân viên</th>
+    <th class="p-2 text-center bg-amber-300 min-w-[70px]">Lương<br>học việc</th>
+    <th class="p-2 text-center bg-amber-300 min-w-[70px]">Mức<br>lương</th>
+  `;
+  for(let d=1; d<=daysInMonth; d++){
+    theadHtml += `<th class="p-1.5 text-center bg-amber-300 min-w-[32px]">${d}</th>`;
+  }
+  theadHtml += `
+    <th class="p-2 text-center bg-amber-300 min-w-[60px]">Tổng<br>giờ</th>
+    <th class="p-2 text-center bg-amber-300 min-w-[55px]">Ngày<br>công</th>
+  `;
+  theadRow.innerHTML = theadHtml;
+
+  // Render tbody
+  const tbody = document.getElementById('matrixTbody');
+  if(rows.length === 0){
+    tbody.innerHTML = `<tr><td colspan="${daysInMonth + 8}" class="text-center py-12 text-slate-400 font-bold bg-white">Không có dữ liệu nhân viên trong kỳ này</td></tr>`;
+    document.getElementById('matrixTfootRow').innerHTML = '';
+    return;
+  }
+
+  const query = (document.getElementById('searchInput')?.value || '').toLowerCase().trim();
+  const filteredRows = query ? rows.filter(r => r.code.toLowerCase().includes(query) || r.name.toLowerCase().includes(query) || r.branchName.toLowerCase().includes(query)) : rows;
+
+  const daySums = new Array(daysInMonth).fill(0);
+
+  tbody.innerHTML = filteredRows.map(r => {
+    let daysHtml = '';
+    r.days.forEach((dayObj, idx) => {
+      const h = dayObj.hours;
+      if(h){
+        daySums[idx] += h;
+        const cellClass = dayObj.isTraining ? 'cell-training' : '';
+        daysHtml += `<td class="p-1 text-center font-bold ${cellClass}">${h}</td>`;
+      } else {
+        daysHtml += `<td class="p-1 text-center text-slate-300"></td>`;
+      }
+    });
+
+    const isPinkRow = r.isSpecial || (r.code && (r.code.includes('139') || r.code.includes('094')));
+    const nameColor = isPinkRow ? 'text-rose-600 font-extrabold' : 'text-slate-800 font-bold';
+    const codeColor = isPinkRow ? 'text-rose-600 font-black' : 'font-mono text-slate-700 font-bold';
+
+    return `
+      <tr class="hover:bg-slate-50 transition-colors">
+        <td class="p-2 text-left sticky-col-1 text-slate-700 font-medium">${r.branchName}</td>
+        <td class="p-2 text-center sticky-col-2 ${codeColor}">${r.code}</td>
+        <td class="p-2 text-center sticky-col-3 text-slate-500 font-mono">${r.cn}</td>
+        <td class="p-2 text-left sticky-col-4 ${nameColor} truncate max-w-[190px]">${r.name}</td>
+        <td class="p-2 text-right ${r.luongHocViec ? 'cell-training' : 'text-slate-400'}">${r.luongHocViec ? fmtMoney(r.luongHocViec) : ''}</td>
+        <td class="p-2 text-right font-semibold">${fmtMoney(r.mucLuong)}</td>
+        ${daysHtml}
+        <td class="p-2 text-center font-black bg-amber-100 text-amber-900">${r.tongGio}</td>
+        <td class="p-2 text-center font-black bg-yellow-100 text-yellow-900">${r.ngayCong}</td>
+      </tr>
+    `;
+  }).join('');
+
+  // Render tfoot (Hàng TỔNG đúng chuẩn ảnh 1)
+  const grandHours = filteredRows.reduce((s, r) => s + (r.tongGio||0), 0);
+  const grandDays = filteredRows.reduce((s, r) => s + (r.ngayCong||0), 0);
+
+  let tfootHtml = `
+    <td colspan="6" class="p-2.5 text-center text-sm font-black bg-amber-300 text-slate-900">TỔNG</td>
+  `;
+  for(let d=0; d<daysInMonth; d++){
+    const sumD = Math.round(daySums[d] * 10) / 10;
+    tfootHtml += `<td class="p-1 text-center bg-amber-300 font-bold text-slate-900">${sumD > 0 ? sumD : ''}</td>`;
+  }
+  tfootHtml += `
+    <td class="p-2 text-center bg-amber-400 text-slate-950 font-black text-sm">${Math.round(grandHours*10)/10}</td>
+    <td class="p-2 text-center bg-amber-400 text-slate-950 font-black text-sm">${grandDays}</td>
+  `;
+  document.getElementById('matrixTfootRow').innerHTML = tfootHtml;
+}
+
+// =========================================================================
+// TAB 2: HOÀN TIỀN ĐỒNG PHỤC (THEO ẢNH 2)
+// =========================================================================
+async function loadDongPhuc(){
+  try{
+    const res = await api('/api/finance/reports/dong-phuc');
+    dongphucCache = res.rows || [];
+    renderDongPhuc(dongphucCache);
+  }catch(e){
+    console.error('loadDongPhuc error', e);
+  }
+}
+
+function renderDongPhuc(rows){
+  const tbody = document.getElementById('dongphucTbody');
+  if(!tbody) return;
+
+  const query = (document.getElementById('searchInput')?.value || '').toLowerCase().trim();
+  const filtered = query ? rows.filter(r => r.bhCode.toLowerCase().includes(query) || r.hoTen.toLowerCase().includes(query) || r.chiNhanh.toLowerCase().includes(query)) : rows;
+
+  if(filtered.length === 0){
+    tbody.innerHTML = `<tr><td colspan="11" class="text-center py-10 text-slate-400 font-bold bg-white">Chưa có dữ liệu đồng phục</td></tr>`;
+    document.getElementById('dongphucTfootRow').innerHTML = '';
+    return;
+  }
+
+  let totalCoc = 0;
+  let totalHoan = 0;
+
+  tbody.innerHTML = filtered.map(r => {
+    totalCoc += Number(r.soTien)||0;
+    totalHoan += Number(r.tienHoan)||0;
+
+    const isHoanThanh = r.hoanDot1 === 'Hoàn thành';
+    const badgeColor = isHoanThanh ? 'bg-cyan-100 text-cyan-800 border-cyan-300' : 'bg-amber-100 text-amber-800 border-amber-300';
+
+    return `
+      <tr class="hover:bg-slate-50 transition-colors">
+        <td class="p-2 text-center font-mono font-bold text-slate-800">${r.bhCode}</td>
+        <td class="p-2 text-center text-slate-600 font-medium">${fmtDMY(r.ngayLamViec)}</td>
+        <td class="p-2 text-center text-slate-500">${r.ngayNghi ? fmtDMY(r.ngayNghi) : (r.trangThai==='Nghỉ việc'?'Đã nghỉ':'—')}</td>
+        <td class="p-2 text-center"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${r.trangThai==='Đang làm'?'bg-emerald-100 text-emerald-700':'bg-slate-200 text-slate-600'}">${r.trangThai}</span></td>
+        <td class="p-2 text-left font-bold text-slate-900">${r.hoTen}</td>
+        <td class="p-2 text-left text-slate-700">${r.chiNhanh}</td>
+        <td class="p-2 text-right font-black bg-yellow-50 text-slate-900">${fmtMoney(r.soTien)}</td>
+        <td class="p-2 text-right font-black bg-cyan-50 text-cyan-900">${fmtMoney(r.tienHoan)}</td>
+        <td class="p-2 text-center font-bold text-rose-600">${r.kiHoan ? fmtDMY(r.kiHoan) : '—'}</td>
+        <td class="p-2 text-center">
+          <span class="px-2.5 py-1 rounded-lg text-[11px] font-extrabold border ${badgeColor}">
+            ${r.hoanDot1}
+          </span>
+        </td>
+        <td class="p-2 text-center">
+          <button onclick="openModalDongPhuc('${r.bhCode}')" class="px-2.5 py-1 rounded-lg bg-white border border-slate-300 hover:border-pink-500 hover:text-pink-600 text-slate-700 text-xs font-bold transition-all">
+            <i class="fa-solid fa-pen-to-square"></i> Sửa
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  document.getElementById('dongphucTfootRow').innerHTML = `
+    <td colspan="6" class="p-2 text-center font-black bg-slate-200">TỔNG CỘNG</td>
+    <td class="p-2 text-right font-black bg-yellow-200 text-slate-950">${fmtMoney(totalCoc)}</td>
+    <td class="p-2 text-right font-black bg-cyan-200 text-cyan-950">${fmtMoney(totalHoan)}</td>
+    <td colspan="3" class="p-2 bg-slate-200"></td>
+  `;
+}
+
+function openModalDongPhuc(bhCode){
+  const r = dongphucCache.find(item => item.bhCode === bhCode);
+  if(!r) return;
+  document.getElementById('editDpBhCode').value = r.bhCode;
+  document.getElementById('editDpCodeName').value = `${r.bhCode} - ${r.hoTen} (${r.chiNhanh})`;
+  document.getElementById('editDpSoTien').value = r.soTien || 300000;
+  document.getElementById('editDpTienHoan').value = r.tienHoan !== undefined ? r.tienHoan : 300000;
+  document.getElementById('editDpKiHoan').value = r.kiHoan || '';
+  document.getElementById('editDpHoanDot1').value = r.hoanDot1 || 'Hoàn thành';
+  document.getElementById('editDpGhiChu').value = r.ghiChu || '';
+  document.getElementById('modalDongPhuc').classList.remove('hidden');
+}
+
+async function submitDongPhuc(e){
+  e.preventDefault();
+  const bhCode = document.getElementById('editDpBhCode').value;
+  const soTien = document.getElementById('editDpSoTien').value;
+  const tienHoan = document.getElementById('editDpTienHoan').value;
+  const kiHoan = document.getElementById('editDpKiHoan').value;
+  const hoanDot1 = document.getElementById('editDpHoanDot1').value;
+  const ghiChu = document.getElementById('editDpGhiChu').value;
+  try{
+    await api('/api/finance/reports/dong-phuc', {
+      method: 'POST',
+      body: JSON.stringify({ bhCode, soTien, tienHoan, kiHoan, hoanDot1, ghiChu })
+    });
+    closeModal('modalDongPhuc');
+    loadDongPhuc();
+  }catch(err){
+    alert(err.message);
+  }
+}
+
+// =========================================================================
+// TAB 3: HOÀN TIỀN KHÁM SỨC KHỎE (THEO ẢNH 3)
+// =========================================================================
+async function loadKhamSK(){
+  try{
+    const res = await api('/api/finance/reports/kham-suc-khoe');
+    khamskCache = res.rows || [];
+    renderKhamSK(khamskCache);
+  }catch(e){
+    console.error('loadKhamSK error', e);
+  }
+}
+
+function renderKhamSK(rows){
+  const tbody = document.getElementById('khamskTbody');
+  if(!tbody) return;
+
+  const query = (document.getElementById('searchInput')?.value || '').toLowerCase().trim();
+  const filtered = query ? rows.filter(r => r.bhCode.toLowerCase().includes(query) || r.hoTen.toLowerCase().includes(query) || r.chiNhanh.toLowerCase().includes(query)) : rows;
+
+  if(filtered.length === 0){
+    tbody.innerHTML = `<tr><td colspan="12" class="text-center py-10 text-slate-400 font-bold bg-white">Chưa có dữ liệu khám sức khỏe</td></tr>`;
+    document.getElementById('khamskTfootRow').innerHTML = '';
+    return;
+  }
+
+  let totalTienKham = 0;
+  let totalMucDuyet = 0;
+
+  tbody.innerHTML = filtered.map((r, idx) => {
+    totalTienKham += Number(r.tienKham)||0;
+    totalMucDuyet += Number(r.mucDuyet)||0;
+
+    // Chi nhánh badge theo đúng màu ảnh 3
+    let bClass = 'bg-slate-100 text-slate-700';
+    if(r.chiNhanh.includes('Tô Hiến Thành')) bClass = 'bg-purple-100 text-purple-800 border border-purple-200';
+    else if(r.chiNhanh.includes('Vạn Kiếp')) bClass = 'bg-emerald-100 text-emerald-800 border border-emerald-200';
+    else if(r.chiNhanh.includes('Hoàng Diệu')) bClass = 'bg-sky-100 text-sky-800 border border-sky-200';
+    else if(r.chiNhanh.includes('Tôn Đản')) bClass = 'bg-blue-900 text-white font-bold';
+
+    const isRed = (r.mucDuyet === 0 || r.tinhTrangHoan?.includes('KO CÓ') || r.code === 'BH.126');
+    const rowColor = isRed ? 'text-rose-600 font-bold' : '';
+
+    return `
+      <tr class="hover:bg-slate-50 transition-colors ${rowColor}">
+        <td class="p-2 text-center font-bold text-slate-500">${idx + 1}</td>
+        <td class="p-2 text-center font-mono font-bold">${r.bhCode}</td>
+        <td class="p-2 text-left font-bold">${r.hoTen}</td>
+        <td class="p-2 text-center"><span class="px-2.5 py-1 rounded-lg text-xs font-bold inline-block ${bClass}">${r.chiNhanh}</span></td>
+        <td class="p-2 text-center font-medium">${fmtDMY(r.ngayKiHD)}</td>
+        <td class="p-2 text-center font-bold text-emerald-700">${fmtDMY(r.ngayHoan)}</td>
+        <td class="p-2 text-center font-medium text-slate-600">${fmtDMY(r.ngayKham)}</td>
+        <td class="p-2 text-right font-bold">${fmtMoney(r.tienKham)}</td>
+        <td class="p-2 text-right font-black text-emerald-600">${fmtMoney(r.mucDuyet)}</td>
+        <td class="p-2 text-center text-xs font-bold text-slate-700">${r.tinhTrangHoan}</td>
+        <td class="p-2 text-left text-xs font-medium text-slate-600">${r.ghiChu || ''}</td>
+        <td class="p-2 text-center">
+          <button onclick="openModalKhamSK('${r.bhCode}')" class="px-2.5 py-1 rounded-lg bg-white border border-slate-300 hover:border-emerald-500 hover:text-emerald-600 text-slate-700 text-xs font-bold transition-all">
+            <i class="fa-solid fa-pen-to-square"></i> Sửa
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  document.getElementById('khamskTfootRow').innerHTML = `
+    <td colspan="7" class="p-2 text-center font-black bg-slate-200">TỔNG CỘNG</td>
+    <td class="p-2 text-right font-black bg-amber-200 text-slate-950">${fmtMoney(totalTienKham)}</td>
+    <td class="p-2 text-right font-black bg-emerald-200 text-emerald-950">${fmtMoney(totalMucDuyet)}</td>
+    <td colspan="3" class="p-2 bg-slate-200"></td>
+  `;
+}
+
+function openModalKhamSK(bhCode){
+  const r = khamskCache.find(item => item.bhCode === bhCode);
+  if(!r) return;
+  document.getElementById('editKskBhCode').value = r.bhCode;
+  document.getElementById('editKskCodeName').value = `${r.bhCode} - ${r.hoTen} (${r.chiNhanh})`;
+  document.getElementById('editKskNgayKiHD').value = r.ngayKiHD ? r.ngayKiHD.split('T')[0] : '';
+  document.getElementById('editKskNgayHoan').value = r.ngayHoan ? r.ngayHoan.split('T')[0] : '';
+  document.getElementById('editKskNgayKham').value = r.ngayKham ? r.ngayKham.split('T')[0] : '';
+  document.getElementById('editKskTienKham').value = r.tienKham || 160000;
+  document.getElementById('editKskMucDuyet').value = r.mucDuyet !== undefined ? r.mucDuyet : 160000;
+  document.getElementById('editKskTinhTrangHoan').value = r.tinhTrangHoan || 'CHƯA HOÀN TRẢ GIẤY KHÁM';
+  document.getElementById('editKskGhiChu').value = r.ghiChu || 'HOÀN 100% CHO NHÂN SỰ';
+  document.getElementById('modalKhamSK').classList.remove('hidden');
+}
+
+function autoCalcNgayHoan(){
+  const hd = document.getElementById('editKskNgayKiHD').value;
+  if(!hd) return;
+  try{
+    const p = hd.split('-');
+    if(p.length===3){
+      const d = new Date(parseInt(p[0]), parseInt(p[1])-1 + 6, parseInt(p[2]));
+      document.getElementById('editKskNgayHoan').value = d.toLocaleDateString('en-CA', {timeZone:'Asia/Ho_Chi_Minh'});
     }
-  }, 30000);
-  // socket cho finance - realtime 100% cùng endpoint với admin/employee, có polling fallback + reconnection
+  }catch(_){}
+}
+
+async function submitKhamSK(e){
+  e.preventDefault();
+  const bhCode = document.getElementById('editKskBhCode').value;
+  const ngayKiHD = document.getElementById('editKskNgayKiHD').value;
+  const ngayHoan = document.getElementById('editKskNgayHoan').value;
+  const ngayKham = document.getElementById('editKskNgayKham').value;
+  const tienKham = document.getElementById('editKskTienKham').value;
+  const mucDuyet = document.getElementById('editKskMucDuyet').value;
+  const tinhTrangHoan = document.getElementById('editKskTinhTrangHoan').value;
+  const ghiChu = document.getElementById('editKskGhiChu').value;
+  try{
+    await api('/api/finance/reports/kham-suc-khoe', {
+      method: 'POST',
+      body: JSON.stringify({ bhCode, ngayKiHD, ngayHoan, ngayKham, tienKham, mucDuyet, tinhTrangHoan, ghiChu })
+    });
+    closeModal('modalKhamSK');
+    loadKhamSK();
+  }catch(err){
+    alert(err.message);
+  }
+}
+
+// =========================================================================
+// TAB 4: BẢNG LƯƠNG TỔNG HỢP
+// =========================================================================
+async function loadPayrollSummary(){
+  const month = document.getElementById('reportMonth').value || getVietnamTodayStr().slice(0,7);
+  const branch = document.getElementById('reportBranch').value || '';
+  try{
+    const res = await api(`/api/finance/reports/payroll-summary?month=${month}&branch=${branch}`);
+    payrollCache = res.rows || [];
+    renderPayrollSummary(payrollCache);
+  }catch(e){
+    console.error('loadPayrollSummary error', e);
+  }
+}
+
+function renderPayrollSummary(rows){
+  const tbody = document.getElementById('payrollTbody');
+  if(!tbody) return;
+
+  const query = (document.getElementById('searchInput')?.value || '').toLowerCase().trim();
+  const filtered = query ? rows.filter(r => r.employeeId.toLowerCase().includes(query) || r.name.toLowerCase().includes(query) || r.branchName.toLowerCase().includes(query)) : rows;
+
+  let totalLuongHV = 0;
+  let totalLuongCT = 0;
+  let totalHoanDP = 0;
+  let totalHoanKSK = 0;
+  let totalGiamTru = 0;
+  let totalThucLinh = 0;
+  let totalGio = 0;
+
+  tbody.innerHTML = filtered.map(r => {
+    totalLuongHV += r.luongHocViec || 0;
+    totalLuongCT += r.luongChinhThuc || 0;
+    totalHoanDP += r.hoanDongPhuc || 0;
+    totalHoanKSK += r.hoanKhamSK || 0;
+    totalGiamTru += r.giamTru || 0;
+    totalThucLinh += r.thucLinh || 0;
+    totalGio += r.totalHours || 0;
+
+    return `
+      <tr class="hover:bg-slate-50 transition-colors">
+        <td class="p-2.5 text-center font-mono font-bold text-slate-800">${r.employeeId}</td>
+        <td class="p-2.5 text-left font-bold text-slate-900">${r.name}</td>
+        <td class="p-2.5 text-left text-slate-600">${r.branchName}</td>
+        <td class="p-2.5 text-center text-emerald-700 font-bold">${r.trainingHours || '—'}</td>
+        <td class="p-2.5 text-center font-bold text-slate-800">${r.officialHours || '—'}</td>
+        <td class="p-2.5 text-center font-black bg-amber-50 text-amber-900">${r.totalHours}</td>
+        <td class="p-2.5 text-right font-medium text-emerald-800">${fmtMoney(r.luongHocViec)}</td>
+        <td class="p-2.5 text-right font-medium text-slate-800">${fmtMoney(r.luongChinhThuc)}</td>
+        <td class="p-2.5 text-right font-bold text-orange-600">${r.hoanDongPhuc ? `+${fmtMoney(r.hoanDongPhuc)}` : '—'}</td>
+        <td class="p-2.5 text-right font-bold text-emerald-600">${r.hoanKhamSK ? `+${fmtMoney(r.hoanKhamSK)}` : '—'}</td>
+        <td class="p-2.5 text-right font-bold text-rose-600">${r.giamTru ? `-${fmtMoney(r.giamTru)}` : '0'}</td>
+        <td class="p-2.5 text-right font-black text-pink-700 bg-pink-50 text-sm">${fmtMoney(r.thucLinh)}</td>
+      </tr>
+    `;
+  }).join('');
+
+  document.getElementById('payrollTfootRow').innerHTML = `
+    <td colspan="5" class="p-2.5 text-center font-black bg-slate-200">TỔNG CỘNG (${filtered.length} NHÂN SỰ)</td>
+    <td class="p-2.5 text-center font-black bg-amber-200">${Math.round(totalGio*10)/10}</td>
+    <td class="p-2.5 text-right font-black bg-slate-200">${fmtMoney(totalLuongHV)}</td>
+    <td class="p-2.5 text-right font-black bg-slate-200">${fmtMoney(totalLuongCT)}</td>
+    <td class="p-2.5 text-right font-black text-orange-700 bg-slate-200">+${fmtMoney(totalHoanDP)}</td>
+    <td class="p-2.5 text-right font-black text-emerald-700 bg-slate-200">+${fmtMoney(totalHoanKSK)}</td>
+    <td class="p-2.5 text-right font-black text-rose-700 bg-slate-200">-${fmtMoney(totalGiamTru)}</td>
+    <td class="p-2.5 text-right font-black bg-pink-600 text-white text-base">${fmtMoney(totalThucLinh)}</td>
+  `;
+
+  // Render KPI grid
+  const kpiEl = document.getElementById('payrollKpiGrid');
+  if(kpiEl){
+    kpiEl.innerHTML = `
+      <div class="card p-4 flex items-center gap-3 bg-gradient-to-br from-pink-500 to-rose-600 text-white">
+        <div class="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center text-xl"><i class="fa-solid fa-coins"></i></div>
+        <div><div class="text-xs font-bold text-pink-100 uppercase">Tổng Thực Lĩnh</div><div class="text-xl font-black">${fmtMoney(totalThucLinh)}đ</div></div>
+      </div>
+      <div class="card p-4 flex items-center gap-3 bg-slate-900 text-white">
+        <div class="w-12 h-12 rounded-2xl bg-white/10 flex items-center justify-center text-xl"><i class="fa-solid fa-clock"></i></div>
+        <div><div class="text-xs font-bold text-slate-400 uppercase">Tổng Giờ Làm</div><div class="text-xl font-black">${Math.round(totalGio*10)/10} giờ</div></div>
+      </div>
+      <div class="card p-4 flex items-center gap-3 bg-amber-500 text-white">
+        <div class="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center text-xl"><i class="fa-solid fa-shirt"></i></div>
+        <div><div class="text-xs font-bold text-amber-100 uppercase">Hoàn Đồng Phục</div><div class="text-xl font-black">${fmtMoney(totalHoanDP)}đ</div></div>
+      </div>
+      <div class="card p-4 flex items-center gap-3 bg-emerald-600 text-white">
+        <div class="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center text-xl"><i class="fa-solid fa-heart-pulse"></i></div>
+        <div><div class="text-xs font-bold text-emerald-100 uppercase">Hoàn Khám Sức Khỏe</div><div class="text-xl font-black">${fmtMoney(totalHoanKSK)}đ</div></div>
+      </div>
+    `;
+  }
+}
+
+// =========================================================================
+// TAB 5 & 6: CHI TIẾT NGÀY & SAI LỆCH
+// =========================================================================
+async function loadEmployeesForDaily(){
+  try{
+    const month = document.getElementById('reportMonth').value || getVietnamTodayStr().slice(0,7);
+    const rows = await api(`/api/finance/reports/monthly?month=${month}`);
+    const sel = document.getElementById('dailyEmp');
+    if(sel){
+      sel.innerHTML = rows.map(r => `<option value="${r.employeeId}">${r.employeeId} - ${r.name} (${r.branchName})</option>`).join('');
+      if(sel.options.length) loadDaily();
+    }
+  }catch(_){}
+}
+
+async function loadDaily(){
+  const empId = document.getElementById('dailyEmp')?.value;
+  const month = document.getElementById('reportMonth').value || getVietnamTodayStr().slice(0,7);
+  if(!empId) return;
+  try{
+    const rows = await api(`/api/finance/reports/daily?employeeId=${empId}&month=${month}`);
+    const tbody = document.getElementById('dailyTbody');
+    if(!tbody) return;
+    tbody.innerHTML = rows.map(r => `
+      <tr class="hover:bg-slate-50 transition-colors">
+        <td class="px-3 py-2 font-bold">${fmtDMY(r.date)} (${r.dayName})</td>
+        <td class="px-3 py-2 text-center">${r.shift}</td>
+        <td class="px-3 py-2 text-center font-mono">${r.checkIn || '—'}</td>
+        <td class="px-3 py-2 text-center font-mono">${r.checkOut || '—'}</td>
+        <td class="px-3 py-2 text-center font-black">${r.actualHours || '—'}</td>
+        <td class="px-3 py-2 text-center"><span class="px-2 py-0.5 rounded-full text-[11px] font-bold ${r.status==='PRESENT'?'bg-emerald-100 text-emerald-700':r.status==='ABSENT'?'bg-rose-100 text-rose-700':'bg-amber-100 text-amber-700'}">${r.status}</span></td>
+      </tr>
+    `).join('');
+  }catch(e){
+    console.error('loadDaily error', e);
+  }
+}
+
+async function loadAnomalies(){
+  const month = document.getElementById('reportMonth').value || getVietnamTodayStr().slice(0,7);
+  const branch = document.getElementById('reportBranch').value || '';
+  try{
+    const list = await api(`/api/finance/reports/anomalies?month=${month}&branch=${branch}`);
+    const el = document.getElementById('anomalyList');
+    if(!el) return;
+    if(list.length === 0){
+      el.innerHTML = '<div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center text-sm font-bold text-emerald-700"><i class="fa-solid fa-circle-check text-xl mr-2"></i> Không có sai lệch chấm công trong kỳ này!</div>';
+      return;
+    }
+    el.innerHTML = list.map(a => `
+      <div class="bg-white border border-amber-200 rounded-2xl p-4 flex justify-between items-center shadow-xs">
+        <div>
+          <div class="font-extrabold text-sm text-slate-900">${a.name} • ${a.employeeId} • ${fmtDMY(a.date)}</div>
+          <div class="text-xs text-slate-600 mt-0.5">${a.desc}</div>
+        </div>
+        <span class="text-xs font-bold px-3 py-1 rounded-full bg-amber-100 text-amber-800">${a.type}</span>
+      </div>
+    `).join('');
+  }catch(e){
+    console.error('loadAnomalies error', e);
+  }
+}
+
+// =========================================================================
+// XUẤT EXCEL CHUẨN MẪU TỪNG SHEET
+// =========================================================================
+function exportCurrentTabExcel(){
+  const month = (document.getElementById('reportMonth').value || getVietnamTodayStr().slice(0,7)).replace('-','_');
+  if(currentTab === 'matrix'){
+    const wb = XLSX.utils.table_to_book(document.getElementById('matrixTable'), { sheet: `CHAM_CONG_${month}` });
+    XLSX.writeFile(wb, `BANG_CHAM_CONG_THANG_${month}_UM_BO_MILK.xlsx`);
+  } else if(currentTab === 'dongphuc'){
+    const dataToExport = dongphucCache.map(r => ({
+      'MÃ NV': r.bhCode,
+      'NGÀY LÀM VIỆC': fmtDMY(r.ngayLamViec),
+      'NGÀY NGHỈ': fmtDMY(r.ngayNghi),
+      'TRẠNG THÁI': r.trangThai,
+      'TÊN NHÂN VIÊN': r.hoTen,
+      'CHI NHÁNH': r.chiNhanh,
+      'SỐ TIỀN': r.soTien,
+      'TIỀN HOÀN': r.tienHoan,
+      'KÌ HOÀN': fmtDMY(r.kiHoan),
+      'Hoàn đợt 1': r.hoanDot1,
+      'GHI CHÚ': r.ghiChu || ''
+    }));
+    const ws = XLSX.utils.json_to_sheet(dataToExport);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'HOAN_TIEN_DONG_PHUC');
+    XLSX.writeFile(wb, `HOAN_TIEN_DONG_PHUC_${month}_UM_BO_MILK.xlsx`);
+  } else if(currentTab === 'khamsk'){
+    const dataToExport = khamskCache.map((r, i) => ({
+      'STT': i + 1,
+      'MÃ NV': r.bhCode,
+      'NHÂN VIÊN': r.hoTen,
+      'CHI NHÁNH': r.chiNhanh,
+      'NGÀY KÍ HỢP ĐỒNG': fmtDMY(r.ngayKiHD),
+      'NGÀY HOÀN (+6 THÁNG)': fmtDMY(r.ngayHoan),
+      'NGÀY NV ĐI KHÁM': fmtDMY(r.ngayKham),
+      'TIỀN KHÁM SỨC KHỎE NV': r.tienKham,
+      'MỨC DUYỆT HOÀN TRẢ': r.mucDuyet,
+      'TÌNH TRẠNG HOÀN': r.tinhTrangHoan,
+      'GHI CHÚ': r.ghiChu || ''
+    }));
+    const ws = XLSX.utils.json_to_sheet(dataToExport);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'KHAM_SUC_KHOE');
+    XLSX.writeFile(wb, `HOAN_TIEN_KHAM_SK_${month}_UM_BO_MILK.xlsx`);
+  } else if(currentTab === 'payroll'){
+    exportPayrollSummaryExcel();
+  }
+}
+
+function exportPayrollSummaryExcel(){
+  const month = (document.getElementById('reportMonth').value || getVietnamTodayStr().slice(0,7)).replace('-','_');
+  const dataToExport = payrollCache.map(r => ({
+    'MÃ NV': r.employeeId,
+    'HỌ VÀ TÊN': r.name,
+    'CHI NHÁNH': r.branchName,
+    'GIỜ HỌC VIỆC (21K)': r.trainingHours,
+    'LƯƠNG HỌC VIỆC': r.luongHocViec,
+    'GIỜ CHÍNH THỨC (25.5K)': r.officialHours,
+    'LƯƠNG CHÍNH THỨC': r.luongChinhThuc,
+    'TỔNG GIỜ': r.totalHours,
+    'CỘNG HOÀN ĐỒNG PHỤC': r.hoanDongPhuc,
+    'CỘNG HOÀN KHÁM SK': r.hoanKhamSK,
+    'TRỪ GIẢM TRỪ/PHẠT': r.giamTru,
+    'THỰC LĨNH': r.thucLinh
+  }));
+  const ws = XLSX.utils.json_to_sheet(dataToExport);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'BANG_LUONG');
+  XLSX.writeFile(wb, `BANG_LUONG_TONG_HOP_${month}_UM_BO_MILK.xlsx`);
+}
+
+function filterCurrentTable(){
+  if(currentTab === 'matrix') renderMatrix(matrixCache);
+  else if(currentTab === 'dongphuc') renderDongPhuc(dongphucCache);
+  else if(currentTab === 'khamsk') renderKhamSK(khamskCache);
+  else if(currentTab === 'payroll') renderPayrollSummary(payrollCache);
+}
+
+function closeModal(id){
+  document.getElementById(id)?.classList.add('hidden');
+}
+
+// Khởi tạo hệ thống & Socket realtime
+(function init(){
+  // Socket.io
   try{
     const isVercel = location.hostname.includes('vercel.app');
     const socketUrl = isVercel ? 'https://umbomilk-hr.onrender.com' : undefined;
-    const s=io(socketUrl, {auth:{token: financeToken||''}, transports:['websocket','polling'], timeout:20000, reconnection:true, reconnectionAttempts:10, reconnectionDelay:1000, reconnectionDelayMax:5000});
-    s.on('connect', ()=>{ console.log('[FINANCE SOCKET] connected', s.id); });
-    s.on('disconnect', ()=>{ console.log('[FINANCE SOCKET] disconnected'); });
-    s.on('connect_error', (err)=>{ console.warn('[FINANCE SOCKET] connect_error', err.message); });
-    s.on('finance:forceLogout', (data)=>{
-      if(financeKey && data.key===financeKey.key){
-        alert(data.reason||'Key đã hết hạn - vui lòng xin key mới');
+    const s = io(socketUrl, {
+      auth: { token: financeToken || '' },
+      transports: ['websocket','polling'],
+      timeout: 20000,
+      reconnection: true
+    });
+    
+    s.on('connect', () => {
+      const b = document.getElementById('socketBadge');
+      if(b) b.innerHTML = '<span class="w-2 h-2 bg-emerald-500 rounded-full animate-ping"></span> REALTIME 1:1';
+    });
+
+    s.on('disconnect', () => {
+      const b = document.getElementById('socketBadge');
+      if(b) b.innerHTML = '<span class="w-2 h-2 bg-rose-500 rounded-full"></span> NGOẠI TUYẾN';
+    });
+
+    s.on('finance:forceLogout', (data) => {
+      if(financeKey && data.key === financeKey.key){
+        alert(data.reason || 'Khóa Tài chính đã hết hạn');
         logout(true);
       }
     });
-    // finance realtime: bất kỳ thay đổi nhân sự/chấm công/lịch/off đều ảnh hưởng báo cáo kế toán -> auto reload
-    const financeRefreshEvents = ['employees:update','attendances:update','schedules:update','offRequests:update','emergencyRequests:update','overtime:update','leave:update','payrollPeriods:update','payrollSnapshots:update','financeKeys:update','drive:update','sync:update'];
-    financeRefreshEvents.forEach(ev=>{
-      s.on(ev, (data)=>{
-        // realtime update without full reload: chỉ reload tab đang mở
-        const activeTab = document.querySelector('.tab-section:not(.hidden)')?.id?.replace('tab-','');
-        if(ev==='financeKeys:update'){
-          // nếu key hiện tại bị revoke/expire -> server sẽ emit finance:forceLogout riêng, nhưng cũng cập nhật UI nếu đang ở tab nào
-          if(financeKey && Array.isArray(data)){
-            const me = data.find(k=>k.key===financeKey.key);
-            if(me && me.status!=='ACTIVE'){
-              s.emit('finance:forceLogout', {key: me.key, reason: `Key ${me.key} đã ${me.status}`});
-            }
-          }
-          return;
-        }
-        // auto refresh overview/monthly/anomalies nếu đang hiển thị
-        if(activeTab==='overview') loadOverview();
-        else if(activeTab==='monthly') loadMonthly();
-        else if(activeTab==='daily') loadDaily();
-        else if(activeTab==='anomalies') loadAnomalies();
-        else if(!activeTab){ loadOverview(); loadMonthly(); } // fallback
+
+    const realTimeEvents = [
+      'attendances:update',
+      'employees:update',
+      'schedules:update',
+      'finance:dongPhuc:update',
+      'finance:khamSK:update',
+      'system:reset'
+    ];
+
+    realTimeEvents.forEach(ev => {
+      s.on(ev, () => {
+        // Realtime reload tab hiện tại
+        loadAll();
       });
     });
-    // polling fallback: nếu socket mất 30s không nhận heartbeat, reload nhẹ
-    let lastHeartbeat=Date.now();
-    s.on('automation:heartbeat', ()=>{ lastHeartbeat=Date.now(); });
-    s.on('db:update', ()=>{ lastHeartbeat=Date.now(); });
-    setInterval(()=>{
-      if(Date.now()-lastHeartbeat>45000 && s.disconnected){
-        console.warn('[FINANCE SOCKET] heartbeat timeout - polling fallback reload');
-        loadOverview(); loadMonthly();
-        lastHeartbeat=Date.now();
-      }
-    }, 30000);
-    // expose for debugging
-    window._financeSocket=s;
-  }catch(e){ console.error('Finance socket init error', e); }
-  if(financeToken && financeKey && financeExpires) showApp();
-  else { document.getElementById('loginOverlay').classList.remove('hidden'); document.getElementById('app').classList.add('hidden'); }
-  document.getElementById('reportMonth').value=getVietnamTodayStr().slice(0,7);
+
+    window._financeSocket = s;
+  }catch(e){
+    console.error('Socket init error', e);
+  }
+
+  // Khởi động
+  if(financeToken && financeKey && financeExpires){
+    showApp();
+  } else {
+    document.getElementById('loginOverlay').classList.remove('hidden');
+    document.getElementById('app').classList.add('hidden');
+  }
+
   document.getElementById('reportBranch')?.addEventListener('change', loadAll);
-  document.getElementById('reportMonth')?.addEventListener('change', loadAll);
+  document.getElementById('reportMonth')?.addEventListener('change', () => {
+    loadAll();
+    loadEmployeesForDaily();
+  });
 })();
