@@ -549,6 +549,22 @@ function connectSocket(){
     console.error('Socket connect_error (Vercel→Render proxy):', err.message);
     updateModeBadge();
   });
+  socket.on('system:reset', (data)=>{
+    console.log('[SOCKET] system:reset received', data);
+    showToast('Hệ thống vừa reset ALL — Toàn bộ dữ liệu đã được làm sạch', 'info');
+    if(typeof applicants!=='undefined') applicants = [];
+    if(typeof employees!=='undefined') employees = [];
+    if(typeof schedules!=='undefined') schedules = [];
+    if(typeof attendances!=='undefined') attendances = [];
+    if(typeof offRequests!=='undefined') offRequests = [];
+    if(typeof trainingKeys!=='undefined') trainingKeys = [];
+    safeCall(loadDashboard());
+    safeCall(loadApplicants());
+    safeCall(loadEmployees());
+    safeCall(loadSchedules());
+    safeCall(loadAttendances());
+    safeCall(loadRequests());
+  });
   const refreshEvents = ['employees:update','applicants:update','attendances:update','schedules:update','offRequests:update','emergencyRequests:update','deviceRequests:update','zalo:update','audit:new','sync:update','keys:update','notifications:update','testResults:update','settings:update','interviews:update','drive:update','overtime:update','leave:update','payrollPeriods:update','payrollSnapshots:update','financeKeys:update'];
   refreshEvents.forEach(ev=>{
     socket.on(ev, (data)=>{
@@ -5091,6 +5107,14 @@ async function resetSystem(){
   const scope=prompt('Nhập scope: ALL hoặc EMPLOYEES','EMPLOYEES');
   if(scope==='ALL' && !confirm('⚠️ Scope ALL sẽ XÓA VĨNH VIỄN toàn bộ dòng dữ liệu trên Google Sheet 17iXM (mọi tab, giữ header) + Sheet Form nộp đơn (chống hồi sinh) LẪN web app.\n\nKhông thể khôi phục! Bạn chắc chắn?')) return;
   const res=await api('/api/system/reset', {method:'POST', body:JSON.stringify({scope}), headers:{Authorization:'Bearer '+token}});
+  if(scope==='ALL'){
+    if(typeof applicants!=='undefined') applicants = [];
+    if(typeof employees!=='undefined') employees = [];
+    if(typeof schedules!=='undefined') schedules = [];
+    if(typeof attendances!=='undefined') attendances = [];
+    if(typeof offRequests!=='undefined') offRequests = [];
+    if(typeof trainingKeys!=='undefined') trainingKeys = [];
+  }
   if(scope==='ALL' && res.sheet){
     const failed=(res.sheet.tabs||[]).filter(t=>!t.ok);
     if(failed.length===0 && res.sheet.formCleared) showToast(`Đã reset ALL — Sheet 17iXM: sạch ${res.sheet.cleared??0}/${res.sheet.total??0} tab (verify từng tab) • Form: đã xóa`,'success');
@@ -5100,7 +5124,12 @@ async function resetSystem(){
     }
   }
   else showToast('Đã reset: '+scope,'success');
-  loadDashboard();
+  safeCall(loadDashboard());
+  safeCall(loadApplicants());
+  safeCall(loadEmployees());
+  safeCall(loadSchedules());
+  safeCall(loadAttendances());
+  safeCall(loadRequests());
 }
 
 // Audit
