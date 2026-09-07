@@ -768,7 +768,34 @@ function emitForceLogout(employeeId, reason='Tài khoản không tồn tại'){
   console.log(`[FORCE_LOGOUT] ${employeeId} reason: ${reason}`);
 }
 
+// ============ RÀNG BUỘC TUYỆT ĐỐI: CHẶN DỮ LIỆU TEST LÊN GOOGLE SHEET ============
+// Google Sheet 17iXM là 100% dữ liệu thật đang vận hành của công ty.
+// Tuyệt đối không lưu, không ghi đè, không đồng bộ bất kỳ bản ghi test/thử nghiệm nào lên Sheet thật.
+function isTestRecord(item){
+  if(!item) return false;
+  if(Array.isArray(item)){
+    const rowStr = item.map(x => String(x||'')).join(' ').toLowerCase();
+    if(rowStr.includes('test') || rowStr.includes('090999') || rowStr.includes('forcelogout')) return true;
+    return false;
+  }
+  if(item.isTest) return true;
+  const name = (item.name || item.employeeName || item.applicantName || '').toString().trim().toLowerCase();
+  if(name.startsWith('test') || name.includes('test forcelogout') || name.includes('test put') || name.includes('test socket') || name.includes('test harddelete') || name.includes('test notexist') || name.includes('test ')) return true;
+  const phone = (item.phone || item.receiver || '').toString().replace(/\D/g, '');
+  if(phone.startsWith('090999') || phone.startsWith('09099') || phone === '0909990001' || phone === '0909990003' || phone === '0909990005') return true;
+  const empId = (item.employeeId || item.id || '').toString().toLowerCase();
+  if(empId.includes('test') || empId.startsWith('test')) return true;
+  const jsonStr = JSON.stringify(item).toLowerCase();
+  if(jsonStr.includes('"istest":true') || jsonStr.includes('"is_test":true')) return true;
+  return false;
+}
+
 async function syncToGoogleSheet(item){
+  // RÀNG BUỘC BẢO VỆ TUYỆT ĐỐI: Chặn 100% dữ liệu test
+  if(isTestRecord(item?.payload)){
+    console.log(`[TEST GUARD] Chặn tuyệt đối: Bỏ qua sync Google Sheet cho dữ liệu test (${item.payload?.name || item.payload?.employeeId || item.entity})`);
+    return { success:true, via:'TEST_DATA_BLOCKED', note:'Dữ liệu test không được phép lưu lên Google Sheet thật' };
+  }
   // Yêu cầu #9: Key đã gộp vào NHAN_VIEN_TRAINING/CHINH_THUC nên không cần sync riêng
   if(item.entity==='KEY'){
     // Key được đồng bộ qua dòng nhân viên (syncSheetTab) nên coi như SYNCED
@@ -867,6 +894,11 @@ async function sheetHasRowId(spreadsheetId, sheetName, id){
   }catch(e){ return null; }
 }
 function addSyncQueue(entity, operation, payload, actor, source='WEB_HR'){
+  // RÀNG BUỘC BẢO VỆ TUYỆT ĐỐI: Không bao giờ đưa dữ liệu test vào hàng đợi đồng bộ Google Sheet
+  if (isTestRecord(payload) || actor === 'TEST' || (payload && payload.isTest)) {
+    console.log(`[TEST GUARD] Bỏ qua addSyncQueue cho dữ liệu test: ${payload?.name || payload?.employeeId || entity}`);
+    return null;
+  }
   // RÀNG BUỘC CHỐNG TRÙNG trong hàng đợi: cùng entity+operation+ID đang PENDING
   // thì gộp (cập nhật payload mới vào mục cũ) thay vì tạo mục trùng.
   try{
@@ -1210,19 +1242,23 @@ app.post('/api/employees', authMiddleware, roleCheck(['Admin','HR']), async (req
   const employeeId = generateEmployeeId(branchId);
   const now = getVietnamNow();
   const end = getVietnamNow(); end.setDate(now.getDate()+7);
+  const isTest = req.headers['x-is-test'] === 'true' || isTestRecord({ name, phone, employeeId }) || req.body.isTest === true;
   const emp = {
     id: uuidv4(), employeeId, name, phone, branchId, shift,
     startDate: toVietnamDateStr(now),
     endDate: toVietnamDateStr(end),
     trainingDays: 7, status: 'TRAINING', testScore: null, testResult: null,
     type: 'TRAINING', category: category||'STORE', avatar:'', checkHistory:[],
-    version:1, updated_at: now.toISOString(), updated_by: req.user.username, source:'WEB_HR', sync_status:'PENDING'
+    isTest: isTest || undefined,
+    version:1, updated_at: now.toISOString(), updated_by: req.user.username, source: isTest ? 'TEST' : 'WEB_HR', sync_status: isTest ? 'TEST_BLOCKED' : 'PENDING'
   };
   db.employees.push(emp);
-  const key = { id: uuidv4(), employeeId, key: 'KEY-'+Math.random().toString(36).substring(2,10).toUpperCase(), deviceId:null, boundAt:null, status:'ACTIVE', version:1, updated_at: now.toISOString(), sync_status:'PENDING' };
+  const key = { id: uuidv4(), employeeId, key: 'KEY-'+Math.random().toString(36).substring(2,10).toUpperCase(), deviceId:null, boundAt:null, status:'ACTIVE', isTest: isTest || undefined, version:1, updated_at: now.toISOString(), sync_status: isTest ? 'TEST_BLOCKED' : 'PENDING' };
   db.keys.push(key);
   audit(req.user.username,'CREATE','EMPLOYEE',null,emp, req.ip);
-  addSyncQueue('EMPLOYEE','CREATE',emp, req.user.username, 'WEB_HR');
+  if(!isTest && !isTestRecord(emp)){
+    addSyncQueue('EMPLOYEE','CREATE',emp, req.user.username, 'WEB_HR');
+  }
   saveDB();
   io.emit('employees:update', db.employees);
   io.emit('keys:update', db.keys);
@@ -1904,7 +1940,11 @@ function computeDataHash(applicant) {
 
 async function syncOutboundToMasterDatabaseSheet(applicant) {
   // RÀNG BUỘC: Chỉ ghi vào Sheet Database chính (17iXM) 20 cột, không ghi vào Sheet nộp Form (1rcq)
-  if (!applicant) return;
+  // RÀNG BUỘC TUYỆT ĐỐI: Chặn 100% dữ liệu test không bao giờ đẩy lên Sheet
+  if (!applicant || isTestRecord(applicant)) {
+    console.log(`[TEST GUARD] Bỏ qua syncOutboundToMasterDatabaseSheet cho dữ liệu test: ${applicant?.name || applicant?.id}`);
+    return;
+  }
   const targetId = (db.settings && db.settings.googleSheet && db.settings.googleSheet.targetDatabaseSpreadsheetId) ? db.settings.googleSheet.targetDatabaseSpreadsheetId : '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w';
   const cfg = (db.settings && db.settings.googleSheet) ? db.settings.googleSheet : {};
 
@@ -4281,16 +4321,16 @@ async function syncSheetTab(sheetKey){
   let dbCollection;
   let dbLen = 0;
   switch(sheetKey){
-    case 'NHAN_VIEN_MOI':     dbCollection = db.applicants;      dbLen = (db.applicants?.length ?? 0);    break;
-    case 'NHAN_VIEN_TRAINING': dbCollection = db.employees.filter(e=>e.type==='TRAINING'); dbLen = (db.employees.filter(e=>e.type==='TRAINING')?.length ?? 0);    break;
-    case 'NHAN_VIEN_CHINH_THUC': dbCollection = db.employees.filter(e=>e.type==='OFFICIAL'||e.status==='OFFICIAL'); dbLen = (db.employees.filter(e=>e.type==='OFFICIAL'||e.status==='OFFICIAL')?.length ?? 0);    break;
-    case 'LICH_LAM_VIEC':     dbCollection = db.schedules;       dbLen = (db.schedules?.length ?? 0);    break;
-    case 'RECORD_DIEM_DANH':  dbCollection = db.attendances;   dbLen = (db.attendances?.length ?? 0);  break;
-    case 'PHIEU_OFF_HANG_TUAN': dbCollection = db.offRequests; dbLen = (db.offRequests?.length ?? 0);    break;
-    case 'PHIEU_OFF_DOT_XUAT': dbCollection = db.emergencyRequests; dbLen = (db.emergencyRequests?.length ?? 0); break;
-    case 'PHIEU_DOI_THIET_BI': dbCollection = db.deviceRequests; dbLen = (db.deviceRequests?.length ?? 0); break;
-    case 'KET_QUA_TEST':      dbCollection = db.testResults;   dbLen = (db.testResults?.length ?? 0);  break;
-    case 'SYNC_QUEUE':        dbCollection = db.syncQueue;     dbLen = (db.syncQueue?.length ?? 0);  break;
+    case 'NHAN_VIEN_MOI':     dbCollection = db.applicants.filter(a=>!isTestRecord(a));      dbLen = dbCollection.length;    break;
+    case 'NHAN_VIEN_TRAINING': dbCollection = db.employees.filter(e=>e.type==='TRAINING' && !isTestRecord(e)); dbLen = dbCollection.length;    break;
+    case 'NHAN_VIEN_CHINH_THUC': dbCollection = db.employees.filter(e=>(e.type==='OFFICIAL'||e.status==='OFFICIAL') && !isTestRecord(e)); dbLen = dbCollection.length;    break;
+    case 'LICH_LAM_VIEC':     dbCollection = db.schedules.filter(s=>!isTestRecord(s));       dbLen = dbCollection.length;    break;
+    case 'RECORD_DIEM_DANH':  dbCollection = db.attendances.filter(a=>!isTestRecord(a));   dbLen = dbCollection.length;  break;
+    case 'PHIEU_OFF_HANG_TUAN': dbCollection = db.offRequests.filter(r=>!isTestRecord(r)); dbLen = dbCollection.length;    break;
+    case 'PHIEU_OFF_DOT_XUAT': dbCollection = db.emergencyRequests.filter(r=>!isTestRecord(r)); dbLen = dbCollection.length; break;
+    case 'PHIEU_DOI_THIET_BI': dbCollection = db.deviceRequests.filter(r=>!isTestRecord(r)); dbLen = dbCollection.length; break;
+    case 'KET_QUA_TEST':      dbCollection = db.testResults.filter(t=>!isTestRecord(t));   dbLen = dbCollection.length;  break;
+    case 'SYNC_QUEUE':        dbCollection = db.syncQueue.filter(q=>!isTestRecord(q)&&!isTestRecord(q.payload));     dbLen = dbCollection.length;  break;
     default:                  dbCollection = null;               dbLen = 0;                              break;
   }
   if(dbLen === 0){
@@ -4304,16 +4344,16 @@ async function syncSheetTab(sheetKey){
     let rows = [];
     switch(sheetKey){
       case 'NHAN_VIEN_MOI':
-        rows = db.applicants.map(a=>[a.id, a.createdAt, a.name, a.gender, a.birthYear, a.education, a.hometown, a.phone, a.shiftText, a.branchText, a.experience, a.handling, a.facebook, a.source, a.aiScore, a.isDisqualified?'LOAI':'DAT', a.status, a.source_id, a.version, a.updated_at]);
+        rows = db.applicants.filter(a=>!isTestRecord(a)).map(a=>[a.id, a.createdAt, a.name, a.gender, a.birthYear, a.education, a.hometown, a.phone, a.shiftText, a.branchText, a.experience, a.handling, a.facebook, a.source, a.aiScore, a.isDisqualified?'LOAI':'DAT', a.status, a.source_id, a.version, a.updated_at]);
         break;
       case 'NHAN_VIEN_TRAINING':
-        rows = db.employees.filter(e=>e.type==='TRAINING').map(e=>{
+        rows = db.employees.filter(e=>e.type==='TRAINING' && !isTestRecord(e)).map(e=>{
           const k = db.keys.find(k=>k.employeeId===e.employeeId)?.key || '';
           return [e.id, e.employeeId, e.name, e.phone, k, e.branchId, e.shift, e.startDate, e.endDate, e.trainingDays, e.status, e.testScore, e.testResult, e.type, e.category, e.version, e.updated_at, e.sync_status];
         });
         break;
       case 'NHAN_VIEN_CHINH_THUC':
-        rows = db.employees.filter(e=>e.type==='OFFICIAL').map(e=>{
+        rows = db.employees.filter(e=>e.type==='OFFICIAL' && !isTestRecord(e)).map(e=>{
           const k = db.keys.find(k=>k.employeeId===e.employeeId)?.key || '';
           return [e.id, e.employeeId, e.name, e.phone, k, e.branchId, e.shift, e.startDate, e.status, e.testScore, e.type, e.officialStartDate||'', e.version, e.updated_at, e.sync_status];
         });
@@ -4371,7 +4411,8 @@ async function syncSheetTab(sheetKey){
       if(guard.phone>=0) return okPhone;
       return !badCode;
     };
-    // 1. Lọc rác từ web trước khi đẩy lên Sheet
+    // 1. Lọc rác và CHẶN TUYỆT ĐỐI dữ liệu test từ web trước khi đẩy lên Sheet
+    rows = rows.filter(r => !isTestRecord(r));
     if(guard){
       const before = rows.length;
       rows = rows.filter(hasPhoneOrCode);
@@ -4384,7 +4425,7 @@ async function syncSheetTab(sheetKey){
       rows = [...seen.values()];
     }
     // RÀNG BUỘC: Sheet GIỮ dữ liệu thật (web xóa local không xóa Sheet).
-    // Ngoại lệ duy nhất: dòng RÁC (thiếu SĐT/Mã NV: header lặp, template) bị dọn ở lần sync này.
+    // Ngoại lệ duy nhất: dòng RÁC (thiếu SĐT/Mã NV) và dòng DỮ LIỆU TEST (tuyệt đối không lưu) bị dọn ở lần sync này.
     const getRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(def.sheetName)}!A2:Z`, { headers:{ Authorization:`Bearer ${token}` }});
     const getData = await getRes.json().catch(()=>({}));
     const existing = getData.values || [];
@@ -4395,7 +4436,7 @@ async function syncSheetTab(sheetKey){
     const oldIndexMap = new Map();
     let droppedOld = 0;
     existing.forEach((r)=>{
-      if(!hasPhoneOrCode(r)){ droppedOld++; return; }
+      if(!hasPhoneOrCode(r) || isTestRecord(r)){ droppedOld++; return; }
       const k = matchKey(r);
       if(sheetKey==='LICH_LAM_VIEC'){
         // Lịch trùng Mã NV + Ngày chỉ giữ dòng đầu — các dòng trùng sau bị dọn

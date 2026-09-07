@@ -23,8 +23,8 @@ async function run(){
   const testPhone = '090' + Math.floor(1000000 + Math.random() * 9000000);
   const createRes = await fetchJSON('/api/employees', {
     method:'POST',
-    headers:{'Content-Type':'application/json', Authorization:'Bearer '+adminToken},
-    body: JSON.stringify({ name:'Test ForceLogout', phone: testPhone, branchId:'CN2', shift:'CA_SANG', category:'STORE'})
+    headers:{'Content-Type':'application/json', Authorization:'Bearer '+adminToken, 'x-is-test':'true'},
+    body: JSON.stringify({ name:'Test ForceLogout', phone: testPhone, branchId:'CN2', shift:'CA_SANG', category:'STORE', isTest:true})
   });
   if(createRes.res.status!==200) throw new Error('Create employee failed: '+JSON.stringify(createRes.data));
   const emp = createRes.data.employee;
@@ -63,8 +63,8 @@ async function run(){
   const phone2 = '090' + Math.floor(1000000 + Math.random() * 9000000);
   const create2 = await fetchJSON('/api/employees', {
     method:'POST',
-    headers:{'Content-Type':'application/json', Authorization:'Bearer '+adminToken},
-    body: JSON.stringify({ name:'Test HardDelete', phone: phone2, branchId:'CN2', shift:'CA_CHIEU', category:'STORE'})
+    headers:{'Content-Type':'application/json', Authorization:'Bearer '+adminToken, 'x-is-test':'true'},
+    body: JSON.stringify({ name:'Test HardDelete', phone: phone2, branchId:'CN2', shift:'CA_CHIEU', category:'STORE', isTest:true})
   });
   const emp2 = create2.data.employee;
   const key2 = create2.data.key;
@@ -97,8 +97,8 @@ async function run(){
   const phone3 = '090' + Math.floor(1000000 + Math.random() * 9000000);
   const create3 = await fetchJSON('/api/employees', {
     method:'POST',
-    headers:{'Content-Type':'application/json', Authorization:'Bearer '+adminToken},
-    body: JSON.stringify({ name:'Test PUT Archived', phone: phone3, branchId:'CN1', shift:'CA_TOI', category:'STORE'})
+    headers:{'Content-Type':'application/json', Authorization:'Bearer '+adminToken, 'x-is-test':'true'},
+    body: JSON.stringify({ name:'Test PUT Archived', phone: phone3, branchId:'CN1', shift:'CA_TOI', category:'STORE', isTest:true})
   });
   const emp3 = create3.data.employee;
   const key3 = create3.data.key;
@@ -130,8 +130,8 @@ async function run(){
   const phone4 = '090' + Math.floor(1000000 + Math.random() * 9000000);
   const create4 = await fetchJSON('/api/employees', {
     method:'POST',
-    headers:{'Content-Type':'application/json', Authorization:'Bearer '+adminToken},
-    body: JSON.stringify({ name:'Test NotExist', phone: phone4, branchId:'CN2', shift:'CA_SANG', category:'STORE'})
+    headers:{'Content-Type':'application/json', Authorization:'Bearer '+adminToken, 'x-is-test':'true'},
+    body: JSON.stringify({ name:'Test NotExist', phone: phone4, branchId:'CN2', shift:'CA_SANG', category:'STORE', isTest:true})
   });
   const emp4 = create4.data.employee;
   const key4 = create4.data.key;
@@ -158,8 +158,8 @@ async function run(){
     const phone5 = '090' + Math.floor(1000000 + Math.random() * 9000000);
     const create5 = await fetchJSON('/api/employees', {
       method:'POST',
-      headers:{'Content-Type':'application/json', Authorization:'Bearer '+adminToken},
-      body: JSON.stringify({ name:'Test Socket', phone: phone5, branchId:'CN2', shift:'CA_SANG', category:'STORE'})
+      headers:{'Content-Type':'application/json', Authorization:'Bearer '+adminToken, 'x-is-test':'true'},
+      body: JSON.stringify({ name:'Test Socket', phone: phone5, branchId:'CN2', shift:'CA_SANG', category:'STORE', isTest:true})
     });
     const emp5 = create5.data.employee;
     const key5 = create5.data.key;
@@ -209,13 +209,23 @@ async function run(){
 
 run()
   .catch(e => { console.error('Test failed', e); process.exit(1); })
-  .finally(() => {
+  .finally(async () => {
+    try {
+      const adminToken = await loginAdmin().catch(() => null);
+      if (adminToken) {
+        const list = await fetchJSON('/api/employees', { headers:{ Authorization:'Bearer '+adminToken }});
+        const testEmps = (list.data || []).filter(e => (e.name||'').toLowerCase().includes('test') || e.isTest);
+        for(const te of testEmps){
+          await fetchJSON(`/api/employees/${te.employeeId}?hard=true`, { method:'DELETE', headers:{ Authorization:'Bearer '+adminToken }});
+        }
+      }
+    } catch(e) {}
     try {
       const fs = require('fs');
       if (fs.existsSync('./data/db.json')) {
         const db = JSON.parse(fs.readFileSync('./data/db.json', 'utf8'));
-        db.employees = (db.employees || []).filter(e => !(e.name || '').toLowerCase().includes('test'));
-        db.keys = (db.keys || []).filter(k => !(k.employeeId || '').includes('Test'));
+        db.employees = (db.employees || []).filter(e => !(e.name || '').toLowerCase().includes('test') && !e.isTest);
+        db.keys = (db.keys || []).filter(k => !(k.employeeId || '').toLowerCase().includes('test') && !k.isTest);
         db.syncQueue = (db.syncQueue || []).filter(q => !JSON.stringify(q).toLowerCase().includes('test'));
         fs.writeFileSync('./data/db.json', JSON.stringify(db, null, 2), 'utf8');
       }
