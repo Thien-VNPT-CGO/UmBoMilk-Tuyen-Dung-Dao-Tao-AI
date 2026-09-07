@@ -292,6 +292,13 @@ function loadDB() {
       if (!db.financeKeys) db.financeKeys = [];
       if (!db.overtimeRequests) db.overtimeRequests = [];
       if (!db.leaveRequests) db.leaveRequests = [];
+      // Tự động chuẩn hóa branchPreference và shiftPreference nếu chưa có
+      if (Array.isArray(db.applicants)) {
+        db.applicants.forEach(a => {
+          if (!a.branchPreference && a.branchText) a.branchPreference = mapBranchText(a.branchText);
+          if (!a.shiftPreference && a.shiftText) a.shiftPreference = mapShiftText(a.shiftText);
+        });
+      }
     } else {
       initEmpty();
     }
@@ -712,14 +719,18 @@ async function bootPullFromMasterSheet(manualBy){
             if(!id || !normalizePhone(phone)){ out.skipped++; continue; }
             const sheetUpd = (row[iUpd]||'').toString().trim();
             const sheetTime = sheetUpd ? new Date(sheetUpd).getTime() : 0;
+            const sText = (row[iShiftT]||'').toString().trim();
+            const bText = (row[iBranchT]||'').toString().trim();
+            const sPref = typeof mapShiftText === 'function' ? mapShiftText(sText) : (SHIFT_MAP[sText] || 'CA_SANG');
+            const bPref = typeof mapBranchText === 'function' ? mapBranchText(bText) : 'CN2';
             let app = db.applicants.find(a=>a.id===id);
             if(!app){
               db.applicants.push({
                 id, name: (row[iName]||'').toString().trim()||id, gender: (row[iGender]||'').toString().trim(),
                 birthYear: (row[iBirth]||'').toString().trim(), education: (row[iEdu]||'').toString().trim(),
                 hometown: (row[iHome]||'').toString().trim(), phone,
-                shiftPreference: '', shiftText: (row[iShiftT]||'').toString().trim(),
-                branchPreference: '', branchText: (row[iBranchT]||'').toString().trim(),
+                shiftPreference: sPref, shiftText: sText,
+                branchPreference: bPref, branchText: bText,
                 experience: (row[iExp]||'').toString().trim(), handling: (row[iHand]||'').toString().trim(),
                 facebook: (row[iFb]||'').toString().trim(), source: (row[iSrc]||'').toString().trim()||'Google Sheet',
                 aiScore: row[iAi]===''||row[iAi]===undefined ? null : Number(String(row[iAi]).replace(',','.'))||null,
@@ -735,6 +746,8 @@ async function bootPullFromMasterSheet(manualBy){
               if(sheetTime>0 && sheetTime>localTime){
                 if(row[iName]) app.name = row[iName].toString().trim();
                 if(row[iPhone]!==undefined) app.phone = phone;
+                if(row[iShiftT]!==undefined){ app.shiftText = sText; if(!app.shiftPreference || app.status!=='CONVERTED') app.shiftPreference = sPref; }
+                if(row[iBranchT]!==undefined){ app.branchText = bText; if(!app.branchPreference || app.status!=='CONVERTED') app.branchPreference = bPref; }
                 if(row[iStatus]) app.status = row[iStatus].toString().trim();
                 app.updated_at = sheetUpd; app.updated_by = manualBy||'BOOT_PULL'; app.sync_status='SYNCED';
                 app.version = (app.version||1)+1;
@@ -2777,16 +2790,58 @@ app.post('/api/applicants/:id/convert', authMiddleware, (req,res)=>{
     }
   }
 
-  appRec.status='CONVERTED';
+  const shiftDisplayMap = {
+    'CA_SANG': 'Ca Sáng: 7g00 - 12g00',
+    'CA_TRUA': 'Ca Trưa: 12g00 - 18g00',
+    'CA_CHIEU': 'Ca Chiều: 12g00 - 18g00',
+    'CA_TOI': 'Ca Tối: 18g00 - 23g00'
+  };
+  const branchDisplayMap = {
+    'CN1': 'CN1: 130 Vạn kiếp, Phường 3, Quận Bình Thạnh',
+    'CN2': 'CN2: 261 Tô Hiến Thành, Phường 13, Quận 10',
+    'CN3': 'CN3: 120 Hoàng Diệu, Phường 12, Quận 4',
+    'CN4': 'CN4: 111 Tôn Đản, Phường 14, Quận 4'
+  };
+
+  // Cập nhật lại Ca và Chi nhánh cho Ứng viên khi HR bấm Training
+  appRec.shiftPreference = shiftFromForm;
+  appRec.shiftText = shiftDisplayMap[shiftFromForm] || (shiftFromForm === 'CA_SANG' ? 'Ca Sáng: 7g00 - 12g00' : shiftFromForm === 'CA_TOI' ? 'Ca Tối: 18g00 - 23g00' : 'Ca Trưa: 12g00 - 18g00');
+  appRec.branchPreference = branchId;
+  appRec.branchText = branchDisplayMap[branchId] || branchId;
+  appRec.status = 'CONVERTED';
   appRec.convertedEmployeeId = employeeId;
-  audit(req.user.username,'CONVERT_APPLICANT','EMPLOYEE',null,emp, req.ip);
-  addSyncQueue('EMPLOYEE','CREATE',emp, req.user.username, 'WEB_HR');
+  appRec.updated_at = getVietnamISOString();
+  appRec.updated_by = req.user.username;
+  appRec.version = (appRec.version || 1) + 1;
+  appRec.sync_status = 'PENDING';
+
+  audit(req.user.username, 'CONVERT_APPLICANT', 'EMPLOYEE', null, emp, req.ip);
+  addSyncQueue('APPLICANT', 'UPDATE', appRec, req.user.username, 'WEB_HR');
+  addSyncQueue('EMPLOYEE', 'CREATE', emp, req.user.username, 'WEB_HR');
   saveDB();
+
+  // Kích hoạt đồng bộ tức thì sang Google Sheet 17iXM (cả 3 tab liên quan)
+  try {
+    if (typeof triggerRealtimeSheetSync === 'function') {
+      triggerRealtimeSheetSync('NHAN_VIEN_MOI');
+      triggerRealtimeSheetSync('NHAN_VIEN_TRAINING');
+      triggerRealtimeSheetSync('LICH_LAM_VIEC');
+    }
+  } catch(_) {}
+
   io.emit('employees:update', db.employees);
   io.emit('keys:update', db.keys);
   io.emit('applicants:update', db.applicants);
   io.emit('schedules:update', db.schedules);
-  res.json({ employee: emp, key, startDate: startDateStr, endDate: endDateStr, shift: shiftFromForm });
+  io.emit('hr:action', {
+    type: 'CONVERT_TRAINING',
+    applicantName: appRec.name,
+    employeeId: employeeId,
+    branchId: branchId,
+    shift: shiftFromForm,
+    message: `HR đã cập nhật ca ${shiftFromForm} và chi nhánh ${branchId}, chuyển ứng viên ${appRec.name} sang Thử việc (Mã NV: ${employeeId})`
+  });
+  res.json({ employee: emp, key, startDate: startDateStr, endDate: endDateStr, shift: shiftFromForm, branchId: branchId, applicant: appRec });
 });
 app.delete('/api/applicants/:id', authMiddleware, (req,res)=>{
   const applicant = db.applicants.find(a=>a.id===req.params.id || normalizePhone(a.phone) === normalizePhone(req.params.id));

@@ -141,8 +141,9 @@ function ensureHeaders(sheet, headers) {
 function getHeadersForSheet(name) {
   switch (name) {
     case 'NHAN_VIEN_MOI':
-      return ['ID / Source ID', 'Họ và tên', 'Số điện thoại', 'Chi nhánh', 'Vị trí', 'Trạng thái', 'Điểm AI', 'Thời gian nộp'];
+      return ['ID','Ngày ĐK','Họ tên','Giới tính','Năm sinh','Trình độ','Quê quán','SĐT','Ca đăng ký','Chi nhánh ĐK','Kinh nghiệm','Xử lý đột xuất','Facebook','Nguồn biết tin','Điểm AI','Kết quả','Trạng thái','Mã nguồn','Phiên bản','Cập nhật lúc'];
     case 'NHAN_VIEN_TRAINING':
+      return ['ID','Mã NV','Họ tên','SĐT','Key','Chi nhánh','Ca','Ngày bắt đầu','Ngày kết thúc','Số ngày Thử việc','Trạng thái','Điểm TEST','Kết quả TEST','Loại','Nhóm','Phiên bản','Cập nhật lúc','Đồng bộ'];
     case 'NHAN_VIEN_CHINH_THUC':
       return ['Mã NV', 'Họ tên', 'SĐT', 'Chi nhánh', 'Ca mặc định', 'Trạng thái', 'Ngày vào làm', 'Thời gian cập nhật'];
     case 'RECORD_DIEM_DANH':
@@ -168,8 +169,49 @@ function formatPayloadToRow(name, payload) {
   var now = new Date().toLocaleString('vi-VN');
   switch (name) {
     case 'NHAN_VIEN_MOI':
-      return [payload.id || payload.source_id || '', payload.name || '', payload.phone || '', payload.branchId || '', payload.position || '', payload.status || '', payload.aiScore || '', payload.submittedAt || now];
+      return [
+        payload.id || payload.source_id || '',
+        payload.createdAt || payload.submittedAt || now,
+        payload.name || '',
+        payload.gender || '',
+        payload.birthYear || '',
+        payload.education || '',
+        payload.hometown || '',
+        payload.phone || '',
+        payload.shiftText || payload.shiftPreference || payload.shift || '',
+        payload.branchText || payload.branchPreference || payload.branchId || '',
+        payload.experience || '',
+        payload.handling || '',
+        payload.facebook || '',
+        payload.source || '',
+        payload.aiScore !== undefined && payload.aiScore !== null ? payload.aiScore : '',
+        payload.isDisqualified ? 'LOAI' : 'DAT',
+        payload.status || '',
+        payload.source_id || '',
+        payload.version || 1,
+        payload.updated_at || now
+      ];
     case 'NHAN_VIEN_TRAINING':
+      return [
+        payload.id || '',
+        payload.employeeId || '',
+        payload.name || '',
+        payload.phone || '',
+        payload.key || '',
+        payload.branchId || '',
+        payload.shift || '',
+        payload.startDate || now,
+        payload.endDate || '',
+        payload.trainingDays || 12,
+        payload.status || 'TRAINING',
+        payload.testScore !== undefined && payload.testScore !== null ? payload.testScore : '',
+        payload.testResult || '',
+        payload.type || 'TRAINING',
+        payload.category || 'STORE',
+        payload.version || 1,
+        payload.updated_at || now,
+        payload.sync_status || 'SYNCED'
+      ];
     case 'NHAN_VIEN_CHINH_THUC':
       return [payload.employeeId || payload.id || '', payload.name || '', payload.phone || '', payload.branchId || '', payload.shift || '', payload.status || '', payload.startDate || now, now];
     case 'RECORD_DIEM_DANH':

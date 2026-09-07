@@ -1035,7 +1035,9 @@ function renderApplicants(){
         <div class="mt-2 grid grid-cols-2 gap-1 text-[11px]">
           <span class="bg-pink-50 border border-pink-200 rounded-lg px-2 py-1"><b>Quê:</b> ${a.hometown||'—'}</span>
           <span class="bg-pink-50 border border-pink-200 rounded-lg px-2 py-1"><b>Học vấn:</b> ${a.education||'—'}</span>
-          <span class="bg-white border border-pink-200 rounded-lg px-2 py-1"><b>Ca:</b> ${a.shiftText||a.shiftPreference||'—'} <span class="text-pink-600">(${a.shiftPreference||''})</span></span>
+          ${(a.shiftText && (a.shiftText.includes('2 Ca') || a.shiftText.includes('2 ca')) && a.status!=='CONVERTED')
+            ? `<span class="bg-amber-50 border border-amber-300 text-amber-800 font-bold rounded-lg px-2 py-1 flex items-center gap-1"><i class="fa-solid fa-clock-rotate-left text-amber-600"></i> Làm từ 2 Ca trở lên</span>`
+            : `<span class="bg-white border border-pink-200 rounded-lg px-2 py-1"><b>Ca:</b> ${a.shiftText||a.shiftPreference||'—'} <span class="text-pink-600">(${a.shiftPreference||''})</span></span>`}
           <span class="bg-white border border-pink-200 rounded-lg px-2 py-1"><b>KN:</b> ${a.experience||'—'}</span>
         </div>
         <details class="mt-2"><summary class="text-[11px] font-bold text-pink-600 cursor-pointer hover:underline">Chi tiết Form (${a.source||'—'}) + Xử lý đột xuất</summary>
@@ -1048,7 +1050,32 @@ function renderApplicants(){
           </div>
         </details>
       </td>
-      <td class="px-3 py-2 text-center"><span class="text-xs font-bold bg-pink-100 text-pink-700 px-2 py-1 rounded-full border border-pink-200">${getBranchDisplay(a.branchPreference)}</span><div class="text-[11px] text-slate-500 mt-1">${getBranchFull(a.branchPreference)}</div><div class="text-[11px] mt-1 bg-white border border-pink-200 rounded-full px-2 py-0.5">${a.shiftText||a.shiftPreference||''}</div></td>
+      <td class="px-3 py-2 text-center">
+        ${(() => {
+          const isFlexB = (a.branchText && (a.branchText.includes('2 chi nhánh') || a.branchText.includes('2 CN') || a.branchText.includes('trở lên')));
+          const isFlexS = (a.shiftText && (a.shiftText.includes('2 Ca') || a.shiftText.includes('2 ca') || a.shiftText.includes('trở lên')));
+          const bCode = a.branchPreference || (a.branchText && a.branchText.includes('CN1')?'CN1':a.branchText && a.branchText.includes('CN2')?'CN2':a.branchText && a.branchText.includes('CN3')?'CN3':a.branchText && a.branchText.includes('CN4')?'CN4':'');
+
+          let bHtml = '';
+          if (isFlexB && a.status !== 'CONVERTED') {
+            bHtml = `<span class="text-[11px] font-bold bg-amber-100 text-amber-800 px-2 py-1 rounded-full border border-amber-300 inline-flex items-center gap-1 shadow-sm"><i class="fa-solid fa-arrows-split-up-and-left text-amber-600"></i> Làm 2+ Chi Nhánh</span>`;
+          } else if (bCode) {
+            bHtml = `<span class="text-xs font-bold bg-pink-100 text-pink-700 px-2 py-1 rounded-full border border-pink-200 shadow-sm">${getBranchDisplay(bCode)}</span>`;
+          } else {
+            bHtml = `<span class="text-xs font-bold bg-slate-100 text-slate-600 px-2 py-1 rounded-full border border-slate-200">${a.branchText || 'Chưa chọn'}</span>`;
+          }
+
+          let sHtml = '';
+          if (isFlexS && a.status !== 'CONVERTED') {
+            sHtml = `<div class="text-[10px] font-bold mt-1 bg-amber-50 text-amber-800 border border-amber-300 rounded-full px-2 py-0.5 inline-flex items-center gap-1 shadow-sm"><i class="fa-solid fa-clock-rotate-left text-amber-600"></i> Làm từ 2 Ca trở lên</div>`;
+          } else {
+            sHtml = `<div class="text-[11px] mt-1 bg-white border border-pink-200 rounded-full px-2 py-0.5 font-medium text-slate-700">${a.shiftText || a.shiftPreference || '—'}</div>`;
+          }
+
+          const addrHtml = bCode ? `<div class="text-[11px] text-slate-500 mt-1">${getBranchFull(bCode)}</div>` : '';
+          return `${bHtml}${addrHtml}${sHtml}`;
+        })()}
+      </td>
       <td class="px-3 py-2 text-center">
         ${a.aiScore!=null?`<div class="font-black text-sm ${a.isDisqualified||a.status==='REJECTED'?'text-red-600':a.aiScore>=8?'text-green-600':'text-amber-600'}">${a.aiScore}/14</div><div class="text-[11px] ${a.isDisqualified||a.status==='REJECTED'?'text-red-600 font-bold':'text-slate-500'}">${a.isDisqualified||a.status==='REJECTED'?'BỊ LOẠI THẲNG':(a.aiScore>=8?'ĐẠT MỨC CHUẨN':'DƯỚI CHUẨN')}</div>`:`<span class="text-xs bg-slate-100 text-slate-500 px-2 py-1 rounded-full">Chưa chấm</span>`}
         ${a.aiBreakdown?`<details class="mt-1"><summary class="text-[11px] text-blue-600 cursor-pointer">Chi tiết (${a.aiBreakdown.length})</summary><div class="text-[11px] text-left bg-slate-50 p-2 rounded mt-1 space-y-1">${a.aiBreakdown.map(b=>`<div class="flex justify-between"><span class="font-medium">${b.criteria}</span><span class="font-bold">${b.score}/${b.max||1}</span></div><div class="text-[10px] text-slate-500">${b.reason}</div>`).join('')}</div></details>`:''}
@@ -1974,7 +2001,10 @@ function convertApplicant(id) {
   let defaultShift = a.shiftPreference || a.shiftText || 'CA_TRUA';
   if (SHIFT_MAP[defaultShift]) defaultShift = SHIFT_MAP[defaultShift];
 
-  const defaultBranch = a.branchPreference || 'CN2';
+  const defaultBranch = a.branchPreference || (a.branchText && a.branchText.includes('CN1')?'CN1':a.branchText && a.branchText.includes('CN2')?'CN2':a.branchText && a.branchText.includes('CN3')?'CN3':a.branchText && a.branchText.includes('CN4')?'CN4':'CN2');
+
+  const isFlexBranch = (a.branchText && (a.branchText.includes('2 chi nhánh') || a.branchText.includes('2 CN') || a.branchText.includes('trở lên')));
+  const isFlexShift = (a.shiftText && (a.shiftText.includes('2 Ca') || a.shiftText.includes('2 ca') || a.shiftText.includes('trở lên')));
 
   const bList = (typeof branches !== 'undefined' && Array.isArray(branches) && branches.length > 0) ? branches : [];
   const branchOptionsHtml = bList.map(b => 
@@ -1989,6 +2019,20 @@ function convertApplicant(id) {
         </div>
         <div class="text-xs opacity-90 mt-1">SĐT: ${a.phone} • Chi nhánh: ${getBranchFull(defaultBranch)}</div>
       </div>
+
+      ${(isFlexBranch || isFlexShift) ? `
+      <div class="bg-amber-50 border-2 border-amber-300 rounded-2xl p-3.5 text-xs text-amber-900 space-y-1.5 shadow-sm">
+        <div class="font-black flex items-center gap-1.5 text-amber-800 text-sm">
+          <i class="fa-solid fa-triangle-exclamation text-amber-600"></i> Cập Nhật Ca & Chi Nhánh Làm Việc Chính Thức
+        </div>
+        <div class="text-amber-800 leading-relaxed">
+          Ứng viên đã đăng ký làm việc linh hoạt: 
+          ${isFlexShift ? '<span class="font-bold bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded">Có thể làm từ 2 Ca trở lên</span>' : `<b>${a.shiftText||a.shiftPreference}</b>`} • 
+          ${isFlexBranch ? '<span class="font-bold bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded">Có thể làm 2 chi nhánh trở lên</span>' : `<b>${getBranchDisplay(a.branchPreference)}</b>`}.
+          <div class="mt-1 text-[11px] text-amber-700 font-medium">👉 Khi xác nhận Thử việc, hệ thống sẽ <b>cập nhật lại Ca & Chi nhánh đã chọn</b> vào Web App và đồng bộ sang Google Sheet 17iXM.</div>
+        </div>
+      </div>
+      ` : ''}
 
       <div class="bg-purple-50 border border-purple-200 rounded-xl p-3 text-xs text-purple-900 space-y-1">
         <div class="font-bold flex items-center gap-1.5 text-purple-700">
