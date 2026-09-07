@@ -4534,8 +4534,12 @@ app.post('/api/employees/:id/trigger-online-test', authMiddleware, (req, res) =>
   emp.testSchedule = {
     type: 'ONLINE_APP',
     status: 'WAITING_TEST',
+    force: true,
+    isForceUnlocked: true,
     createdAt: getVietnamISOString()
   };
+  emp.forceOpenTest = true;
+  emp.isForceUnlocked = true;
   emp.status = 'WAITING_TEST';
   emp.updated_at = getVietnamISOString();
 
@@ -6685,30 +6689,62 @@ app.post('/api/quiz/open', (req,res)=>{
     const emp = db.employees.find(e=>e.employeeId===employeeId);
     if(!emp) return res.status(404).json({error:'Không tìm thấy nhân viên'});
     if(emp.type!=='TRAINING' && !['TRAINING','WAITING_TEST','RETEST'].includes(emp.status)) return res.status(403).json({error:'Chỉ nhân viên Training mới được mở TEST đầu ra'});
-    if(!force && emp.startDate){
+
+    // RÀNG BUỘC REALTIME: Bỏ qua kiểm tra 7 ngày nếu:
+    // 1. Request có force: true (HR bấm Mở ép)
+    // 2. Nhân viên đã được HR đánh dấu Mở ép trước đó (emp.forceOpenTest hoặc emp.isForceUnlocked)
+    // 3. Ca thi đã được HR duyệt/mở (emp.status === 'WAITING_TEST' hoặc emp.testSchedule?.status === 'IN_PROGRESS' hoặc emp.testSchedule?.force)
+    const isAllowedBypass = !!(
+      force ||
+      emp.forceOpenTest ||
+      emp.isForceUnlocked ||
+      (emp.testSchedule && (emp.testSchedule.force || emp.testSchedule.isForceUnlocked || emp.testSchedule.status === 'IN_PROGRESS' || emp.testSchedule.status === 'WAITING_TEST')) ||
+      emp.status === 'WAITING_TEST' ||
+      emp.status === 'RETEST'
+    );
+
+    if(!isAllowedBypass && emp.startDate){
       const t0 = new Date(emp.startDate+'T00:00:00+07:00').getTime();
       if(!isNaN(t0)){
         const diffDays = Math.floor((Date.now()-t0)/86400000);
         if(diffDays < 7) return res.status(400).json({error:`Nhân viên mới training ${diffDays} ngày — đủ 7 ngày mới được mở TEST (hoặc tick Mở ép)`, diffDays});
       }
     }
+
+    if(force || isAllowedBypass){
+      emp.forceOpenTest = true;
+      emp.isForceUnlocked = true;
+    }
+
     const pool = Array.isArray(bank.questions)? bank.questions : [];
-    if(pool.length < 25) return res.status(400).json({error:`Ngân hàng đề chưa đủ 25 câu (hiện có ${pool.length}) — HR/Admin import thêm file Excel`, total: pool.length});
+    if(pool.length === 0) return res.status(400).json({error:'Ngân hàng đề rỗng — HR/Admin import câu hỏi trước'});
+    const targetCount = Math.min(25, pool.length);
     // Dùng lại ca thi đang mở nếu còn hiệu lực, tránh random lại khi NV tải lại trang
     const sess = emp.testSchedule;
     let picked = null;
-    if(sess && sess.type==='ONLINE_QUIZ' && sess.status==='IN_PROGRESS' && Array.isArray(sess.questionIds) && sess.questionIds.length===25){
+    if(sess && sess.type==='ONLINE_QUIZ' && sess.status==='IN_PROGRESS' && Array.isArray(sess.questionIds) && sess.questionIds.length===targetCount){
       const valid = sess.questionIds.map(id=>pool.find(q=>q.id===id)).filter(Boolean);
-      if(valid.length===25) picked = valid;
+      if(valid.length===targetCount) picked = valid;
     }
-    if(!picked) picked = [...pool].sort(()=>Math.random()-0.5).slice(0,25);
-    emp.testSchedule = { type:'ONLINE_QUIZ', courseId: bank.id, questionIds: picked.map(q=>q.id), status:'IN_PROGRESS', startedAt: getVietnamISOString(), perQuestionSec:5, total:25, openedBy: openedBy||'HR' };
+    if(!picked) picked = [...pool].sort(()=>Math.random()-0.5).slice(0, targetCount);
+    emp.testSchedule = {
+      type:'ONLINE_QUIZ',
+      courseId: bank.id,
+      questionIds: picked.map(q=>q.id),
+      status:'IN_PROGRESS',
+      startedAt: getVietnamISOString(),
+      perQuestionSec:5,
+      total: targetCount,
+      openedBy: openedBy || emp.testSchedule?.openedBy || 'HR',
+      force: true,
+      isForceUnlocked: true
+    };
     emp.status='WAITING_TEST';
     emp.updated_at=getVietnamISOString();
-    audit(openedBy||'HR','OPEN_QUIZ','TEST',{employeeId},{total:25, courseId: bank.id}, req.ip);
+    audit(openedBy||'HR','OPEN_QUIZ','TEST',{employeeId},{total:targetCount, courseId: bank.id}, req.ip);
     saveDB();
     io.emit('employees:update', db.employees);
-    res.json({ success:true, courseId: bank.id, questions: picked.map(q=>({id:q.id, question:q.question, options:q.options})), questionIds: picked.map(q=>q.id), employee:{employeeId:emp.employeeId, name:emp.name, phone:emp.phone}, perQuestionSec:5, total:25, timeLimitSec:125 });
+    res.json({ success:true, courseId: bank.id, questions: picked.map(q=>({id:q.id, question:q.question, options:q.options})), questionIds: picked.map(q=>q.id), employee:{employeeId:emp.employeeId, name:emp.name, phone:emp.phone}, perQuestionSec:5, total: targetCount, timeLimitSec: targetCount*5 });
   }catch(e){ res.status(500).json({error:e.message}); }
 });
 app.post('/api/courses/:id/submit', (req,res)=>{

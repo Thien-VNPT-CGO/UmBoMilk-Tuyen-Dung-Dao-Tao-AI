@@ -1784,7 +1784,8 @@ async function loadElearning(){
 async function startTest(courseId){
   try{
     showToast('Đang mở đề thi 25 câu...','info');
-    const sess = await api('/api/quiz/open',{method:'POST', body:JSON.stringify({employeeId:employee.employeeId})});
+    const isForce = !!(employee.forceOpenTest || employee.isForceUnlocked || (employee.testSchedule && (employee.testSchedule.force || employee.testSchedule.isForceUnlocked)) || employee.status === 'WAITING_TEST');
+    const sess = await api('/api/quiz/open',{method:'POST', body:JSON.stringify({employeeId:employee.employeeId, force: isForce})});
     currentTest = { id: sess.courseId, questions: sess.questions, totalQuestions: sess.total||25, minPerQuestion: sess.perQuestionSec||5, questionIds: sess.questionIds };
     testAnswers = Array(25).fill(null);
     testIndex=0;
