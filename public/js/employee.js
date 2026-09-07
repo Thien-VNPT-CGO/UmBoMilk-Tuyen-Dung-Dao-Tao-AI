@@ -210,16 +210,31 @@ function isElearningUnlocked(){
   return false;
 }
 
+function isTraining5OffDaysCompleted(){
+  if(!employee) return false;
+  const isTraining = employee.type==='TRAINING' || employee.status==='TRAINING' || employee.status==='WAITING_TEST' || employee.status==='RETEST';
+  if(!isTraining) return false;
+  if(employee.registeredOffDates && employee.registeredOffDates.length >= 5) return true;
+  if(employee.trainingOffDays && employee.trainingOffDays.length >= 5) return true;
+  if(Array.isArray(myOffs)){
+    const found = myOffs.find(o => (o.type==='TRAINING_OFF' || isTraining) && Array.isArray(o.dates) && o.dates.length >= 5);
+    if(found) return true;
+  }
+  return false;
+}
+
 function getVisibleNav(){
   if(!employee) return NAV;
   const isOfficial = employee.status === 'OFFICIAL' || employee.type === 'OFFICIAL';
   // Yêu cầu #5,6: ẩn Thông báo khỏi nav, chỉ dùng chuông
   const baseFilter = (n)=> n.id !== 'notifs';
   if(!isOfficial){
-    // Training: ẩn emergency, shiftSwap, notifs; OFF luôn mở để đăng ký 5 ngày; elearning chỉ khi unlock
+    // Training: ẩn emergency, shiftSwap, notifs; khi đã đăng ký 5 ngày OFF thì ẩn chức năng Nghỉ OFF
+    const completed5Off = isTraining5OffDaysCompleted();
     return NAV.filter(n => {
       if(!baseFilter(n)) return false;
       if(TRAINING_HIDDEN_TABS.includes(n.id)) return false;
+      if(n.id === 'off' && completed5Off) return false;
       if(n.id === 'elearning') return isElearningUnlocked();
       return true;
     });
@@ -279,6 +294,7 @@ function isTabAllowed(id){
   if(!employee) return true;
   const isOfficial = employee.status === 'OFFICIAL' || employee.type === 'OFFICIAL';
   if(TRAINING_HIDDEN_TABS.includes(id) && !isOfficial) return false;
+  if(!isOfficial && id === 'off' && isTraining5OffDaysCompleted()) return false;
   // emergency (OFF đột xuất) cho phép chính thức - Master Spec Mục 19 (tối đa 1 lần/tuần, phải có người thay)
   if(isOfficial && id === 'off' && !isOffWindowOpen()) return false;
   if(id === 'elearning' && !isElearningUnlocked()) return false;
@@ -855,9 +871,11 @@ async function submitTrainingOffRegistration() {
       body: JSON.stringify({ employeeId: employee.employeeId, offDates: checked })
     });
     employee.registeredOffDates = res.registeredOffDates || checked;
+    employee.trainingOffDays = res.registeredOffDates || checked;
     localStorage.setItem('emp_data', JSON.stringify(employee));
     try{ localStorage.removeItem('trainingOffDraft_' + employee.employeeId); }catch(e){}
     showToast('Đã đăng ký 5 ngày OFF thử việc thành công! Lịch đã được AI cập nhật realtime', 'success');
+    try{ refreshNavVisibility(); }catch(e){}
     renderTrainingOffPicker();
     await loadSchedule();
   } catch (e) {
@@ -1024,12 +1042,12 @@ async function loadAttendanceTab(){
   const startMins = parseHM(sInfo.start);
   const endMins = parseHM(sInfo.end);
   const openCheckIn = startMins - 30; // AI mở trước 30p
-  const closeCheckIn = startMins + 60; // đóng sau 60p (server.js checkInCloseAfter)
-  const openCheckOut = endMins; // AI mở sau giờ hết ca
+  const closeCheckIn = endMins - 60; // Tự động đóng trước giờ check out 1 tiếng và chuyển sang check out
+  const openCheckOut = endMins - 60; // Tự động mở check-out từ trước 1 tiếng hết ca
   try{
     const winEl = document.getElementById('checkinWindow');
     if(winEl){
-      if(isOfficial) winEl.textContent = `AI mở ${fmtHM(openCheckIn)} → ${fmtHM(closeCheckIn)} (trễ 5p phạt 30k)`;
+      if(isOfficial) winEl.textContent = `Mở ${fmtHM(openCheckIn)} → ${fmtHM(closeCheckIn)} (chuyển Check-out lúc ${fmtHM(closeCheckIn)})`;
       else winEl.textContent = `Mở ${sInfo.start} -30p (Training)`;
     }
   }catch(e){}
@@ -1074,17 +1092,18 @@ async function loadAttendanceTab(){
     const hideAiInfo = ()=>{ if(aiInfo) aiInfo.classList.add('hidden'); };
 
     if(isOfficial){
-      // --- NV CHÍNH THỨC: AI window nghiêm ngặt ---
+      // --- NV CHÍNH THỨC: AI window mới (mở trước 30p, không đóng sau 60p, đóng trước 1h hết ca và chuyển check-out) ---
       if(!todayAtt || !todayAtt.checkIn){
         // Chưa check-in
         if(nowMins < openCheckIn){
           const remain = openCheckIn - nowMins;
           if(cardCheckin) cardCheckin.classList.remove('hidden');
           if(cardCheckout) cardCheckout.classList.add('hidden');
-          if(shiftMsg){ shiftMsg.innerHTML = `<i class=\"fa-solid fa-robot text-pink-500 text-xl mb-2 block\"></i> AI chưa mở điểm danh<br><span class=\"text-sm\">Ca ${getShiftVi(normalizeShift(employee.shift))} ${sInfo.start}-${sInfo.end} • AI sẽ mở lúc <b>${fmtHM(openCheckIn)}</b> (còn ${remain} phút)</span>`; shiftMsg.className='card bg-slate-50 border-slate-200 text-slate-600 text-sm font-bold text-center p-6'; shiftMsg.classList.remove('hidden'); }
+          if(shiftMsg){ shiftMsg.innerHTML = `<i class=\"fa-solid fa-robot text-pink-500 text-xl mb-2 block\"></i> AI chưa mở điểm danh<br><span class=\"text-sm\">Ca ${getShiftVi(normalizeShift(employee.shift))} ${sInfo.start}-${sInfo.end} • AI sẽ mở trước 30 phút lúc <b>${fmtHM(openCheckIn)}</b> (còn ${remain} phút)</span>`; shiftMsg.className='card bg-slate-50 border-slate-200 text-slate-600 text-sm font-bold text-center p-6'; shiftMsg.classList.remove('hidden'); }
           if(btnIn) btnIn.disabled = true, btnIn.classList.add('opacity-50','cursor-not-allowed');
-          showAiInfo(`<i class=\"fa-solid fa-clock\"></i> AI tự động mở điểm danh trước giờ làm 30 phút • Sau ${fmtHM(closeCheckIn)} sẽ đóng và tính phạt theo nội quy`, 'bg-slate-50 border-slate-200 text-slate-600');
-        } else if(nowMins <= closeCheckIn){
+          showAiInfo(`<i class=\"fa-solid fa-clock\"></i> AI tự động mở điểm danh trước 30 phút (${fmtHM(openCheckIn)}) • Tự động đóng Check-in và chuyển Check-out lúc ${fmtHM(closeCheckIn)} (trước ra ca 1 tiếng)`, 'bg-slate-50 border-slate-200 text-slate-600');
+        } else if(nowMins < closeCheckIn){
+          // Không đóng sau 60 phút: mở liên tục cho đến trước giờ ra ca 1 tiếng
           const remain = closeCheckIn - nowMins;
           const late5 = diffLate >=5 && diffLate <30;
           const late30 = diffLate >=30 && diffLate <60;
@@ -1093,17 +1112,17 @@ async function loadAttendanceTab(){
           if(cardCheckout) cardCheckout.classList.add('hidden');
           if(shiftMsg) shiftMsg.classList.add('hidden');
           if(btnIn) btnIn.disabled = false, btnIn.classList.remove('opacity-50','cursor-not-allowed');
-          if(late60) showAiInfo(`<span class=\"text-red-600\">⚠️ Đã trễ ${diffLate} phút — nếu check-in bây giờ sẽ phạt 100% ca (${(sInfo.hours*25500).toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'})}đ) • Còn ${remain} phút trước khi đóng</span>`, 'bg-red-50 border-red-200 text-red-700');
-          else if(late30) showAiInfo(`<span class=\"text-orange-600\">⚠️ Đã trễ ${diffLate} phút — phạt 50% ca (${Math.round(sInfo.hours*25500*0.5).toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'})}đ) • Còn ${remain} phút</span>`, 'bg-orange-50 border-orange-200 text-orange-700');
-          else if(late5) showAiInfo(`<span class=\"text-amber-600\">⚠️ Trễ ${diffLate} phút — phạt 30.000đ • Còn ${remain} phút trước khi đóng</span>`, 'bg-amber-50 border-amber-200 text-amber-700');
-          else showAiInfo(`<span class=\"text-emerald-600\">✔ AI đang mở Check-in • Còn ${remain} phút • Check-in đúng giờ không phạt</span>`, 'bg-emerald-50 border-emerald-200 text-emerald-700');
+          if(late60) showAiInfo(`<span class=\"text-red-600\">⚠️ Đã trễ ${diffLate} phút — check-in sẽ phạt 100% ca (${(sInfo.hours*25500).toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'})}đ) • Tự động chuyển Check-out lúc ${fmtHM(closeCheckIn)} (còn ${remain} phút)</span>`, 'bg-red-50 border-red-200 text-red-700');
+          else if(late30) showAiInfo(`<span class=\"text-orange-600\">⚠️ Đã trễ ${diffLate} phút — phạt 50% ca (${Math.round(sInfo.hours*25500*0.5).toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'})}đ) • Tự động chuyển Check-out lúc ${fmtHM(closeCheckIn)} (còn ${remain} phút)</span>`, 'bg-orange-50 border-orange-200 text-orange-700');
+          else if(late5) showAiInfo(`<span class=\"text-amber-600\">⚠️ Trễ ${diffLate} phút — phạt 30.000đ • Tự động chuyển Check-out lúc ${fmtHM(closeCheckIn)} (còn ${remain} phút)</span>`, 'bg-amber-50 border-amber-200 text-amber-700');
+          else showAiInfo(`<span class=\"text-emerald-600\">✔ AI đang mở Check-in • Còn ${remain} phút trước khi chuyển Check-out • Check-in đúng giờ không phạt</span>`, 'bg-emerald-50 border-emerald-200 text-emerald-700');
         } else {
-          // Đã đóng
-          if(cardCheckin) cardCheckin.classList.remove('hidden');
-          if(cardCheckout) cardCheckout.classList.add('hidden');
-          if(shiftMsg){ shiftMsg.innerHTML = `<i class=\"fa-solid fa-triangle-exclamation text-red-500 text-xl mb-2 block\"></i> Đã đóng Check-in lúc ${fmtHM(closeCheckIn)}<br><span class=\"text-sm\">Quá 60 phút sau ${sInfo.start} — hệ thống sẽ ghi <b>VẮNG/TRỄ NẶNG</b> và phạt 100% ca theo nội quy</span>`; shiftMsg.className='card bg-red-50 border-red-200 text-red-700 text-sm font-bold text-center p-6'; shiftMsg.classList.remove('hidden'); }
-          if(btnIn) btnIn.disabled = true, btnIn.classList.add('opacity-50','cursor-not-allowed');
-          showAiInfo(`<span class=\"text-red-600\">AI đã đóng Check-in — liên hệ HR nếu có lý do</span>`, 'bg-red-50 border-red-200 text-red-700');
+          // Trước giờ ra ca 1 tiếng: Hệ thống TỰ ĐỘNG ĐÓNG CHECK-IN và CHUYỂN SANG CHECK-OUT!
+          if(cardCheckin) cardCheckin.classList.add('hidden');
+          if(cardCheckout) cardCheckout.classList.remove('hidden');
+          if(shiftMsg) shiftMsg.classList.add('hidden');
+          if(btnOut) btnOut.disabled = false, btnOut.classList.remove('opacity-50','cursor-not-allowed');
+          showAiInfo(`<i class=\"fa-solid fa-triangle-exclamation text-amber-600\"></i> Đã quá hạn Check-in (hệ thống tự động đóng trước giờ ra ca 1 tiếng lúc <b>${fmtHM(closeCheckIn)}</b> và chuyển sang Check-out • Bấm Check-out để hoàn thành ca)`, 'bg-amber-50 border-amber-200 text-amber-800');
         }
       } else if(todayAtt.checkIn && !todayAtt.checkOut){
         // Đã check-in, chờ check-out
@@ -1245,7 +1264,23 @@ async function loadSchedule(){
       }
     }
     const today = getVietnamTodayStr();
-    el.innerHTML = displaySchedules.map(s=>{
+    const offBanner = (!isOfficial && isTraining5OffDaysCompleted()) ? `
+      <div class="bg-pink-50 border border-pink-200 rounded-3xl p-4 mb-4 flex items-center justify-between gap-3 shadow-xs">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-pink-500 to-rose-500 text-white flex items-center justify-center font-bold text-lg shadow-sm">
+            <i class="fa-solid fa-bed"></i>
+          </div>
+          <div>
+            <div class="font-black text-sm text-pink-900">5 NGÀY NGHỈ (OFF) ĐÀO TẠO ĐÃ ĐƯỢC LƯU & TỰ ĐỘNG SẮP LỊCH</div>
+            <div class="text-xs text-pink-700 font-medium mt-0.5">
+              ${(employee.registeredOffDates || employee.trainingOffDays || []).map(d => `<span class="inline-block bg-white border border-pink-200 px-2 py-0.5 rounded-md font-bold text-[11px] mr-1">${fmtDMY(d)}</span>`).join('')}
+            </div>
+          </div>
+        </div>
+        <span class="text-xs font-bold bg-pink-500 text-white px-3 py-1 rounded-full whitespace-nowrap hidden sm:inline-block">5 NGÀY OFF ĐÃ LƯU</span>
+      </div>
+    ` : '';
+    el.innerHTML = offBanner + displaySchedules.map(s=>{
       const isCurrentWeek = isDateInCurrentWeek(new Date(s.weekStart));
       const workingDays = s.days.filter(d => d.status === 'WORKING' || d.status === 'SUBSTITUTE').length;
       
@@ -1356,6 +1391,47 @@ async function loadSchedule(){
   }catch(e){ console.error('loadSchedule error', e); }
 }
 // Training: Đổi ca / Thêm ca (yêu cầu #5) – HR 15p auto duyệt, 1 ngày 2 ca để rút ngắn 7→6 ngày
+async function loadTrainingShiftHistoryModal(){
+  const container = document.getElementById('trainingShiftHistoryList');
+  if(!container || !employee) return;
+  try{
+    const list = await api('/api/training/shift-requests?employeeId=' + employee.employeeId);
+    if(!list || list.length === 0){
+      container.innerHTML = '<div class="text-slate-400 text-center py-3">Chưa có yêu cầu đổi ca hoặc thêm ca nào</div>';
+      return;
+    }
+    container.innerHTML = list.map(r => {
+      const isAdd = r.type === 'ADD_SHIFT' || (r.reason && r.reason.startsWith('[THÊM CA]'));
+      const typeBadge = isAdd
+        ? '<span class="bg-teal-100 text-teal-800 border border-teal-200 text-[10px] font-black px-2 py-0.5 rounded-full">THÊM CA</span>'
+        : '<span class="bg-pink-100 text-pink-800 border border-pink-200 text-[10px] font-black px-2 py-0.5 rounded-full">ĐỔI CA</span>';
+      const statusClass = r.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : (r.status === 'PENDING' ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-rose-100 text-rose-700 border-rose-200');
+      const statusText = r.status === 'APPROVED' ? 'ĐÃ DUYỆT' : (r.status === 'PENDING' ? 'CHỜ DUYỆT (15p)' : 'TỪ CHỐI');
+      return `
+        <div class="bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-left">
+          <div class="flex items-center justify-between gap-1">
+            <div class="font-bold text-xs text-slate-800 flex items-center gap-1.5">
+              ${typeBadge}
+              <span>${fmtDMY(r.date)}</span>
+            </div>
+            <span class="text-[10px] font-black px-2 py-0.5 rounded-full border ${statusClass}">${statusText}</span>
+          </div>
+          <div class="text-xs text-slate-700 mt-1">
+            ${isAdd ? `Ca thêm: <b>${getShiftVi(normalizeShift(r.toShift))}</b>` : `${getShiftVi(normalizeShift(r.fromShift))} → <b>${getShiftVi(normalizeShift(r.toShift))}</b>`}
+          </div>
+          <div class="text-[11px] text-slate-500 mt-0.5">Lý do: ${r.reason || '—'}</div>
+          <div class="text-[10px] text-slate-400 mt-1 flex justify-between">
+            <span>Gửi: ${fmtDMYTime(r.createdAt)}</span>
+            <span>${r.approvedBy ? 'Duyệt bởi ' + r.approvedBy : (r.status === 'PENDING' ? 'HR có 15p duyệt' : '')}</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }catch(e){
+    container.innerHTML = `<div class="text-rose-500 text-center py-2">${e.message || 'Lỗi tải lịch sử'}</div>`;
+  }
+}
+
 function openTrainingShiftModal(weekStart){
   if(!employee) return;
   const dates = mySchedules.find(s=>s.weekStart===weekStart)?.days || [];
@@ -1363,7 +1439,7 @@ function openTrainingShiftModal(weekStart){
   const options = dates.map(d=> `<option value="${d.date}">${fmtDMY(d.date)} (${d.dayName}) - ${getShiftVi(normalizeShift(d.shift))} [${getStatusVi(d.status)}]</option>`).join('');
   const modalHtml = `
     <div id="trainingShiftModal" class="fixed inset-0 z-[100] bg-black/50 flex items-center justify-center p-4">
-      <div class="bg-white rounded-2xl w-full max-w-md p-5 shadow-xl">
+      <div class="bg-white rounded-2xl w-full max-w-lg p-5 shadow-xl max-h-[90vh] overflow-y-auto">
         <div class="font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-rotate text-pink-600"></i> Đổi ca Training (12h trước)</div>
         <div class="text-xs text-slate-500 mt-1">Chọn ngày và ca mới. HR có 15 phút duyệt, quá hạn tự động duyệt. 1 ngày 2 ca giúp rút ngắn 7→6 ngày.</div>
         <div class="mt-3 space-y-3">
@@ -1371,11 +1447,22 @@ function openTrainingShiftModal(weekStart){
           <div><label class="text-xs font-bold">Ca mới</label><select id="shiftTo" class="w-full mt-1 px-3 py-2 rounded-xl border text-sm"><option value="CA_SANG">Ca Sáng (07:00-12:00)</option><option value="CA_CHIEU">Ca Chiều (12:00-18:00)</option><option value="CA_TOI">Ca Tối (18:00-23:00)</option></select></div>
           <div><label class="text-xs font-bold">Lý do <span class="text-red-500">*</span> (bắt buộc)</label><input id="shiftReason" class="w-full mt-1 px-3 py-2 rounded-xl border text-sm focus:border-pink-400" placeholder="Nhập lý do (bắt buộc)..."></div>
         </div>
-        <div class="mt-4 flex gap-2"><button onclick="submitTrainingShift(false)" class="flex-1 bg-gradient-to-r from-pink-500 to-rose-500 text-white font-black py-2.5 rounded-xl">Gửi yêu cầu</button><button onclick="document.getElementById('trainingShiftModal').remove()" class="px-4 bg-slate-100 font-bold py-2.5 rounded-xl">Hủy</button></div>
+        <div class="mt-4 flex gap-2"><button onclick="submitTrainingShift(false)" class="flex-1 bg-gradient-to-r from-pink-500 to-rose-500 text-white font-black py-2.5 rounded-xl shadow hover:from-pink-600 hover:to-rose-600">Gửi yêu cầu đổi ca</button><button onclick="document.getElementById('trainingShiftModal').remove()" class="px-4 bg-slate-100 font-bold py-2.5 rounded-xl">Đóng</button></div>
+        <div class="mt-4 pt-3 border-t border-slate-200">
+          <div class="font-black text-xs text-pink-900 flex items-center justify-between mb-2">
+            <span><i class="fa-solid fa-clock-rotate-left text-pink-600"></i> Lịch sử yêu cầu Đổi ca / Thêm ca</span>
+            <button type="button" onclick="loadTrainingShiftHistoryModal()" class="text-pink-600 hover:text-pink-800 text-[11px] font-bold">↻ Cập nhật</button>
+          </div>
+          <div id="trainingShiftHistoryList" class="space-y-2 max-h-48 overflow-y-auto pr-1 text-xs">
+            <div class="text-slate-400 text-center py-2">Đang tải lịch sử...</div>
+          </div>
+        </div>
       </div>
     </div>`;
   document.body.insertAdjacentHTML('beforeend', modalHtml);
+  loadTrainingShiftHistoryModal();
 }
+
 function openTrainingAddShiftModal(weekStart){
   if(!employee) return;
   const dates = mySchedules.find(s=>s.weekStart===weekStart)?.days.filter(d=>d.status==='WORKING') || [];
@@ -1383,7 +1470,7 @@ function openTrainingAddShiftModal(weekStart){
   const options = dates.map(d=> `<option value="${d.date}">${fmtDMY(d.date)} (${d.dayName}) - ${getShiftVi(normalizeShift(d.shift))}</option>`).join('');
   const modalHtml = `
     <div id="trainingShiftModal" class="fixed inset-0 z-[100] bg-black/50 flex items-center justify-center p-4">
-      <div class="bg-white rounded-2xl w-full max-w-md p-5 shadow-xl">
+      <div class="bg-white rounded-2xl w-full max-w-lg p-5 shadow-xl max-h-[90vh] overflow-y-auto">
         <div class="font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-plus text-pink-600"></i> Thêm ca (1 ngày 2 ca)</div>
         <div class="text-xs text-slate-500 mt-1">Chọn ngày đã có ca và ca muốn THÊM (ví dụ: đã Ca Sáng thêm Ca Chiều). Giúp rút ngắn 7→6 ngày.</div>
         <div class="mt-3 space-y-3">
@@ -1391,11 +1478,22 @@ function openTrainingAddShiftModal(weekStart){
           <div><label class="text-xs font-bold">Ca THÊM</label><select id="shiftTo" class="w-full mt-1 px-3 py-2 rounded-xl border text-sm"><option value="CA_CHIEU">Ca Chiều (12:00-18:00)</option><option value="CA_SANG">Ca Sáng (07:00-12:00)</option><option value="CA_TOI">Ca Tối (18:00-23:00)</option></select></div>
           <div><label class="text-xs font-bold">Lý do <span class="text-red-500">*</span> (bắt buộc)</label><input id="shiftReason" class="w-full mt-1 px-3 py-2 rounded-xl border text-sm focus:border-pink-400" placeholder="Nhập lý do (bắt buộc)..."></div>
         </div>
-        <div class="mt-4 flex gap-2"><button onclick="submitTrainingShift(true)" class="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-black py-2.5 rounded-xl">Gửi thêm ca</button><button onclick="document.getElementById('trainingShiftModal').remove()" class="px-4 bg-slate-100 font-bold py-2.5 rounded-xl">Hủy</button></div>
+        <div class="mt-4 flex gap-2"><button onclick="submitTrainingShift(true)" class="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-black py-2.5 rounded-xl shadow hover:from-emerald-600 hover:to-teal-700">Gửi yêu cầu thêm ca</button><button onclick="document.getElementById('trainingShiftModal').remove()" class="px-4 bg-slate-100 font-bold py-2.5 rounded-xl">Đóng</button></div>
+        <div class="mt-4 pt-3 border-t border-slate-200">
+          <div class="font-black text-xs text-pink-900 flex items-center justify-between mb-2">
+            <span><i class="fa-solid fa-clock-rotate-left text-pink-600"></i> Lịch sử yêu cầu Đổi ca / Thêm ca</span>
+            <button type="button" onclick="loadTrainingShiftHistoryModal()" class="text-pink-600 hover:text-pink-800 text-[11px] font-bold">↻ Cập nhật</button>
+          </div>
+          <div id="trainingShiftHistoryList" class="space-y-2 max-h-48 overflow-y-auto pr-1 text-xs">
+            <div class="text-slate-400 text-center py-2">Đang tải lịch sử...</div>
+          </div>
+        </div>
       </div>
     </div>`;
   document.body.insertAdjacentHTML('beforeend', modalHtml);
+  loadTrainingShiftHistoryModal();
 }
+
 async function submitTrainingShift(isAdd){
   const date = document.getElementById('shiftDate')?.value;
   const toShift = document.getElementById('shiftTo')?.value;
@@ -1403,13 +1501,13 @@ async function submitTrainingShift(isAdd){
   if(!date || !toShift) return showToast('Thiếu ngày/ca','error');
   if(!reason) return showToast('Vui lòng nhập lý do (bắt buộc)','error');
   try{
-    const endpoint = isAdd ? '/api/training/shift-change' : '/api/training/shift-change';
-    // Thêm ca gửi cùng endpoint với reason prefix để server phân biệt (hiện server chưa có endpoint riêng, dùng chung và thêm tag)
+    const endpoint = '/api/training/shift-change';
     const bodyReason = isAdd ? `[THÊM CA] ${reason}` : reason;
-    const res = await api(endpoint, {method:'POST', body:JSON.stringify({employeeId:employee.employeeId, date, toShift, reason: bodyReason})});
+    const res = await api(endpoint, {method:'POST', body:JSON.stringify({employeeId:employee.employeeId, date, toShift, reason: bodyReason, isAdd})});
     showToast(res.message || (isAdd ? 'Đã gửi yêu cầu thêm ca - chờ HR 15p' : 'Đã gửi yêu cầu đổi ca - chờ HR 15p'), 'success');
-    document.getElementById('trainingShiftModal')?.remove();
-    // Thông báo realtime sẽ đến qua socket, không cần reload ngay
+    loadTrainingShiftHistoryModal();
+    if(document.getElementById('shiftReason')) document.getElementById('shiftReason').value = '';
+    loadSchedule();
   }catch(e){ showToast(e.message,'error'); }
 }
 
@@ -1562,8 +1660,15 @@ async function submitOff(){
   try{
     const res = await api('/api/off-requests', {method:'POST', body:JSON.stringify({employeeId:employee.employeeId, dates:checks})});
     showToast('OFF đã tự động duyệt: '+(res.dates||checks).map(d=>fmtDMY(d)).join(', '),'success');
+    if(isTraining && checks.length >= 5){
+      employee.registeredOffDates = checks;
+      employee.trainingOffDays = checks;
+      localStorage.setItem('emp_data', JSON.stringify(employee));
+      try{ refreshNavVisibility(); }catch(e){}
+    }
     await loadOff();
     await loadSchedule();
+    await loadHome();
   }catch(e){ showToast(e.message,'error'); }
 }
 function getMonday(d){

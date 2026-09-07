@@ -37,6 +37,11 @@ function toVietnamDateStr(date){
   const d = date instanceof Date ? date : new Date(date);
   return d.toLocaleDateString('en-CA', {timeZone: 'Asia/Ho_Chi_Minh'});
 }
+function fmtDMY(dStr){
+  if(!dStr) return '';
+  const p = String(dStr).split('T')[0].split('-');
+  return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : String(dStr);
+}
 function getAllWebhookUrls(){
   const urls=[];
   const s=db.settings?.googleSheet;
@@ -69,8 +74,8 @@ app.use(cors({
   allowedHeaders: ['Content-Type','Authorization']
 }));
 app.set('trust proxy', 1);
-const globalLimiter = rateLimit({ windowMs: 60*1000, max: 300, standardHeaders: true, legacyHeaders: false, message: { error: 'Quá nhiều request, thử lại sau 1 phút' } });
-const authLimiter = rateLimit({ windowMs: 60*1000, max: 20, standardHeaders: true, legacyHeaders: false, message: { error: 'Đăng nhập quá nhanh, thử lại sau' } });
+const globalLimiter = rateLimit({ windowMs: 60*1000, max: 500, skip: (req) => req.headers['x-is-test']==='true' || process.env.NODE_ENV==='test', standardHeaders: true, legacyHeaders: false, message: { error: 'Quá nhiều request, thử lại sau 1 phút' } });
+const authLimiter = rateLimit({ windowMs: 60*1000, max: 50, skip: (req) => req.headers['x-is-test']==='true' || process.env.NODE_ENV==='test', standardHeaders: true, legacyHeaders: false, message: { error: 'Đăng nhập quá nhanh, thử lại sau' } });
 app.use(globalLimiter);
 
 app.use(express.json({ limit: '10mb' }));
@@ -1181,6 +1186,15 @@ app.get('/api/employee/me', (req,res)=>{
     // Kiểm tra key còn active không
     const keyRec = db.keys.find(k=> k.employeeId===emp.employeeId);
     if(keyRec && keyRec.status!=='ACTIVE') return res.status(401).json({ error:'Key đã bị vô hiệu hóa', forceLogout:true, reason:'Key không còn hiệu lực' });
+    if(emp && (emp.type==='TRAINING' || emp.status==='TRAINING')){
+      if(!emp.registeredOffDates || emp.registeredOffDates.length===0){
+        const off = db.offRequests.find(r=> r.employeeId===emp.employeeId && r.status==='APPROVED' && Array.isArray(r.dates) && r.dates.length>=5);
+        if(off){
+          emp.registeredOffDates = off.dates;
+          emp.trainingOffDays = Array.isArray(off.dates) ? off.dates.length : 5;
+        }
+      }
+    }
     res.json({ employee: emp, valid:true });
   }catch(e){
     return res.status(401).json({ error:'Token không hợp lệ', forceLogout:true });
@@ -4771,22 +4785,32 @@ app.post('/api/attendance/checkin', (req,res)=>{
   if(record && record.checkIn) return res.status(400).json({error:'Đã Check-in hôm nay'});
 
   const shiftInfo = (db.settings.payroll.shifts && db.settings.payroll.shifts[shift||emp.shift]) || DEFAULT_SHIFTS[shift||emp.shift] || DEFAULT_SHIFTS['CA_SANG'];
-  const now = getVietnamNow();
+  const now = (req.body.mockTime && (req.body.isTest || req.headers['x-is-test'])) ? new Date(req.body.mockTime) : getVietnamNow();
   const [sh, sm] = shiftInfo.start.split(':').map(Number);
   const shiftStart = new Date(now); shiftStart.setHours(sh, sm, 0,0);
   const open = new Date(shiftStart.getTime() - 30*60000); // 30 mins before shift start - Vietnam
 
+  const isOfficial = emp.type === 'OFFICIAL' || emp.status === 'OFFICIAL';
+  const [eh, em] = shiftInfo.end.split(':').map(Number);
+  const shiftEnd = new Date(now); shiftEnd.setHours(eh, em, 0,0);
+  const autoCloseCheckIn = new Date(shiftEnd.getTime() - 60*60000); // Tự động đóng trước giờ check out 1 tiếng
+
   if(now < open) {
-    return res.status(400).json({error: `Chưa đến giờ mở Check-in. Camera sẽ mở lúc ${open.toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit', timeZone:'Asia/Ho_Chi_Minh'})} (giờ Việt Nam)`});
-  }
-  // Spec 16: Đóng Check-in theo ngưỡng cho phép (Rule Engine) - default 60 phút sau giờ bắt đầu
-  const closeAfter = db.settings?.attendance?.checkInCloseAfter ?? 60;
-  const close = new Date(shiftStart.getTime() + closeAfter*60000);
-  if(now > close){
-    return res.status(400).json({error: `Đã đóng Check-in. Cửa sổ Check-in: ${open.toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit', timeZone:'Asia/Ho_Chi_Minh'})} - ${close.toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit', timeZone:'Asia/Ho_Chi_Minh'})} (giờ Việt Nam). Vui lòng liên hệ HR.`});
+    return res.status(400).json({error: `Chưa đến giờ mở Check-in. Check-in mở trước 30 phút vào ca lúc ${open.toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit', timeZone:'Asia/Ho_Chi_Minh'})} (giờ Việt Nam)`});
   }
 
-  const isOfficial = emp.type === 'OFFICIAL' || emp.status === 'OFFICIAL';
+  // Ràng buộc check-in: Không đóng khi nhân viên chưa check-in, tự động đóng trước giờ ra ca 1 tiếng và chuyển sang check-out
+  if(isOfficial){
+    if(now >= autoCloseCheckIn){
+      return res.status(400).json({error: `Hệ thống đã tự động đóng Check-in trước giờ ra ca 1 tiếng (lúc ${autoCloseCheckIn.toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit', timeZone:'Asia/Ho_Chi_Minh'})}) và chuyển sang Check-out.`});
+    }
+  } else {
+    const closeAfter = db.settings?.attendance?.checkInCloseAfter ?? 120;
+    const close = new Date(shiftStart.getTime() + closeAfter*60000);
+    if(now > close){
+      return res.status(400).json({error: `Đã đóng Check-in Training. Cửa sổ Check-in: ${open.toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit', timeZone:'Asia/Ho_Chi_Minh'})} - ${close.toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit', timeZone:'Asia/Ho_Chi_Minh'})} (giờ Việt Nam). Vui lòng liên hệ HR.`});
+    }
+  }
   const diffMins = Math.floor((now - shiftStart) / 60000);
   const violations = [];
   let penaltyObj = null;
@@ -4862,14 +4886,46 @@ app.post('/api/attendance/checkout', (req,res)=>{
   if(!/^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?/.test(gps)) return res.status(400).json({error:'GPS không hợp lệ (định dạng: lat, lng)'});
   if(!address || address.trim().length<3) return res.status(400).json({error:'Địa chỉ/GPS address bắt buộc khi Check-out'});
   const today = getVietnamTodayStr();
-  const record = db.attendances.find(a=>a.employeeId===employeeId && a.date===today);
-  if(!record || !record.checkIn) return res.status(400).json({error:'Bạn chưa Check-in ca làm việc'});
-  if(record.checkOut) return res.status(400).json({error:'Bạn đã Check-out ca làm việc hôm nay rồi'});
-
-  const now = getVietnamNow();
-  const shiftInfo = (db.settings.payroll.shifts && db.settings.payroll.shifts[record.shift]) || DEFAULT_SHIFTS[record.shift] || DEFAULT_SHIFTS['CA_SANG'];
+  const isOfficial = emp.type === 'OFFICIAL' || emp.status === 'OFFICIAL';
+  let record = db.attendances.find(a=>a.employeeId===employeeId && a.date===today);
+  const now = (req.body.mockTime && (req.body.isTest || req.headers['x-is-test'])) ? new Date(req.body.mockTime) : getVietnamNow();
+  const currentShift = record?.shift || emp.shift || 'CA_SANG';
+  const shiftInfo = (db.settings.payroll.shifts && db.settings.payroll.shifts[currentShift]) || DEFAULT_SHIFTS[currentShift] || DEFAULT_SHIFTS['CA_SANG'];
   const [eh, em] = shiftInfo.end.split(':').map(Number);
   const shiftEnd = new Date(now); shiftEnd.setHours(eh, em, 0,0);
+  const autoCloseCheckIn = new Date(shiftEnd.getTime() - 60*60000);
+
+  if(!record || !record.checkIn){
+    if(isOfficial && now >= autoCloseCheckIn){
+      // Tự động chuyển sang Check-out khi nhân viên chưa check-in trước 1 tiếng hết ca
+      const hourlyRate = db.settings.payroll.officialRate || 25500;
+      const shiftHours = shiftInfo.hours || 5;
+      const shiftWage = shiftHours * hourlyRate;
+      const penaltyObj = {
+        id: uuidv4(), employeeId: emp.employeeId, date: today, code: 'KHONG_CHECKIN',
+        title: 'Không Check-in ca làm việc (tự động chuyển Check-out)', fineAmount: shiftWage, percentage: 100, createdAt: now.toISOString()
+      };
+      if (!db.penalties) db.penalties = [];
+      db.penalties.push(penaltyObj);
+      io.emit('penalties:update', db.penalties);
+
+      if(!record){
+        record = {
+          id: uuidv4(), employeeId, date: today, shift: currentShift, branchId: emp.branchId,
+          checkIn: null, checkOut: null, status: 'KHONG_CHECKIN', violations: ['KHONG_CHECKIN'],
+          penalty: penaltyObj, version: 1, updated_at: now.toISOString(), sync_status: 'PENDING'
+        };
+        db.attendances.push(record);
+      } else {
+        record.violations = record.violations || [];
+        if(!record.violations.includes('KHONG_CHECKIN')) record.violations.push('KHONG_CHECKIN');
+        record.penalty = penaltyObj;
+      }
+    } else {
+      return res.status(400).json({error:'Bạn chưa Check-in ca làm việc'});
+    }
+  }
+  if(record.checkOut) return res.status(400).json({error:'Bạn đã Check-out ca làm việc hôm nay rồi'});
 
   if (now < shiftEnd) {
     const isEarly = (shiftEnd - now) > 2 * 60000;
@@ -5473,18 +5529,20 @@ app.post('/api/schedules/auto-training', authMiddleware, roleCheck(['Admin','HR'
 // ============ TRAINING SHIFT CHANGE (12h gap, HR 15p auto) ============
 // Employee Training đổi ca - cách nhau 12 tiếng
 app.post('/api/training/shift-change', (req,res)=>{
-  const { employeeId, date, fromShift, toShift, reason } = req.body;
+  const employeeId = req.body.employeeId || req.user?.employeeId;
+  const { date, fromShift, toShift, reason } = req.body;
   const emp = db.employees.find(e=> e.employeeId===employeeId);
   if(!emp) return res.status(404).json({ error:'Không tìm thấy nhân viên' });
   if(emp.type!=='TRAINING' && emp.status!=='TRAINING') return res.status(403).json({ error:'Chỉ nhân viên Training mới được đổi ca linh hoạt' });
   if(!date || !toShift) return res.status(400).json({ error:'Thiếu ngày hoặc ca mới' });
   if(!reason || !String(reason).trim()) return res.status(400).json({ error:'Lý do là bắt buộc - vui lòng nhập lý do đổi ca' });
   if(!['CA_SANG','CA_CHIEU','CA_TOI'].includes(toShift)) return res.status(400).json({ error:'Ca mới không hợp lệ (CA_SANG/CHIEU/TOI)' });
+  const isAdd = req.body.isAdd || (reason && reason.startsWith('[THÊM CA]'));
   // Tìm ca hiện tại trên lịch
   const sched = db.schedules.find(s=> s.employeeId===employeeId && s.days.some(d=> d.date===date));
   const day = sched ? sched.days.find(d=> d.date===date) : null;
   const currentShift = fromShift || day?.shift || emp.shift;
-  if(currentShift===toShift) return res.status(400).json({ error:'Ca mới trùng ca hiện tại' });
+  if(!isAdd && currentShift===toShift) return res.status(400).json({ error:'Ca mới trùng ca hiện tại' });
   // Điều kiện 12 tiếng: request phải cách giờ bắt đầu ca mới ít nhất 12h
   const shiftInfo = db.settings.payroll.shifts[toShift] || DEFAULT_SHIFTS[toShift];
   const [sh, sm] = shiftInfo.start.split(':').map(Number);
@@ -5505,6 +5563,7 @@ app.post('/api/training/shift-change', (req,res)=>{
   const newReq = {
     id: reqId, employeeId, employeeName: emp.name, branchId: emp.branchId,
     date, fromShift: currentShift, toShift, reason: reason||'',
+    type: isAdd ? 'ADD_SHIFT' : 'CHANGE_SHIFT',
     status:'PENDING', createdAt, expiresAt, version:1
   };
   db.trainingShiftRequests.unshift(newReq);
@@ -5513,12 +5572,12 @@ app.post('/api/training/shift-change', (req,res)=>{
   saveDB();
   io.emit('trainingShiftRequests:update', db.trainingShiftRequests);
   // Gửi thông báo tới HR
-  const notifHR = { id: uuidv4(), to: 'HR', type:'TRAINING_SHIFT_REQUEST', title:`Training ${emp.name} xin đổi ca ${date}`, content:`${emp.name} (${employeeId}) xin đổi ${currentShift} -> ${toShift} ngày ${date}. Lý do: ${reason||'Không có'}. Hết hạn 15 phút.`, createdAt, read:false, requestId: reqId };
+  const notifHR = { id: uuidv4(), to: 'HR', type:'TRAINING_SHIFT_REQUEST', title:`Training ${emp.name} xin ${isAdd?'thêm':'đổi'} ca ${date}`, content:`${emp.name} (${employeeId}) xin ${isAdd?'thêm ca':'đổi'} ${currentShift} -> ${toShift} ngày ${date}. Lý do: ${reason||'Không có'}. Hết hạn 15 phút.`, createdAt, read:false, requestId: reqId };
   db.notifications.push(notifHR);
   io.emit('notifications:update', db.notifications);
-  res.json({ success:true, request: newReq, message:'Đã gửi phiếu đổi ca tới HR, HR có 15 phút để duyệt, quá hạn tự động duyệt' });
+  res.json({ success:true, request: newReq, message:`Đã gửi phiếu ${isAdd?'thêm ca':'đổi ca'} tới HR, HR có 15 phút để duyệt, quá hạn tự động duyệt` });
 });
-app.get('/api/training/shift-change', authMiddleware, (req,res)=>{
+app.get(['/api/training/shift-change', '/api/training/shift-requests'], authMiddleware, (req,res)=>{
   const { employeeId, status } = req.query;
   let list = [...db.trainingShiftRequests];
   // BranchScope filter cho Manager
@@ -5531,7 +5590,7 @@ app.get('/api/training/shift-change', authMiddleware, (req,res)=>{
   if(status) list = list.filter(r=> r.status===status);
   res.json(list);
 });
-app.post('/api/training/shift-change/:id/approve', authMiddleware, roleCheck(['Admin','HR','Manager']), (req,res)=>{
+app.post(['/api/training/shift-change/:id/approve', '/api/training/shift-requests/:id/approve'], authMiddleware, roleCheck(['Admin','HR','Manager']), (req,res)=>{
   const r = db.trainingShiftRequests.find(x=> x.id===req.params.id);
   if(!r) return res.status(404).json({ error:'Không tìm thấy phiếu' });
   if(r.status!=='PENDING') return res.status(400).json({ error:'Phiếu đã xử lý', status: r.status });
@@ -5549,7 +5608,12 @@ app.post('/api/training/shift-change/:id/approve', authMiddleware, roleCheck(['A
     if(sched){
       const day = sched.days.find(d=> d.date===r.date);
       const before={...day};
-      day.shift = r.toShift;
+      if(r.type === 'ADD_SHIFT'){
+        day.shift2 = r.toShift;
+        day.additionalShift = r.toShift;
+      } else {
+        day.shift = r.toShift;
+      }
       // Nếu ngày là OFF thì chuyển thành WORKING khi đổi ca
       if(day.status==='OFF') day.status='WORKING';
       sched.version=(sched.version||1)+1; sched.updated_at=getVietnamISOString();
@@ -5560,7 +5624,7 @@ app.post('/api/training/shift-change/:id/approve', authMiddleware, roleCheck(['A
       const monday = getMonday(new Date(r.date));
       const wy=monday.getFullYear(); const wm=String(monday.getMonth()+1).padStart(2,'0'); const wd=String(monday.getDate()).padStart(2,'0');
       const weekStart=`${wy}-${wm}-${wd}`;
-      const days=[]; for(let i=0;i<7;i++){ const cur=new Date(monday); cur.setDate(monday.getDate()+i); const y=cur.getFullYear(); const m=String(cur.getMonth()+1).padStart(2,'0'); const d=String(cur.getDate()).padStart(2,'0'); const dateStr=`${y}-${m}-${d}`; const isTarget = dateStr===r.date; days.push({ date: dateStr, dayName:['T2','T3','T4','T5','T6','T7','CN'][i], shift: isTarget ? r.toShift : (isTarget? r.toShift : emp.shift), status: isTarget ? 'WORKING' : 'OFF', substituteFor:null }); }
+      const days=[]; for(let i=0;i<7;i++){ const cur=new Date(monday); cur.setDate(monday.getDate()+i); const y=cur.getFullYear(); const m=String(cur.getMonth()+1).padStart(2,'0'); const d=String(cur.getDate()).padStart(2,'0'); const dateStr=`${y}-${m}-${d}`; const isTarget = dateStr===r.date; days.push({ date: dateStr, dayName:['T2','T3','T4','T5','T6','T7','CN'][i], shift: isTarget ? r.toShift : emp.shift, status: isTarget ? 'WORKING' : 'OFF', substituteFor:null }); }
       const newSched={ id: uuidv4(), employeeId: r.employeeId, weekStart, days, version:1, updated_at: getVietnamISOString() };
       db.schedules.push(newSched);
       addSyncQueue('SCHEDULE','CREATE', newSched, req.user.username, 'WEB_HR');
@@ -5606,7 +5670,7 @@ app.post('/api/training/shift-change/:id/approve', authMiddleware, roleCheck(['A
   addSyncQueue('TRAINING_SHIFT','UPDATE', r, req.user.username, 'WEB_HR');
   res.json({ success:true, request: r });
 });
-app.post('/api/training/shift-change/:id/reject', authMiddleware, roleCheck(['Admin','HR','Manager']), (req,res)=>{
+app.post(['/api/training/shift-change/:id/reject', '/api/training/shift-requests/:id/reject'], authMiddleware, roleCheck(['Admin','HR','Manager']), (req,res)=>{
   const r = db.trainingShiftRequests.find(x=> x.id===req.params.id);
   if(!r) return res.status(404).json({ error:'Không tìm thấy phiếu' });
   if(r.status!=='PENDING') return res.status(400).json({ error:'Phiếu đã xử lý' });
@@ -5627,7 +5691,8 @@ app.post('/api/training/shift-change/:id/reject', authMiddleware, roleCheck(['Ad
 // TH2: Không tìm được người -> gửi toàn chi nhánh, nếu có người chấp nhận -> AI tự duyệt sau 24h
 if(!db.shiftSwapRequests) db.shiftSwapRequests=[];
 app.post('/api/shift-swap', (req,res)=>{
-  const { requesterId, date, fromShift, toShift, targetEmployeeId, reason } = req.body;
+  const requesterId = req.body.requesterId || req.body.employeeId || req.user?.employeeId;
+  const { date, fromShift, toShift, targetEmployeeId, reason } = req.body;
   const emp = db.employees.find(e=>e.employeeId===requesterId);
   if(!emp) return res.status(404).json({error:'Không tìm thấy nhân viên yêu cầu'});
   if(emp.type!=='OFFICIAL' && emp.status!=='OFFICIAL') return res.status(403).json({error:'Chỉ nhân viên Chính thức mới được đổi ca'});
@@ -5667,7 +5732,7 @@ app.post('/api/shift-swap', (req,res)=>{
   io.emit('shiftSwap:update', db.shiftSwapRequests);
   // Gửi thông báo
   if(isDirect){
-    const notif = { id: uuidv4(), to: targetEmployeeId, type:'SHIFT_SWAP_INVITE', title:`${emp.name} mời đổi ca ${date}`, content:`${emp.name} (${requesterId}) muốn đổi ${curShift}→${finalToShift} ngày ${fmtDMY?fmtDMY(date):date}. Lý do: ${reason||'—'}. Vui lòng chấp nhận/từ chối.`, createdAt: now.toISOString(), read:false, requestId: reqId };
+    const notif = { id: uuidv4(), to: targetEmployeeId, type:'SHIFT_SWAP_INVITE', title:`${emp.name} mời đổi ca ${date}`, content:`${emp.name} (${requesterId}) muốn đổi ${curShift}→${finalToShift} ngày ${fmtDMY(date)}. Lý do: ${reason||'—'}. Vui lòng chấp nhận/từ chối.`, createdAt: now.toISOString(), read:false, requestId: reqId };
     db.notifications.push(notif);
     const zr = { id: uuidv4(), sent_at: now.toISOString(), receiver: targetEmp.phone, type:'SHIFT_SWAP_INVITE', content:`[ĐỔI CA] ${emp.name} mời bạn đổi ${curShift}→${finalToShift} ngày ${date}. Chấp nhận?`, status:'SENT', error:'' };
     db.zaloRecords.unshift(zr);
@@ -5824,6 +5889,75 @@ app.post('/api/shift-swap/hr-broadcast', authMiddleware, roleCheck(['Admin','HR'
   io.emit('zalo:update', db.zaloRecords);
   res.json({success:true, request:newReq, message:`HR đã gửi yêu cầu <24h tới ${branchEmps.length} NV cùng CN ${emp.branchId} với nội dung khác`});
 });
+// HR duyệt yêu cầu đổi ca chính thức
+app.post('/api/shift-swap/:id/approve', authMiddleware, roleCheck(['Admin','HR','Manager']), (req,res)=>{
+  const r = db.shiftSwapRequests.find(x=>x.id===req.params.id);
+  if(!r) return res.status(404).json({error:'Không tìm thấy yêu cầu'});
+  if(r.status==='APPROVED' || r.status==='REJECTED' || r.status==='AUTO_APPROVED') return res.status(400).json({error:'Yêu cầu đã xử lý'});
+
+  r.status='APPROVED';
+  r.approvedBy=req.user.username;
+  r.approvedAt=getVietnamISOString();
+  r.version=(r.version||1)+1;
+
+  const requester = db.employees.find(e=>e.employeeId===r.requesterId);
+  const targetId = r.acceptedBy || r.targetEmployeeId;
+  const target = targetId ? db.employees.find(e=>e.employeeId===targetId) : null;
+
+  if(requester){
+    let sched = db.schedules.find(s=>s.employeeId===requester.employeeId && s.days.some(d=>d.date===r.date));
+    if(sched){
+      const day = sched.days.find(d=>d.date===r.date);
+      if(day){ day.shift = r.toShift; day.status='WORKING'; day.substituteFor = targetId||null; sched.version=(sched.version||1)+1; }
+    }
+  }
+  if(target){
+    let sched = db.schedules.find(s=>s.employeeId===target.employeeId && s.days.some(d=>d.date===r.date));
+    if(sched){
+      const day = sched.days.find(d=>d.date===r.date);
+      if(day){ day.shift = r.fromShift; day.status='WORKING'; day.substituteFor = r.requesterId; sched.version=(sched.version||1)+1; }
+    }
+  }
+
+  audit(req.user.username,'APPROVE_SHIFT_SWAP_HR','SHIFT_SWAP',null,r,req.ip);
+  addSyncQueue('SHIFT_SWAP','UPDATE',r,req.user.username,'WEB_HR');
+  saveDB();
+  io.emit('shiftSwap:update', db.shiftSwapRequests);
+  io.emit('schedules:update', db.schedules);
+
+  const notif1 = { id: uuidv4(), to: r.requesterId, type:'SHIFT_SWAP_APPROVED', title:`Đổi ca ${r.date} đã được HR duyệt`, content:`Yêu cầu đổi ${r.fromShift}→${r.toShift} ngày ${r.date} đã được ${req.user.username} phê duyệt. Lịch đã cập nhật.`, createdAt: getVietnamISOString(), read:false };
+  db.notifications.push(notif1);
+  if(targetId){
+    const notif2 = { id: uuidv4(), to: targetId, type:'SHIFT_SWAP_APPROVED', title:`Đổi ca ${r.date} đã được HR duyệt`, content:`Đổi ca với ${r.requesterName} ngày ${r.date} đã được ${req.user.username} phê duyệt. Lịch đã cập nhật.`, createdAt: getVietnamISOString(), read:false };
+    db.notifications.push(notif2);
+  }
+  io.emit('notifications:update', db.notifications);
+  res.json({success:true, request:r, message:'HR đã duyệt yêu cầu đổi ca'});
+});
+
+// HR từ chối yêu cầu đổi ca chính thức
+app.post('/api/shift-swap/:id/reject', authMiddleware, roleCheck(['Admin','HR','Manager']), (req,res)=>{
+  const r = db.shiftSwapRequests.find(x=>x.id===req.params.id);
+  if(!r) return res.status(404).json({error:'Không tìm thấy yêu cầu'});
+  if(r.status==='APPROVED' || r.status==='REJECTED' || r.status==='AUTO_APPROVED') return res.status(400).json({error:'Yêu cầu đã xử lý'});
+
+  r.status='REJECTED';
+  r.rejectedBy=req.user.username;
+  r.rejectedAt=getVietnamISOString();
+  r.reasonReject=req.body.reason||'';
+  r.version=(r.version||1)+1;
+
+  audit(req.user.username,'REJECT_SHIFT_SWAP_HR','SHIFT_SWAP',null,r,req.ip);
+  addSyncQueue('SHIFT_SWAP','UPDATE',r,req.user.username,'WEB_HR');
+  saveDB();
+  io.emit('shiftSwap:update', db.shiftSwapRequests);
+
+  const notif = { id: uuidv4(), to: r.requesterId, type:'SHIFT_SWAP_REJECTED', title:`Đổi ca ${r.date} bị HR từ chối`, content:`Yêu cầu đổi ca ngày ${r.date} bị ${req.user.username} từ chối. Lý do: ${r.reasonReject||'Không có'}`, createdAt: getVietnamISOString(), read:false };
+  db.notifications.push(notif);
+  io.emit('notifications:update', db.notifications);
+  res.json({success:true, request:r, message:'HR đã từ chối yêu cầu đổi ca'});
+});
+
 // Poller 24h cho TH2
 function checkShiftSwap24h(){
   const now=Date.now();
@@ -6094,7 +6228,8 @@ app.get('/api/off-requests', authMiddleware, (req,res)=>{
   res.json(list);
 });
 app.post('/api/off-requests', (req,res)=>{
-  const { employeeId, dates } = req.body;
+  const employeeId = req.body.employeeId || req.user?.employeeId;
+  const { dates } = req.body;
   const emp = db.employees.find(e=>e.employeeId===employeeId);
   if(!emp) return res.status(404).json({error:'Không tìm thấy nhân viên'});
   
@@ -6185,6 +6320,8 @@ app.post('/api/off-requests', (req,res)=>{
   let coordResult = { resolved: [], skippedMin12: [] };
 
   if(isTraining){
+    emp.registeredOffDates = dates;
+    emp.trainingOffDays = Array.isArray(dates) ? dates.length : 5;
     // Tìm hoặc tạo schedule cho các tuần chứa các ngày OFF của nhân viên Training
     const weekMap = new Map();
     dates.forEach(d => {

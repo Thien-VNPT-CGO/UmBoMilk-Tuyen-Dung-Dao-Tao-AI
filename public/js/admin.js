@@ -16,6 +16,8 @@ let schedules = [];
 let offRequests = [];
 let emergencyRequests = [];
 let deviceRequests = [];
+let trainingShiftRequests = [];
+let shiftSwapRequests = [];
 let testCourses = [];
 let testResults = [];
 let zaloRecords = [];
@@ -4240,20 +4242,215 @@ async function approveNextWeek(){
   }catch(e){ showToast(e.message,'error'); }
 }
 
-// Requests
+// Requests - Trung tâm duyệt phiếu
 async function loadRequests(){
-  deviceRequests = await api('/api/device-requests', {headers:{Authorization:'Bearer '+token}});
-  emergencyRequests = await api('/api/emergency-requests');
-  offRequests = await api('/api/off-requests');
-  renderDeviceRequests();
-  renderEmergencyAdmin();
-  renderOffAdmin();
-  updatePendingCount();
+  try {
+    const [dReq, emReq, offReq, trReq, swReq] = await Promise.all([
+      api('/api/device-requests', {headers:{Authorization:'Bearer '+token}}).catch(()=>[]),
+      api('/api/emergency-requests').catch(()=>[]),
+      api('/api/off-requests').catch(()=>[]),
+      api('/api/training/shift-change', {headers:{Authorization:'Bearer '+token}}).catch(()=>[]),
+      api('/api/shift-swap', {headers:{Authorization:'Bearer '+token}}).catch(()=>[])
+    ]);
+    deviceRequests = Array.isArray(dReq) ? dReq : [];
+    emergencyRequests = Array.isArray(emReq) ? emReq : [];
+    offRequests = Array.isArray(offReq) ? offReq : [];
+    trainingShiftRequests = Array.isArray(trReq) ? trReq : [];
+    shiftSwapRequests = Array.isArray(swReq) ? swReq : [];
+
+    renderTrainingShiftRequestsAdmin();
+    renderShiftSwapRequestsAdmin();
+    renderDeviceRequests();
+    renderEmergencyAdmin();
+    renderOffAdmin();
+    updatePendingCount();
+  } catch(err) {
+    console.error('loadRequests error', err);
+    showToast('Không thể tải dữ liệu yêu cầu', 'error');
+  }
 }
+
 function updatePendingCount(){
-  const pending = (deviceRequests.filter(r=>r.status==='PENDING').length + emergencyRequests.filter(r=>r.status==='PENDING').length);
-  const el=document.getElementById('pendingCount');
-  if(el) el.textContent=pending;
+  const trPending = (trainingShiftRequests || []).filter(r => r.status === 'PENDING').length;
+  const swPending = (shiftSwapRequests || []).filter(r => r.status && r.status.includes('PENDING')).length;
+  const devPending = (deviceRequests || []).filter(r => r.status === 'PENDING').length;
+  const emPending = (emergencyRequests || []).filter(r => r.status === 'PENDING').length;
+  const total = trPending + swPending + devPending + emPending;
+
+  const el = document.getElementById('pendingCount');
+  if (el) el.textContent = total;
+
+  const trBadge = document.getElementById('trainingShiftPendingBadge');
+  if (trBadge) trBadge.textContent = trPending + ' chờ duyệt';
+
+  const swBadge = document.getElementById('shiftSwapPendingBadge');
+  if (swBadge) swBadge.textContent = swPending + ' chờ duyệt';
+
+  const devBadge = document.getElementById('devicePendingBadge');
+  if (devBadge) devBadge.textContent = devPending + ' chờ duyệt';
+
+  const emBadge = document.getElementById('emergencyPendingBadge');
+  if (emBadge) emBadge.textContent = emPending + ' chờ duyệt';
+}
+
+function renderTrainingShiftRequestsAdmin(){
+  const el = document.getElementById('trainingShiftRequestsAdmin');
+  if (!el) return;
+  if (!trainingShiftRequests || trainingShiftRequests.length === 0) {
+    return el.innerHTML = '<div class="text-xs text-slate-400 text-center py-6">Không có yêu cầu đổi ca / thêm ca training</div>';
+  }
+  el.innerHTML = trainingShiftRequests.map(r => {
+    const isAdd = r.type === 'ADD_SHIFT';
+    const typeBadge = isAdd 
+      ? '<span class="bg-emerald-100 text-emerald-700 text-[10px] font-black px-2 py-0.5 rounded-full border border-emerald-200"><i class="fa-solid fa-plus mr-0.5"></i> THÊM CA</span>'
+      : '<span class="bg-blue-100 text-blue-700 text-[10px] font-black px-2 py-0.5 rounded-full border border-blue-200"><i class="fa-solid fa-arrows-rotate mr-0.5"></i> ĐỔI CA</span>';
+
+    const statusClass = r.status === 'PENDING' 
+      ? 'bg-amber-100 text-amber-800 border-amber-300 animate-pulse' 
+      : r.status === 'APPROVED' 
+        ? 'bg-emerald-100 text-emerald-800 border-emerald-300' 
+        : 'bg-rose-100 text-rose-800 border-rose-300';
+    const statusText = r.status === 'PENDING' ? 'Chờ HR duyệt' : r.status === 'APPROVED' ? 'Đã duyệt' : 'Từ chối';
+
+    const shiftInfo = isAdd
+      ? '<span class="font-bold text-emerald-700">' + r.toShift + '</span>'
+      : '<span class="font-bold text-slate-700">' + (r.fromShift || '—') + '</span> → <span class="font-bold text-pink-700">' + r.toShift + '</span>';
+
+    return `
+      <div class="border ${r.status==='PENDING' ? 'border-pink-300 bg-pink-50/60 shadow-sm' : 'border-slate-200 bg-white'} rounded-xl p-3 text-xs transition">
+        <div class="flex items-start justify-between gap-2">
+          <div class="flex-1 min-w-0">
+            <div class="font-bold text-sm text-slate-800 flex items-center gap-1.5 flex-wrap">
+              <span>${r.employeeName || r.employeeId}</span>
+              <span class="font-mono text-[11px] text-slate-500">(${r.employeeId})</span>
+              ${typeBadge}
+            </div>
+            <div class="text-slate-600 mt-1 flex items-center gap-2 flex-wrap">
+              <span><i class="fa-regular fa-calendar text-pink-500"></i> ${fmtDMY(r.date)}</span>
+              <span>•</span>
+              <span><i class="fa-solid fa-clock text-pink-500"></i> ${shiftInfo}</span>
+              <span>•</span>
+              <span>${getBranchDisplay(r.branchId)}</span>
+            </div>
+            <div class="text-slate-600 mt-1 bg-white/80 p-2 rounded-lg border border-slate-100">
+              <span class="font-semibold text-slate-700">Lý do:</span> ${r.reason || 'Không có'}
+            </div>
+            <div class="text-[11px] text-slate-400 mt-1">
+              Gửi lúc: ${fmtDMYTime(r.createdAt)} ${r.reviewedBy ? '• Duyệt bởi: ' + r.reviewedBy : ''}
+            </div>
+          </div>
+          <span class="text-[11px] font-black px-2.5 py-1 rounded-full border ${statusClass} shrink-0">
+            ${statusText}
+          </span>
+        </div>
+        ${r.status === 'PENDING' ? `
+          <div class="mt-3 pt-2 border-t border-pink-200/70 flex gap-2">
+            <button onclick="handleTrainingShift('${r.id}', 'approve')" class="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold py-1.5 rounded-lg shadow-sm flex items-center justify-center gap-1">
+              <i class="fa-solid fa-check"></i> Duyệt ca
+            </button>
+            <button onclick="handleTrainingShift('${r.id}', 'reject')" class="flex-1 bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 font-bold py-1.5 rounded-lg flex items-center justify-center gap-1">
+              <i class="fa-solid fa-xmark"></i> Từ chối
+            </button>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+async function handleTrainingShift(id, action){
+  try {
+    const res = await api('/api/training/shift-change/' + id + '/' + action, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    showToast(action === 'approve' ? 'Đã duyệt ca training thành công!' : 'Đã từ chối yêu cầu ca training', 'success');
+    loadRequests();
+  } catch(e) {
+    showToast(e.message || 'Thao tác thất bại', 'error');
+  }
+}
+
+function renderShiftSwapRequestsAdmin(){
+  const el = document.getElementById('shiftSwapRequestsAdmin');
+  if (!el) return;
+  if (!shiftSwapRequests || shiftSwapRequests.length === 0) {
+    return el.innerHTML = '<div class="text-xs text-slate-400 text-center py-6">Không có yêu cầu đổi ca chính thức nào</div>';
+  }
+  el.innerHTML = shiftSwapRequests.map(r => {
+    const isPending = r.status && r.status.includes('PENDING');
+    const color = r.status === 'PENDING_TARGET' 
+      ? 'bg-amber-100 text-amber-700 border-amber-300' 
+      : r.status === 'PENDING_BROADCAST' 
+        ? 'bg-blue-100 text-blue-700 border-blue-300' 
+        : r.status === 'PENDING_BROADCAST_ACCEPTED' 
+          ? 'bg-purple-100 text-purple-700 border-purple-300' 
+          : r.status && r.status.includes('APPROVED') 
+            ? 'bg-emerald-100 text-emerald-700 border-emerald-300' 
+            : r.status === 'EXPIRED' 
+              ? 'bg-slate-100 text-slate-500 border-slate-200' 
+              : 'bg-rose-100 text-rose-700 border-rose-300';
+
+    const urgentBadge = r.isHrCreated ? '<span class="bg-red-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded">HR &lt;24h</span>' : '';
+
+    return `
+      <div class="border ${isPending ? 'border-indigo-300 bg-indigo-50/40 shadow-sm' : 'border-slate-200 bg-white'} rounded-xl p-3 text-xs transition">
+        <div class="flex items-start justify-between gap-2">
+          <div class="flex-1 min-w-0">
+            <div class="font-bold text-sm text-slate-800 flex items-center gap-1.5 flex-wrap">
+              <span>${r.requesterName}</span>
+              <span class="font-mono text-[11px] text-slate-500">(${r.requesterId})</span>
+              ${urgentBadge}
+            </div>
+            <div class="text-slate-600 mt-1 flex items-center gap-2 flex-wrap">
+              <span><i class="fa-regular fa-calendar text-indigo-500"></i> ${fmtDMY(r.date)}</span>
+              <span>•</span>
+              <span><i class="fa-solid fa-clock text-indigo-500"></i> ${r.fromShift} → <b class="text-indigo-700">${r.toShift}</b></span>
+              <span>•</span>
+              <span>${getBranchDisplay(r.branchId)}</span>
+            </div>
+            <div class="text-slate-600 mt-1">
+              ${r.targetEmployeeId ? '<span class="font-semibold text-slate-700">Đổi với:</span> ' + (r.targetEmployeeName || r.targetEmployeeId) : '<span class="italic text-indigo-600">Gửi toàn chi nhánh (&lt;24h)</span>'}
+              ${r.acceptedBy ? '<span class="font-semibold text-emerald-700 ml-2">• Nhận ca: ' + (r.acceptedByName || r.acceptedBy) + '</span>' : ''}
+            </div>
+            <div class="text-slate-600 mt-1 bg-white/80 p-2 rounded-lg border border-slate-100">
+              <span class="font-semibold text-slate-700">Lý do:</span> ${r.reason || 'Không có'}
+            </div>
+            <div class="text-[11px] text-slate-400 mt-1">
+              Tạo: ${fmtDMYTime(r.createdAt)} • Hết hạn: ${fmtDMYTime(r.expiresAt)}
+            </div>
+          </div>
+          <span class="text-[11px] font-black px-2.5 py-1 rounded-full border ${color} shrink-0">
+            ${r.status}
+          </span>
+        </div>
+        ${isPending ? `
+          <div class="mt-3 pt-2 border-t border-indigo-200/70 flex gap-2">
+            <button onclick="handleShiftSwapAdmin('${r.id}', 'approve')" class="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold py-1.5 rounded-lg shadow-sm flex items-center justify-center gap-1">
+              <i class="fa-solid fa-check"></i> Duyệt đổi ca
+            </button>
+            <button onclick="handleShiftSwapAdmin('${r.id}', 'reject')" class="flex-1 bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 font-bold py-1.5 rounded-lg flex items-center justify-center gap-1">
+              <i class="fa-solid fa-xmark"></i> Từ chối
+            </button>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+async function handleShiftSwapAdmin(id, action){
+  try {
+    const res = await api('/api/shift-swap/' + id + '/' + action, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    showToast(action === 'approve' ? 'Đã duyệt đổi ca chính thức thành công!' : 'Đã từ chối yêu cầu đổi ca', 'success');
+    loadRequests();
+    if (typeof loadShiftSwapAdmin === 'function') loadShiftSwapAdmin();
+  } catch(e) {
+    showToast(e.message || 'Thao tác thất bại', 'error');
+  }
 }
 function renderDeviceRequests(){
   const el=document.getElementById('deviceRequestsList');
@@ -5204,13 +5401,22 @@ async function loadShiftSwapAdmin(){
     el.innerHTML = list.map(r=>{
       const color = r.status==='PENDING_TARGET' ? 'bg-amber-100 text-amber-700 border-amber-200' : r.status==='PENDING_BROADCAST' ? 'bg-blue-100 text-blue-700 border-blue-200' : r.status==='PENDING_BROADCAST_ACCEPTED' ? 'bg-purple-100 text-purple-700' : r.status.includes('APPROVED') ? 'bg-emerald-100 text-emerald-700' : r.status==='EXPIRED' ? 'bg-slate-100 text-slate-500' : 'bg-red-100 text-red-700';
       const urgent = r.isHrCreated ? '<span class="bg-red-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded">HR &lt;24h</span>' : '';
-      return `<div class="p-3 flex justify-between gap-3">
-        <div class="min-w-0 flex-1">
-          <div class="font-bold text-sm flex items-center gap-2">${r.requesterName} <span class="font-mono text-xs">${r.requesterId}</span> ${urgent} <span class="text-[11px] font-black px-2 py-0.5 rounded-full border ${color}">${r.status}</span></div>
-          <div class="text-xs text-slate-600 mt-1">${r.branchId} • ${r.date} • ${r.fromShift} → ${r.toShift} ${r.targetEmployeeId ? '→ '+r.targetEmployeeName : '(toàn CN)'} • Lý do: ${r.reason}</div>
-          <div class="text-[11px] text-slate-400 mt-1">Tạo: ${fmtDMYTime(r.createdAt)} • Hết hạn: ${fmtDMYTime(r.expiresAt)} ${r.acceptedBy ? '• Người nhận: '+r.acceptedBy : ''}</div>
+      const isPending = r.status && r.status.includes('PENDING');
+      return `<div class="p-3 border-b border-pink-50 last:border-0 hover:bg-pink-50/30 transition">
+        <div class="flex justify-between items-start gap-3">
+          <div class="min-w-0 flex-1">
+            <div class="font-bold text-sm flex items-center gap-2 flex-wrap">${r.requesterName} <span class="font-mono text-xs text-slate-500">${r.requesterId}</span> ${urgent} <span class="text-[11px] font-black px-2 py-0.5 rounded-full border ${color}">${r.status}</span></div>
+            <div class="text-xs text-slate-600 mt-1">${r.branchId} • ${fmtDMY(r.date)} • ${r.fromShift} → ${r.toShift} ${r.targetEmployeeId ? '→ '+r.targetEmployeeName : '(toàn CN)'} • Lý do: ${r.reason}</div>
+            <div class="text-[11px] text-slate-400 mt-1">Tạo: ${fmtDMYTime(r.createdAt)} • Hết hạn: ${fmtDMYTime(r.expiresAt)} ${r.acceptedBy ? '• Người nhận: '+r.acceptedBy : ''}</div>
+          </div>
+          <div class="text-xs text-slate-400 shrink-0">${r.isHrCreated ? 'HR tạo' : 'NV tạo'}</div>
         </div>
-        <div class="text-xs text-slate-400">${r.isHrCreated ? 'HR tạo' : 'NV tạo'}</div>
+        ${isPending ? `
+          <div class="mt-2 flex gap-2 pt-2 border-t border-slate-100">
+            <button onclick="handleShiftSwapAdmin('${r.id}','approve')" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm flex items-center gap-1"><i class="fa-solid fa-check"></i> Duyệt đổi ca</button>
+            <button onclick="handleShiftSwapAdmin('${r.id}','reject')" class="px-3 py-1 bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 rounded-lg text-xs font-bold flex items-center gap-1"><i class="fa-solid fa-xmark"></i> Từ chối</button>
+          </div>
+        ` : ''}
       </div>`;
     }).join('');
   }catch(e){ console.error('loadShiftSwapAdmin',e); }

@@ -561,23 +561,85 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
 
       <!-- Duyệt phiếu -->
       <section id="tab-requests" class="tab-section hidden">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="text-xl font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-clipboard-check text-pink-500"></i> Duyệt phiếu yêu cầu</h2>
-          <span class="text-xs font-bold bg-pink-100 text-pink-700 px-3 py-1 rounded-full border border-pink-200"><span id="pendingCount">0</span> chờ xử lý</span>
-        </div>
-        <div class="grid lg:grid-cols-1 gap-4">
-          <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm">
-            <div class="font-bold text-sm text-pink-900 flex items-center gap-2"><i class="fa-solid fa-mobile-screen text-pink-500"></i> Reset thiết bị / Đổi điện thoại</div>
-            <div id="deviceRequestsList" class="mt-3 space-y-2 max-h-[500px] overflow-auto scrollbar-thin"></div>
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+          <div>
+            <h2 class="text-xl font-black text-pink-900 flex items-center gap-2">
+              <i class="fa-solid fa-clipboard-check text-pink-500"></i> Trung tâm xét duyệt yêu cầu
+            </h2>
+            <p class="text-xs text-slate-500 mt-1">Duyệt đổi ca / thêm ca cho NV Training, đổi ca NV chính thức và các yêu cầu reset thiết bị</p>
           </div>
-          <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm hidden" id="emergencyCardHR" style="display:none">
-            <div class="font-bold text-sm text-pink-900 flex items-center gap-2"><i class="fa-solid fa-person-circle-question text-pink-500"></i> OFF đột xuất & Tìm người thay ca <span class="ml-2 text-[10px] font-bold bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full">Đã ẩn trên HR</span></div>
-            <div id="emergencyListAdmin" class="mt-3 space-y-2 max-h-[500px] overflow-auto scrollbar-thin"></div>
+          <div class="flex items-center gap-2">
+            <button onclick="loadRequests()" class="px-3 py-1.5 rounded-xl bg-white border border-pink-200 text-pink-700 text-xs font-bold hover:bg-pink-50 shadow-sm flex items-center gap-1.5">
+              <i class="fa-solid fa-rotate"></i> Làm mới
+            </button>
+            <span class="text-xs font-black bg-pink-100 text-pink-700 px-3 py-1.5 rounded-full border border-pink-200 flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-pink-500 animate-pulse"></span>
+              Chờ duyệt: <span id="pendingCount" class="font-black">0</span>
+            </span>
           </div>
         </div>
-        <div class="bg-white rounded-2xl border border-pink-200 p-4 mt-4 shadow-sm">
-          <div class="font-bold text-sm text-pink-900">OFF hàng tuần (Auto Approve)</div>
-          <div id="offRequestsAdmin" class="mt-3 space-y-2 max-h-[300px] overflow-auto scrollbar-thin"></div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <!-- Card 1: Yêu cầu Đổi ca / Thêm ca - Nhân viên Training -->
+          <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm flex flex-col">
+            <div class="flex items-center justify-between pb-3 border-b border-pink-100">
+              <div class="font-bold text-sm text-pink-900 flex items-center gap-2">
+                <div class="w-7 h-7 rounded-lg bg-pink-100 text-pink-600 flex items-center justify-center text-xs"><i class="fa-solid fa-graduation-cap"></i></div>
+                <span>NV Training - Đổi ca & Thêm ca</span>
+              </div>
+              <span id="trainingShiftPendingBadge" class="text-[11px] font-black bg-pink-50 text-pink-600 px-2 py-0.5 rounded-full border border-pink-200">0 chờ duyệt</span>
+            </div>
+            <div id="trainingShiftRequestsAdmin" class="mt-3 space-y-2 max-h-[500px] overflow-auto scrollbar-thin flex-1">
+              <div class="text-xs text-slate-400 text-center py-6">Đang tải...</div>
+            </div>
+          </div>
+
+          <!-- Card 2: Yêu cầu Đổi ca - Nhân viên Chính thức -->
+          <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm flex flex-col">
+            <div class="flex items-center justify-between pb-3 border-b border-pink-100">
+              <div class="font-bold text-sm text-pink-900 flex items-center gap-2">
+                <div class="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs"><i class="fa-solid fa-people-arrows"></i></div>
+                <span>NV Chính thức - Yêu cầu Đổi ca</span>
+              </div>
+              <span id="shiftSwapPendingBadge" class="text-[11px] font-black bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full border border-indigo-200">0 chờ duyệt</span>
+            </div>
+            <div id="shiftSwapRequestsAdmin" class="mt-3 space-y-2 max-h-[500px] overflow-auto scrollbar-thin flex-1">
+              <div class="text-xs text-slate-400 text-center py-6">Đang tải...</div>
+            </div>
+          </div>
+
+          <!-- Card 3: Reset thiết bị / Đổi máy chấm công -->
+          <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm flex flex-col">
+            <div class="flex items-center justify-between pb-3 border-b border-pink-100">
+              <div class="font-bold text-sm text-pink-900 flex items-center gap-2">
+                <div class="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center text-xs"><i class="fa-solid fa-mobile-screen"></i></div>
+                <span>Reset thiết bị / Đổi máy chấm công</span>
+              </div>
+              <span id="devicePendingBadge" class="text-[11px] font-black bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full border border-emerald-200">0 chờ duyệt</span>
+            </div>
+            <div id="deviceRequestsList" class="mt-3 space-y-2 max-h-[500px] overflow-auto scrollbar-thin flex-1">
+              <div class="text-xs text-slate-400 text-center py-6">Đang tải...</div>
+            </div>
+          </div>
+
+          <!-- Card 4: OFF hàng tuần (Lịch sử đăng ký) -->
+          <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm flex flex-col">
+            <div class="flex items-center justify-between pb-3 border-b border-pink-100">
+              <div class="font-bold text-sm text-pink-900 flex items-center gap-2">
+                <div class="w-7 h-7 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center text-xs"><i class="fa-solid fa-calendar-days"></i></div>
+                <span>Đăng ký Nghỉ OFF (Hàng tuần)</span>
+              </div>
+              <span class="text-[11px] font-bold text-slate-400">Tự động duyệt</span>
+            </div>
+            <div id="offRequestsAdmin" class="mt-3 space-y-2 max-h-[500px] overflow-auto scrollbar-thin flex-1">
+              <div class="text-xs text-slate-400 text-center py-6">Đang tải...</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-2xl border border-pink-200 p-4 mt-4 shadow-sm hidden" id="emergencyCardHR" style="display:none">
+          <div class="font-bold text-sm text-pink-900 flex items-center gap-2"><i class="fa-solid fa-person-circle-question text-pink-500"></i> OFF đột xuất & Tìm người thay ca <span class="ml-2 text-[10px] font-bold bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full">Đã ẩn trên HR</span></div>
+          <div id="emergencyListAdmin" class="mt-3 space-y-2 max-h-[300px] overflow-auto scrollbar-thin"></div>
         </div>
       </section>
 
