@@ -2709,12 +2709,9 @@ async function loadEmployees(){
   // update tab counts immediately
   try{
     const storeAll = employees.filter(e => e.category === 'STORE' || !e.category);
-    // Chuẩn hóa: Training = chưa OFFICIAL (không phải type=OFFICIAL và không phải status=OFFICIAL)
-    // KHÔNG đếm ARCHIVED vào Training để tránh lệch KPI
-    const cTrain = storeAll.filter(e => e.type!=='OFFICIAL' && e.status!=='OFFICIAL' && e.status!=='ARCHIVED').length;
-    // Chuẩn hóa: Chính thức = status=OFFICIAL (đồng bộ với KPI dashboard server-side)
-    // type=OFFICIAL && status=ARCHIVED sẽ KHÔNG được đếm ở đây (chỉ xem qua dropdown filter)
-    const cOfficial = storeAll.filter(e => e.status==='OFFICIAL').length;
+    // Badge đếm NV Chính thức: type=OFFICIAL hoặc status=OFFICIAL (khớp với Google Sheet 17iXM)
+    const cTrain = storeAll.filter(e => e.type!=='OFFICIAL' && e.status!=='OFFICIAL').length;
+    const cOfficial = storeAll.filter(e => e.type==='OFFICIAL' || e.status==='OFFICIAL').length;
     const elT = document.getElementById('countEmpTrainingTab');
     const elO = document.getElementById('countEmpOfficialTab');
     if(elT) elT.textContent = cTrain;
@@ -2745,9 +2742,9 @@ function renderEmployeesStore(){
     const storeAll = employees.filter(e => e.category === 'STORE' || !e.category);
     let baseListForCounts = storeAll;
     if(branchF) baseListForCounts = baseListForCounts.filter(e => e.branchId===branchF);
-    // Chuẩn hóa đồng bộ với KPI dashboard: Training không tính ARCHIVED, Chính thức chỉ status=OFFICIAL
-    const cTrainAll = baseListForCounts.filter(e => e.type!=='OFFICIAL' && e.status!=='OFFICIAL' && e.status!=='ARCHIVED').length;
-    const cOfficialAll = baseListForCounts.filter(e => e.status==='OFFICIAL').length;
+    // Badge đếm NV Chính thức: type=OFFICIAL hoặc status=OFFICIAL (khớp Google Sheet 17iXM)
+    const cTrainAll = baseListForCounts.filter(e => e.type!=='OFFICIAL' && e.status!=='OFFICIAL').length;
+    const cOfficialAll = baseListForCounts.filter(e => e.type==='OFFICIAL' || e.status==='OFFICIAL').length;
     const elT = document.getElementById('countEmpTrainingTab');
     const elO = document.getElementById('countEmpOfficialTab');
     if(elT) elT.textContent = cTrainAll;
@@ -3860,9 +3857,9 @@ async function loadSchedules(){
     let filteredEmps = employees;
     if(branch) filteredEmps = filteredEmps.filter(e=>e.branchId===branch);
     const counts = {
-      // Chuẩn hóa: đồng bộ với KPI dashboard - Training không tính ARCHIVED, Chính thức chỉ status=OFFICIAL
-      TRAINING: filteredEmps.filter(e=> (e.category==='STORE'||!e.category) && e.type!=='OFFICIAL' && e.status!=='OFFICIAL' && e.status!=='ARCHIVED').length,
-      OFFICIAL: filteredEmps.filter(e=> (e.category==='STORE'||!e.category) && e.status==='OFFICIAL').length,
+      // Badge đếm NV Chính thức: type=OFFICIAL hoặc status=OFFICIAL (khớp Google Sheet 17iXM)
+      TRAINING: filteredEmps.filter(e=> (e.category==='STORE'||!e.category) && e.type!=='OFFICIAL' && e.status!=='OFFICIAL').length,
+      OFFICIAL: filteredEmps.filter(e=> (e.category==='STORE'||!e.category) && (e.type==='OFFICIAL' || e.status==='OFFICIAL')).length,
       WORKSHOP: filteredEmps.filter(e=>e.category==='WORKSHOP').length,
       OFFICE: filteredEmps.filter(e=>e.category==='OFFICE').length,
       SALE: filteredEmps.filter(e=>e.category==='SALE').length,

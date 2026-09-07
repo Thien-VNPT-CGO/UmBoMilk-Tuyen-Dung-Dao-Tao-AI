@@ -1,4 +1,4 @@
-﻿require('dotenv').config();
+require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const https = require('https');
@@ -7624,10 +7624,10 @@ app.get('/api/dashboard/kpi', authMiddleware, (req,res)=>{
     waitingTest: db.employees.filter(e=>e.status==='WAITING_TEST' || e.status==='RETEST').length,
     passedTest: passedTestCount,
     failedTest: failedTestCount,
-    official: db.employees.filter(e=>e.status==='OFFICIAL').length,
+    official: db.employees.filter(e=>e.type==='OFFICIAL'||e.status==='OFFICIAL').length,
     workingToday: db.attendances.filter(a=>a.date===today && (a.status==='CHECKED_IN'||a.status==='LATE'||a.status==='COMPLETED')).length,
     lateToday: db.attendances.filter(a=>a.date===today && a.status==='LATE').length,
-    absent: Math.max(0, db.employees.filter(e=>e.status==='OFFICIAL').length - db.attendances.filter(a=>a.date===today).length),
+    absent: Math.max(0, db.employees.filter(e=>e.type==='OFFICIAL'||e.status==='OFFICIAL').length - db.attendances.filter(a=>a.date===today).length),
     offToday: db.offRequests.filter(r=>r.dates && r.dates.includes(today) && r.status==='APPROVED').length,
     emergencyOff: db.emergencyRequests.filter(r=>r.date===today && r.status==='APPROVED').length,
     pendingRequests: db.deviceRequests.filter(r=>r.status==='PENDING').length + db.emergencyRequests.filter(r=>r.status==='PENDING').length,
