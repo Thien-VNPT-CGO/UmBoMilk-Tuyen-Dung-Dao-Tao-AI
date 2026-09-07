@@ -1,4 +1,4 @@
-﻿require('dotenv').config();
+require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const https = require('https');
@@ -7564,30 +7564,119 @@ app.get('/api/sync/diagnostic', authMiddleware, roleCheck(['Admin']), (req,res)=
     hint: counts.DEAD ? `${counts.DEAD} mục DEAD (dừng sau 5 lần) - bấm Retry All sau khi sửa webhook/secret` : undefined
   });
 });
-// Admin: Liệt kê tất cả Environment trên Render (dễ quản lý)
+// ============ RENDER ENVIRONMENT (18 BIẾN) REALTIME BINDING ============
+const RENDER_18_ENV_DEFS = [
+  { key:'NODE_ENV', desc:'Môi trường thực thi', required:true, default:'production' },
+  { key:'PORT', desc:'Cổng dịch vụ Web Server', required:true, default:'10000' },
+  { key:'JWT_SECRET', desc:'Khóa bảo mật JWT Authentication', required:true, masked:true },
+  { key:'SECRET_ENCRYPTION_KEY', desc:'Khóa mã hóa DB & Credentials', required:true, masked:true },
+  { key:'ALLOWED_ORIGINS', desc:'CORS Whitelist tên miền', required:false, default:'*' },
+  { key:'GOOGLE_SHEET_SPREADSHEET_ID', desc:'Sheet Ứng viên mới / Form (1rcq)', required:true, renderKey:'GOOGLE_SHEET_SPREADSHEET_ID' },
+  { key:'GOOGLE_SHEET_TARGET_DATABASE_ID', desc:'Sheet Master 20 cột (17iXM)', required:true, renderKey:'GOOGLE_SHEET_TARGET_DATABASE_ID' },
+  { key:'GOOGLE_SHEET_WEBHOOK_URL', desc:'Webhook Apps Script Hub Google Sheet', required:true, masked:true },
+  { key:'GOOGLE_SHEET_WEBHOOK_SECRET', desc:'Mật mã Webhook Apps Script', required:true, masked:true },
+  { key:'GOOGLE_SERVICE_ACCOUNT_EMAIL', desc:'Tài khoản dịch vụ Service Account', required:true },
+  { key:'GOOGLE_PRIVATE_KEY', desc:'Khóa RSA Private Key Service Account', required:true, masked:true },
+  { key:'GOOGLE_OAUTH_CLIENT_ID', desc:'OAuth Client ID (Google Calendar/Meet)', required:false, masked:true },
+  { key:'GOOGLE_OAUTH_CLIENT_SECRET', desc:'OAuth Client Secret (Google Meet)', required:false, masked:true },
+  { key:'GOOGLE_DRIVE_ROOT_FOLDER_ID', desc:'ID Thư mục gốc Google Drive', required:false },
+  { key:'GOOGLE_CALENDAR_ID', desc:'Lịch Google Calendar phỏng vấn', required:false, default:'primary' },
+  { key:'FINANCE_MASTER_ID', desc:'Sheet Kế toán Tài chính Master (13Y4)', required:true },
+  { key:'FINANCE_WEBHOOK_URL', desc:'Webhook Apps Script Tài chính', required:true, masked:true },
+  { key:'DATABASE_URL', desc:'Chuỗi kết nối Neon PostgreSQL 24/7', required:false, masked:true }
+];
+
+function getRenderEnvStatus(){
+  const envList = RENDER_18_ENV_DEFS.map(def => {
+    const rawVal = process.env[def.key];
+    const isOnRender = typeof rawVal === 'string' && rawVal.trim().length > 0;
+    let displayVal = 'EMPTY';
+    let status = isOnRender ? 'ACTIVE' : 'DELETED_OR_EMPTY';
+    let statusText = isOnRender ? 'HOẠT ĐỘNG (RENDER)' : 'ĐÃ XÓA TRÊN RENDER';
+
+    if(isOnRender){
+      if(def.masked){
+        if(def.key === 'GOOGLE_PRIVATE_KEY'){
+          displayVal = '••••••••' + rawVal.slice(-20).replace(/\n/g,'');
+        } else if(rawVal.length > 8){
+          displayVal = '••••••••' + rawVal.slice(-4);
+        } else {
+          displayVal = '••••••••';
+        }
+      } else {
+        displayVal = rawVal.length > 35 ? rawVal.slice(0, 32) + '...' : rawVal;
+      }
+    } else {
+      displayVal = 'ĐÃ XÓA TRÊN RENDER / CHƯA CẤU HÌNH';
+    }
+
+    return {
+      key: def.key,
+      desc: def.desc,
+      required: def.required,
+      masked: !!def.masked,
+      isOnRender,
+      status,
+      statusText,
+      value: displayVal,
+      renderKey: def.renderKey || def.key
+    };
+  });
+
+  const total = 18;
+  const configured = envList.filter(e => e.isOnRender).length;
+  const missing = total - configured;
+
+  return {
+    total,
+    configured,
+    missing,
+    envList,
+    renderYamlCount: 18,
+    timestamp: new Date().toISOString(),
+    vietnamTime: new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }),
+    note: '18 biến môi trường Render chuẩn hóa — Tự động cập nhật realtime khi Render thay đổi hoặc xóa biến'
+  };
+}
+
+let lastRenderEnvFingerprint = '';
+function checkAndBroadcastRenderEnv(force = false){
+  const currentFingerprint = RENDER_18_ENV_DEFS.map(k => `${k.key}=${process.env[k.key] || ''}`).join(';');
+  const changed = !lastRenderEnvFingerprint || lastRenderEnvFingerprint !== currentFingerprint;
+  if(changed || force){
+    const wasInitial = !lastRenderEnvFingerprint;
+    lastRenderEnvFingerprint = currentFingerprint;
+    const report = getRenderEnvStatus();
+    if(!wasInitial || force){
+      console.log(`[RENDER ENV REALTIME] Đồng bộ 18 biến môi trường Render: ${report.configured}/18 cấu hình, ${report.missing} thiếu/xóa.`);
+      io.emit('render:env:update', report);
+      io.emit('hr:action', { action: 'Môi trường Render (18 biến)', detail: `Đã đồng bộ realtime (${report.configured}/18)`, success: true });
+    }
+    return report;
+  }
+  return getRenderEnvStatus();
+}
+
+// Khởi tạo và kiểm tra định kỳ mỗi 10s
+setTimeout(() => checkAndBroadcastRenderEnv(false), 2000);
+setInterval(() => checkAndBroadcastRenderEnv(false), 10000);
+
+// API Admin lấy trạng thái 18 biến
 app.get('/api/admin/env', authMiddleware, roleCheck(['Admin']), (req,res)=>{
-  const envList = [
-    { key:'NODE_ENV', value: process.env.NODE_ENV || 'production', desc:'Môi trường', required:true },
-    { key:'PORT', value: process.env.PORT || '10000', desc:'Cổng', required:true },
-    { key:'JWT_SECRET', value: process.env.JWT_SECRET ? '••••••••'+process.env.JWT_SECRET.slice(-4) : 'GENERATED', desc:'JWT', required:true, masked:true },
-    { key:'SECRET_ENCRYPTION_KEY', value: process.env.SECRET_ENCRYPTION_KEY ? '••••••••'+process.env.SECRET_ENCRYPTION_KEY.slice(-4) : 'GENERATED', desc:'Mã hóa', required:true, masked:true },
-    { key:'ALLOWED_ORIGINS', value: process.env.ALLOWED_ORIGINS || '*', desc:'CORS', required:false },
-    { key:'GOOGLE_SHEET_SPREADSHEET_ID', value: process.env.GOOGLE_SHEET_SPREADSHEET_ID || db.settings.googleSheet.spreadsheetId, desc:'Sheet Form (1rcq)', required:true, renderKey:'GOOGLE_SHEET_SPREADSHEET_ID' },
-    { key:'GOOGLE_SHEET_TARGET_DATABASE_ID', value: process.env.GOOGLE_SHEET_TARGET_DATABASE_ID || db.settings.googleSheet.targetDatabaseSpreadsheetId, desc:'Sheet DB 20 cột (17iXM)', required:true, renderKey:'GOOGLE_SHEET_TARGET_DATABASE_ID' },
-    { key:'GOOGLE_SHEET_WEBHOOK_URL', value: process.env.GOOGLE_SHEET_WEBHOOK_URL ? process.env.GOOGLE_SHEET_WEBHOOK_URL.slice(0,50)+'...' : (db.settings.googleSheet.targetWebhookUrl ? db.settings.googleSheet.targetWebhookUrl.slice(0,50)+'...' : 'EMPTY'), desc:'Webhook chính', required:true, masked:true },
-    { key:'GOOGLE_SHEET_WEBHOOK_SECRET', value: process.env.GOOGLE_SHEET_WEBHOOK_SECRET ? '••••••••'+process.env.GOOGLE_SHEET_WEBHOOK_SECRET.slice(-4) : 'umbomilk_secret_2026', desc:'Secret', required:true, masked:true },
-    { key:'GOOGLE_SERVICE_ACCOUNT_EMAIL', value: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || db.settings.googleSheet.serviceAccountEmail, desc:'Service Account', required:true },
-    { key:'GOOGLE_PRIVATE_KEY', value: process.env.GOOGLE_PRIVATE_KEY ? '••••••••'+process.env.GOOGLE_PRIVATE_KEY.slice(-20).replace(/\n/g,'') : (db.settings.googleSheet.privateKey ? '••••••••'+db.settings.googleSheet.privateKey.slice(-10) : 'EMPTY'), desc:'Private Key', required:true, masked:true },
-    { key:'GOOGLE_OAUTH_CLIENT_ID', value: process.env.GOOGLE_OAUTH_CLIENT_ID ? '••••••••'+process.env.GOOGLE_OAUTH_CLIENT_ID.slice(-6) : (db.settings.calendar.clientId ? 'SET' : 'EMPTY'), desc:'OAuth Client', required:false, masked:true },
-    { key:'GOOGLE_OAUTH_CLIENT_SECRET', value: process.env.GOOGLE_OAUTH_CLIENT_SECRET ? '••••••••' : (db.settings.calendar.clientSecret ? '••••••••' : 'EMPTY'), desc:'OAuth Secret', required:false, masked:true },
-    { key:'GOOGLE_DRIVE_ROOT_FOLDER_ID', value: process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID || db.settings.googleDrive.rootFolderId, desc:'Drive Root', required:false },
-    { key:'GOOGLE_CALENDAR_ID', value: process.env.GOOGLE_CALENDAR_ID || db.settings.calendar.calendarId, desc:'Calendar', required:false },
-    { key:'FINANCE_MASTER_ID', value: process.env.FINANCE_MASTER_ID || db.settings.finance?.spreadsheetId || 'EMPTY', desc:'Finance Master (13Y4...)', required:true },
-    { key:'DATABASE_URL', value: process.env.DATABASE_URL ? 'SET (Postgres)' : 'EMPTY (db.json)', desc:'DB Neon', required:true, masked:true },
-  ];
-  const total = envList.length;
-  const configured = envList.filter(e=> e.value!=='EMPTY' && !e.value.includes('EMPTY')).length;
-  res.json({ total, configured, missing: total-configured, envList, renderYamlCount: 18, note:'18 Environment trong render.yaml (4 sync:false phải set tay trên Render Dashboard)' });
+  res.json(getRenderEnvStatus());
+});
+
+// API Admin ép đồng bộ realtime tức thì
+app.post('/api/admin/env/sync', authMiddleware, roleCheck(['Admin']), (req,res)=>{
+  const report = checkAndBroadcastRenderEnv(true);
+  res.json({ success: true, message: 'Đã ép đồng bộ realtime 18 biến môi trường Render', data: report });
+});
+
+// Webhook tiếp nhận deploy / thay đổi từ Render
+app.post('/api/render/deploy-hook', (req,res)=>{
+  console.log('[RENDER DEPLOY HOOK] Nhận thông báo deploy/cập nhật từ Render!');
+  const report = checkAndBroadcastRenderEnv(true);
+  res.json({ success: true, message: 'Render deploy hook received & broadcasted', data: report });
 });
 app.get('/api/zalo-records', authMiddleware, (req,res)=> res.json(db.zaloRecords));
 app.get('/api/notifications', (req,res)=>{

@@ -19,11 +19,12 @@ async function run(){
   const adminToken = await loginAdmin();
   console.log('✔ Admin login OK');
 
-  // Tạo nhân viên mới
+  // Tạo nhân viên mới với SĐT unique
+  const testPhone = '090' + Math.floor(1000000 + Math.random() * 9000000);
   const createRes = await fetchJSON('/api/employees', {
     method:'POST',
     headers:{'Content-Type':'application/json', Authorization:'Bearer '+adminToken},
-    body: JSON.stringify({ name:'Test ForceLogout', phone:'0909990001', branchId:'CN2', shift:'CA_SANG', category:'STORE'})
+    body: JSON.stringify({ name:'Test ForceLogout', phone: testPhone, branchId:'CN2', shift:'CA_SANG', category:'STORE'})
   });
   if(createRes.res.status!==200) throw new Error('Create employee failed: '+JSON.stringify(createRes.data));
   const emp = createRes.data.employee;
@@ -58,11 +59,12 @@ async function run(){
   }
   console.log('✅ TEST 1 PASSED: Soft delete => forceLogout true (HR xóa -> nhân viên bị thoát)');
 
-  // Tạo nhân viên thứ 2 để test hard delete
+  // Tạo nhân viên 2
+  const phone2 = '090' + Math.floor(1000000 + Math.random() * 9000000);
   const create2 = await fetchJSON('/api/employees', {
     method:'POST',
     headers:{'Content-Type':'application/json', Authorization:'Bearer '+adminToken},
-    body: JSON.stringify({ name:'Test HardDelete', phone:'0909990002', branchId:'CN2', shift:'CA_CHIEU', category:'STORE'})
+    body: JSON.stringify({ name:'Test HardDelete', phone: phone2, branchId:'CN2', shift:'CA_CHIEU', category:'STORE'})
   });
   const emp2 = create2.data.employee;
   const key2 = create2.data.key;
@@ -92,10 +94,11 @@ async function run(){
   console.log('✅ TEST 2 PASSED: Hard delete => forceLogout true');
 
   // Tạo nhân viên thứ 3 để test PUT ARCHIVED
+  const phone3 = '090' + Math.floor(1000000 + Math.random() * 9000000);
   const create3 = await fetchJSON('/api/employees', {
     method:'POST',
     headers:{'Content-Type':'application/json', Authorization:'Bearer '+adminToken},
-    body: JSON.stringify({ name:'Test PUT Archived', phone:'0909990003', branchId:'CN1', shift:'CA_TOI', category:'STORE'})
+    body: JSON.stringify({ name:'Test PUT Archived', phone: phone3, branchId:'CN1', shift:'CA_TOI', category:'STORE'})
   });
   const emp3 = create3.data.employee;
   const key3 = create3.data.key;
@@ -124,10 +127,11 @@ async function run(){
   console.log('✅ TEST 3 PASSED: PUT ARCHIVED => forceLogout true');
 
   // TEST 4: Token không tồn tại / DB không tồn tại nhân viên (giả lập xóa trực tiếp)
+  const phone4 = '090' + Math.floor(1000000 + Math.random() * 9000000);
   const create4 = await fetchJSON('/api/employees', {
     method:'POST',
     headers:{'Content-Type':'application/json', Authorization:'Bearer '+adminToken},
-    body: JSON.stringify({ name:'Test NotExist', phone:'0909990004', branchId:'CN2', shift:'CA_SANG', category:'STORE'})
+    body: JSON.stringify({ name:'Test NotExist', phone: phone4, branchId:'CN2', shift:'CA_SANG', category:'STORE'})
   });
   const emp4 = create4.data.employee;
   const key4 = create4.data.key;
@@ -151,10 +155,11 @@ async function run(){
   try{
     const { io } = require('socket.io-client');
     console.log('\n--- TEST 5: Socket realtime forceLogout ---');
+    const phone5 = '090' + Math.floor(1000000 + Math.random() * 9000000);
     const create5 = await fetchJSON('/api/employees', {
       method:'POST',
       headers:{'Content-Type':'application/json', Authorization:'Bearer '+adminToken},
-      body: JSON.stringify({ name:'Test Socket', phone:'0909990005', branchId:'CN2', shift:'CA_SANG', category:'STORE'})
+      body: JSON.stringify({ name:'Test Socket', phone: phone5, branchId:'CN2', shift:'CA_SANG', category:'STORE'})
     });
     const emp5 = create5.data.employee;
     const key5 = create5.data.key;

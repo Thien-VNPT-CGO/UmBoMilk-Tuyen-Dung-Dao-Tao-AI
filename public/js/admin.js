@@ -540,6 +540,7 @@ function connectSocket(){
   socket = io(socketUrl, { auth: { token: token || localStorage.getItem('admin_token') }, transports: ['websocket','polling'], timeout: 20000, reconnection: true, reconnectionAttempts: 10, reconnectionDelay: 1000 });
   socket.on('connect', ()=>{
     updateModeBadge();
+    if(typeof loadRenderEnv === 'function') loadRenderEnv();
   });
   socket.on('disconnect', ()=>{
     updateModeBadge();
@@ -645,6 +646,11 @@ function connectSocket(){
   socket.on('hr:action', (data) => {
     if(!data) return;
     hrToast(data.action, data.success !== false, data.detail);
+  });
+  // Realtime Render Environment (18 biến) Update
+  socket.on('render:env:update', (data) => {
+    if(typeof renderEnvListUI === 'function') renderEnvListUI(data);
+    if(typeof showToast === 'function') showToast('⚡ Môi trường Render (18 biến) vừa cập nhật realtime!', 'info');
   });
 }
 
@@ -4856,38 +4862,75 @@ async function loadSettings(){
     if(e.message.includes('Forbidden') || e.message.includes('Không có quyền')) showToast('Chỉ Admin mới xem được cài đặt','error');
   }
 }
+function renderEnvListUI(data){
+  if(!data || !data.envList) return;
+  const listEl = document.getElementById('renderEnvList');
+  const badge = document.getElementById('envCountBadge');
+  const lastSyncEl = document.getElementById('renderEnvLastSync');
+  if(badge){
+    badge.textContent = `${data.configured} / ${data.total || 18}`;
+    badge.className = data.configured === (data.total || 18)
+      ? 'text-xs bg-emerald-600 text-white px-2.5 py-1 rounded-full font-bold shadow-xs'
+      : 'text-xs bg-amber-600 text-white px-2.5 py-1 rounded-full font-bold shadow-xs';
+  }
+  if(lastSyncEl && data.vietnamTime){
+    const parts = data.vietnamTime.split(' ');
+    lastSyncEl.textContent = 'Đồng bộ lúc ' + (parts[1] || data.vietnamTime);
+  }
+  if(!listEl) return;
+  listEl.innerHTML = data.envList.map(e => {
+    const isOk = e.isOnRender;
+    const statusColor = isOk
+      ? 'bg-emerald-50/90 border-emerald-200 text-emerald-800'
+      : 'bg-rose-50/90 border-rose-200 text-rose-800';
+    const statusIcon = isOk ? 'fa-check text-emerald-600' : 'fa-triangle-exclamation text-rose-600';
+    const badgeText = isOk ? 'RENDER ONLINE' : 'ĐÃ XÓA TRÊN RENDER';
+    const badgeColor = isOk ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-rose-100 text-rose-800 border-rose-300';
+    return `<div class="flex items-center justify-between gap-2 px-3 py-2 rounded-xl border ${statusColor} text-xs shadow-xs transition hover:shadow-sm">
+      <div class="flex-1 min-w-0">
+        <div class="font-bold font-mono text-[11px] truncate flex items-center gap-1.5">
+          <span>${e.key}</span>
+          ${e.required ? '<span class="text-[9px] bg-red-100 text-red-600 font-black px-1 rounded">BẮT BUỘC</span>' : ''}
+        </div>
+        <div class="text-[11px] opacity-75 truncate">${e.desc}</div>
+      </div>
+      <div class="flex items-center gap-2 flex-shrink-0">
+        <span class="font-mono text-[11px] truncate max-w-[170px] ${isOk ? 'text-slate-700 font-medium' : 'text-rose-600 font-bold'}">${e.value}</span>
+        <span class="w-6 h-6 rounded-full bg-white border flex items-center justify-center shadow-xs"><i class="fa-solid ${statusIcon} text-[10px]"></i></span>
+        <span class="text-[9px] font-black px-2 py-0.5 rounded-full border ${badgeColor}">${badgeText}</span>
+      </div>
+    </div>`;
+  }).join('');
+  if(data.missing > 0){
+    const hint = document.createElement('div');
+    hint.className = 'mt-2 text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 flex items-center justify-between';
+    hint.innerHTML = `<span><i class="fa-solid fa-circle-exclamation mr-1 text-amber-600"></i> Render hiện thiếu hoặc đã xóa <b>${data.missing}</b> biến</span><span class="font-semibold text-[10px] text-amber-700">Tự động báo Admin qua Socket</span>`;
+    listEl.appendChild(hint);
+  }
+}
+
 async function loadRenderEnv(){
   try{
     const data = await api('/api/admin/env', {headers:{Authorization:'Bearer '+token}});
-    const listEl=document.getElementById('renderEnvList');
-    const badge=document.getElementById('envCountBadge');
-    if(badge) badge.textContent=`${data.configured} / ${data.total}`;
-    if(!listEl) return;
-    listEl.innerHTML=data.envList.map(e=>{
-      const isOk = e.value!=='EMPTY' && !e.value.includes('EMPTY');
-      const isMasked = e.masked;
-      const statusColor = isOk ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-red-50 border-red-200 text-red-700';
-      const statusIcon = isOk ? 'fa-check' : 'fa-triangle-exclamation';
-      const statusText = isOk ? 'SET' : 'EMPTY';
-      return `<div class="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-xl border ${statusColor} text-xs">
-        <div class="flex-1 min-w-0">
-          <div class="font-bold font-mono text-[11px] truncate">${e.key}</div>
-          <div class="text-[11px] opacity-70 truncate">${e.desc}${e.renderKey?` • ${e.renderKey}`:''}</div>
-        </div>
-        <div class="flex items-center gap-1.5 flex-shrink-0">
-          <span class="font-mono text-[11px] truncate max-w-[180px]">${e.value}</span>
-          <span class="w-6 h-6 rounded-full bg-white border flex items-center justify-center"><i class="fa-solid ${statusIcon} text-[10px]"></i></span>
-          <span class="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-white border">${statusText}</span>
-        </div>
-      </div>`;
-    }).join('');
-    if(data.missing>0){
-      const hint=document.createElement('div');
-      hint.className='mt-2 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-2.5 py-1.5';
-      hint.innerHTML=`<i class="fa-solid fa-circle-info mr-1"></i> Thiếu ${data.missing} vars - ${data.note}`;
-      listEl.appendChild(hint);
+    renderEnvListUI(data);
+  }catch(e){ console.error('loadRenderEnv error', e); }
+}
+
+async function syncRenderEnvRealtime(){
+  try{
+    showToast('Đang kết nối Render kiểm tra 18 biến môi trường...', 'info');
+    const res = await api('/api/admin/env/sync', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    if(res && res.data){
+      renderEnvListUI(res.data);
+      showToast(`Đã đồng bộ realtime 18 biến Render (${res.data.configured}/18 hoàn tất)`, 'success');
     }
-  }catch(e){ console.error('loadRenderEnv', e); }
+  }catch(e){
+    console.error('syncRenderEnvRealtime error', e);
+    showToast('Lỗi khi đồng bộ môi trường Render: ' + (e.message || 'Thử lại'), 'error');
+  }
 }
 async function loadGoogleSheetHub(){
   // Hub dùng chung data với Settings, chỉ khác view
