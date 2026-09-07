@@ -306,8 +306,20 @@ function loadDB() {
 function saveDB() {
   try {
     fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
-    // encrypt secrets before writing (clone)
+    // RÀNG BUỘC TUYỆT ĐỐI: TUYỆT ĐỐI KHÔNG LƯU DỮ LIỆU TEST VÀO DB THẬT
+    // Lọc sạch 100% dữ liệu test khỏi tất cả các bảng trước khi ghi ra file db.json
     const clone = JSON.parse(JSON.stringify(db));
+    if(Array.isArray(clone.employees)) clone.employees = clone.employees.filter(e => !isTestRecord(e));
+    if(Array.isArray(clone.applicants)) clone.applicants = clone.applicants.filter(a => !isTestRecord(a));
+    if(Array.isArray(clone.testResults)) clone.testResults = clone.testResults.filter(t => !isTestRecord(t));
+    if(Array.isArray(clone.keys)) clone.keys = clone.keys.filter(k => !isTestRecord(k));
+    if(Array.isArray(clone.syncQueue)) clone.syncQueue = clone.syncQueue.filter(q => !isTestRecord(q) && !isTestRecord(q?.payload));
+    if(Array.isArray(clone.attendances)) clone.attendances = clone.attendances.filter(a => !isTestRecord(a));
+    if(Array.isArray(clone.offRequests)) clone.offRequests = clone.offRequests.filter(r => !isTestRecord(r));
+    if(Array.isArray(clone.emergencyRequests)) clone.emergencyRequests = clone.emergencyRequests.filter(r => !isTestRecord(r));
+    if(Array.isArray(clone.deviceRequests)) clone.deviceRequests = clone.deviceRequests.filter(r => !isTestRecord(r));
+    if(Array.isArray(clone.driveFiles)) clone.driveFiles = clone.driveFiles.filter(f => !isTestRecord(f));
+    if(Array.isArray(clone.zaloRecords)) clone.zaloRecords = clone.zaloRecords.filter(z => !isTestRecord(z));
     if(clone.settings){
       if(clone.settings.googleSheet?.privateKey && !clone.settings.googleSheet.privateKey.startsWith('enc:') && clone.settings.googleSheet.privateKey.length>20 && !clone.settings.googleSheet.privateKey.includes('•')){
         clone.settings.googleSheet.privateKey = encryptSecret(clone.settings.googleSheet.privateKey);
@@ -765,21 +777,26 @@ function isTestRecord(item){
     const id = String(item[0]||'').toLowerCase().trim();
     const code = String(item[1]||'').toLowerCase().trim();
     const name = String(item[2]||'').toLowerCase().trim();
-    if(id.startsWith('test_') || id.startsWith('mock_') || code.startsWith('test_') || code.startsWith('mock_')) return true;
-    if(name.startsWith('test ') || name==='test' || name.includes('forcelogout')) return true;
-    const allStr = item.map(x => String(x||'')).join(' ');
-    if(allStr.includes('0909990001') || allStr.includes('0909990003') || allStr.includes('0909990005') || allStr.includes('090999999')) return true;
+    if(id === 'test' || id.startsWith('test_') || id.startsWith('mock_') || id.includes('_test')) return true;
+    if(code === 'test' || code.startsWith('test_') || code.startsWith('mock_') || code.includes('_test')) return true;
+    if(/\btest\b/i.test(name) || name.includes('thử nghiệm') || name.includes('thu nghiem') || name.includes('forcelogout')) return true;
+    const allStr = item.map(x => String(x||'')).join(' ').toLowerCase();
+    if(allStr.includes('0909990001') || allStr.includes('0909990003') || allStr.includes('0909990005') || allStr.includes('090999999') || allStr.includes('0909990099') || allStr.includes('09099')) return true;
+    if(allStr.includes('test submit') || allStr.includes('test forcelogout') || allStr.includes('test harddelete') || allStr.includes('test socket') || allStr.includes('test notexist') || allStr.includes('test put') || allStr.includes('test nv 3 ngay') || allStr.includes('test force') || allStr.includes('nguyen van test')) return true;
+    if(allStr.includes('"istest":true') || allStr.includes('"is_test":true')) return true;
     return false;
   }
-  if(item.isTest) return true;
+  if(item.isTest === true || item.is_test === true) return true;
   const name = (item.name || item.employeeName || item.applicantName || '').toString().trim().toLowerCase();
-  if(name.startsWith('test ') || name === 'test' || name.includes('test forcelogout') || name.includes('test put') || name.includes('test socket') || name.includes('test harddelete') || name.includes('test notexist')) return true;
+  if(/\btest\b/i.test(name) || name.includes('thử nghiệm') || name.includes('thu nghiem') || name.includes('forcelogout') || name.includes('test submit') || name.includes('test force')) return true;
   const phone = (item.phone || item.receiver || '').toString().replace(/\D/g, '');
-  if(phone.startsWith('090999') || phone.startsWith('09099') || phone === '0909990001' || phone === '0909990003' || phone === '0909990005') return true;
-  const empId = (item.employeeId || item.id || '').toString().toLowerCase();
-  if(empId.startsWith('test_') || empId.startsWith('mock_') || empId === 'test') return true;
+  if(phone.startsWith('09099') || phone === '0909990001' || phone === '0909990003' || phone === '0909990005') return true;
+  const empId = (item.employeeId || item.id || '').toString().toLowerCase().trim();
+  if(empId === 'test' || empId.startsWith('test_') || empId.startsWith('mock_') || empId.includes('_test')) return true;
+  if(item.payload && isTestRecord(item.payload)) return true;
   const jsonStr = JSON.stringify(item).toLowerCase();
   if(jsonStr.includes('"istest":true') || jsonStr.includes('"is_test":true')) return true;
+  if(jsonStr.includes('test submit') || jsonStr.includes('test forcelogout') || jsonStr.includes('test harddelete') || jsonStr.includes('test socket') || jsonStr.includes('test notexist') || jsonStr.includes('test put') || jsonStr.includes('test nv 3 ngay') || jsonStr.includes('test force') || jsonStr.includes('nguyen van test')) return true;
   return false;
 }
 
@@ -4354,28 +4371,28 @@ async function syncSheetTab(sheetKey){
         });
         break;
       case 'LICH_LAM_VIEC':
-        rows = db.schedules.flatMap(s=> s.days.map(d=>[s.id, s.employeeId, db.employees.find(e=>e.employeeId===s.employeeId)?.name||'', db.employees.find(e=>e.employeeId===s.employeeId)?.branchId||'', s.weekStart, d.date, d.dayName, d.shift, d.status, d.substituteFor||'', s.version]));
+        rows = db.schedules.filter(s=>!isTestRecord(s)).flatMap(s=> s.days.map(d=>[s.id, s.employeeId, db.employees.find(e=>e.employeeId===s.employeeId)?.name||'', db.employees.find(e=>e.employeeId===s.employeeId)?.branchId||'', s.weekStart, d.date, d.dayName, d.shift, d.status, d.substituteFor||'', s.version]));
         break;
       case 'RECORD_DIEM_DANH':
-        rows = db.attendances.map(a=>[a.id, a.employeeId, db.employees.find(e=>e.employeeId===a.employeeId)?.name||'', a.date, a.shift, a.branchId, a.checkIn?.time||'', a.checkIn?.gps||'', a.checkIn?.image ? 'co_anh' : '', a.checkIn?.drivePath||'', a.checkOut?.time||'', a.checkOut?.gps||'', a.checkOut?.image ? 'co_anh' : '', a.checkOut?.drivePath||'', a.status, (a.violations||[]).join(','), a.version]);
+        rows = db.attendances.filter(a=>!isTestRecord(a)).map(a=>[a.id, a.employeeId, db.employees.find(e=>e.employeeId===a.employeeId)?.name||'', a.date, a.shift, a.branchId, a.checkIn?.time||'', a.checkIn?.gps||'', a.checkIn?.image ? 'co_anh' : '', a.checkIn?.drivePath||'', a.checkOut?.time||'', a.checkOut?.gps||'', a.checkOut?.image ? 'co_anh' : '', a.checkOut?.drivePath||'', a.status, (a.violations||[]).join(','), a.version]);
         break;
       case 'RECORD_ZALO':
-        rows = db.zaloRecords.map(z=>[z.id, z.sent_at, z.receiver, z.type, z.content?.slice(0,200), z.status, z.error||'']);
+        rows = db.zaloRecords.filter(z=>!isTestRecord(z)).map(z=>[z.id, z.sent_at, z.receiver, z.type, z.content?.slice(0,200), z.status, z.error||'']);
         break;
       case 'PHIEU_OFF_HANG_TUAN':
-        rows = db.offRequests.map(r=>[r.id, r.employeeId, r.employeeName, r.branchId, r.shift, r.dates?.join(','), r.type, r.status, r.autoApproved?'YES':'', r.createdAt]);
+        rows = db.offRequests.filter(r=>!isTestRecord(r)).map(r=>[r.id, r.employeeId, r.employeeName, r.branchId, r.shift, r.dates?.join(','), r.type, r.status, r.autoApproved?'YES':'', r.createdAt]);
         break;
       case 'PHIEU_OFF_DOT_XUAT':
-        rows = db.emergencyRequests.map(r=>[r.id, r.employeeId, r.employeeName, r.branchId, r.shift, r.date, r.reason, r.substituteName||'', r.status, r.cascadeStep, r.createdAt]);
+        rows = db.emergencyRequests.filter(r=>!isTestRecord(r)).map(r=>[r.id, r.employeeId, r.employeeName, r.branchId, r.shift, r.date, r.reason, r.substituteName||'', r.status, r.cascadeStep, r.createdAt]);
         break;
       case 'PHIEU_DOI_THIET_BI':
-        rows = db.deviceRequests.map(r=>[r.id, r.employeeId, r.reason, r.oldDeviceId||'', r.newDeviceId||'', r.status, r.createdAt, r.expiresAt]);
+        rows = db.deviceRequests.filter(r=>!isTestRecord(r)).map(r=>[r.id, r.employeeId, r.reason, r.oldDeviceId||'', r.newDeviceId||'', r.status, r.createdAt, r.expiresAt]);
         break;
       case 'KET_QUA_TEST':
-        rows = db.testResults.map(t=>[t.id, t.employeeId, db.employees.find(e=>e.employeeId===t.employeeId)?.name||'', t.courseId, t.score, `${t.correct}/${t.total}`, t.result, t.timeSpent, t.createdAt]);
+        rows = db.testResults.filter(t=>!isTestRecord(t)).map(t=>[t.id, t.employeeId, db.employees.find(e=>e.employeeId===t.employeeId)?.name||'', t.courseId, t.score, `${t.correct}/${t.total}`, t.result, t.timeSpent, t.createdAt]);
         break;
       case 'DRIVE_FILES':
-        rows = db.driveFiles.map(f=>[f.id, f.employeeId, f.employeeName, f.date, f.type, f.fileName, f.drivePath, f.url, f.createdAt]);
+        rows = db.driveFiles.filter(f=>!isTestRecord(f)).map(f=>[f.id, f.employeeId, f.employeeName, f.date, f.type, f.fileName, f.drivePath, f.url, f.createdAt]);
         break;
       default:
         return;
@@ -4421,8 +4438,8 @@ async function syncSheetTab(sheetKey){
     }
     // RÀNG BUỘC: Sheet GIỮ dữ liệu thật (web xóa local không xóa Sheet).
     // RÀNG BUỘC TUYỆT ĐỐI GOOGLE SHEET 17iXM:
-    // Dữ liệu trên Google Sheet sẽ KHÔNG BỊ MẤT trừ khi admin reset ALL trên web app.
-    // Giữ nguyên 100% tất cả dòng hiện có trên Sheet, tuyệt đối KHÔNG drop và KHÔNG gọi clear.
+    // Dữ liệu thật trên Google Sheet sẽ KHÔNG BỊ MẤT trừ khi admin reset ALL trên web app.
+    // Ngoại lệ duy nhất: dòng DỮ LIỆU TEST (bị lọc bỏ để không lưu trên Sheet thật).
     const getRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(def.sheetName)}!A2:Z`, { headers:{ Authorization:`Bearer ${token}` }});
     const getData = await getRes.json().catch(()=>({}));
     const existing = getData.values || [];
@@ -4431,7 +4448,13 @@ async function syncSheetTab(sheetKey){
     const matchKey = (r)=> sheetKey==='LICH_LAM_VIEC' ? (String(r[1]||'').trim()+'|'+String(r[5]||'').trim()) : (r[0]||'').toString();
     const merged = [];
     const oldIndexMap = new Map();
+    let droppedTest = 0;
     existing.forEach((r)=>{
+      // Chặn và dọn dẹp triệt để dữ liệu test trên Google Sheet
+      if(isTestRecord(r)){
+        droppedTest++;
+        return;
+      }
       const k = matchKey(r);
       if(sheetKey==='LICH_LAM_VIEC'){
         if(k && !oldIndexMap.has(k)){
@@ -4459,15 +4482,23 @@ async function syncSheetTab(sheetKey){
         });
       } else { oldIndexMap.set(k, [merged.length]); merged.push(r); appended++; }
     });
-    // Ghi đè đúng vùng (update, KHÔNG BAO GIỜ clear tab để bảo toàn dữ liệu tuyệt đối).
+    // Ghi đè đúng vùng (update, giữ nguyên dữ liệu thật)
     if(merged.length>0){
       const endRow = 1 + merged.length;
       await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(def.sheetName)}!A2:Z${endRow}?valueInputOption=RAW`, {
         method:'PUT', headers:{ Authorization:`Bearer ${token}`, 'Content-Type':'application/json'},
         body: JSON.stringify({ values: merged })
       });
+      // Nếu có dòng test bị dọn (merged ngắn hơn existing), xóa vùng thừa để dọn sạch test data
+      const oldEndRow = 1 + existing.length;
+      if(droppedTest > 0 && oldEndRow > endRow){
+        await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(def.sheetName)}!A${endRow+1}:Z${oldEndRow}:clear`, {
+          method:'POST', headers:{ Authorization:`Bearer ${token}` }
+        });
+        console.log(`[SHEET CLEANUP] Đã dọn ${droppedTest} dòng dữ liệu test trên ${def.sheetName}`);
+      }
     }
-    console.log(`[SHEET] Đã đồng bộ ${def.sheetName}: giữ nguyên ${existing.length} dòng cũ + cập nhật ${updated} + thêm ${appended} - Bảo toàn dữ liệu Sheet 100%`);
+    console.log(`[SHEET] Đã đồng bộ ${def.sheetName}: giữ nguyên ${existing.length - droppedTest} dòng thật + dọn ${droppedTest} dòng test + cập nhật ${updated} + thêm ${appended}`);
   }catch(e){ console.error(`syncSheetTab ${sheetKey} error`, e.message); }
 }
 async function syncAllTabsToSheetsRealtime(){
@@ -6806,9 +6837,11 @@ app.post('/api/courses/:id/submit', (req,res)=>{
   }
   emp.version=(emp.version||1)+1;
   emp.updated_at=getVietnamISOString();
-  emp.sync_status='PENDING';
-  try{ addSyncQueue('TEST_RESULT','CREATE',testRes, employeeId, 'WEB_EMPLOYEE'); }catch(_){}
-  try{ addSyncQueue('EMPLOYEE','UPDATE',emp, employeeId, 'WEB_EMPLOYEE'); }catch(_){}
+  emp.sync_status = (emp.isTest || isTestRecord(emp)) ? 'TEST_BLOCKED' : 'PENDING';
+  if(!emp.isTest && !isTestRecord(emp) && !isTestRecord(testRes)){
+    try{ addSyncQueue('TEST_RESULT','CREATE',testRes, employeeId, 'WEB_EMPLOYEE'); }catch(_){}
+    try{ addSyncQueue('EMPLOYEE','UPDATE',emp, employeeId, 'WEB_EMPLOYEE'); }catch(_){}
+  }
   try{ audit(employeeId,'SUBMIT_TEST','TEST',before,emp, req.ip); }catch(_){}
   saveDB();
   io.emit('testResults:update', db.testResults);

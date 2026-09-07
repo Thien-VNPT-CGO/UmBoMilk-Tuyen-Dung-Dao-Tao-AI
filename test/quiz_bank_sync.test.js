@@ -49,59 +49,63 @@ test('Quiz Bank Real Google Sheet Sync & Random 25 Questions Constraint', async 
   });
 
   await t.test('POST /api/quiz/open và /api/courses/:id/submit nộp bài thành công 25 câu không lỗi', async () => {
-    // 1. Tạo nhân viên training mẫu
-    const testPhone = '0988' + Math.floor(Math.random() * 900000 + 100000);
+    // 1. Tạo nhân viên training mẫu (gắn cờ test)
+    const testPhone = '0909990' + Math.floor(Math.random() * 900 + 100);
     const createEmpRes = await fetch(`${BASE_URL}/api/employees`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`, 'x-is-test': 'true' },
       body: JSON.stringify({
-        name: 'Nguyễn Văn Test Submit',
+        name: 'Test Submit Quiz',
         phone: testPhone,
         branchId: 'CN1',
         shift: 'SÁNG',
         type: 'TRAINING',
         status: 'TRAINING',
-        startDate: '2026-08-01'
+        startDate: '2026-08-01',
+        isTest: true
       })
     });
     const createEmpData = await createEmpRes.json();
     assert.ok(createEmpData.employee && createEmpData.employee.employeeId, `Tạo NV lỗi: ${JSON.stringify(createEmpData)}`);
     const testEmpId = createEmpData.employee.employeeId;
 
-    // 2. Mở đề thi 25 câu
-    const openRes = await fetch(`${BASE_URL}/api/quiz/open`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ employeeId: testEmpId, force: true })
-    });
-    assert.strictEqual(openRes.status, 200);
-    const openData = await openRes.json();
-    assert.strictEqual(openData.questions.length, 25);
-    assert.strictEqual(openData.questionIds.length, 25);
+    try {
+      // 2. Mở đề thi 25 câu
+      const openRes = await fetch(`${BASE_URL}/api/quiz/open`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-is-test': 'true' },
+        body: JSON.stringify({ employeeId: testEmpId, force: true, isTest: true })
+      });
+      assert.strictEqual(openRes.status, 200);
+      const openData = await openRes.json();
+      assert.strictEqual(openData.questions.length, 25);
+      assert.strictEqual(openData.questionIds.length, 25);
 
-    // 3. Nộp bài với 25 câu trả lời
-    const answers = Array(25).fill(1); // Chọn đáp án B cho tất cả 25 câu
-    const submitRes = await fetch(`${BASE_URL}/api/courses/${openData.courseId}/submit`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        employeeId: testEmpId,
-        answers,
-        timeSpent: 70,
-        questionIds: openData.questionIds
-      })
-    });
-    const submitData = await submitRes.json();
-    assert.strictEqual(submitRes.status, 200, `Nộp bài thất bại: ${JSON.stringify(submitData)}`);
-    assert.strictEqual(submitData.success, true);
-    assert.ok(submitData.testResult);
-    assert.strictEqual(submitData.testResult.total, 25);
-    assert.ok(typeof submitData.testResult.score === 'number');
-
-    // 4. Dọn dẹp nhân viên test
-    await fetch(`${BASE_URL}/api/employees/${testEmpId}?hard=true`, {
-      method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
+      // 3. Nộp bài với 25 câu trả lời
+      const answers = Array(25).fill(1); // Chọn đáp án B cho tất cả 25 câu
+      const submitRes = await fetch(`${BASE_URL}/api/courses/${openData.courseId}/submit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-is-test': 'true' },
+        body: JSON.stringify({
+          employeeId: testEmpId,
+          answers,
+          timeSpent: 70,
+          questionIds: openData.questionIds,
+          isTest: true
+        })
+      });
+      const submitData = await submitRes.json();
+      assert.strictEqual(submitRes.status, 200, `Nộp bài thất bại: ${JSON.stringify(submitData)}`);
+      assert.strictEqual(submitData.success, true);
+      assert.ok(submitData.testResult);
+      assert.strictEqual(submitData.testResult.total, 25);
+      assert.ok(typeof submitData.testResult.score === 'number');
+    } finally {
+      // 4. Dọn dẹp nhân viên test triệt để
+      await fetch(`${BASE_URL}/api/employees/${testEmpId}?hard=true`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+    }
   });
 });
