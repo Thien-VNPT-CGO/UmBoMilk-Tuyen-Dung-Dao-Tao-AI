@@ -1,4 +1,4 @@
-require('dotenv').config();
+﻿require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const https = require('https');
@@ -2770,10 +2770,10 @@ app.post('/api/admin/sync-from-sheet', authMiddleware, roleCheck(['Admin']), asy
     const startDate = get('Ngày bắt đầu','') || getVietnamTodayStr();
     const endDate = get('Ngày kết thúc','') || null;
     const trainingDays = parseInt(get('Số ngày Thử việc','')) || 7;
-    const status = get('Trạng thái','') || (foundSheet==='NHAN_VIEN_CHINH_THUC' ? 'OFFICIAL' : 'TRAINING');
+    const rawStatus = get('Tr\u1ea1ng th\u00e1i',''); const status = rawStatus==='OFFICIAL'||rawStatus==='Ch\u00ednh th\u1ee9c'||rawStatus==='chinh thuc'||rawStatus==='official' ? 'OFFICIAL' : (rawStatus||null) || (foundSheet==='NHAN_VIEN_CHINH_THUC' ? 'OFFICIAL' : 'TRAINING');
     const testScore = get('Điểm TEST','') ? Number(get('Điểm TEST','')) : null;
     const testResult = get('Kết quả TEST','') || null;
-    const type = get('Loại','') || (foundSheet==='NHAN_VIEN_CHINH_THUC' ? 'OFFICIAL' : 'TRAINING');
+    const rawType = get('Lo\u1ea1i',''); const type = rawType==='OFFICIAL'||rawType==='Ch\u00ednh th\u1ee9c'||rawType==='chinh thuc'||rawType==='official' ? 'OFFICIAL' : (rawType==='TRAINING'||rawType==='Th\u1eed vi\u1ec7c'||rawType==='training' ? 'TRAINING' : (rawType||null) || (foundSheet==='NHAN_VIEN_CHINH_THUC' ? 'OFFICIAL' : 'TRAINING'));
     const category = get('Category','') || 'STORE';
     const version = parseInt(get('Version','')) || 1;
     // Tạo employee
@@ -4283,7 +4283,7 @@ async function syncSheetTab(sheetKey){
   switch(sheetKey){
     case 'NHAN_VIEN_MOI':     dbCollection = db.applicants;      dbLen = (db.applicants?.length ?? 0);    break;
     case 'NHAN_VIEN_TRAINING': dbCollection = db.employees.filter(e=>e.type==='TRAINING'); dbLen = (db.employees.filter(e=>e.type==='TRAINING')?.length ?? 0);    break;
-    case 'NHAN_VIEN_CHINH_THUC': dbCollection = db.employees.filter(e=>e.type==='OFFICIAL'); dbLen = (db.employees.filter(e=>e.type==='OFFICIAL')?.length ?? 0);    break;
+    case 'NHAN_VIEN_CHINH_THUC': dbCollection = db.employees.filter(e=>e.type==='OFFICIAL'||e.status==='OFFICIAL'); dbLen = (db.employees.filter(e=>e.type==='OFFICIAL'||e.status==='OFFICIAL')?.length ?? 0);    break;
     case 'LICH_LAM_VIEC':     dbCollection = db.schedules;       dbLen = (db.schedules?.length ?? 0);    break;
     case 'RECORD_DIEM_DANH':  dbCollection = db.attendances;   dbLen = (db.attendances?.length ?? 0);  break;
     case 'PHIEU_OFF_HANG_TUAN': dbCollection = db.offRequests; dbLen = (db.offRequests?.length ?? 0);    break;
