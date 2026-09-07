@@ -779,17 +779,22 @@ function emitForceLogout(employeeId, reason='Tài khoản không tồn tại'){
 function isTestRecord(item){
   if(!item) return false;
   if(Array.isArray(item)){
-    const rowStr = item.map(x => String(x||'')).join(' ').toLowerCase();
-    if(rowStr.includes('test') || rowStr.includes('090999') || rowStr.includes('forcelogout')) return true;
+    const id = String(item[0]||'').toLowerCase().trim();
+    const code = String(item[1]||'').toLowerCase().trim();
+    const name = String(item[2]||'').toLowerCase().trim();
+    if(id.startsWith('test_') || id.startsWith('mock_') || code.startsWith('test_') || code.startsWith('mock_')) return true;
+    if(name.startsWith('test ') || name==='test' || name.includes('forcelogout')) return true;
+    const allStr = item.map(x => String(x||'')).join(' ');
+    if(allStr.includes('0909990001') || allStr.includes('0909990003') || allStr.includes('0909990005') || allStr.includes('090999999')) return true;
     return false;
   }
   if(item.isTest) return true;
   const name = (item.name || item.employeeName || item.applicantName || '').toString().trim().toLowerCase();
-  if(name.startsWith('test') || name.includes('test forcelogout') || name.includes('test put') || name.includes('test socket') || name.includes('test harddelete') || name.includes('test notexist') || name.includes('test ')) return true;
+  if(name.startsWith('test ') || name === 'test' || name.includes('test forcelogout') || name.includes('test put') || name.includes('test socket') || name.includes('test harddelete') || name.includes('test notexist')) return true;
   const phone = (item.phone || item.receiver || '').toString().replace(/\D/g, '');
   if(phone.startsWith('090999') || phone.startsWith('09099') || phone === '0909990001' || phone === '0909990003' || phone === '0909990005') return true;
   const empId = (item.employeeId || item.id || '').toString().toLowerCase();
-  if(empId.includes('test') || empId.startsWith('test')) return true;
+  if(empId.startsWith('test_') || empId.startsWith('mock_') || empId === 'test') return true;
   const jsonStr = JSON.stringify(item).toLowerCase();
   if(jsonStr.includes('"istest":true') || jsonStr.includes('"is_test":true')) return true;
   return false;
@@ -4432,7 +4437,9 @@ async function syncSheetTab(sheetKey){
       rows = [...seen.values()];
     }
     // RÀNG BUỘC: Sheet GIỮ dữ liệu thật (web xóa local không xóa Sheet).
-    // Ngoại lệ duy nhất: dòng RÁC (thiếu SĐT/Mã NV) và dòng DỮ LIỆU TEST (tuyệt đối không lưu) bị dọn ở lần sync này.
+    // RÀNG BUỘC TUYỆT ĐỐI GOOGLE SHEET 17iXM:
+    // Dữ liệu trên Google Sheet sẽ KHÔNG BỊ MẤT trừ khi admin reset ALL trên web app.
+    // Giữ nguyên 100% tất cả dòng hiện có trên Sheet, tuyệt đối KHÔNG drop và KHÔNG gọi clear.
     const getRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(def.sheetName)}!A2:Z`, { headers:{ Authorization:`Bearer ${token}` }});
     const getData = await getRes.json().catch(()=>({}));
     const existing = getData.values || [];
@@ -4441,15 +4448,13 @@ async function syncSheetTab(sheetKey){
     const matchKey = (r)=> sheetKey==='LICH_LAM_VIEC' ? (String(r[1]||'').trim()+'|'+String(r[5]||'').trim()) : (r[0]||'').toString();
     const merged = [];
     const oldIndexMap = new Map();
-    let droppedOld = 0;
     existing.forEach((r)=>{
-      if(!hasPhoneOrCode(r) || isTestRecord(r)){ droppedOld++; return; }
       const k = matchKey(r);
       if(sheetKey==='LICH_LAM_VIEC'){
-        // Lịch trùng Mã NV + Ngày chỉ giữ dòng đầu — các dòng trùng sau bị dọn
-        if(!String(r[1]||'').trim() || !String(r[5]||'').trim() || oldIndexMap.has(k)){ droppedOld++; return; }
-        oldIndexMap.set(k, [merged.length]);
-      } else if(!isBadKey(k)){
+        if(k && !oldIndexMap.has(k)){
+          oldIndexMap.set(k, [merged.length]);
+        }
+      } else if(k && !isBadKey(k)){
         if(!oldIndexMap.has(k)) oldIndexMap.set(k, []);
         oldIndexMap.get(k).push(merged.length);
       }
@@ -4471,23 +4476,15 @@ async function syncSheetTab(sheetKey){
         });
       } else { oldIndexMap.set(k, [merged.length]); merged.push(r); appended++; }
     });
-    // Ghi đè đúng vùng (update, KHÔNG clear toàn tab để không mất dữ liệu nếu lỗi giữa chừng).
+    // Ghi đè đúng vùng (update, KHÔNG BAO GIỜ clear tab để bảo toàn dữ liệu tuyệt đối).
     if(merged.length>0){
       const endRow = 1 + merged.length;
       await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(def.sheetName)}!A2:Z${endRow}?valueInputOption=RAW`, {
         method:'PUT', headers:{ Authorization:`Bearer ${token}`, 'Content-Type':'application/json'},
         body: JSON.stringify({ values: merged })
       });
-      // RÀNG BUỘC CHỐNG RÁC: sau khi dọn rác, merged ngắn hơn vùng cũ → xóa đuôi thừa
-      // (nếu không, rác cũ nằm dưới vẫn hiển thị dù đã bị loại khỏi merged).
-      const oldEndRow = 1 + existing.length;
-      if(oldEndRow > endRow){
-        await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(def.sheetName)}!A${endRow+1}:Z${oldEndRow}:clear`, {
-          method:'POST', headers:{ Authorization:`Bearer ${token}` }
-        });
-      }
     }
-    console.log(`[SHEET] Đã đồng bộ ${def.sheetName}: giữ ${existing.length} dòng cũ + cập nhật ${updated} + thêm ${appended} + dọn ${droppedOld} dòng rác (thiếu SĐT/Mã NV) - Realtime 1:1`);
+    console.log(`[SHEET] Đã đồng bộ ${def.sheetName}: giữ nguyên ${existing.length} dòng cũ + cập nhật ${updated} + thêm ${appended} - Bảo toàn dữ liệu Sheet 100%`);
   }catch(e){ console.error(`syncSheetTab ${sheetKey} error`, e.message); }
 }
 async function syncAllTabsToSheetsRealtime(){
@@ -7449,6 +7446,9 @@ app.get('/api/admin/inspect-sheet', authMiddleware, roleCheck(['Admin']), async 
 // dryRun=true (mặc định) chỉ báo cáo; dryRun=false mới ghi. Không bao giờ xóa dòng duy nhất.
 app.post('/api/admin/rebuild-sheet-tab', authMiddleware, roleCheck(['Admin']), async (req,res)=>{
   const spreadsheetId = req.body.spreadsheetId || db.settings?.googleSheet?.spreadsheetId || '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w';
+  if(isSheetDeleteProtected(spreadsheetId)){
+    return res.status(403).json({ error:'Ràng buộc bảo vệ tuyệt đối: Dữ liệu trên Google Sheet 17iXM không được phép xóa/clear trừ khi Admin thực hiện System Reset ALL.' });
+  }
   const sheetName = req.body.sheet || 'NHAN_VIEN_MOI';
   const dryRun = req.body.dryRun !== false;
   const token = await getGoogleAccessToken();
@@ -7513,10 +7513,12 @@ app.post('/api/admin/rebuild-sheet-tab', authMiddleware, roleCheck(['Admin']), a
   }catch(e){ res.status(500).json({ error: e.message }); }
 });
 // Admin: xóa CHỈ ĐỊNH một số dòng trên Sheet (ghi rõ IDs, có audit).
-// Đây là cách duy nhất xóa trên Sheet qua web (thay cho xóa trực tiếp trên Google Sheets).
 // Mọi luồng tự động khác đều bị cấm xóa Sheet.
 app.post('/api/admin/delete-sheet-rows', authMiddleware, roleCheck(['Admin']), async (req,res)=>{
   const spreadsheetId = req.body.spreadsheetId || db.settings?.googleSheet?.spreadsheetId || '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w';
+  if(isSheetDeleteProtected(spreadsheetId)){
+    return res.status(403).json({ error:'Ràng buộc bảo vệ tuyệt đối: Dữ liệu trên Google Sheet 17iXM không được phép xóa dòng trừ khi Admin thực hiện System Reset ALL.' });
+  }
   const sheetName = req.body.sheet;
   const ids = (req.body.ids||[]).map(x=>String(x).trim()).filter(Boolean);
   if(!sheetName) return res.status(400).json({ error:'Thiếu tên sheet' });
@@ -7900,13 +7902,17 @@ app.post('/api/system/reset', authMiddleware, roleCheck(['Admin']), async (req,r
           const rows = vj.values || [];
           return rows.filter(r=>r && r.some(c=>String(c||'').trim()!=='')).length===0;
         };
-        // Xóa sạch toàn bộ dữ liệu từ dòng 2 đến vô cực (cột A đến ZZ)
+        // Xóa sạch toàn bộ dữ liệu từ dòng 2 đến vô cực (cột A đến ZZ và hàng 2:50000)
         const clearRange = async (sid, tab)=>{
-          const clr = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sid}/values/${encodeURIComponent(tab)}!A2:ZZ:clear`, {
+          const clr1 = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sid}/values/${encodeURIComponent(tab)}!A2:ZZ:clear`, {
             method:'POST', headers:{ Authorization:`Bearer ${token}` }
           });
-          const cj = await clr.json().catch(()=>({}));
-          if(cj.error) throw new Error(cj.error.message);
+          const cj1 = await clr1.json().catch(()=>({}));
+          if(cj1.error) throw new Error(cj1.error.message);
+          // Đồng thời xóa toàn bộ cột theo dòng 2:50000 để đảm bảo triệt để 100%
+          await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sid}/values/${encodeURIComponent(tab)}!2:50000:clear`, {
+            method:'POST', headers:{ Authorization:`Bearer ${token}` }
+          }).catch(()=>({}));
         };
         const clearAndVerify = async (sid, tab, headers)=>{
           let lastErr = '';
