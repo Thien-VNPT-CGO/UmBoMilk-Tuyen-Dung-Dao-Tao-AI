@@ -1401,6 +1401,8 @@ async function loadSchedule(){
                 if (r.toShift && !dayShifts.includes(r.toShift)) dayShifts.push(r.toShift);
               });
             }
+            const SHIFT_CHRONO_ORDER = { 'CA_SANG': 1, 'CA_CHIEU': 2, 'CA_TOI': 3 };
+            dayShifts.sort((a, b) => (SHIFT_CHRONO_ORDER[a] || 99) - (SHIFT_CHRONO_ORDER[b] || 99));
 
             if(d.status === 'OFF') {
               bgColor = 'bg-red-50/30';

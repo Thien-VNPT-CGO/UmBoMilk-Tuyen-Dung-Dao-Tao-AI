@@ -5311,7 +5311,7 @@ app.get('/api/schedules', authMiddleware, (req,res)=>{
 
   // Auto-generate missing schedules cho TRAINING và OFFICIAL (fix: OFFICIAL không hiển thị lịch)
   let updated = false;
-  db.employees.filter(e => e.status === 'TRAINING' || e.type === 'TRAINING').forEach(emp => {
+  db.employees.filter(e => !isTestRecord(e) && !e.isTest && (e.status === 'TRAINING' || e.type === 'TRAINING')).forEach(emp => {
     const hasSched = db.schedules.some(s => s.employeeId === emp.employeeId);
     if (!hasSched) {
       const startDateStr = emp.startDate || getVietnamTodayStr();
@@ -5351,7 +5351,7 @@ app.get('/api/schedules', authMiddleware, (req,res)=>{
   const currentMonday = getMonday(getVietnamNow());
   const cy = currentMonday.getFullYear(); const cm = String(currentMonday.getMonth()+1).padStart(2,'0'); const cd = String(currentMonday.getDate()).padStart(2,'0');
   const currentWeekStart = `${cy}-${cm}-${cd}`;
-  const officialsNeedingWeek = db.employees.filter(e => (e.status === 'OFFICIAL' || e.type === 'OFFICIAL') && !db.schedules.some(s => s.employeeId === e.employeeId && s.weekStart === currentWeekStart));
+  const officialsNeedingWeek = db.employees.filter(e => !isTestRecord(e) && !e.isTest && (e.status === 'OFFICIAL' || e.type === 'OFFICIAL') && !db.schedules.some(s => s.employeeId === e.employeeId && s.weekStart === currentWeekStart));
   if(officialsNeedingWeek.length>0){
     // Group cùng CN cùng ca để không trùng
     const groupMapWeek = {};
@@ -5440,6 +5440,8 @@ app.get('/api/schedules', authMiddleware, (req,res)=>{
             shifts.push(r.toShift);
             updated = true;
           }
+          const SHIFT_CHRONO_ORDER = { 'CA_SANG': 1, 'CA_CHIEU': 2, 'CA_TOI': 3 };
+          shifts.sort((a, b) => (SHIFT_CHRONO_ORDER[a] || 99) - (SHIFT_CHRONO_ORDER[b] || 99));
           day.shifts = shifts;
           if (shifts[0]) day.shift = shifts[0];
           if (shifts[1]) day.shift2 = shifts[1];
@@ -6172,6 +6174,8 @@ app.post(['/api/training/shift-change/:id/approve', '/api/training/shift-request
         if (!existingShifts.includes(r.toShift)) {
           existingShifts.push(r.toShift);
         }
+        const SHIFT_CHRONO_ORDER = { 'CA_SANG': 1, 'CA_CHIEU': 2, 'CA_TOI': 3 };
+        existingShifts.sort((a, b) => (SHIFT_CHRONO_ORDER[a] || 99) - (SHIFT_CHRONO_ORDER[b] || 99));
         day.shifts = existingShifts;
         if (existingShifts[0]) day.shift = existingShifts[0];
         if (existingShifts[1]) day.shift2 = existingShifts[1];

@@ -4147,6 +4147,8 @@ function renderSchedules(){
                   if (r.toShift && !allShifts.includes(r.toShift)) allShifts.push(r.toShift);
                 });
               }
+              const SHIFT_CHRONO_ORDER = { 'CA_SANG': 1, 'CA_CHIEU': 2, 'CA_TOI': 3 };
+              allShifts.sort((a, b) => (SHIFT_CHRONO_ORDER[normalizeShift(a)] || 99) - (SHIFT_CHRONO_ORDER[normalizeShift(b)] || 99));
               if (!allShifts.length && (found?.shift || emp.shift)) {
                 allShifts.push(found?.shift || emp.shift || 'CA_SANG');
               }
@@ -4203,6 +4205,8 @@ function renderSchedules(){
                         if (r.toShift && !dayAllShifts.includes(r.toShift)) dayAllShifts.push(r.toShift);
                       });
                     }
+                    const SHIFT_CHRONO_ORDER_DAY = { 'CA_SANG': 1, 'CA_CHIEU': 2, 'CA_TOI': 3 };
+                    dayAllShifts.sort((a, b) => (SHIFT_CHRONO_ORDER_DAY[normalizeShift(a)] || 99) - (SHIFT_CHRONO_ORDER_DAY[normalizeShift(b)] || 99));
                     let badgeText='', badgeClass='', detailText='', detailClass='';
                     if(isWaiting){
                       badgeText='CHỜ CHÍNH THỨC';
