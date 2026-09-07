@@ -83,6 +83,39 @@ function syncRow(sheet, operation, payload) {
     }
   }
   
+  // RÀNG BUỘC CHỐNG TRÙNG SĐT (09/2026):
+  // Nếu trùng số điện thoại thì KHÔNG ĐƯỢC LƯU VÀO GOOGLE SHEET (không append dòng mới).
+  var rawPhone = payload.phone || payload.receiver || '';
+  var normPhone = String(rawPhone).replace(/\D/g, '');
+  if (normPhone.length >= 9 && data.length > 1) {
+    var phoneColIndex = -1;
+    for (var h = 0; h < data[0].length; h++) {
+      var headerName = String(data[0][h]).trim().toLowerCase();
+      if (headerName === 'sđt' || headerName === 'số điện thoại' || headerName === 'sdt' || headerName === 'điện thoại' || headerName === 'phone' || headerName === 'số zalo') {
+        phoneColIndex = h;
+        break;
+      }
+    }
+    if (phoneColIndex !== -1) {
+      for (var i = 1; i < data.length; i++) {
+        var rowPhone = String(data[i][phoneColIndex] || '').replace(/\D/g, '');
+        if (rowPhone.length >= 9 && rowPhone === normPhone) {
+          // Trùng số điện thoại với dòng i + 1
+          if (targetRowIndex > 0 && targetRowIndex === (i + 1)) {
+            // Đúng là cùng dòng ID này -> cho phép cập nhật dòng này
+          } else if (targetRowIndex <= 0) {
+            // Chưa tìm thấy theo ID, nhưng trùng SĐT -> cập nhật dòng đã có SĐT này thay vì append dòng mới trùng SĐT!
+            targetRowIndex = i + 1;
+          } else {
+            // Trùng SĐT với một dòng khác -> không lưu trùng vào Google Sheet
+            return;
+          }
+          break;
+        }
+      }
+    }
+  }
+
   // RÀNG BUỘC TUYỆT ĐỐI (09/2026): Google Sheet KHÔNG BAO GIỜ bị xóa dòng.
   // Web xóa local -> Sheet GIỮ NGUYÊN vĩnh viễn. Mọi lệnh DELETE/HARD_DELETE từ webhook đều bị bỏ qua.
   if (operation === 'DELETE' || operation === 'HARD_DELETE' || operation === 'DELETE_ROW') {

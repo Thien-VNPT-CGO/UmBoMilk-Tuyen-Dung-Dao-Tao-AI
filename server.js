@@ -892,14 +892,20 @@ async function syncToGoogleSheet(item){
   };
   const sheetName = sheetMap[item.entity];
   if(!sheetName) throw new Error(`Chưa cấu hình bảng tính cho ${item.entity}`);
-  // RÀNG BUỘC CHỐNG TRÙNG web→Sheet: CREATE nhưng Sheet đã có dòng cùng ID
-  // thì chuyển thành UPDATE (GAS upsert theo ID) - không tạo dòng trùng.
+  // RÀNG BUỘC CHỐNG TRÙNG web→Sheet: CREATE nhưng Sheet đã có dòng cùng ID hoặc cùng SĐT
+  // thì chuyển thành UPDATE (GAS upsert theo ID/SĐT) - không tạo dòng trùng.
   if(item.operation==='CREATE'){
     try{
       const canonicalId = db.settings?.googleSheet?.spreadsheetId || '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w';
       const rowId = item.payload?.id || item.payload?.employeeId || item.payload?.source_id;
       if(rowId && await sheetHasRowId(canonicalId, sheetName, rowId)){
         console.log(`[CHỐNG TRÙNG] ${item.entity} ${rowId} đã có trên Sheet ${sheetName} -> chuyển CREATE thành UPDATE`);
+        item.operation = 'UPDATE';
+      }
+      // RÀNG BUỘC CHỐNG TRÙNG SĐT: Nếu trùng số điện thoại thì KHÔNG ĐƯỢC LƯU VÀO GOOGLE SHEET (không tạo dòng mới)
+      const pPhone = normalizePhone(item.payload?.phone || item.payload?.receiver || '');
+      if(pPhone && pPhone.length >= 9 && await sheetHasPhone(canonicalId, sheetName, pPhone)){
+        console.log(`[CHỐNG TRÙNG SĐT] ${item.entity} SĐT ${pPhone} đã có trên Sheet ${sheetName} -> chuyển CREATE thành UPDATE để không tạo dòng mới trùng SĐT`);
         item.operation = 'UPDATE';
       }
     }catch(e){}
@@ -932,6 +938,9 @@ async function syncToGoogleSheet(item){
   throw lastError || new Error('Tất cả 3 webhook đều lỗi/placeholder');
 }
 
+// Khởi tạo cache số điện thoại trên Google Sheet (toàn cục)
+var sheetPhoneCache = { at: 0, set: new Set() };
+
 // Kiểm tra ID đã tồn tại trên Sheet chưa (chống trùng web→Sheet)
 async function sheetHasRowId(spreadsheetId, sheetName, id){
   try{
@@ -943,6 +952,36 @@ async function sheetHasRowId(spreadsheetId, sheetName, id){
     const vals = j.values || [];
     return vals.some(r=> (r[0]||'').toString()===id.toString());
   }catch(e){ return null; }
+}
+
+// Kiểm tra SĐT đã tồn tại trên Sheet chưa (chống trùng SĐT web→Sheet)
+async function sheetHasPhone(spreadsheetId, sheetName, phone){
+  const norm = normalizePhone(phone||'');
+  if(!norm || norm.length < 9) return false;
+  try{
+    if(sheetPhoneCache && sheetPhoneCache.set && sheetPhoneCache.set.has(norm)) return true;
+    const token = await getGoogleAccessToken();
+    if(!token || !spreadsheetId) return false;
+    const targetSheets = sheetName ? [sheetName] : ['NHAN_VIEN_MOI','NHAN_VIEN_TRAINING','NHAN_VIEN_CHINH_THUC','NHAN_VIEN_XUONG','NHAN_VIEN_VAN_PHONG','NHAN_VIEN_SALE'];
+    for(const sName of targetSheets){
+      try{
+        const resp = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sName)}!A1:Z5000`, { headers:{ Authorization:`Bearer ${token}` }});
+        if(!resp.ok) continue;
+        const j = await resp.json();
+        const vals = j.values || [];
+        if(vals.length < 2) continue;
+        const iPhone = vals[0].findIndex(h=> /^(sđt|số điện thoại|điện thoại|phone|sdt)$/i.test(String(h||'').trim()));
+        if(iPhone === -1) continue;
+        for(let i=1; i<vals.length; i++){
+          if(normalizePhone(vals[i][iPhone]) === norm){
+            if(sheetPhoneCache && sheetPhoneCache.set) sheetPhoneCache.set.add(norm);
+            return true;
+          }
+        }
+      }catch(_){}
+    }
+  }catch(e){}
+  return false;
 }
 function addSyncQueue(entity, operation, payload, actor, source='WEB_HR'){
   if(isSystemResetting) return null;
@@ -2085,6 +2124,13 @@ async function syncOutboundToMasterDatabaseSheet(applicant) {
       applicant.outboundRowHash = rowHash;
       return;
     }
+    // RÀNG BUỘC CHỐNG TRÙNG SĐT: Nếu trùng số điện thoại thì KHÔNG ĐƯỢC LƯU VÀO GOOGLE SHEET
+    const normPhone = normalizePhone(applicant.phone);
+    if(normPhone && normPhone.length >= 9 && await sheetHasPhone(targetId, 'NHAN_VIEN_MOI', normPhone)){
+      console.log(`[CHỐNG TRÙNG SĐT] Ứng viên SĐT ${applicant.phone} đã tồn tại trên Sheet 17iXM -> Bỏ qua APPEND để không lưu trùng`);
+      applicant.outboundRowHash = rowHash;
+      return;
+    }
   }catch(e){}
 
   const syncItem = {
@@ -3224,10 +3270,9 @@ function normalizePhone(phone) {
 }
 // RÀNG BUỘC realtime: 1 SĐT chỉ tồn tại 1 lần trên toàn bộ file 17iXM + web.
 // Cache SĐT trên Sheet 60s để không gọi API mỗi lần nhập liệu.
-let sheetPhoneCache = { at: 0, set: new Set() };
-async function getSheetPhoneSet(){
+async function getSheetPhoneSet(forceFresh = false){
   const now = Date.now();
-  if(now - sheetPhoneCache.at < 60000 && sheetPhoneCache.set.size>0) return sheetPhoneCache.set;
+  if(!forceFresh && now - sheetPhoneCache.at < 60000 && sheetPhoneCache.set && sheetPhoneCache.set.size > 0) return sheetPhoneCache.set;
   try{
     const spreadsheetId = db.settings?.googleSheet?.spreadsheetId || '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w';
     const token = await getGoogleAccessToken();
@@ -3236,7 +3281,8 @@ async function getSheetPhoneSet(){
     const set = new Set();
     let fetched = false;
     if(token){
-      for(const sheetName of ['NHAN_VIEN_MOI','NHAN_VIEN_TRAINING','NHAN_VIEN_CHINH_THUC']){
+      const phoneSheets = ['NHAN_VIEN_MOI','NHAN_VIEN_TRAINING','NHAN_VIEN_CHINH_THUC','NHAN_VIEN_XUONG','NHAN_VIEN_VAN_PHONG','NHAN_VIEN_SALE'];
+      for(const sheetName of phoneSheets){
         try{
           const resp = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A1:Z5000`, { headers:{ Authorization:`Bearer ${token}` }});
           if(!resp.ok) continue;
@@ -3244,11 +3290,11 @@ async function getSheetPhoneSet(){
           const j = await resp.json();
           const values = j.values || [];
           if(values.length<2) continue;
-          const iPhone = values[0].findIndex(h=>h==='SĐT');
+          const iPhone = values[0].findIndex(h=> /^(sđt|số điện thoại|điện thoại|phone|sdt)$/i.test(String(h||'').trim()));
           if(iPhone===-1) continue;
           for(let i=1;i<values.length;i++){
             const ph = normalizePhone((values[i][iPhone]||'').toString());
-            if(ph) set.add(ph);
+            if(ph && ph.length >= 9) set.add(ph);
           }
         }catch(e){}
       }
@@ -4545,12 +4591,27 @@ async function syncSheetTab(sheetKey){
     const matchKey = (r)=> sheetKey==='LICH_LAM_VIEC' ? (String(r[1]||'').trim()+'|'+String(r[5]||'').trim()) : (r[0]||'').toString();
     const merged = [];
     const oldIndexMap = new Map();
+    const phoneIndexMap = new Map();
     let droppedTest = 0;
+    let droppedDupPhone = 0;
     existing.forEach((r)=>{
       // Chặn và dọn dẹp triệt để dữ liệu test trên Google Sheet
       if(isTestRecord(r)){
         droppedTest++;
         return;
+      }
+      // RÀNG BUỘC CHỐNG TRÙNG SĐT TRÊN GOOGLE SHEET:
+      // Nếu dòng existing trên Sheet bị trùng SĐT với một dòng trước đó trên cùng tab, loại bỏ dòng trùng thừa
+      if(guard && guard.phone >= 0){
+        const normPhone = normalizePhone(r[guard.phone]);
+        if(normPhone && normPhone.length >= 9){
+          if(phoneIndexMap.has(normPhone)){
+            console.log(`[CHỐNG TRÙNG SĐT GOOGLE SHEET] Dọn dòng cũ trùng SĐT ${r[guard.phone]} trên ${def.sheetName}`);
+            droppedDupPhone++;
+            return;
+          }
+          phoneIndexMap.set(normPhone, merged.length);
+        }
       }
       const k = matchKey(r);
       if(sheetKey==='LICH_LAM_VIEC'){
@@ -4569,6 +4630,24 @@ async function syncSheetTab(sheetKey){
       if(sheetKey==='LICH_LAM_VIEC'){
         if(!String(r[1]||'').trim() || !String(r[5]||'').trim()) return;
       } else if(isBadKey(k)) return;
+
+      // RÀNG BUỘC CHỐNG TRÙNG SĐT: Nếu trùng số điện thoại thì KHÔNG ĐƯỢC LƯU VÀO GOOGLE SHEET (không tạo thêm dòng mới)
+      if(guard && guard.phone >= 0){
+        const normPhone = normalizePhone(r[guard.phone]);
+        if(normPhone && normPhone.length >= 9){
+          if(phoneIndexMap.has(normPhone)){
+            const targetIdx = phoneIndexMap.get(normPhone);
+            const old = merged[targetIdx];
+            const len = Math.max(old.length, r.length);
+            const nr = [];
+            for(let c=0;c<len;c++) nr[c] = (c<r.length && r[c]!==undefined && r[c]!=='') ? r[c] : old[c];
+            merged[targetIdx]=nr; updated++;
+            console.log(`[CHỐNG TRÙNG SĐT GOOGLE SHEET] SĐT ${r[guard.phone]} đã có trên ${def.sheetName} -> Cập nhật dòng hiện có, KHÔNG tạo dòng mới`);
+            return; // Đã cập nhật dòng có cùng SĐT, không append thêm dòng mới
+          }
+        }
+      }
+
       if(oldIndexMap.has(k)){
         oldIndexMap.get(k).forEach(ei=>{
           const old = merged[ei];
@@ -4577,7 +4656,15 @@ async function syncSheetTab(sheetKey){
           for(let c=0;c<len;c++) nr[c] = (c<r.length && r[c]!==undefined && r[c]!=='') ? r[c] : old[c];
           merged[ei]=nr; updated++;
         });
-      } else { oldIndexMap.set(k, [merged.length]); merged.push(r); appended++; }
+      } else {
+        if(guard && guard.phone >= 0){
+          const normPhone = normalizePhone(r[guard.phone]);
+          if(normPhone && normPhone.length >= 9){
+            phoneIndexMap.set(normPhone, merged.length);
+          }
+        }
+        oldIndexMap.set(k, [merged.length]); merged.push(r); appended++;
+      }
     });
     // Ghi đè đúng vùng (update, giữ nguyên dữ liệu thật)
     if(merged.length>0){
@@ -4586,16 +4673,16 @@ async function syncSheetTab(sheetKey){
         method:'PUT', headers:{ Authorization:`Bearer ${token}`, 'Content-Type':'application/json'},
         body: JSON.stringify({ values: merged })
       });
-      // Nếu có dòng test bị dọn (merged ngắn hơn existing), xóa vùng thừa để dọn sạch test data
+      // Nếu có dòng test bị dọn hoặc dòng trùng SĐT bị dọn (merged ngắn hơn existing), xóa vùng thừa để dọn sạch
       const oldEndRow = 1 + existing.length;
-      if(droppedTest > 0 && oldEndRow > endRow){
+      if((droppedTest > 0 || droppedDupPhone > 0) && oldEndRow > endRow){
         await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(def.sheetName)}!A${endRow+1}:Z${oldEndRow}:clear`, {
           method:'POST', headers:{ Authorization:`Bearer ${token}` }
         });
-        console.log(`[SHEET CLEANUP] Đã dọn ${droppedTest} dòng dữ liệu test trên ${def.sheetName}`);
+        console.log(`[SHEET CLEANUP] Đã dọn ${droppedTest} dòng test và ${droppedDupPhone} dòng trùng SĐT trên ${def.sheetName}`);
       }
     }
-    console.log(`[SHEET] Đã đồng bộ ${def.sheetName}: giữ nguyên ${existing.length - droppedTest} dòng thật + dọn ${droppedTest} dòng test + cập nhật ${updated} + thêm ${appended}`);
+    console.log(`[SHEET] Đã đồng bộ ${def.sheetName}: giữ nguyên ${existing.length - droppedTest - droppedDupPhone} dòng thật + dọn ${droppedTest} dòng test + dọn ${droppedDupPhone} dòng trùng SĐT + cập nhật ${updated} + thêm ${appended}`);
   }catch(e){ console.error(`syncSheetTab ${sheetKey} error`, e.message); }
 }
 async function syncAllTabsToSheetsRealtime(){
