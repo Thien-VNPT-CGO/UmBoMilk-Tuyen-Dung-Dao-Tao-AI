@@ -192,8 +192,8 @@ function updateModeBadge(){
 }
 
 
-// Các tab bị ẩn mặc định với tài khoản TRAINING (off, emergency, đổi ca luôn ẩn)
-const TRAINING_HIDDEN_TABS = ['off', 'emergency', 'shiftSwap'];
+// Các tab bị ẩn mặc định với tài khoản TRAINING (emergency, đổi ca luôn ẩn; OFF mở để đăng ký tối đa 5 ngày)
+const TRAINING_HIDDEN_TABS = ['emergency', 'shiftSwap'];
 
 // E-learning chỉ mở cho NV Training khi HR bấm chọn "Thi Trực Tuyến Trên Web App" (Option 1).
 // Khi lên Nhân viên Chính thức (OFFICIAL) thì E-learning tạm thời ẩn đi.
@@ -216,7 +216,7 @@ function getVisibleNav(){
   // Yêu cầu #5,6: ẩn Thông báo khỏi nav, chỉ dùng chuông
   const baseFilter = (n)=> n.id !== 'notifs';
   if(!isOfficial){
-    // Training: ẩn OFF, emergency, notifs; elearning chỉ khi unlock
+    // Training: ẩn emergency, shiftSwap, notifs; OFF luôn mở để đăng ký 5 ngày; elearning chỉ khi unlock
     return NAV.filter(n => {
       if(!baseFilter(n)) return false;
       if(TRAINING_HIDDEN_TABS.includes(n.id)) return false;
@@ -1422,13 +1422,34 @@ function isDateInCurrentWeek(date) {
   return date >= startOfWeek && date <= endOfWeek;
 }
 
-// OFF weekly - Chính thức: AI T6 12:00→T7 15:00 + TH1/TH2
+// OFF weekly - Chính thức: AI T6 12:00→T7 15:00 + TH1/TH2 & Training: tối đa 5 ngày
 async function loadOff(){
-  // generate dates for next week Mon-Sun
-  const nextMon = getMonday(new Date(getVietnamNow().getTime()+7*24*60*60*1000));
-  const nextWeekStr = toVietnamDateStr(nextMon);
-  const dates=[];
-  for(let i=0;i<7;i++){ const d=new Date(nextMon); d.setDate(nextMon.getDate()+i); dates.push(toVietnamDateStr(d)); }
+  const isTraining = employee && (employee.type==='TRAINING' || employee.status==='TRAINING' || employee.status==='WAITING_TEST');
+  const isOfficial = employee && (employee.type==='OFFICIAL' || employee.status==='OFFICIAL');
+
+  let dates=[];
+  if(isTraining){
+    // Training: 12 ngày từ startDate (hoặc hôm nay)
+    const baseDateStr = employee.startDate || getVietnamTodayStr();
+    const baseDate = new Date(baseDateStr);
+    for(let i=0; i<12; i++){
+      const d = new Date(baseDate);
+      d.setDate(baseDate.getDate() + i);
+      dates.push(toVietnamDateStr(d));
+    }
+    try{
+      if(mySchedules && mySchedules.length>0){
+        const scDates = mySchedules.flatMap(s => (s.days||[]).map(d=>d.date));
+        if(scDates.length > 0){
+          dates = Array.from(new Set([...dates, ...scDates])).sort();
+        }
+      }
+    }catch(e){}
+  } else {
+    // generate dates for next week Mon-Sun
+    const nextMon = getMonday(new Date(getVietnamNow().getTime()+7*24*60*60*1000));
+    for(let i=0;i<7;i++){ const d=new Date(nextMon); d.setDate(nextMon.getDate()+i); dates.push(toVietnamDateStr(d)); }
+  }
 
   try{
     const win = await api('/api/off-window');
@@ -1438,19 +1459,29 @@ async function loadOff(){
     // my offs
     myOffs = await api('/api/off-requests?employeeId='+employee.employeeId);
     
-    // Check if already registered for NEXT week
+    // Check if already registered
     const alreadyRegistered = myOffs.find(r => {
-       return r.dates.some(d => dates.includes(d));
+       return r.dates && r.dates.some(d => dates.includes(d));
     });
 
-    const isOpen = win.isOpen;
+    const isOpen = isTraining ? true : win.isOpen;
     window._offVipTest = !!win.vipTest;
     try{ refreshNavVisibility(); }catch(e){}
-    statusEl.textContent = isOpen? (win.vipTest?'🟢 AI đang MỞ đăng ký OFF (VIP TEST — Admin mở, TH1/TH2 giữ nguyên) - Auto Approve FCFS':'🟢 AI đang MỞ đăng ký OFF (T6 12:00 → T7 15:00) - Auto Approve FCFS') : '🔴 AI đã ĐÓNG đăng ký OFF - ngoài khung giờ (sẽ bị từ chối)';
-    statusEl.className='mt-3 text-xs font-bold rounded-xl px-3 py-2 '+(isOpen?'bg-emerald-50 text-emerald-700 border border-emerald-200':'bg-red-100 text-red-700 border border-red-200');
-    if(aiEl){
-      aiEl.classList.remove('hidden');
-      aiEl.innerHTML = `<div class="font-bold text-blue-800 flex items-center gap-1"><i class="fa-solid fa-robot"></i> ${win.aiStatus||'AI Auto'}</div><div class="text-[11px] text-blue-700 mt-1">Next: ${win.nextOpen?fmtDMY(win.nextOpen):'—'} 12:00 → ${win.nextClose?fmtDMY(win.nextClose):'—'} 15:00 • Official: ${win.officialCount} NV • TH1: không trùng ca cùng CN • TH2: ≥12 ngày/tháng → AI tự cập nhật lịch T2→CN tuần sau</div>`;
+
+    if(isTraining){
+      statusEl.textContent = '🟢 AI đang MỞ đăng ký OFF Nhân viên Đào tạo (Tối đa 5 ngày) - Tự động đồng bộ Google Sheet realtime';
+      statusEl.className = 'mt-3 text-xs font-bold rounded-xl px-3 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200';
+      if(aiEl){
+        aiEl.classList.remove('hidden');
+        aiEl.innerHTML = `<div class="font-bold text-blue-800 flex items-center gap-1"><i class="fa-solid fa-robot"></i> AI Tự Động Xếp Lịch Training</div><div class="text-[11px] text-blue-700 mt-1">Đăng ký tối đa 5 ngày OFF trong đợt đào tạo • Các ngày còn lại AI tự động xếp LÀM VIỆC (WORKING) và đồng bộ Google Sheet realtime</div>`;
+      }
+    } else {
+      statusEl.textContent = isOpen? (win.vipTest?'🟢 AI đang MỞ đăng ký OFF (VIP TEST — Admin mở, TH1/TH2 giữ nguyên) - Auto Approve FCFS':'🟢 AI đang MỞ đăng ký OFF (T6 12:00 → T7 15:00) - Auto Approve FCFS') : '🔴 AI đã ĐÓNG đăng ký OFF - ngoài khung giờ (sẽ bị từ chối)';
+      statusEl.className='mt-3 text-xs font-bold rounded-xl px-3 py-2 '+(isOpen?'bg-emerald-50 text-emerald-700 border border-emerald-200':'bg-red-100 text-red-700 border border-red-200');
+      if(aiEl){
+        aiEl.classList.remove('hidden');
+        aiEl.innerHTML = `<div class="font-bold text-blue-800 flex items-center gap-1"><i class="fa-solid fa-robot"></i> ${win.aiStatus||'AI Auto'}</div><div class="text-[11px] text-blue-700 mt-1">Next: ${win.nextOpen?fmtDMY(win.nextOpen):'—'} 12:00 → ${win.nextClose?fmtDMY(win.nextClose):'—'} 15:00 • Official: ${win.officialCount} NV • Ràng buộc AI: Cùng CN cùng ca không trùng ca, khác ca/khác CN được trùng • ≥12 ngày/tháng → Tự động đồng bộ Google Sheet realtime</div>`;
+      }
     }
 
     const registrationBox = document.getElementById('offRegistrationContainer');
@@ -1465,19 +1496,22 @@ async function loadOff(){
     } else if(alreadyRegistered){
       registrationBox.innerHTML = `
         <div class="bg-pink-50 border border-pink-200 rounded-2xl p-5 text-center">
-          <i class="fa-solid fa-calendar-check text-pink-500 text-3xl mb-3 block"></i>
-          <div class="font-black text-pink-900">BẠN ĐÃ ĐĂNG KÝ OFF TUẦN SAU</div>
+          <i class="fa-solid fa-calendar-check text-pink-500 text-3xl block mb-3"></i>
+          <div class="font-black text-pink-900">${isTraining ? 'BẠN ĐÃ ĐĂNG KÝ OFF ĐÀO TẠO' : 'BẠN ĐÃ ĐĂNG KÝ OFF TUẦN SAU'}</div>
           <div class="text-xs text-pink-700 mt-2">Các ngày đã chọn:</div>
           <div class="flex flex-wrap justify-center gap-2 mt-3">
             ${alreadyRegistered.dates.map(d => `<span class="bg-white border border-pink-200 text-pink-700 font-bold px-3 py-1.5 rounded-full text-xs">${fmtDMY(d)}</span>`).join('')}
           </div>
-          <div class="text-[11px] text-slate-500 mt-4 italic">Hệ thống đã ghi nhận và tự động sắp lịch WORKING cho các ngày còn lại.</div>
+          <div class="text-[11px] text-slate-500 mt-4 italic">Hệ thống đã ghi nhận và tự động sắp lịch WORKING cho các ngày còn lại (đồng bộ realtime sang Google Sheet).</div>
         </div>
       `;
     } else {
-      // restore registration UI if not registered
+      const maxText = isTraining ? 'Tối đa 5 ngày' : 'Tối đa 2 ngày';
       registrationBox.innerHTML = `
-        <div class="font-black text-sm text-pink-900 mb-2 flex items-center justify-between">Chọn ngày OFF tuần sau <span class="text-[11px] font-bold bg-white border border-pink-200 px-2 py-1 rounded-full text-pink-600">AI sắp lịch T2→CN</span></div>
+        <div class="font-black text-sm text-pink-900 mb-2 flex items-center justify-between">
+          <span>${isTraining ? 'Chọn ngày OFF đào tạo' : 'Chọn ngày OFF tuần sau'} <span class="text-xs font-normal text-pink-600">(${maxText})</span></span>
+          <span class="text-[11px] font-bold bg-white border border-pink-200 px-2 py-1 rounded-full text-pink-600">AI sắp lịch</span>
+        </div>
         <div id="offDates" class="grid grid-cols-2 md:grid-cols-4 gap-2"></div>
         <div class="mt-3 flex gap-2">
           <button onclick="submitOff()" class="flex-1 text-white font-black py-3 rounded-xl shadow text-sm" style="background:linear-gradient(135deg,#ec4899,#f43f5e)">Gửi đăng ký (AI Auto Approve)</button>
@@ -1486,7 +1520,8 @@ async function loadOff(){
       `;
       const offDatesEl=document.getElementById('offDates');
       offDatesEl.innerHTML = dates.map(d=>{
-        const dayName=['T2','T3','T4','T5','T6','T7','CN'][new Date(d).getDay()===0?6:new Date(d).getDay()-1];
+        const dayIdx = new Date(d).getDay();
+        const dayName=['CN','T2','T3','T4','T5','T6','T7'][dayIdx];
         return `<label class="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-2 cursor-pointer hover:bg-sky-50"><input type="checkbox" value="${d}" class="offCheck rounded"> <span class="text-xs font-bold">${dayName} ${fmtDMY(d)}</span></label>`;
       }).join('');
     }
@@ -1496,9 +1531,11 @@ async function loadOff(){
       window._offWindowSocketBound=true;
       socket.on('offWindow:update', (data)=>{
         window._offVipTest = !!(data && data.vipTest);
-        const open = data.isOpen;
-        statusEl.textContent = open? (window._offVipTest?'🟢 AI đang MỞ đăng ký OFF (VIP TEST) - Cập nhật trực tiếp':'🟢 AI đang MỞ đăng ký OFF - Cập nhật trực tiếp') : '🔴 AI đã ĐÓNG - Cập nhật trực tiếp';
-        statusEl.className='mt-3 text-xs font-bold rounded-xl px-3 py-2 '+(open?'bg-emerald-50 text-emerald-700 border border-emerald-200':'bg-red-100 text-red-700 border border-red-200');
+        if(!isTraining){
+          const open = data.isOpen;
+          statusEl.textContent = open? (window._offVipTest?'🟢 AI đang MỞ đăng ký OFF (VIP TEST) - Cập nhật trực tiếp':'🟢 AI đang MỞ đăng ký OFF - Cập nhật trực tiếp') : '🔴 AI đã ĐÓNG - Cập nhật trực tiếp';
+          statusEl.className='mt-3 text-xs font-bold rounded-xl px-3 py-2 '+(open?'bg-emerald-50 text-emerald-700 border border-emerald-200':'bg-red-100 text-red-700 border border-red-200');
+        }
         try{ refreshNavVisibility(); }catch(e){}
       });
     }
@@ -1515,12 +1552,18 @@ async function loadOff(){
   }catch(e){}
 }
 async function submitOff(){
+  const isTraining = employee && (employee.type==='TRAINING' || employee.status==='TRAINING' || employee.status==='WAITING_TEST');
+  const maxAllowed = isTraining ? 5 : 2;
   const checks=[...document.querySelectorAll('.offCheck:checked')].map(c=>c.value);
   if(checks.length===0) return showToast('Chưa chọn ngày','error');
+  if(checks.length > maxAllowed){
+    return showToast(isTraining ? 'Nhân viên Đào tạo được đăng ký tối đa 5 ngày OFF' : 'Chỉ được đăng ký tối đa 2 ngày OFF tuần sau', 'error');
+  }
   try{
     const res = await api('/api/off-requests', {method:'POST', body:JSON.stringify({employeeId:employee.employeeId, dates:checks})});
-    showToast('OFF đã tự động duyệt: '+res.dates.map(d=>fmtDMY(d)).join(', '),'success');
-    loadOff(); loadSchedule();
+    showToast('OFF đã tự động duyệt: '+(res.dates||checks).map(d=>fmtDMY(d)).join(', '),'success');
+    await loadOff();
+    await loadSchedule();
   }catch(e){ showToast(e.message,'error'); }
 }
 function getMonday(d){

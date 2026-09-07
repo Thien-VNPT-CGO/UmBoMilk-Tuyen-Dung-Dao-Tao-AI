@@ -788,7 +788,7 @@ function isTestRecord(item){
   }
   if(item.isTest === true || item.is_test === true) return true;
   const name = (item.name || item.employeeName || item.applicantName || '').toString().trim().toLowerCase();
-  if(/\btest\b/i.test(name) || name.includes('thử nghiệm') || name.includes('thu nghiem') || name.includes('forcelogout') || name.includes('test submit') || name.includes('test force')) return true;
+  if(/\b(test|mock)\b/i.test(name) || /^nv [a-d] \(/i.test(name) || name.includes('thử nghiệm') || name.includes('thu nghiem') || name.includes('forcelogout') || name.includes('test submit') || name.includes('test force')) return true;
   const phone = (item.phone || item.receiver || '').toString().replace(/\D/g, '');
   if(phone.startsWith('09099') || phone === '0909990001' || phone === '0909990003' || phone === '0909990005') return true;
   const empId = (item.employeeId || item.id || '').toString().toLowerCase().trim();
@@ -974,6 +974,24 @@ function addSyncQueue(entity, operation, payload, actor, source='WEB_HR'){
     saveDB();
     io.emit('sync:update', db.syncQueue);
   }
+  // Kích hoạt đồng bộ realtime tức thì sang Google Sheet 17iXM
+  try{
+    const entitySheetMap = {
+      APPLICANT: 'NHAN_VIEN_MOI',
+      EMPLOYEE: payload?.type === 'OFFICIAL' ? 'NHAN_VIEN_CHINH_THUC' : 'NHAN_VIEN_TRAINING',
+      PERSON: 'NHAN_VIEN_MOI',
+      ATTENDANCE: 'RECORD_DIEM_DANH',
+      SCHEDULE: 'LICH_LAM_VIEC',
+      OFF_REQUEST: 'PHIEU_OFF_HANG_TUAN',
+      EMERGENCY_REQUEST: 'PHIEU_OFF_DOT_XUAT',
+      DEVICE_REQUEST: 'PHIEU_DOI_THIET_BI',
+      TEST_RESULT: 'KET_QUA_TEST',
+      ZALO: 'RECORD_ZALO'
+    };
+    if(entitySheetMap[entity] && typeof triggerRealtimeSheetSync === 'function'){
+      triggerRealtimeSheetSync(entitySheetMap[entity]);
+    }
+  }catch(_){}
   return item;
 }
 function generateEmployeeId(branchId){
@@ -1007,9 +1025,12 @@ function isOffWindowOpen(){
   if(day===6 && hour<15) return true;
   return false;
 }
-function checkOffConflict(branchId, shift, date){
+function checkOffConflict(branchId, shift, date, excludeEmployeeId){
   // Check if same branch+shift+date already has OFF approved
-  return db.offRequests.find(r=>r.branchId===branchId && r.shift===shift && r.dates.includes(date) && r.status==='APPROVED');
+  return db.offRequests.find(r=> {
+    if(excludeEmployeeId && r.employeeId === excludeEmployeeId) return false;
+    return r.branchId===branchId && r.shift===shift && (r.dates||[]).includes(date) && r.status==='APPROVED';
+  });
 }
 function calculatePayroll(employeeId, month){
   const emp = db.employees.find(e=>e.employeeId===employeeId);
@@ -1254,12 +1275,17 @@ app.post('/api/employees', authMiddleware, roleCheck(['Admin','HR']), async (req
   const now = getVietnamNow();
   const end = getVietnamNow(); end.setDate(now.getDate()+7);
   const isTest = req.headers['x-is-test'] === 'true' || isTestRecord({ name, phone, employeeId }) || req.body.isTest === true;
+  const empType = req.body.type || (req.body.status === 'OFFICIAL' ? 'OFFICIAL' : 'TRAINING');
+  const empStatus = req.body.status || (req.body.type === 'OFFICIAL' ? 'OFFICIAL' : 'TRAINING');
   const emp = {
     id: uuidv4(), employeeId, name, phone, branchId, shift,
-    startDate: toVietnamDateStr(now),
-    endDate: toVietnamDateStr(end),
-    trainingDays: 7, status: 'TRAINING', testScore: null, testResult: null,
-    type: 'TRAINING', category: category||'STORE', avatar:'', checkHistory:[],
+    startDate: req.body.startDate || toVietnamDateStr(now),
+    endDate: empType === 'OFFICIAL' ? null : toVietnamDateStr(end),
+    trainingDays: empType === 'OFFICIAL' ? 0 : 7, 
+    status: empStatus, 
+    testScore: null, testResult: null,
+    type: empType, 
+    category: category||'STORE', avatar:'', checkHistory:[],
     isTest: isTest || undefined,
     version:1, updated_at: now.toISOString(), updated_by: req.user.username, source: isTest ? 'TEST' : 'WEB_HR', sync_status: isTest ? 'TEST_BLOCKED' : 'PENDING'
   };
@@ -4532,6 +4558,33 @@ async function syncAllTabsToSheetsRealtime(){
 setInterval(syncAllTabsToSheetsRealtime, 60*1000);
 setTimeout(()=>{ syncAllTabsToSheetsRealtime().catch(()=>{}); }, 15000);
 
+// ============ REALTIME SHEET SYNC TRIGGER ============
+// Tự động đồng bộ ngay lập tức về Google Sheet 17iXM khi có thay đổi trên Web App
+const _pendingSheetSyncs = new Set();
+let _sheetSyncDebounceTimer = null;
+
+function triggerRealtimeSheetSync(sheetKey){
+  if(isSystemResetting) return;
+  if(sheetKey) _pendingSheetSyncs.add(sheetKey);
+  clearTimeout(_sheetSyncDebounceTimer);
+  _sheetSyncDebounceTimer = setTimeout(async ()=>{
+    try{
+      const keysToSync = [..._pendingSheetSyncs];
+      _pendingSheetSyncs.clear();
+      if(keysToSync.length === 0){
+        await syncAllTabsToSheetsRealtime();
+      } else {
+        for(const k of keysToSync){
+          await syncSheetTab(k);
+          await new Promise(r=>setTimeout(r, 150));
+        }
+      }
+    }catch(e){
+      console.error('[REALTIME SHEET SYNC ERROR]', e.message);
+    }
+  }, 100);
+}
+
 // Drive realtime status vars
 
 // ĐÃ LOẠI BỎ endpoint giả lập điểm danh (simulate-7days-training):
@@ -6043,105 +6096,218 @@ app.get('/api/off-requests', authMiddleware, (req,res)=>{
 app.post('/api/off-requests', (req,res)=>{
   const { employeeId, dates } = req.body;
   const emp = db.employees.find(e=>e.employeeId===employeeId);
-  if(!emp) return res.status(404).json({error:'Không tìm thấy nhôn viôn'});
-  if(emp.status!=='OFFICIAL') return res.status(403).json({error:'Chỉ nhân viên Chính thức (status OFFICIAL) mới được đăng ký OFF hàng tuần'});
-  // Check window - allow bypass for demo if setting offWindowBypass
+  if(!emp) return res.status(404).json({error:'Không tìm thấy nhân viên'});
+  
+  const isTraining = emp.type==='TRAINING' || emp.status==='TRAINING';
+  const isOfficial = emp.type==='OFFICIAL' || emp.status==='OFFICIAL';
+  if(!isTraining && !isOfficial) {
+    return res.status(403).json({error:'Chỉ nhân viên Training hoặc Chính thức mới được đăng ký OFF'});
+  }
+
+  if(!dates || !Array.isArray(dates) || dates.length===0) return res.status(400).json({error:'Chưa chọn ngày'});
+
   const bypass = req.body.bypassWindow;
-  if(!bypass && !isOffWindowOpen()){
+  const maxAllowed = isTraining ? 5 : (db.settings?.off?.maxPerWeek || 2);
+
+  if(dates.length > maxAllowed){
+    return res.status(400).json({
+      error: isTraining ? 'Nhân viên Training được đăng ký tối đa 5 ngày OFF' : `Tối đa ${maxAllowed} ngày/tuần`
+    });
+  }
+
+  // Khung giờ đăng ký chỉ áp dụng cho Chính thức (Thứ 6 12:00 - Thứ 7 15:00), Training được đăng ký linh hoạt
+  if(isOfficial && !bypass && !isOffWindowOpen()){
     return res.status(400).json({error:'Ngoài khung giờ đăng ký: Thứ 6 12:00 - Thứ 7 15:00'});
   }
-  if(!dates || dates.length===0) return res.status(400).json({error:'Chưa chọn ngày'});
-  if(dates.length>db.settings.off.maxPerWeek) return res.status(400).json({error:`Tối đa ${db.settings.off.maxPerWeek} ngày/tuần`});
-  // Check already has OFF this week approved count
-  const weekOffCount = db.offRequests.filter(r=>r.employeeId===employeeId && r.status==='APPROVED' && isSameWeek(r.createdAt, getVietnamISOString())).reduce((s,r)=>s+r.dates.length,0);
-  if(weekOffCount + dates.length > db.settings.off.maxPerWeek) return res.status(400).json({error:`Bạn đã có ${weekOffCount} ngày OFF tuần này, chỉ được tối đa ${db.settings.off.maxPerWeek}`});
-  // TH1: Conflict check FCFS - Cùng CN cùng ca không được OFF trùng ngày
-  for(const date of dates){
-    const conflict = checkOffConflict(emp.branchId, emp.shift, date);
-    if(conflict) return res.status(409).json({error:`[TH1] Ngày ${date} đã có nhân viên cùng chi nhánh + cùng ca OFF (${conflict.employeeName||conflict.employeeId}). Cùng CN cùng ca không được trùng OFF trong 1 ngày.`, conflict});
-    // TH1 mở rộng: ngày OFF đã nằm trên LỊCH (kể cả AI cân lật autoOff) của NV cùng CN+ca khác
-    // cũng tính là trùng — nếu không, lịch sẽ hở ca (2 người cùng OFF 1 ngày)
-    const schedHit = db.schedules.find(s=>{
-      if(s.employeeId===employeeId) return false;
-      const o = db.employees.find(e=>e.employeeId===s.employeeId);
-      if(!o || o.branchId!==emp.branchId || (o.shift||'')!==(emp.shift||'')) return false;
-      if(!(o.type==='OFFICIAL'||o.status==='OFFICIAL')) return false;
-      return (s.days||[]).some(d=>d.date===date && d.status==='OFF');
-    });
-    if(schedHit){
-      const o = db.employees.find(e=>e.employeeId===schedHit.employeeId);
-      return res.status(409).json({error:`[TH1] Ngày ${date} đã OFF trên lịch của ${o?o.name+' ('+o.employeeId+')':schedHit.employeeId} (cùng chi nhánh + cùng ca). Cùng CN cùng ca không được trùng OFF trong 1 ngày.`});
+
+  if(isOfficial){
+    // Kiểm tra số ngày OFF trong tuần của Chính thức
+    const weekOffCount = db.offRequests.filter(r=>r.employeeId===employeeId && r.status==='APPROVED' && isSameWeek(r.createdAt, getVietnamISOString())).reduce((s,r)=>s+r.dates.length,0);
+    if(weekOffCount + dates.length > maxAllowed){
+      return res.status(400).json({error:`Bạn đã có ${weekOffCount} ngày OFF tuần này, chỉ được tối đa ${maxAllowed} ngày`});
+    }
+
+    // RÀNG BUỘC THEO QUY ĐỊNH AI:
+    // 1. Cùng Chi nhánh + Cùng Ca: Không được trùng ca làm việc trong 1 ngày
+    // 2. Cùng Chi nhánh + Khác Ca: Được phép trùng ngày làm việc
+    // 3. Khác Chi nhánh: Được phép trùng ngày làm việc
+    for(const date of dates){
+      const conflict = checkOffConflict(emp.branchId, emp.shift, date, employeeId);
+      if(conflict) return res.status(409).json({error:`[TH1] Ngày ${date} đã có nhân viên cùng chi nhánh + cùng ca OFF (${conflict.employeeName||conflict.employeeId}). Cùng CN cùng ca không được trùng OFF trong 1 ngày.`, conflict});
+      const schedHit = db.schedules.find(s=>{
+        if(s.employeeId===employeeId) return false;
+        const o = db.employees.find(e=>e.employeeId===s.employeeId);
+        if(!o || o.branchId!==emp.branchId || (o.shift||'')!==(emp.shift||'')) return false;
+        if(!(o.type==='OFFICIAL'||o.status==='OFFICIAL')) return false;
+        return (s.days||[]).some(d=>d.date===date && d.status==='OFF');
+      });
+      if(schedHit){
+        const o = db.employees.find(e=>e.employeeId===schedHit.employeeId);
+        return res.status(409).json({error:`[TH1] Ngày ${date} đã OFF trên lịch của ${o?o.name+' ('+o.employeeId+')':schedHit.employeeId} (cùng chi nhánh + cùng ca). Cùng CN cùng ca không được trùng OFF trong 1 ngày.`});
+      }
+    }
+
+    // TH1/TH2: Đảm bảo 1 tháng tối thiểu 12 ngày làm việc (OFFICIAL)
+    const monthsSet = new Set(dates.map(d=>d.slice(0,7)));
+    for(const m of monthsSet){
+      const addDates = dates.filter(d=>d.startsWith(m));
+      const chk = validateOfficialMonthlyMin12(employeeId, m, addDates);
+      if(!chk.valid){
+        return res.status(400).json({error:`[TH1/TH2] Tháng ${m} sau khi OFF sẽ chỉ còn ${chk.workingAfter} ngày làm (tổng ${chk.daysInMonth} - OFF ${chk.totalOffAfter}). Yêu cầu tối thiểu 12 ngày làm/tháng.`, detail: chk});
+      }
     }
   }
-  // TH1/TH2: Đảm bảo 1 tháng tối thiểu 12 ngày làm việc (OFFICIAL)
-  const monthlyCheck = validateOfficialMonthlyMin12(employeeId, dates[0].slice(0,7), dates);
-  // validate all months involved
-  const monthsSet = new Set(dates.map(d=>d.slice(0,7)));
-  for(const m of monthsSet){
-    const addDates = dates.filter(d=>d.startsWith(m));
-    const chk = validateOfficialMonthlyMin12(employeeId, m, addDates);
-    if(!chk.valid){
-      return res.status(400).json({error:`[TH1/TH2] Tháng ${m} sau khi OFF sẽ chỉ còn ${chk.workingAfter} ngày làm (tổng ${chk.daysInMonth} - OFF ${chk.totalOffAfter}). Yêu cầu tối thiểu 12 ngày làm/tháng.`, detail: chk});
-    }
-  }
+
   // Auto Approve if all valid (AI Rule Engine)
   const reqId = uuidv4();
+  const reqType = isTraining ? 'TRAINING_OFF' : 'WEEKLY';
+  const isTest = emp.isTest || isTestRecord(emp) || req.headers['x-is-test'] === 'true' || undefined;
   const newReq = {
-    id: reqId, employeeId, employeeName: emp.name, branchId: emp.branchId, shift: emp.shift,
-    dates, type:'WEEKLY', status:'APPROVED', autoApproved:true, createdAt: getVietnamISOString(),
-    message: 'AI Auto Approve - Thỏa TH1/TH2 (12 ngày/tháng, không trùng ca)', version:1, sync_status:'SYNCED'
+    id: reqId,
+    employeeId,
+    employeeName: emp.name,
+    branchId: emp.branchId,
+    shift: emp.shift,
+    dates,
+    type: reqType,
+    status: 'APPROVED',
+    autoApproved: true,
+    createdAt: getVietnamISOString(),
+    isTest: isTest || undefined,
+    message: isTraining 
+      ? 'AI Auto Approve - Lịch OFF Nhân viên Training (tối đa 5 ngày)'
+      : 'AI Auto Approve - Thỏa TH1/TH2 (12 ngày/tháng, không trùng ca)',
+    version: 1,
+    sync_status: isTest ? 'TEST_BLOCKED' : 'SYNCED'
   };
   db.offRequests.push(newReq);
-  // AI tự động cập nhật lịch tuần sau (T2→CN) theo ca còn lại
-  const nextWeekMonday = getMonday(new Date(getVietnamNow().getTime()+7*24*60*60*1000));
-  const weekStr = toVietnamDateStr(nextWeekMonday);
-  let sched = db.schedules.find(s=>s.employeeId===employeeId && s.weekStart===weekStr);
-  if(!sched){
-    const days=[];
-    for(let i=0;i<7;i++){
-      const d = new Date(nextWeekMonday); d.setDate(nextWeekMonday.getDate()+i);
-      const ds = toVietnamDateStr(d);
-      // AI: nếu ngày trong dates => OFF, còn lại WORKING theo ca
-      days.push({ date: ds, dayName:['T2','T3','T4','T5','T6','T7','CN'][i], shift: emp.shift, status: dates.includes(ds)?'OFF':'WORKING', substituteFor:null });
-    }
-    sched = { id: uuidv4(), employeeId, weekStart: weekStr, days, version:1, updated_at: getVietnamISOString(), approvalStatus:'APPROVED' };
-    db.schedules.push(sched);
-  } else {
-    sched.days.forEach(d=>{
-      if(dates.includes(d.date)) d.status='OFF';
-      else if(d.status==='OFF' && !dates.includes(d.date)) {
-        // Keep existing OFF if not in new dates? No, only update requested dates, else keep WORKING
-        // Ensure AI resets to WORKING if not OFF
-        d.status='WORKING';
-        d.shift = emp.shift;
-      }
+
+  let coordResult = { resolved: [], skippedMin12: [] };
+
+  if(isTraining){
+    // Tìm hoặc tạo schedule cho các tuần chứa các ngày OFF của nhân viên Training
+    const weekMap = new Map();
+    dates.forEach(d => {
+      const mon = toVietnamDateStr(getMonday(new Date(d)));
+      if(!weekMap.has(mon)) weekMap.set(mon, []);
+      weekMap.get(mon).push(d);
     });
-    // Ensure all days in next week are correctly set by AI
-    for(let i=0;i<7;i++){
-      const d = new Date(nextWeekMonday); d.setDate(nextWeekMonday.getDate()+i);
-      const ds = toVietnamDateStr(d);
-      const dayRec = sched.days.find(x=>x.date===ds);
-      if(dayRec){
-        dayRec.status = dates.includes(ds)?'OFF':'WORKING';
-        dayRec.shift = dates.includes(ds)? 'OFF' : emp.shift;
+
+    weekMap.forEach((offDatesInWeek, weekStr) => {
+      let sched = db.schedules.find(s => s.employeeId === employeeId && s.weekStart === weekStr);
+      const monDate = new Date(weekStr);
+      if(!sched){
+        const days = [];
+        for(let i=0; i<7; i++){
+          const d = new Date(monDate);
+          d.setDate(monDate.getDate() + i);
+          const ds = toVietnamDateStr(d);
+          const isOff = offDatesInWeek.includes(ds);
+          days.push({
+            date: ds,
+            dayName: ['T2','T3','T4','T5','T6','T7','CN'][i],
+            shift: isOff ? 'OFF' : emp.shift,
+            status: isOff ? 'OFF' : 'WORKING',
+            substituteFor: null
+          });
+        }
+        sched = { id: uuidv4(), employeeId, weekStart: weekStr, days, version: 1, updated_at: getVietnamISOString(), approvalStatus: 'APPROVED' };
+        db.schedules.push(sched);
+      } else {
+        sched.days.forEach(d => {
+          if(offDatesInWeek.includes(d.date)){
+            d.status = 'OFF';
+            d.shift = 'OFF';
+          }
+        });
+        sched.version = (sched.version || 1) + 1;
+        sched.updated_at = getVietnamISOString();
+        sched.approvalStatus = 'APPROVED';
       }
+      addSyncQueue('SCHEDULE', 'UPDATE', sched, employeeId, 'WEB_EMPLOYEE');
+    });
+  } else {
+    // Với Nhân viên Chính Thức: AI tự động cập nhật lịch tuần sau (T2→CN)
+    const nextWeekMonday = getMonday(new Date(getVietnamNow().getTime() + 7*24*60*60*1000));
+    const weekStr = toVietnamDateStr(nextWeekMonday);
+    let sched = db.schedules.find(s => s.employeeId === employeeId && s.weekStart === weekStr);
+    if(!sched){
+      const days = [];
+      for(let i=0; i<7; i++){
+        const d = new Date(nextWeekMonday);
+        d.setDate(nextWeekMonday.getDate() + i);
+        const ds = toVietnamDateStr(d);
+        const isOff = dates.includes(ds);
+        days.push({
+          date: ds,
+          dayName: ['T2','T3','T4','T5','T6','T7','CN'][i],
+          shift: isOff ? 'OFF' : emp.shift,
+          status: isOff ? 'OFF' : 'WORKING',
+          substituteFor: null
+        });
+      }
+      sched = { id: uuidv4(), employeeId, weekStart: weekStr, days, version: 1, updated_at: getVietnamISOString(), approvalStatus: 'APPROVED' };
+      db.schedules.push(sched);
+    } else {
+      sched.days.forEach(d => {
+        if(dates.includes(d.date)) {
+          d.status = 'OFF';
+          d.shift = 'OFF';
+        } else if(d.status==='OFF' && !dates.includes(d.date)) {
+          d.status = 'WORKING';
+          d.shift = emp.shift;
+        }
+      });
+      for(let i=0; i<7; i++){
+        const d = new Date(nextWeekMonday);
+        d.setDate(nextWeekMonday.getDate() + i);
+        const ds = toVietnamDateStr(d);
+        const dayRec = sched.days.find(x => x.date === ds);
+        if(dayRec){
+          dayRec.status = dates.includes(ds) ? 'OFF' : 'WORKING';
+          dayRec.shift = dates.includes(ds) ? 'OFF' : emp.shift;
+        }
+      }
+      sched.version = (sched.version || 1) + 1;
+      sched.updated_at = getVietnamISOString();
+      sched.approvalStatus = 'APPROVED';
     }
-    sched.version = (sched.version||1)+1;
-    sched.updated_at = getVietnamISOString();
-    // Đảm bảo lịch tuần sau hiển thị ngay cho NV sau khi đăng ký OFF (realtime) - gỡ trạng thái chờ duyệt
-    sched.approvalStatus = 'APPROVED';
+
+    // AI cân lịch chống trùng ca theo đúng 3 điều kiện:
+    // 1. Cùng CN + Cùng Ca: không trùng ca làm việc trong 1 ngày (giữ tối đa 1 NV WORKING)
+    // 2. Cùng CN + Khác Ca: ĐƯỢC trùng ngày làm việc
+    // 3. Khác CN: ĐƯỢC trùng ngày làm việc
+    const coord = coordinateBranchShifts(weekStr, employeeId);
+    if(coord && coord.resolved) coordResult = coord;
+    addSyncQueue('SCHEDULE', 'UPDATE', sched, employeeId, 'WEB_EMPLOYEE');
   }
-  // AI điều phối chéo: cùng CN + cùng ngày + cùng ca chỉ 1 NV WORKING (không trùng ca)
-  const coord = coordinateBranchShifts(weekStr, employeeId);
-  audit(employeeId,'OFF_WEEKLY_AI_AUTO','OFF_REQUEST',null,newReq, req.ip);
-  addSyncQueue('OFF_REQUEST','CREATE',newReq, employeeId, 'WEB_EMPLOYEE');
+
+  audit(employeeId, 'OFF_WEEKLY_AI_AUTO', 'OFF_REQUEST', null, newReq, req.ip);
+  addSyncQueue('OFF_REQUEST', 'CREATE', newReq, employeeId, 'WEB_EMPLOYEE');
   saveDB();
+
   io.emit('offRequests:update', db.offRequests);
   io.emit('schedules:update', db.schedules);
-  const zr = { id: uuidv4(), sent_at: getVietnamISOString(), receiver: emp.phone, type:'OFF_APPROVED', content:`OFF tuần sau đã được Auto Approve: ${dates.join(', ')}${coord.resolved.length?` • AI cân lịch: ${coord.resolved.length} ca trùng đã chuyển OFF`:''}`, status:'SENT', error:'' };
+
+  // Kích hoạt đồng bộ realtime tức thì sang Google Sheet 17iXM
+  triggerRealtimeSheetSync('PHIEU_OFF_HANG_TUAN');
+  triggerRealtimeSheetSync('LICH_LAM_VIEC');
+
+  const zr = { 
+    id: uuidv4(), 
+    sent_at: getVietnamISOString(), 
+    receiver: emp.phone, 
+    type: 'OFF_APPROVED', 
+    content: isTraining
+      ? `Đăng ký OFF ${dates.length} ngày đã được Auto Approve: ${dates.join(', ')}`
+      : `OFF tuần sau đã được Auto Approve: ${dates.join(', ')}${coordResult.resolved.length ? ` • AI cân lịch: ${coordResult.resolved.length} ca trùng đã chuyển OFF` : ''}`, 
+    status: 'SENT', 
+    error: '' 
+  };
   db.zaloRecords.unshift(zr);
   io.emit('zalo:update', db.zaloRecords);
-  res.json({ ...newReq, coordinated: coord.resolved.length, coordSkipped: coord.skippedMin12.length });
+
+  res.json({ ...newReq, coordinated: coordResult.resolved.length, coordSkipped: (coordResult.skippedMin12||[]).length });
 });
 // AI cân lịch chống trùng ca: cùng Chi nhánh + cùng Ngày + cùng Ca → giữ tối đa 1 NV WORKING.
 // Ưu tiên FCFS (ai được duyệt OFF trước giữ slot). Người bị chuyển sang OFF nhận TB + audit.
@@ -6193,11 +6359,17 @@ function coordinateBranchShifts(weekStart, actor){
         // RÀNG BUỘC HỞ CA: lật ngày này mà slot không còn ai trực (0 WORKING) thì GIỮ NGUYÊN + báo HR
         const stillWorking = list.filter(x=>x!==it && x.day.status==='WORKING').length;
         if(stillWorking<1){ result.keptForCoverage = result.keptForCoverage||[]; result.keptForCoverage.push({ employeeId: it.emp.employeeId, name: it.emp.name, date: it.day.date, slot: key }); continue; }
-        // Safeguard: đếm ngày WORKING còn lại trong tháng (trừ chính ngày này), dưới 12 thì giữ nguyên
+        // Safeguard: đếm ngày WORKING còn lại trong tháng (trừ chính ngày này), nếu tháng này đã lên lịch >= 12 ngày mà dưới 12 thì giữ nguyên
         const m = it.day.date.slice(0,7);
+        let totalDaysScheduled = 0;
         let working = 0;
-        db.schedules.filter(s=>s.employeeId===it.emp.employeeId).forEach(s=>(s.days||[]).forEach(d=>{ if(d.date.startsWith(m) && d.status==='WORKING' && d.date!==it.day.date) working++; }));
-        if(working < 12){ result.skippedMin12.push({ employeeId: it.emp.employeeId, name: it.emp.name, date: it.day.date, slot: key }); continue; }
+        db.schedules.filter(s=>s.employeeId===it.emp.employeeId).forEach(s=>(s.days||[]).forEach(d=>{
+          if(d.date.startsWith(m)){
+            totalDaysScheduled++;
+            if(d.status==='WORKING' && d.date!==it.day.date) working++;
+          }
+        }));
+        if(totalDaysScheduled >= 12 && working < 12){ result.skippedMin12.push({ employeeId: it.emp.employeeId, name: it.emp.name, date: it.day.date, slot: key }); continue; }
         it.day.status='OFF';
         it.day.shift='OFF';
         it.day.autoOff=true;
@@ -7479,6 +7651,25 @@ app.get('/api/admin/inspect-sheet', authMiddleware, roleCheck(['Admin']), async 
     res.json({ sheet: sheetName, headerRows: 1, totalRows: values.length-1, dupByIdCount: dupById.length, dupByPhoneCount: dupByPhone.length, dupById: dupById.slice(0,20), dupByPhone: dupByPhone.slice(0,20), sample: values.slice(1,4) });
   }catch(e){ res.status(500).json({ error: e.message }); }
 });
+
+// Admin: Dọn dẹp toàn bộ dữ liệu test trong bộ nhớ (dành cho automated tests)
+app.post('/api/admin/clean-test-data', authMiddleware, roleCheck(['Admin']), (req, res) => {
+  db.employees = db.employees.filter(e => !isTestRecord(e));
+  db.applicants = db.applicants.filter(a => !isTestRecord(a));
+  db.testResults = db.testResults.filter(t => !isTestRecord(t));
+  db.keys = db.keys.filter(k => !isTestRecord(k));
+  db.syncQueue = db.syncQueue.filter(q => !isTestRecord(q) && !isTestRecord(q?.payload));
+  db.attendances = db.attendances.filter(a => !isTestRecord(a));
+  const validEmpIds = new Set(db.employees.map(e => e.employeeId));
+  db.offRequests = db.offRequests.filter(r => !isTestRecord(r) && validEmpIds.has(r.employeeId));
+  db.schedules = db.schedules.filter(s => !isTestRecord(s) && validEmpIds.has(s.employeeId));
+  db.emergencyRequests = db.emergencyRequests.filter(r => !isTestRecord(r) && validEmpIds.has(r.employeeId));
+  db.deviceRequests = db.deviceRequests.filter(r => !isTestRecord(r) && validEmpIds.has(r.employeeId));
+  db.zaloRecords = db.zaloRecords.filter(z => !isTestRecord(z));
+  saveDB();
+  res.json({ success: true, message: 'Đã dọn dẹp toàn bộ dữ liệu test' });
+});
+
 // Admin: dựng lại 1 tab Sheet cho sạch (xóa dòng trùng + dòng lỗi, giữ dữ liệu thật duy nhất).
 // dryRun=true (mặc định) chỉ báo cáo; dryRun=false mới ghi. Không bao giờ xóa dòng duy nhất.
 app.post('/api/admin/rebuild-sheet-tab', authMiddleware, roleCheck(['Admin']), async (req,res)=>{
