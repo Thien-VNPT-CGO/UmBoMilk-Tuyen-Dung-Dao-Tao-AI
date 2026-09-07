@@ -3106,7 +3106,22 @@ async function pullRemainingTabsFromMasterSheet(manualBy){
         if(badId(sid) || badCode(empId) || !date){ st.skipped++; continue; }
         if(!groups.has(sid)) groups.set(sid, { empId, week: S(row[iWeek]), days: new Map() });
         const g = groups.get(sid);
-        g.days.set(date, { date, dayName: S(row[iDay]), shift: S(row[iShift])||'CA_SANG', status: S(row[iStatus])||'WORKING', substituteFor: S(row[iSub])||null });
+        const rawShift = S(row[iShift]);
+        let parsedShifts = [];
+        if(rawShift && (rawShift.includes('+') || rawShift.includes(','))){
+          parsedShifts = rawShift.split(/[,+]/).map(s=>s.trim()).filter(Boolean);
+        }
+        const primaryShift = parsedShifts[0] || rawShift || 'CA_SANG';
+        g.days.set(date, {
+          date,
+          dayName: S(row[iDay]),
+          shift: primaryShift,
+          shift2: parsedShifts[1] || null,
+          shift3: parsedShifts[2] || null,
+          shifts: parsedShifts.length > 1 ? parsedShifts : (primaryShift && primaryShift !== 'OFF' ? [primaryShift] : []),
+          status: S(row[iStatus])||'WORKING',
+          substituteFor: S(row[iSub])||null
+        });
         const v = num(row[iVer]); if(v!==null) g.version = Math.max(g.version||0, v);
       }
       for(const [sid, g] of groups){
@@ -3119,7 +3134,20 @@ async function pullRemainingTabsFromMasterSheet(manualBy){
           for(const d of g.days.values()){
             const ex = (sched.days||[]).find(x=>x.date===d.date);
             if(!ex){ (sched.days=sched.days||[]).push(d); dirty=true; }
-            else if(ex.status!==d.status || ex.shift!==d.shift){ ex.status=d.status; ex.shift=d.shift; ex.dayName=d.dayName||ex.dayName; ex.substituteFor=d.substituteFor; dirty=true; }
+            else {
+              if (d.shifts && d.shifts.length > 1) {
+                ex.shifts = d.shifts;
+                ex.shift = d.shift;
+                ex.shift2 = d.shift2;
+                ex.shift3 = d.shift3;
+                dirty = true;
+              } else if (!ex.shifts || ex.shifts.length <= 1) {
+                if(ex.status!==d.status || ex.shift!==d.shift){ ex.status=d.status; ex.shift=d.shift; dirty=true; }
+              }
+              if(ex.status!==d.status){ ex.status=d.status; dirty=true; }
+              ex.dayName = d.dayName || ex.dayName;
+              ex.substituteFor = d.substituteFor;
+            }
           }
           if(dirty){ sched.version=(sched.version||1)+1; sched.updated_at=getVietnamISOString(); st.updated++; }
           else st.skipped++;
@@ -4569,7 +4597,10 @@ async function syncSheetTab(sheetKey){
         });
         break;
       case 'LICH_LAM_VIEC':
-        rows = db.schedules.filter(s=>!isTestRecord(s)).flatMap(s=> s.days.map(d=>[s.id, s.employeeId, db.employees.find(e=>e.employeeId===s.employeeId)?.name||'', db.employees.find(e=>e.employeeId===s.employeeId)?.branchId||'', s.weekStart, d.date, d.dayName, d.shift, d.status, d.substituteFor||'', s.version]));
+        rows = db.schedules.filter(s=>!isTestRecord(s)).flatMap(s=> s.days.map(d=>{
+          const shiftStr = (Array.isArray(d.shifts) && d.shifts.length > 1) ? d.shifts.join('+') : (d.shift2 ? `${d.shift}+${d.shift2}` : d.shift);
+          return [s.id, s.employeeId, db.employees.find(e=>e.employeeId===s.employeeId)?.name||'', db.employees.find(e=>e.employeeId===s.employeeId)?.branchId||'', s.weekStart, d.date, d.dayName, shiftStr, d.status, d.substituteFor||'', s.version];
+        }));
         break;
       case 'RECORD_DIEM_DANH':
         rows = db.attendances.filter(a=>!isTestRecord(a)).map(a=>[a.id, a.employeeId, db.employees.find(e=>e.employeeId===a.employeeId)?.name||'', a.date, a.shift, a.branchId, a.checkIn?.time||'', a.checkIn?.gps||'', a.checkIn?.image ? 'co_anh' : '', a.checkIn?.drivePath||'', a.checkOut?.time||'', a.checkOut?.gps||'', a.checkOut?.image ? 'co_anh' : '', a.checkOut?.drivePath||'', a.status, (a.violations||[]).join(','), a.version]);
@@ -5388,6 +5419,37 @@ app.get('/api/schedules', authMiddleware, (req,res)=>{
       console.log(`[SCHEDULE] Auto-generated OFFICIAL (constrained) for ${emp.name} ${emp.employeeId} week ${currentWeekStart}`);
     });
   }
+  // Đảm bảo mọi ca đã duyệt (ADD_SHIFT) luôn hiển thị 2-3 ca trên lịch
+  if (Array.isArray(db.trainingShiftRequests)) {
+    db.trainingShiftRequests.filter(r => r.status === 'APPROVED' && r.type === 'ADD_SHIFT').forEach(r => {
+      const emp = db.employees.find(e => e.employeeId === r.employeeId || e.id === r.employeeId);
+      const empId = emp ? emp.employeeId : r.employeeId;
+      const empUUID = emp ? emp.id : null;
+      const targetSched = db.schedules.find(s => (s.employeeId === empId || s.employeeId === r.employeeId || (empUUID && s.employeeId === empUUID)) && s.days && s.days.some(d => d.date === r.date));
+      if (targetSched) {
+        const day = targetSched.days.find(d => d.date === r.date);
+        if (day) {
+          const shifts = [];
+          if (day.shift && day.shift !== 'OFF') shifts.push(day.shift);
+          if (day.shift2 && !shifts.includes(day.shift2)) shifts.push(day.shift2);
+          if (day.shift3 && !shifts.includes(day.shift3)) shifts.push(day.shift3);
+          if (Array.isArray(day.shifts)) {
+            day.shifts.forEach(s => { if (s && s !== 'OFF' && !shifts.includes(s)) shifts.push(s); });
+          }
+          if (r.toShift && !shifts.includes(r.toShift)) {
+            shifts.push(r.toShift);
+            updated = true;
+          }
+          day.shifts = shifts;
+          if (shifts[0]) day.shift = shifts[0];
+          if (shifts[1]) day.shift2 = shifts[1];
+          if (shifts[2]) day.shift3 = shifts[2];
+          day.additionalShift = r.toShift;
+          day.status = 'WORKING';
+        }
+      }
+    });
+  }
   if (updated) saveDB();
 
   const { employeeId, weekStart, branch } = req.query;
@@ -6090,10 +6152,12 @@ app.post(['/api/training/shift-change/:id/approve', '/api/training/shift-request
   }
   r.status='APPROVED'; r.approvedBy=req.user.username; r.approvedAt=getVietnamISOString(); r.version=(r.version||1)+1;
   // Tự động cập nhật ca + lịch + attendance
-  const emp = db.employees.find(e=> e.employeeId===r.employeeId);
-  if(emp){
+  const emp = db.employees.find(e=> e.employeeId===r.employeeId || e.id===r.employeeId);
+  const empId = emp ? emp.employeeId : r.employeeId;
+  const empUUID = emp ? emp.id : null;
+  if(emp || r.employeeId){
     // Tìm schedule chứa ngày này
-    let sched = db.schedules.find(s=> s.employeeId===r.employeeId && s.days.some(d=> d.date===r.date));
+    let sched = db.schedules.find(s=> (s.employeeId===empId || s.employeeId===r.employeeId || (empUUID && s.employeeId===empUUID)) && s.days && s.days.some(d=> d.date===r.date));
     if(sched){
       const day = sched.days.find(d=> d.date===r.date);
       const before={...day};

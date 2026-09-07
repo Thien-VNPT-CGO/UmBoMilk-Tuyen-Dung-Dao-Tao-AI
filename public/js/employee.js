@@ -581,7 +581,7 @@ function connectSocket(){
   socket.on('disconnect', ()=>{
     updateModeBadge();
   });
-  const evs=['employees:update','attendances:update','schedules:update','offRequests:update','emergencyRequests:update','notifications:update','testResults:update','zalo:update','drive:update','overtime:update','leave:update','automation:heartbeat','sync:update'];
+  const evs=['employees:update','attendances:update','schedules:update','offRequests:update','emergencyRequests:update','trainingShiftRequests:update','notifications:update','testResults:update','zalo:update','drive:update','overtime:update','leave:update','automation:heartbeat','sync:update'];
   evs.forEach(ev=> socket.on(ev, async (data)=>{
     if(ev==='automation:heartbeat' && data){
       const hb=document.getElementById('heartbeatInfo');
@@ -1309,7 +1309,12 @@ async function loadAttendanceTab(){
 // Schedule
 async function loadSchedule(){
   try{
-    mySchedules = await api('/api/schedules?employeeId='+employee.employeeId);
+    const [schedData, trReqs] = await Promise.all([
+      api('/api/schedules?employeeId='+employee.employeeId).catch(()=>[]),
+      api('/api/training/shift-requests?employeeId='+employee.employeeId).catch(()=>[])
+    ]);
+    mySchedules = Array.isArray(schedData) ? schedData : [];
+    const myApprovedShiftReqs = (Array.isArray(trReqs) ? trReqs : []).filter(r => r.status === 'APPROVED' && r.type === 'ADD_SHIFT');
     const el=document.getElementById('scheduleList');
     if(mySchedules.length===0) return el.innerHTML='<div class="bg-white rounded-2xl border border-slate-200 p-8 text-center text-sm text-slate-400">Chưa có lịch - liên hệ HR</div>';
     // Ràng buộc realtime: Official chỉ hiện lịch tuần sau khi đã duyệt OFF 2 ngày và HR đã duyệt
@@ -1383,6 +1388,20 @@ async function loadSchedule(){
             let statusClass = 'bg-slate-100 text-slate-500';
             let statusText = getStatusVi(d.status).toUpperCase();
             
+            const dayShifts = [];
+            if (Array.isArray(d.shifts)) {
+              d.shifts.forEach(s => { if (s && s !== 'OFF' && !dayShifts.includes(s)) dayShifts.push(s); });
+            }
+            if (d.shift && d.shift !== 'OFF' && !dayShifts.includes(d.shift)) dayShifts.push(d.shift);
+            if (d.shift2 && d.shift2 !== 'OFF' && !dayShifts.includes(d.shift2)) dayShifts.push(d.shift2);
+            if (d.shift3 && d.shift3 !== 'OFF' && !dayShifts.includes(d.shift3)) dayShifts.push(d.shift3);
+            if (d.additionalShift && d.additionalShift !== 'OFF' && !dayShifts.includes(d.additionalShift)) dayShifts.push(d.additionalShift);
+            if (typeof myApprovedShiftReqs !== 'undefined' && Array.isArray(myApprovedShiftReqs)) {
+              myApprovedShiftReqs.filter(r => r.date === d.date).forEach(r => {
+                if (r.toShift && !dayShifts.includes(r.toShift)) dayShifts.push(r.toShift);
+              });
+            }
+
             if(d.status === 'OFF') {
               bgColor = 'bg-red-50/30';
               borderColor = 'border-red-100';
@@ -1396,8 +1415,13 @@ async function loadSchedule(){
             } else if(d.status === 'WORKING') {
               bgColor = 'bg-white';
               borderColor = isToday ? 'border-pink-400' : 'border-slate-100';
-              statusClass = 'bg-pink-100 text-pink-700';
-              statusText = 'LÀM VIỆC';
+              if (dayShifts.length > 1) {
+                statusClass = 'bg-gradient-to-r from-pink-500 to-rose-600 text-white font-black shadow-xs animate-pulse';
+                statusText = `LÀM VIỆC (${dayShifts.length} CA)`;
+              } else {
+                statusClass = 'bg-pink-100 text-pink-700';
+                statusText = 'LÀM VIỆC';
+              }
             } else if(d.status === 'SUBSTITUTE') {
               bgColor = 'bg-indigo-50/30';
               borderColor = 'border-indigo-200';
@@ -1416,26 +1440,39 @@ async function loadSchedule(){
             }
 
             return `
-            <div class="rounded-2xl border-2 ${borderColor} p-4 text-center transition-all ${bgColor} ${isToday ? 'ring-4 ring-pink-300 scale-[1.03] z-10 shadow-lg' : ''}">
+            <div class="rounded-2xl border-2 ${borderColor} p-3 sm:p-4 text-center transition-all ${bgColor} ${isToday ? 'ring-4 ring-pink-300 scale-[1.03] z-10 shadow-lg' : ''}">
               <div class="text-base font-black ${isToday?'text-pink-600':'text-slate-400'} uppercase tracking-widest">${d.dayName}</div>
               <div class="text-2xl font-mono font-black ${isToday?'text-pink-900':'text-slate-800'} leading-none mt-1">${fmtDMYShort(d.date)}</div>
               <div class="text-sm font-bold text-slate-500 mt-1">${fmtDMY(d.date)}</div>
               <div class="mt-3 flex flex-col items-center gap-2">
-                <span class="text-sm font-black px-4 py-1.5 rounded-full ${statusClass}">${statusText}</span>
-                <div class="text-base font-black text-slate-800 leading-tight min-h-[32px] flex flex-col items-center justify-center gap-0.5">
+                <span class="text-xs sm:text-sm font-black px-3 py-1.5 rounded-full ${statusClass}">${statusText}</span>
+                <div class="w-full text-base font-black text-slate-800 leading-tight min-h-[36px] flex flex-col items-center justify-center gap-1">
                   ${(() => {
                     if (d.status !== 'WORKING' && d.status !== 'SUBSTITUTE') return '—';
-                    const shifts = [];
-                    if (Array.isArray(d.shifts) && d.shifts.length) {
-                      d.shifts.forEach(s => { if (s && !shifts.includes(s)) shifts.push(s); });
-                    } else {
-                      if (d.shift && d.shift !== 'OFF') shifts.push(d.shift);
-                      if (d.shift2 && !shifts.includes(d.shift2)) shifts.push(d.shift2);
-                      if (d.shift3 && !shifts.includes(d.shift3)) shifts.push(d.shift3);
+                    if (!dayShifts.length) return `<div class="text-base font-black text-slate-800">${getShiftVi(d.shift)}</div>`;
+                    if (dayShifts.length === 1) {
+                      const s = dayShifts[0];
+                      const sName = getShiftVi(s);
+                      const sTime = s === 'CA_SANG' ? '07:00-12:00' : s === 'CA_CHIEU' ? '12:00-18:00' : '18:00-23:00';
+                      return `<div class="text-base font-black text-slate-800">${sName}</div><span class="text-xs font-medium text-slate-500 font-mono">${sTime}</span>`;
                     }
-                    if (!shifts.length) return getShiftShortVi(d.shift);
-                    if (shifts.length === 1) return getShiftShortVi(shifts[0]);
-                    return `<span class="text-pink-700">${shifts.map(s => getShiftShortVi(s)).join('+')}</span><span class="text-[10px] font-black bg-pink-100 text-pink-700 px-2 py-0.5 rounded-full">${shifts.length} ca/ngày</span>`;
+                    return `
+                    <div class="flex flex-col gap-1.5 w-full mt-1">
+                      ${dayShifts.map((s, idx) => {
+                        const sName = getShiftVi(s);
+                        const sTime = s === 'CA_SANG' ? '07:00-12:00' : s === 'CA_CHIEU' ? '12:00-18:00' : '18:00-23:00';
+                        const sBg = s === 'CA_SANG' ? 'bg-amber-50 text-amber-900 border-amber-200' : s === 'CA_CHIEU' ? 'bg-pink-50 text-pink-900 border-pink-200' : 'bg-indigo-50 text-indigo-900 border-indigo-200';
+                        const sIcon = s === 'CA_SANG' ? 'fa-sun text-amber-500' : s === 'CA_CHIEU' ? 'fa-cloud-sun text-pink-500' : 'fa-moon text-indigo-500';
+                        return `<div class="px-2 py-1 rounded-xl border ${sBg} text-xs font-black flex items-center justify-between shadow-2xs">
+                          <span class="flex items-center gap-1"><i class="fa-solid ${sIcon}"></i> Ca ${idx+1}: ${sName}</span>
+                          <span class="text-[10px] font-mono opacity-75">${sTime}</span>
+                        </div>`;
+                      }).join('')}
+                      <span class="text-[10px] font-black bg-pink-100 text-pink-700 py-0.5 px-2 rounded-full border border-pink-200 text-center mt-0.5">
+                        ⚡ ${dayShifts.length} ca/ngày (Rút ngắn training)
+                      </span>
+                    </div>
+                    `;
                   })()}
                 </div>
               </div>

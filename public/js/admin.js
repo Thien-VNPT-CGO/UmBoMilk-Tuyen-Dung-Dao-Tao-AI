@@ -4134,10 +4134,30 @@ function renderSchedules(){
               const isPast = dateStr < todayStr;
               const isWorking = found ? (found.status === 'WORKING' || found.status === 'SUBSTITUTE') : (!isPast);
 
+              const allShifts = [];
+              if (Array.isArray(found?.shifts)) {
+                found.shifts.forEach(s => { if (s && s !== 'OFF' && !allShifts.includes(s)) allShifts.push(s); });
+              }
+              if (found?.shift && found.shift !== 'OFF' && !allShifts.includes(found.shift)) allShifts.push(found.shift);
+              if (found?.shift2 && found.shift2 !== 'OFF' && !allShifts.includes(found.shift2)) allShifts.push(found.shift2);
+              if (found?.shift3 && found.shift3 !== 'OFF' && !allShifts.includes(found.shift3)) allShifts.push(found.shift3);
+              if (found?.additionalShift && found.additionalShift !== 'OFF' && !allShifts.includes(found.additionalShift)) allShifts.push(found.additionalShift);
+              if (typeof trainingShiftRequests !== 'undefined' && Array.isArray(trainingShiftRequests)) {
+                trainingShiftRequests.filter(r => (r.employeeId === emp.employeeId || r.employeeId === emp.id) && r.date === dateStr && r.status === 'APPROVED' && r.type === 'ADD_SHIFT').forEach(r => {
+                  if (r.toShift && !allShifts.includes(r.toShift)) allShifts.push(r.toShift);
+                });
+              }
+              if (!allShifts.length && (found?.shift || emp.shift)) {
+                allShifts.push(found?.shift || emp.shift || 'CA_SANG');
+              }
+
               return {
                 date: dateStr,
                 dayName: dName,
                 shift: found ? found.shift : (emp.shift || 'CA_SANG'),
+                shift2: found?.shift2,
+                shift3: found?.shift3,
+                shifts: allShifts,
                 status: isWorking ? (found?.status || 'WORKING') : (found?.status || 'OFF'),
                 substituteFor: found ? found.substituteFor : null,
                 isPast,
@@ -4171,12 +4191,17 @@ function renderSchedules(){
                     const isOffDay = d.status==='OFF';
                     const isFuture = d.date > todayStr;
                     const dayAllShifts = [];
-                    if (Array.isArray(d.shifts) && d.shifts.length) {
-                      d.shifts.forEach(s => { if(s && !dayAllShifts.includes(s)) dayAllShifts.push(s); });
-                    } else {
-                      if (d.shift && d.shift !== 'OFF') dayAllShifts.push(d.shift);
-                      if (d.shift2 && !dayAllShifts.includes(d.shift2)) dayAllShifts.push(d.shift2);
-                      if (d.shift3 && !dayAllShifts.includes(d.shift3)) dayAllShifts.push(d.shift3);
+                    if (Array.isArray(d.shifts)) {
+                      d.shifts.forEach(s => { if(s && s !== 'OFF' && !dayAllShifts.includes(s)) dayAllShifts.push(s); });
+                    }
+                    if (d.shift && d.shift !== 'OFF' && !dayAllShifts.includes(d.shift)) dayAllShifts.push(d.shift);
+                    if (d.shift2 && d.shift2 !== 'OFF' && !dayAllShifts.includes(d.shift2)) dayAllShifts.push(d.shift2);
+                    if (d.shift3 && d.shift3 !== 'OFF' && !dayAllShifts.includes(d.shift3)) dayAllShifts.push(d.shift3);
+                    if (d.additionalShift && d.additionalShift !== 'OFF' && !dayAllShifts.includes(d.additionalShift)) dayAllShifts.push(d.additionalShift);
+                    if (typeof trainingShiftRequests !== 'undefined' && Array.isArray(trainingShiftRequests)) {
+                      trainingShiftRequests.filter(r => (r.employeeId === emp.employeeId || r.employeeId === emp.id) && r.date === d.date && r.status === 'APPROVED' && r.type === 'ADD_SHIFT').forEach(r => {
+                        if (r.toShift && !dayAllShifts.includes(r.toShift)) dayAllShifts.push(r.toShift);
+                      });
                     }
                     let badgeText='', badgeClass='', detailText='', detailClass='';
                     if(isWaiting){
@@ -4189,16 +4214,27 @@ function renderSchedules(){
                       badgeClass=d.autoOff?'bg-amber-100 text-amber-700 border border-amber-200':'bg-slate-200 text-slate-600';
                       detailText=d.autoOff?('⚖ '+(d.autoOffReason||'AI chống trùng ca')):'—';
                       detailClass=d.autoOff?'text-amber-700':'text-slate-400';
-                    } else if(isFuture){
-                      badgeText = dayAllShifts.length > 1 ? `${dayAllShifts.length} CA SẮP TỚI` : 'SẮP TỚI';
-                      badgeClass='bg-blue-50 text-blue-700 border border-blue-200';
+                    } else if(isFuture || dayAllShifts.length > 1){
+                      badgeText = dayAllShifts.length > 1 ? `${dayAllShifts.length} CA LÀM VIỆC` : 'SẮP TỚI';
+                      badgeClass = dayAllShifts.length > 1 ? 'bg-gradient-to-r from-pink-500 to-rose-600 text-white font-black shadow-xs' : 'bg-blue-50 text-blue-700 border border-blue-200';
                       if(dayAllShifts.length > 1){
-                        detailText = dayAllShifts.map(s => normalizeShift(s).replace('CA_','')).join(' + ') + ` (${dayAllShifts.length} ca)`;
+                        detailText = `
+                          <div class="mt-1 flex flex-col gap-1 text-left w-full">
+                            ${dayAllShifts.map((s, idx) => {
+                              const norm = normalizeShift(s);
+                              const sVi = norm==='CA_SANG'?'Sáng':norm==='CA_CHIEU'?'Chiều':'Tối';
+                              const sBg = norm==='CA_SANG'?'bg-amber-100 text-amber-900 border-amber-300':norm==='CA_CHIEU'?'bg-pink-100 text-pink-900 border-pink-300':'bg-indigo-100 text-indigo-900 border-indigo-300';
+                              const sTime = SHIFT_DETAIL[norm]?.time || '';
+                              return `<div class="px-1.5 py-0.5 rounded border text-[11px] font-black ${sBg} flex justify-between"><span>Ca ${idx+1}: ${sVi}</span><span class="font-mono text-[10px] opacity-75">${sTime}</span></div>`;
+                            }).join('')}
+                          </div>
+                        `;
+                        detailClass = 'w-full';
                       } else {
                         const normShiftFuture = normalizeShift(d.shift);
                         detailText=normShiftFuture + (SHIFT_DETAIL[normShiftFuture]?.time ? ' • ' + SHIFT_DETAIL[normShiftFuture].time : '');
+                        detailClass='text-blue-700';
                       }
-                      detailClass='text-blue-700';
                     } else {
                       // Realtime đúng giờ Vietnam: CA_TOI buổi sáng phải hiện Sắp tới, không phải Vắng/Đang làm
                       const nowVN2 = getVietnamNow();
