@@ -4170,6 +4170,14 @@ function renderSchedules(){
                     const isWaiting = d.status==='WAITING_OFFICIAL';
                     const isOffDay = d.status==='OFF';
                     const isFuture = d.date > todayStr;
+                    const dayAllShifts = [];
+                    if (Array.isArray(d.shifts) && d.shifts.length) {
+                      d.shifts.forEach(s => { if(s && !dayAllShifts.includes(s)) dayAllShifts.push(s); });
+                    } else {
+                      if (d.shift && d.shift !== 'OFF') dayAllShifts.push(d.shift);
+                      if (d.shift2 && !dayAllShifts.includes(d.shift2)) dayAllShifts.push(d.shift2);
+                      if (d.shift3 && !dayAllShifts.includes(d.shift3)) dayAllShifts.push(d.shift3);
+                    }
                     let badgeText='', badgeClass='', detailText='', detailClass='';
                     if(isWaiting){
                       badgeText='CHỜ CHÍNH THỨC';
@@ -4182,10 +4190,14 @@ function renderSchedules(){
                       detailText=d.autoOff?('⚖ '+(d.autoOffReason||'AI chống trùng ca')):'—';
                       detailClass=d.autoOff?'text-amber-700':'text-slate-400';
                     } else if(isFuture){
-                      badgeText='SẮP TỚI';
+                      badgeText = dayAllShifts.length > 1 ? `${dayAllShifts.length} CA SẮP TỚI` : 'SẮP TỚI';
                       badgeClass='bg-blue-50 text-blue-700 border border-blue-200';
-                      const normShiftFuture = normalizeShift(d.shift);
-                      detailText=normShiftFuture + (SHIFT_DETAIL[normShiftFuture]?.time ? ' • ' + SHIFT_DETAIL[normShiftFuture].time : '');
+                      if(dayAllShifts.length > 1){
+                        detailText = dayAllShifts.map(s => normalizeShift(s).replace('CA_','')).join(' + ') + ` (${dayAllShifts.length} ca)`;
+                      } else {
+                        const normShiftFuture = normalizeShift(d.shift);
+                        detailText=normShiftFuture + (SHIFT_DETAIL[normShiftFuture]?.time ? ' • ' + SHIFT_DETAIL[normShiftFuture].time : '');
+                      }
                       detailClass='text-blue-700';
                     } else {
                       // Realtime đúng giờ Vietnam: CA_TOI buổi sáng phải hiện Sắp tới, không phải Vắng/Đang làm

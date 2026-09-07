@@ -997,11 +997,12 @@ async function submitCheckin(){
   if(!gpsEl.dataset.valid || gpsEl.dataset.valid!=='true') return showToast('❌ GPS chưa sẵn sàng - Vui lòng bấm ↻ để lấy GPS thật (bắt buộc bật GPS)', 'error');
   if(!gps || gps.includes('Đang lấy') || gps.includes('LỖI') || gps.includes('mock') || !gps.includes(',')) return showToast('GPS không hợp lệ - Vui lòng bật GPS và thử lại', 'error');
   try{
-    const res = await api('/api/attendance/checkin', {method:'POST', body:JSON.stringify({employeeId:employee.employeeId, gps, address:addr, image:capturedCheckin, shift:employee.shift, isCameraCapture:true})});
+    const activeShift = window._currentActiveShift || employee.shift;
+    const res = await api('/api/attendance/checkin', {method:'POST', body:JSON.stringify({employeeId:employee.employeeId, gps, address:addr, image:capturedCheckin, shift:activeShift, isCameraCapture:true})});
     document.getElementById('checkinResult').className='mt-2 text-xs font-bold rounded-xl px-3 py-2 bg-pink-100 text-pink-700 border border-pink-200';
-    document.getElementById('checkinResult').textContent='Vào ca thành công lúc '+res.checkIn.time+' • '+(res.status!=='CHECKED_IN'?'Vi phạm: '+getStatusVi(res.status):'Đúng giờ');
+    document.getElementById('checkinResult').textContent='Vào ca '+getShiftVi(activeShift)+' thành công lúc '+res.checkIn.time+' • '+(res.status!=='CHECKED_IN'?'Vi phạm: '+getStatusVi(res.status):'Đúng giờ');
     document.getElementById('checkinResult').classList.remove('hidden');
-    showToast('Check-in thành công','success');
+    showToast('Check-in thành công ca '+getShiftVi(activeShift),'success');
     loadAttendanceTab(); loadHome();
   }catch(e){
     document.getElementById('checkinResult').className='mt-2 text-xs font-bold rounded-xl px-3 py-2 bg-red-100 text-red-700 border border-red-200';
@@ -1018,11 +1019,12 @@ async function submitCheckout(){
   if(!gpsEl.dataset.valid || gpsEl.dataset.valid!=='true') return showToast('❌ GPS chưa sẵn sàng - Vui lòng bấm ↻ để lấy GPS thật (bắt buộc)', 'error');
   if(!gps || gps.includes('Đang lấy') || gps.includes('LỖI') || gps.includes('mock') || !gps.includes(',')) return showToast('GPS không hợp lệ - Vui lòng bật GPS', 'error');
   try{
-    const res = await api('/api/attendance/checkout', {method:'POST', body:JSON.stringify({employeeId:employee.employeeId, gps, address:addr, image:capturedCheckout, isCameraCapture:true})});
+    const activeShift = window._currentActiveShift || employee.shift;
+    const res = await api('/api/attendance/checkout', {method:'POST', body:JSON.stringify({employeeId:employee.employeeId, gps, address:addr, image:capturedCheckout, shift:activeShift, isCameraCapture:true})});
     document.getElementById('checkoutResult').className='mt-2 text-xs font-bold rounded-xl px-3 py-2 bg-pink-100 text-pink-700 border border-pink-200';
-    document.getElementById('checkoutResult').textContent='Ra ca thành công lúc '+res.checkOut.time+' • Ca hoàn thành';
+    document.getElementById('checkoutResult').textContent='Ra ca '+getShiftVi(activeShift)+' thành công lúc '+res.checkOut.time+' • Ca hoàn thành';
     document.getElementById('checkoutResult').classList.remove('hidden');
-    showToast('Ra ca thành công - Ca hoàn thành','success');
+    showToast('Ra ca '+getShiftVi(activeShift)+' thành công - Ca hoàn thành','success');
     loadAttendanceTab(); loadHome();
   }catch(e){
     document.getElementById('checkoutResult').className='mt-2 text-xs font-bold rounded-xl px-3 py-2 bg-red-100 text-red-700 border border-red-200';
@@ -1153,37 +1155,111 @@ async function loadAttendanceTab(){
         window._attendanceRealtimeInterval = setInterval(()=>{ if(document.getElementById('tab-attendance') && !document.getElementById('tab-attendance').classList.contains('hidden')) loadAttendanceTab(); }, 60000);
       }
     } else {
-      // --- NV TRAINING: giữ logic cũ đơn giản, không phạt trễ ---
-      const currentTime = now.getHours() + now.getMinutes()/60;
-      let isShiftTime = false;
-      const shift = employee.shift;
-      if(shift === 'CA_SANG') isShiftTime = currentTime >= 6.5 && currentTime <= 12.5;
-      else if(shift === 'CA_CHIEU') isShiftTime = currentTime >= 11.5 && currentTime <= 18.5;
-      else if(shift === 'CA_TOI') isShiftTime = currentTime >= 17.5 && currentTime <= 23.5;
-      if(!isShiftTime){
-         if (cardCheckin) cardCheckin.classList.add('hidden');
-         if (cardCheckout) cardCheckout.classList.add('hidden');
-         if(shiftMsg){
-           shiftMsg.innerHTML = `<i class=\"fa-solid fa-clock text-2xl mb-2 block\"></i> Ngoài giờ ca làm việc (${getShiftVi(normalizeShift(employee.shift))})<br><span class=\"text-xs font-normal opacity-75\">Training: điểm danh linh hoạt, không phạt trễ</span>`;
-           shiftMsg.className='card bg-amber-50 border-amber-200 text-amber-800 text-sm font-bold text-center p-6';
-           shiftMsg.classList.remove('hidden');
-         }
-         hideAiInfo();
+      // --- NV TRAINING: Tự động nhận diện ca làm việc (hỗ trợ 1, 2 hoặc 3 ca / ngày) ---
+      const schedToday = mySchedules.flatMap(s=>s.days||[]).find(d=>d.date===today);
+      const todayShifts = [];
+      if(schedToday && (schedToday.status==='WORKING' || schedToday.status==='SUBSTITUTE')){
+        if(Array.isArray(schedToday.shifts) && schedToday.shifts.length){
+          schedToday.shifts.forEach(s=> { if(s && !todayShifts.includes(s)) todayShifts.push(s); });
+        } else {
+          if(schedToday.shift && schedToday.shift!=='OFF') todayShifts.push(schedToday.shift);
+          if(schedToday.shift2 && !todayShifts.includes(schedToday.shift2)) todayShifts.push(schedToday.shift2);
+          if(schedToday.shift3 && !todayShifts.includes(schedToday.shift3)) todayShifts.push(schedToday.shift3);
+        }
+      }
+      if(!todayShifts.length) todayShifts.push(employee.shift || 'CA_SANG');
+
+      let activeShift = null;
+      let activeAtt = null;
+      const inProgress = (atts||[]).find(a=> a.checkIn && !a.checkOut);
+      if(inProgress){
+        activeShift = inProgress.shift;
+        activeAtt = inProgress;
       } else {
-         if(shiftMsg) shiftMsg.classList.add('hidden');
-         hideAiInfo();
-         if (!todayAtt || !todayAtt.checkIn) {
-           if (cardCheckin) cardCheckin.classList.remove('hidden');
-           if (cardCheckout) cardCheckout.classList.add('hidden');
-         } else if (todayAtt.checkIn && !todayAtt.checkOut) {
-           if (cardCheckin) cardCheckin.classList.add('hidden');
-           if (cardCheckout) cardCheckout.classList.remove('hidden');
-         } else {
-           if (cardCheckin) cardCheckin.classList.add('hidden');
-           if (cardCheckout) cardCheckout.classList.remove('hidden');
-         }
-         if(btnIn) btnIn.disabled=false, btnIn.classList.remove('opacity-50','cursor-not-allowed');
-         if(btnOut) btnOut.disabled=false, btnOut.classList.remove('opacity-50','cursor-not-allowed');
+        const currentTime = now.getHours() + now.getMinutes()/60;
+        const uncompleted = todayShifts.filter(s => {
+          const a = (atts||[]).find(x=> x.shift === s);
+          return !a || !a.checkOut;
+        });
+
+        if(uncompleted.length === 0){
+          activeShift = todayShifts[todayShifts.length - 1];
+          activeAtt = (atts||[]).find(x=> x.shift === activeShift);
+        } else {
+          for(const s of uncompleted){
+            const norm = normalizeShiftEmp(s);
+            if(norm === 'CA_SANG' && currentTime <= 12.5) { activeShift = s; break; }
+            if(norm === 'CA_CHIEU' && currentTime >= 11.5 && currentTime <= 18.5) { activeShift = s; break; }
+            if(norm === 'CA_TOI' && currentTime >= 17.5) { activeShift = s; break; }
+          }
+          if(!activeShift) activeShift = uncompleted[0];
+          activeAtt = (atts||[]).find(x=> x.shift === activeShift);
+        }
+      }
+
+      window._currentActiveShift = activeShift;
+
+      // Hiển thị dải trạng thái đa ca nếu hôm nay có từ 2 ca trở lên
+      if(todayShifts.length > 1){
+        const shiftsStatusHtml = todayShifts.map((s, idx)=>{
+          const attS = (atts||[]).find(a=> a.shift === s);
+          const isDone = attS && attS.checkOut;
+          const isInProg = attS && attS.checkIn && !attS.checkOut;
+          const isCurrent = s === activeShift;
+          const bg = isDone ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : isInProg ? 'bg-pink-100 text-pink-800 border-pink-300 font-black ring-2 ring-pink-400' : isCurrent ? 'bg-blue-100 text-blue-800 border-blue-300 font-bold' : 'bg-slate-100 text-slate-500 border-slate-200';
+          const icon = isDone ? 'fa-check' : isInProg ? 'fa-hourglass-half' : isCurrent ? 'fa-arrow-right' : 'fa-clock';
+          const stateText = isDone ? 'Đã xong' : isInProg ? 'Đang làm' : isCurrent ? 'Ca hiện tại' : 'Chưa đến';
+          return `<span class="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full border ${bg}"><i class="fa-solid ${icon}"></i> Ca ${idx+1} (${getShiftVi(normalizeShiftEmp(s))}): ${stateText}</span>`;
+        }).join(' ');
+
+        showAiInfo(`<div class="text-xs font-black text-pink-900 mb-1"><i class="fa-solid fa-calendar-day text-pink-600 mr-1"></i> Hôm nay bạn xếp ${todayShifts.length} ca (Rút ngắn thời gian thử việc):</div><div class="flex flex-wrap items-center justify-center gap-1.5 mt-1">${shiftsStatusHtml}</div>`, 'bg-pink-50/80 border-pink-200 text-pink-900');
+      } else {
+        hideAiInfo();
+      }
+
+      // Kiểm tra trạng thái hoàn thành tất cả ca hôm nay
+      const allCompleted = todayShifts.every(s => (atts||[]).some(a => a.shift === s && a.checkOut));
+      if(allCompleted){
+        if(cardCheckin) cardCheckin.classList.add('hidden');
+        if(cardCheckout) cardCheckout.classList.add('hidden');
+        if(shiftMsg){
+          shiftMsg.innerHTML = `<i class=\"fa-solid fa-circle-check text-2xl text-emerald-600 mb-2 block\"></i> Đã hoàn thành tất cả ca làm việc hôm nay (${todayShifts.length}/${todayShifts.length} ca)<br><span class=\"text-xs font-normal opacity-75\">Rút ngắn đào tạo thành công! Tiếp tục duy trì phong độ cho các ngày tiếp theo.</span>`;
+          shiftMsg.className='card bg-emerald-50 border-emerald-200 text-emerald-800 text-sm font-bold text-center p-6';
+          shiftMsg.classList.remove('hidden');
+        }
+      } else {
+        // Có ca đang làm hoặc sắp làm
+        const currentTime = now.getHours() + now.getMinutes()/60;
+        let isShiftTime = false;
+        const normActive = normalizeShiftEmp(activeShift);
+        if(normActive === 'CA_SANG') isShiftTime = currentTime >= 6.0 && currentTime <= 12.5;
+        else if(normActive === 'CA_CHIEU') isShiftTime = currentTime >= 11.5 && currentTime <= 18.5;
+        else if(normActive === 'CA_TOI') isShiftTime = currentTime >= 17.5 && currentTime <= 23.5;
+
+        if(!isShiftTime && !activeAtt?.checkIn){
+          if (cardCheckin) cardCheckin.classList.add('hidden');
+          if (cardCheckout) cardCheckout.classList.add('hidden');
+          if(shiftMsg){
+            shiftMsg.innerHTML = `<i class=\"fa-solid fa-clock text-2xl mb-2 block\"></i> Chưa đến giờ ca làm việc (${getShiftVi(normActive)})<br><span class=\"text-xs font-normal opacity-75\">Hệ thống tự động nhận diện ca ${getShiftVi(normActive)} và sẽ mở Check-in khi đến ca.</span>`;
+            shiftMsg.className='card bg-amber-50 border-amber-200 text-amber-800 text-sm font-bold text-center p-6';
+            shiftMsg.classList.remove('hidden');
+          }
+        } else {
+          if(shiftMsg) shiftMsg.classList.add('hidden');
+          if(!activeAtt || !activeAtt.checkIn){
+            // Sẵn sàng check-in ca hiện hành
+            if(cardCheckin) cardCheckin.classList.remove('hidden');
+            if(cardCheckout) cardCheckout.classList.add('hidden');
+            const inBadge = cardCheckin.querySelector('span.bg-pink-100') || cardCheckin.querySelector('h3');
+            if(inBadge) inBadge.title = `Điểm danh ca ${getShiftVi(normActive)}`;
+          } else if(activeAtt.checkIn && !activeAtt.checkOut){
+            // Sẵn sàng check-out ca hiện hành
+            if(cardCheckin) cardCheckin.classList.add('hidden');
+            if(cardCheckout) cardCheckout.classList.remove('hidden');
+          }
+          if(btnIn) btnIn.disabled=false, btnIn.classList.remove('opacity-50','cursor-not-allowed');
+          if(btnOut) btnOut.disabled=false, btnOut.classList.remove('opacity-50','cursor-not-allowed');
+        }
       }
     }
   }catch(e){}
@@ -1346,8 +1422,21 @@ async function loadSchedule(){
               <div class="text-sm font-bold text-slate-500 mt-1">${fmtDMY(d.date)}</div>
               <div class="mt-3 flex flex-col items-center gap-2">
                 <span class="text-sm font-black px-4 py-1.5 rounded-full ${statusClass}">${statusText}</span>
-                <div class="text-lg font-black text-slate-800 leading-tight min-h-[32px] flex items-center justify-center">
-                  ${(d.status === 'WORKING' || d.status === 'SUBSTITUTE') ? getShiftShortVi(d.shift) : '—'}
+                <div class="text-base font-black text-slate-800 leading-tight min-h-[32px] flex flex-col items-center justify-center gap-0.5">
+                  ${(() => {
+                    if (d.status !== 'WORKING' && d.status !== 'SUBSTITUTE') return '—';
+                    const shifts = [];
+                    if (Array.isArray(d.shifts) && d.shifts.length) {
+                      d.shifts.forEach(s => { if (s && !shifts.includes(s)) shifts.push(s); });
+                    } else {
+                      if (d.shift && d.shift !== 'OFF') shifts.push(d.shift);
+                      if (d.shift2 && !shifts.includes(d.shift2)) shifts.push(d.shift2);
+                      if (d.shift3 && !shifts.includes(d.shift3)) shifts.push(d.shift3);
+                    }
+                    if (!shifts.length) return getShiftShortVi(d.shift);
+                    if (shifts.length === 1) return getShiftShortVi(shifts[0]);
+                    return `<span class="text-pink-700">${shifts.map(s => getShiftShortVi(s)).join('+')}</span><span class="text-[10px] font-black bg-pink-100 text-pink-700 px-2 py-0.5 rounded-full">${shifts.length} ca/ngày</span>`;
+                  })()}
                 </div>
               </div>
               ${isToday ? '<div class="text-sm font-black text-pink-600 mt-2 uppercase tracking-widest">● Hôm nay</div>' : ''}
@@ -1550,20 +1639,54 @@ function checkSelectedToDate(){
 
 function openTrainingAddShiftModal(weekStart){
   if(!employee) return;
-  const dates = mySchedules.find(s=>s.weekStart===weekStart)?.days.filter(d=>d.status==='WORKING') || [];
-  if(dates.length===0) return showToast('Không có ngày làm việc để thêm ca','error');
-  const options = dates.map(d=> `<option value="${d.date}">${fmtDMY(d.date)} (${d.dayName}) - ${getShiftVi(normalizeShift(d.shift))}</option>`).join('');
+  const sched = mySchedules.find(s=>s.weekStart===weekStart);
+  const dates = (sched?.days || []).filter(d=>d.status==='WORKING');
+  if(dates.length===0) return showToast('Không có ngày làm việc để thêm ca (chức năng chỉ áp dụng cho ngày đi làm, không áp dụng ngày nghỉ OFF)','error');
+
+  const getDayShiftsList = (d) => {
+    const list = [];
+    if(Array.isArray(d.shifts) && d.shifts.length){
+      d.shifts.forEach(s=> { if(s && !list.includes(s)) list.push(s); });
+    } else {
+      if(d.shift && d.shift !== 'OFF') list.push(d.shift);
+      if(d.shift2 && !list.includes(d.shift2)) list.push(d.shift2);
+      if(d.shift3 && !list.includes(d.shift3)) list.push(d.shift3);
+    }
+    return list.length ? list : (d.shift ? [d.shift] : []);
+  };
+
+  const options = dates.map(d=> {
+    const curShifts = getDayShiftsList(d);
+    const countText = curShifts.length === 1 ? '1 ca' : `${curShifts.length} ca`;
+    return `<option value="${d.date}">${fmtDMY(d.date)} (${d.dayName}) - Đang có: ${curShifts.map(s=>getShiftVi(normalizeShift(s))).join(' + ')} (${countText})</option>`;
+  }).join('');
+
   const modalHtml = `
     <div id="trainingShiftModal" class="fixed inset-0 z-[100] bg-black/50 flex items-center justify-center p-4">
       <div class="bg-white rounded-2xl w-full max-w-lg p-5 shadow-xl max-h-[90vh] overflow-y-auto">
-        <div class="font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-plus text-pink-600"></i> Thêm ca (1 ngày 2 ca)</div>
-        <div class="text-xs text-slate-500 mt-1">Chọn ngày đã có ca và ca muốn THÊM (ví dụ: đã Ca Sáng thêm Ca Chiều). Giúp rút ngắn 7→6 ngày.</div>
+        <div class="font-black text-pink-900 flex items-center gap-2"><i class="fa-solid fa-plus text-pink-600"></i> Thêm ca làm việc (2 ca hoặc 3 ca / ngày)</div>
+        <div class="text-xs text-slate-500 mt-1">Sắp 2 ca hoặc 3 ca trên 1 ngày làm việc giúp tích lũy ca nhanh hơn và rút ngắn quá trình đào tạo. Chức năng chỉ áp dụng cho ngày đi làm (ngày nghỉ OFF không thực hiện được).</div>
         <div class="mt-3 space-y-3">
-          <div><label class="text-xs font-bold">Ngày (đã có ca)</label><select id="shiftDate" class="w-full mt-1 px-3 py-2 rounded-xl border text-sm">${options}</select></div>
-          <div><label class="text-xs font-bold">Ca THÊM</label><select id="shiftTo" class="w-full mt-1 px-3 py-2 rounded-xl border text-sm"><option value="CA_CHIEU">Ca Chiều (12:00-18:00)</option><option value="CA_SANG">Ca Sáng (07:00-12:00)</option><option value="CA_TOI">Ca Tối (18:00-23:00)</option></select></div>
-          <div><label class="text-xs font-bold">Lý do <span class="text-red-500">*</span> (bắt buộc)</label><input id="shiftReason" class="w-full mt-1 px-3 py-2 rounded-xl border text-sm focus:border-pink-400" placeholder="Nhập lý do (bắt buộc)..."></div>
+          <div>
+            <label class="text-xs font-bold">Ngày đi làm (đã có ca)</label>
+            <select id="shiftDate" onchange="onSelectAddShiftDate('${weekStart}')" class="w-full mt-1 px-3 py-2 rounded-xl border text-sm">${options}</select>
+          </div>
+          <div id="addShiftNotice" class="p-2.5 rounded-xl text-xs font-semibold bg-blue-50 border border-blue-200 text-blue-800">
+            Đang tải thông tin ca...
+          </div>
+          <div>
+            <label class="text-xs font-bold">Ca THÊM</label>
+            <select id="shiftTo" class="w-full mt-1 px-3 py-2 rounded-xl border text-sm"></select>
+          </div>
+          <div>
+            <label class="text-xs font-bold">Lý do <span class="text-red-500">*</span> (bắt buộc)</label>
+            <input id="shiftReason" class="w-full mt-1 px-3 py-2 rounded-xl border text-sm focus:border-pink-400" placeholder="Nhập lý do thêm ca (ví dụ: Muốn tăng tốc hoàn thành đào tạo)...">
+          </div>
         </div>
-        <div class="mt-4 flex gap-2"><button onclick="submitTrainingShift(true)" class="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-black py-2.5 rounded-xl shadow hover:from-emerald-600 hover:to-teal-700">Gửi yêu cầu thêm ca</button><button onclick="document.getElementById('trainingShiftModal').remove()" class="px-4 bg-slate-100 font-bold py-2.5 rounded-xl">Đóng</button></div>
+        <div class="mt-4 flex gap-2">
+          <button id="btnSubmitAddShift" onclick="submitTrainingShift(true)" class="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-black py-2.5 rounded-xl shadow hover:from-emerald-600 hover:to-teal-700">Gửi yêu cầu thêm ca</button>
+          <button onclick="document.getElementById('trainingShiftModal').remove()" class="px-4 bg-slate-100 font-bold py-2.5 rounded-xl hover:bg-slate-200">Đóng</button>
+        </div>
         <div class="mt-4 pt-3 border-t border-slate-200">
           <div class="font-black text-xs text-pink-900 flex items-center justify-between mb-2">
             <span><i class="fa-solid fa-clock-rotate-left text-pink-600"></i> Lịch sử yêu cầu Đổi ca / Thêm ca</span>
@@ -1576,7 +1699,58 @@ function openTrainingAddShiftModal(weekStart){
       </div>
     </div>`;
   document.body.insertAdjacentHTML('beforeend', modalHtml);
+  onSelectAddShiftDate(weekStart);
   loadTrainingShiftHistoryModal();
+}
+
+function onSelectAddShiftDate(weekStart){
+  const selDate = document.getElementById('shiftDate')?.value;
+  const selTo = document.getElementById('shiftTo');
+  const notice = document.getElementById('addShiftNotice');
+  const btnSubmit = document.getElementById('btnSubmitAddShift');
+  if(!selDate || !selTo || !notice) return;
+
+  const sched = mySchedules.find(s=>s.weekStart===weekStart);
+  const day = (sched?.days || []).find(d=>d.date===selDate);
+  if(!day){
+    notice.className = 'p-2.5 rounded-xl text-xs font-semibold bg-red-50 border border-red-200 text-red-700';
+    notice.textContent = 'Không tìm thấy ngày đã chọn';
+    if(btnSubmit) btnSubmit.disabled = true;
+    return;
+  }
+
+  const existingShifts = [];
+  if(Array.isArray(day.shifts) && day.shifts.length){
+    day.shifts.forEach(s=> { if(s && !existingShifts.includes(s)) existingShifts.push(s); });
+  } else {
+    if(day.shift && day.shift !== 'OFF') existingShifts.push(day.shift);
+    if(day.shift2 && !existingShifts.includes(day.shift2)) existingShifts.push(day.shift2);
+    if(day.shift3 && !existingShifts.includes(day.shift3)) existingShifts.push(day.shift3);
+  }
+
+  const ALL_SHIFTS = [
+    { value: 'CA_SANG', label: 'Ca Sáng (07:00-12:00)' },
+    { value: 'CA_CHIEU', label: 'Ca Chiều (12:00-18:00)' },
+    { value: 'CA_TOI', label: 'Ca Tối (18:00-23:00)' }
+  ];
+
+  const available = ALL_SHIFTS.filter(s => !existingShifts.includes(s.value));
+
+  if(available.length === 0){
+    selTo.innerHTML = '<option value="">-- Đã đủ 3 ca (tối đa) --</option>';
+    selTo.disabled = true;
+    notice.className = 'p-2.5 rounded-xl text-xs font-semibold bg-amber-50 border border-amber-200 text-amber-800';
+    notice.innerHTML = '<i class="fa-solid fa-lock text-amber-600 mr-1"></i> Ngày này đã xếp đủ 3 ca (Ca Sáng, Ca Chiều, Ca Tối) - không thể thêm ca nữa.';
+    if(btnSubmit){ btnSubmit.disabled = true; btnSubmit.classList.add('opacity-50','cursor-not-allowed'); }
+  } else {
+    selTo.disabled = false;
+    selTo.innerHTML = available.map(s => `<option value="${s.value}">${s.label}</option>`).join('');
+    if(btnSubmit){ btnSubmit.disabled = false; btnSubmit.classList.remove('opacity-50','cursor-not-allowed'); }
+
+    const nextCount = existingShifts.length + 1;
+    notice.className = 'p-2.5 rounded-xl text-xs font-semibold bg-emerald-50 border border-emerald-200 text-emerald-800';
+    notice.innerHTML = `<i class="fa-solid fa-bolt text-emerald-600 mr-1"></i> Ngày này hiện có <b>${existingShifts.length} ca</b> (${existingShifts.map(s=>getShiftVi(s)).join(', ')}). Thêm ca sẽ nâng lên <b>${nextCount} ca/ngày</b> để rút ngắn quá trình đào tạo!`;
+  }
 }
 
 async function submitTrainingShift(isAdd){
