@@ -6566,7 +6566,7 @@ async function syncQuizBankFromSheet(manualBy){
       bank = { id:'course_001', title:'Kiểm tra đầu ra - Ụm Bò Milk 2026', description:'Ngân hàng câu hỏi trắc nghiệm (tự động từ Google Sheet)', totalQuestions:0, minPerQuestion:5, questions:[], voiceSimulations:[], createdAt:getVietnamISOString() };
       db.testCourses.unshift(bank);
     }
-    bank.questions = parsed.map(q=>({ id:'q'+uuidv4().slice(0,8), ...q }));
+    bank.questions = parsed.map((q, idx)=>({ id: 'q_' + (idx + 1), ...q }));
     bank.totalQuestions = bank.questions.length;
     bank.minPerQuestion = 5;
     bank.description = 'Ngân hàng câu hỏi trắc nghiệm (tự động từ Google Sheet 1h06TrHMRnBOHMkp7Ri4Rz8yRw8ptemQp0ftjMldHYdc)';
@@ -6718,6 +6718,7 @@ app.post('/api/quiz/open', async (req,res)=>{
       type:'ONLINE_QUIZ',
       courseId: bank.id,
       questionIds: picked.map(q=>q.id),
+      pickedQuestions: picked.map(q=>({ id:q.id, question:q.question, options:q.options, correct:q.correct, explanation:q.explanation })),
       status:'IN_PROGRESS',
       startedAt: getVietnamISOString(),
       perQuestionSec:5,
@@ -6740,14 +6741,27 @@ app.post('/api/courses/:id/submit', (req,res)=>{
   if(!course) return res.status(404).json({error:'Không tìm thấy'});
   const emp = db.employees.find(e=>e.employeeId===employeeId);
   if(!emp) return res.status(404).json({error:'Không tìm thấy nhân viên'});
-  // Chốt đúng 25 câu của ca thi (chống tráo đề): ưu tiên session đã mở, fallback 25 câu đầu ngân hàng
+  // Chốt đúng 25 câu của ca thi (chống tráo đề, đa tầng fallback bảo vệ tránh lỗi ID ca thi)
   const bank = Array.isArray(course.questions)? course.questions : [];
   const sess = emp.testSchedule;
   const sessIds = (sess && sess.type==='ONLINE_QUIZ' && Array.isArray(sess.questionIds) && sess.questionIds.length===25) ? sess.questionIds : null;
   const ids = (Array.isArray(questionIds) && questionIds.length===25) ? questionIds : (sessIds || bank.slice(0,25).map(q=>q.id));
-  const qlist = ids.map(id=>bank.find(q=>q.id===id)).filter(Boolean);
-  if(qlist.length!==25) return res.status(400).json({error:'Ca thi không đủ 25 câu — vui lòng mở lại đề'});
-  if(!Array.isArray(answers) || answers.length!==25) return res.status(400).json({error:'Bài làm phải đủ 25 câu'});
+  
+  // Tầng 1: Tìm theo IDs trong ngân hàng câu hỏi
+  let qlist = (Array.isArray(ids) ? ids : []).map(id=>bank.find(q=>q.id===id)).filter(Boolean);
+  
+  // Tầng 2: Nếu không khớp đủ (do sync cập nhật ID), dùng pickedQuestions lưu trực tiếp trong ca thi
+  if(qlist.length < 25 && sess && Array.isArray(sess.pickedQuestions) && sess.pickedQuestions.length === 25){
+    qlist = sess.pickedQuestions;
+  }
+  
+  // Tầng 3: Nếu vẫn chưa đủ mà ngân hàng có >= 25 câu, dùng 25 câu đầu của ngân hàng đề thật
+  if(qlist.length < 25 && bank.length >= 25){
+    qlist = bank.slice(0, 25);
+  }
+  
+  if(qlist.length < 25) return res.status(400).json({error:`Ngân hàng đề hiện có ${qlist.length}/25 câu — vui lòng mở lại đề`});
+  if(!Array.isArray(answers) || answers.length < 25) return res.status(400).json({error:'Bài làm phải đủ 25 câu'});
   let correct=0;
   qlist.forEach((q,idx)=>{ if(answers[idx]===q.correct) correct++; });
   const rounded = Math.round((correct/25*10)*10)/10;
@@ -6800,7 +6814,7 @@ app.post('/api/courses/:id/submit', (req,res)=>{
   io.emit('testResults:update', db.testResults);
   io.emit('employees:update', db.employees);
   io.emit('notifications:update', db.notifications);
-  res.json({ testResult: testRes, employee: emp, passed: result==='DAT', score: rounded });
+  res.json({ success: true, testResult: testRes, employee: emp, passed: result==='DAT', score: rounded });
 });
 
 
