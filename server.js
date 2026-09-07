@@ -372,26 +372,9 @@ function initEmpty() {
   db.deviceRequests = [];
   db.trainingShiftRequests = [];
   db.shiftSwapRequests = [];
-  // Ngân hàng câu hỏi kiểm tra đầu ra (cấu hình vận hành, không phải mock nghiệp vụ).
-  // Không có UI tạo khóa học nên giữ 1 khóa mặc định để E-learning hoạt động với dữ liệu thật.
-db.testCourses = [
-    {
-      id: 'course_001',
-      title: 'Kiểm tra đầu ra - Ụm Bò Milk 2026',
-      description: 'Bài kiểm tra tổng hợp kiến thức sản phẩm và quy trình phục vụ',
-      totalQuestions: 25,
-      minPerQuestion: 5,
-      questions: Array.from({length:25}, (_,i)=>({
-        id: `q${i+1}`,
-        question: `Câu ${i+1}: Thành phần chính của món Trà Sữa Ụm Bò Truyền Thống là gì?`,
-        options: ['Trà đen + Sữa tươi + Trân châu', 'Trà xanh + Sữa đặc', 'Cà phê + Sữa', 'Nước lọc + Đường'],
-        correct: 0,
-        explanation: 'Đáp án đúng là Trà đen + Sữa tươi'
-      })),
-      voiceSimulations: [],
-      createdAt: getVietnamISOString()
-    }
-  ];
+  // Ngân hàng câu hỏi kiểm tra đầu ra: 100% tự động kéo từ Google Sheet 1h06TrHMRnBOHMkp7Ri4Rz8yRw8ptemQp0ftjMldHYdc
+  // Tuyệt đối không lưu câu hỏi mock/thử nghiệm trên hệ thống.
+  db.testCourses = [];
   db.testResults = [];
   db.zaloRecords = [];
   db.syncQueue = [];
@@ -6538,7 +6521,7 @@ function fetchQuizBankCSV(){
 }
 function normalizeQuizBankRows(rows){
   if(!rows || rows.length<2) return [];
-  const normCell = s=>String(s||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,'').trim();
+  const normCell = s=>String(s||'').trim().toLowerCase().replace(/đ/g,'d').replace(/Đ/g,'d').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,'').trim();
   let hi=-1, map=null;
   for(let r=0;r<Math.min(3,rows.length);r++){
     const cells=(rows[r]||[]).map(normCell);
@@ -6546,7 +6529,7 @@ function normalizeQuizBankRows(rows){
     cells.forEach((c,i)=>{
       if(m.q===undefined && (c.includes('cau hoi')||c==='question'||c.includes('cauhoi'))) m.q=i;
       else if(c==='a') m.A=i; else if(c==='b') m.B=i; else if(c==='c') m.C=i; else if(c==='d') m.D=i;
-      else if(c.includes('dap an')||c==='answer'||c.includes('dapan')) m.ans=i;
+      else if(c.includes('dap an')||c.includes('ap an')||c==='answer'||c.includes('dapan')||c.includes('ans')) m.ans=i;
       else if(c.includes('giai thich')||c.includes('explanation')||c==='note') m.exp=i;
     });
     if(m.q!==undefined && m.A!==undefined && m.ans!==undefined){ hi=r; map=m; break; }
@@ -6586,18 +6569,18 @@ async function syncQuizBankFromSheet(manualBy){
     bank.questions = parsed.map(q=>({ id:'q'+uuidv4().slice(0,8), ...q }));
     bank.totalQuestions = bank.questions.length;
     bank.minPerQuestion = 5;
-    bank.description = 'Ngân hàng câu hỏi trắc nghiệm (tự động từ Google Sheet)';
+    bank.description = 'Ngân hàng câu hỏi trắc nghiệm (tự động từ Google Sheet 1h06TrHMRnBOHMkp7Ri4Rz8yRw8ptemQp0ftjMldHYdc)';
     bank.quizSource = { spreadsheetId: cfg.spreadsheetId, sheetName: cfg.sheetName, sheetUrl: cfg.sheetUrl, updatedAt: getVietnamISOString(), rowCount: parsed.length, by: manualBy||'AUTO_60S' };
     out.updated = parsed.length; out.total = bank.questions.length;
     audit(manualBy||'SYSTEM','SYNC_QUIZ_BANK','TEST',null,{total:bank.questions.length},'sheet-sync');
     saveDB();
     io.emit('courses:update', db.testCourses);
-    console.log(`[QUIZ BANK] Đã đồng bộ ${parsed.length} câu từ Sheet (${manualBy||'AUTO_60S'})`);
+    console.log(`[QUIZ BANK] Đã đồng bộ ${parsed.length} câu thật từ Google Sheet (${manualBy||'AUTO_60S'})`);
     return out;
   }catch(e){ console.error('[QUIZ BANK] error', e.message); return { ...out, error: e.message }; }
 }
 setInterval(()=>{ syncQuizBankFromSheet().catch(()=>{}); }, 60*1000);
-setTimeout(()=>{ syncQuizBankFromSheet('BOOT').catch(()=>{}); }, 20000);
+setTimeout(()=>{ syncQuizBankFromSheet('BOOT_FAST').catch(()=>{}); }, 1000);
 // HR/Admin xem trạng thái nguồn đề (không cần quyền đặc biệt — dữ liệu câu hỏi không nhạy cảm)
 app.get('/api/quiz/status', (req,res)=>{
   const cfg = getQuizBankConfig();
@@ -6678,11 +6661,18 @@ app.post('/api/courses/import', authMiddleware, roleCheck(['Admin','HR']), (req,
 });
 // Mở đề thi trắc nghiệm đầu ra: random 25 câu từ ngân hàng, mỗi câu 5 giây, thang 10đ
 // HR/Admin mở cho NV training đủ 7 ngày (hoặc force). Trả về đề đã ẩn đáp án + thông tin NV.
-app.post('/api/quiz/open', (req,res)=>{
+app.post('/api/quiz/open', async (req,res)=>{
   try{
     const { employeeId, force, openedBy } = req.body||{};
-    const bank = db.testCourses.find(c=>c.id==='course_001') || db.testCourses[0];
-    if(!bank) return res.status(404).json({error:'Chưa có ngân hàng đề — HR/Admin import file Excel trước'});
+    let bank = db.testCourses.find(c=>c.id==='course_001') || db.testCourses[0];
+    // RÀNG BUỘC TUYỆT ĐỐI: 100% câu hỏi đề thi phải lấy từ Google Sheet 1h06TrHMRnBOHMkp7Ri4Rz8yRw8ptemQp0ftjMldHYdc
+    if(!bank || !Array.isArray(bank.questions) || bank.questions.length < 25){
+      await syncQuizBankFromSheet('ON_DEMAND_OPEN');
+      bank = db.testCourses.find(c=>c.id==='course_001') || db.testCourses[0];
+    }
+    if(!bank || !Array.isArray(bank.questions) || bank.questions.length === 0){
+      return res.status(502).json({error:'Chưa đồng bộ được ngân hàng đề từ Google Sheet 1h06TrHMRnBOHMkp7Ri4Rz8yRw8ptemQp0ftjMldHYdc'});
+    }
     const emp = db.employees.find(e=>e.employeeId===employeeId);
     if(!emp) return res.status(404).json({error:'Không tìm thấy nhân viên'});
     if(emp.type!=='TRAINING' && !['TRAINING','WAITING_TEST','RETEST'].includes(emp.status)) return res.status(403).json({error:'Chỉ nhân viên Training mới được mở TEST đầu ra'});
@@ -6714,7 +6704,7 @@ app.post('/api/quiz/open', (req,res)=>{
     }
 
     const pool = Array.isArray(bank.questions)? bank.questions : [];
-    if(pool.length === 0) return res.status(400).json({error:'Ngân hàng đề rỗng — HR/Admin import câu hỏi trước'});
+    if(pool.length === 0) return res.status(400).json({error:'Ngân hàng đề rỗng — không có câu hỏi trên Google Sheet'});
     const targetCount = Math.min(25, pool.length);
     // Dùng lại ca thi đang mở nếu còn hiệu lực, tránh random lại khi NV tải lại trang
     const sess = emp.testSchedule;
