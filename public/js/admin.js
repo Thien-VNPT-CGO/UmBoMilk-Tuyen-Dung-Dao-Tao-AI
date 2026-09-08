@@ -3200,7 +3200,7 @@ function openTestOptionModal(employeeId) {
             <div class="w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center font-black text-lg mb-2 group-hover:scale-110 transition">
               <i class="fa-solid fa-mobile-screen-button"></i>
             </div>
-            <div class="font-black text-sm text-purple-950">1. Thi Trực Tuyến Trên Web App</div>
+            <div class="font-black text-sm text-purple-950">1. Thi Trắc Nghiệm Trên Web App</div>
             <div class="text-xs text-slate-600 mt-1.5 leading-relaxed">
               Gửi bài thi trắc nghiệm & tình huống voice E-learning đến Web App nhân viên. 
               <span class="font-bold text-red-600">Đồng thời khóa chức năng Check-in/Check-out</span> của nhân viên trên App.
@@ -3217,7 +3217,7 @@ function openTestOptionModal(employeeId) {
             <div class="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black text-lg mb-2 group-hover:scale-110 transition">
               <i class="fa-solid fa-video"></i>
             </div>
-            <div class="font-black text-sm text-indigo-950">2. Lên Lịch Phỏng Vấn (Google Meet)</div>
+            <div class="font-black text-sm text-indigo-950">2. TEST Trực Tuyến</div>
             <div class="text-xs text-slate-600 mt-1.5 leading-relaxed">
               Đặt lịch phỏng vấn trực tiếp với HR qua Google Meet. 
               <span class="font-bold text-indigo-700">Mỗi ca bắt buộc cách nhau tối thiểu 1 tiếng 30 phút</span>.
