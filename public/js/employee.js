@@ -19,6 +19,7 @@ let testAnswers=[];
 let testIndex=0;
 let testStartTime=null;
 let testTimerInterval=null;
+const TEST_TOTAL_SEC = 8*60; // Tổng 8 phút cho 25 câu trắc nghiệm (bỏ ràng buộc 5s/câu)
 let myAttendances=[];
 let mySchedules=[];
 let myOffs=[];
@@ -2225,15 +2226,15 @@ async function loadElearning(){
               <div class="text-xs text-slate-500 mt-1">${c.description}</div>
               <div class="mt-2 flex flex-wrap gap-2">
                 <span class="text-xs font-bold bg-purple-100 text-purple-700 px-2 py-1 rounded-full">${c.totalQuestions} câu trắc nghiệm</span>
-                <span class="text-xs font-bold bg-pink-100 text-pink-700 px-2 py-1 rounded-full">≥${c.minPerQuestion} giây/câu = ${c.totalQuestions*c.minPerQuestion} giây tối thiểu</span>
+                <span class="text-xs font-bold bg-pink-100 text-pink-700 px-2 py-1 rounded-full">Tổng 8 phút • Hết giờ tự động nộp</span>
               </div>
-              <button onclick="startTest('${c.id}')" class="w-full mt-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-black py-2.5 rounded-xl">Bắt đầu làm TEST (random 25 câu • 5s/câu)</button>
+              <button onclick="startTest('${c.id}')" class="w-full mt-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-black py-2.5 rounded-xl">Bắt đầu làm TEST (random 25 câu • 8 phút)</button>
               ${lastResult?`<div class="mt-3 bg-slate-50 border rounded-xl p-2 text-xs"><div class="font-bold">Kết quả gần nhất: ${lastResult.score}đ • ${lastResult.result} • ${fmtDMYTime(lastResult.createdAt)}</div><div class="text-[11px] text-slate-500">${lastResult.correct}/${lastResult.total} đúng • ${lastResult.timeSpent}s</div></div>`:''}
             </div>
           `).join('')}
         </div>
         <div class="mt-4 bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs">
-          <div class="font-black">Quy tắc kết quả (25 câu • 5s/câu • thang 10đ):</div>
+          <div class="font-black">Quy tắc kết quả (25 câu • 8 phút • thang 10đ):</div>
           <div class="mt-1 space-y-1">
             <div class="flex justify-between"><span>Điểm &lt; 5</span><span class="font-bold text-red-600">LOẠI → TB app + logout sau 15p</span></div>
             <div class="flex justify-between"><span>5 – dưới 8</span><span class="font-bold text-amber-600">Chưa ĐẠT → thi lại (HR gửi lịch)</span></div>
@@ -2249,12 +2250,12 @@ async function startTest(courseId){
     showToast('Đang mở đề thi 25 câu...','info');
     const isForce = !!(employee.forceOpenTest || employee.isForceUnlocked || (employee.testSchedule && (employee.testSchedule.force || employee.testSchedule.isForceUnlocked)) || employee.status === 'WAITING_TEST');
     const sess = await api('/api/quiz/open',{method:'POST', body:JSON.stringify({employeeId:employee.employeeId, force: isForce})});
-    currentTest = { id: sess.courseId, questions: sess.questions, totalQuestions: sess.total||25, minPerQuestion: sess.perQuestionSec||5, questionIds: sess.questionIds };
+    currentTest = { id: sess.courseId, questions: sess.questions, totalQuestions: sess.total||25, timeLimitSec: sess.timeLimitSec||TEST_TOTAL_SEC, questionIds: sess.questionIds };
     testAnswers = Array(25).fill(null);
     testIndex=0;
     testStartTime=Date.now();
+    window.testSubmitting=false;
     document.getElementById('testModal').classList.remove('hidden');
-    document.getElementById('testMin').textContent='125';
     const info=document.getElementById('testEmpInfo');
     if(info) info.textContent=`${sess.employee.employeeId} • ${sess.employee.name} • ${sess.employee.phone}`;
     renderTestQuestion();
@@ -2263,30 +2264,29 @@ async function startTest(courseId){
 }
 function startTestTimer(){
   if(testTimerInterval) clearInterval(testTimerInterval);
-  testTimerInterval=setInterval(()=>{
+  const total = (currentTest && currentTest.timeLimitSec) || TEST_TOTAL_SEC;
+  const tick = ()=>{
     const elapsed = Math.floor((Date.now()-testStartTime)/1000);
-    const m=String(Math.floor(elapsed/60)).padStart(2,'0');
-    const s=String(elapsed%60).padStart(2,'0');
+    const left = Math.max(total - elapsed, 0);
+    const m=String(Math.floor(left/60)).padStart(2,'0');
+    const s=String(left%60).padStart(2,'0');
     const t=document.getElementById('testTimer');
     if(t) t.textContent=`${m}:${s}`;
-  },1000);
-  startQTimer();
-}
-function startQTimer(){
-  if(window.testQTimerInterval) clearInterval(window.testQTimerInterval);
-  window.testQTimeLeft=5;
-  const el=document.getElementById('testQTimer');
-  if(el) el.textContent='5';
-  window.testQTimerInterval=setInterval(()=>{
-    window.testQTimeLeft--;
-    const qel=document.getElementById('testQTimer');
-    if(qel) qel.textContent=String(Math.max(window.testQTimeLeft,0));
-    if(window.testQTimeLeft<=0){
-      clearInterval(window.testQTimerInterval);
-      if(testIndex < 24){ testIndex++; renderTestQuestion(); startQTimer(); }
-      else submitTest(true);
+    if(left<=0){
+      clearInterval(testTimerInterval);
+      submitTest(true); // Hết 8 phút: hệ thống tự động nộp bài
     }
-  },1000);
+  };
+  tick();
+  testTimerInterval=setInterval(tick,1000);
+}
+// Khóa nút Trở lại ở câu đầu, khóa nút Tiếp theo ở câu cuối
+function updateTestNav(){
+  const total = (currentTest && currentTest.totalQuestions) || 25;
+  const prev = document.getElementById('btnPrevQ');
+  const next = document.getElementById('btnNextQ');
+  if(prev){ const lock = testIndex <= 0; prev.disabled = lock; prev.classList.toggle('opacity-40', lock); prev.classList.toggle('cursor-not-allowed', lock); }
+  if(next){ const lock = testIndex >= total - 1; next.disabled = lock; next.classList.toggle('opacity-40', lock); next.classList.toggle('cursor-not-allowed', lock); }
 }
 function renderTestQuestion(){
   const q=currentTest.questions[testIndex];
@@ -2302,13 +2302,14 @@ function renderTestQuestion(){
         </label>
       `).join('')}
     </div>
-    <div class="mt-4 text-[11px] text-slate-500">Mỗi câu 5 giây — hết giờ tự chuyển câu • Tổng 25 câu thang 10đ</div>
+    <div class="mt-4 text-[11px] text-slate-500">Tổng 8 phút cho 25 câu — hết giờ tự động nộp bài • Thang 10đ</div>
   `;
+  updateTestNav();
 }
 function selectAnswer(i){ testAnswers[testIndex]=i; renderTestQuestion(); }
-function prevQuestion(){ if(testIndex>0){ testIndex--; renderTestQuestion(); startQTimer(); } }
-function nextQuestion(){ if(testIndex < 24){ testIndex++; renderTestQuestion(); startQTimer(); } }
-function closeTest(){ document.getElementById('testModal').classList.add('hidden'); if(testTimerInterval) clearInterval(testTimerInterval); if(window.testQTimerInterval) clearInterval(window.testQTimerInterval); }
+function prevQuestion(){ if(testIndex>0){ testIndex--; renderTestQuestion(); } }
+function nextQuestion(){ const total=(currentTest&&currentTest.totalQuestions)||25; if(testIndex < total-1){ testIndex++; renderTestQuestion(); } }
+function closeTest(){ document.getElementById('testModal').classList.add('hidden'); if(testTimerInterval) clearInterval(testTimerInterval); }
 function showFireworks(){
   try{
     const ov=document.createElement('div');
@@ -2332,9 +2333,11 @@ function showFireworks(){
   }catch(_){}
 }
 async function submitTest(auto){
-  if(window.testQTimerInterval) clearInterval(window.testQTimerInterval);
+  if(window.testSubmitting) return; // chống nộp trùng khi hết giờ + bấm tay cùng lúc
+  if(testTimerInterval) clearInterval(testTimerInterval);
   const unanswered = testAnswers.filter(a=>a===null).length;
-  if(!auto && unanswered>0 && !confirm(`Còn ${unanswered} câu chưa trả lời (hết 5s tự bỏ qua). Vẫn nộp?`)) { startQTimer(); return; }
+  if(!auto && unanswered>0 && !confirm(`Còn ${unanswered} câu chưa trả lời. Vẫn nộp?`)) { startTestTimer(); return; }
+  window.testSubmitting=true;
   const timeSpent = Math.floor((Date.now()-testStartTime)/1000);
   try{
     const res = await api('/api/courses/'+currentTest.id+'/submit', {method:'POST', body:JSON.stringify({employeeId:employee.employeeId, answers:testAnswers, timeSpent, questionIds:currentTest.questionIds})});
@@ -2354,7 +2357,7 @@ async function submitTest(auto){
     employee = res.employee;
     localStorage.setItem('emp_data', JSON.stringify(employee));
     loadElearning(); loadHome();
-  }catch(e){ alert(e.message); startQTimer(); }
+  }catch(e){ alert(e.message); window.testSubmitting=false; startTestTimer(); }
 }
 
 // Notifications

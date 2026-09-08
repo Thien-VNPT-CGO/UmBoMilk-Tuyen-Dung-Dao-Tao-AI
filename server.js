@@ -7732,7 +7732,7 @@ app.post('/api/courses/import', authMiddleware, roleCheck(['Admin','HR']), (req,
     res.json({ success:true, added, total:bank.questions.length, courseId: bank.id });
   }catch(e){ res.status(500).json({error:e.message}); }
 });
-// Mở đề thi trắc nghiệm đầu ra: random 25 câu từ ngân hàng, mỗi câu 5 giây, thang 10đ
+// Mở đề thi trắc nghiệm đầu ra: random 25 câu từ ngân hàng, tổng 8 phút, thang 10đ
 // HR/Admin mở cho NV training đủ 7 ngày (hoặc force). Trả về đề đã ẩn đáp án + thông tin NV.
 app.post('/api/quiz/open', async (req,res)=>{
   try{
@@ -7794,7 +7794,7 @@ app.post('/api/quiz/open', async (req,res)=>{
       pickedQuestions: picked.map(q=>({ id:q.id, question:q.question, options:q.options, correct:q.correct, explanation:q.explanation })),
       status:'IN_PROGRESS',
       startedAt: getVietnamISOString(),
-      perQuestionSec:5,
+      timeLimitSec: 8*60, // 8 phút cho 25 câu trắc nghiệm (bỏ ràng buộc 5s/câu)
       total: targetCount,
       openedBy: openedBy || emp.testSchedule?.openedBy || 'HR',
       force: true,
@@ -7805,7 +7805,7 @@ app.post('/api/quiz/open', async (req,res)=>{
     audit(openedBy||'HR','OPEN_QUIZ','TEST',{employeeId},{total:targetCount, courseId: bank.id}, req.ip);
     saveDB();
     io.emit('employees:update', db.employees);
-    res.json({ success:true, courseId: bank.id, questions: picked.map(q=>({id:q.id, question:q.question, options:q.options})), questionIds: picked.map(q=>q.id), employee:{employeeId:emp.employeeId, name:emp.name, phone:emp.phone}, perQuestionSec:5, total: targetCount, timeLimitSec: targetCount*5 });
+    res.json({ success:true, courseId: bank.id, questions: picked.map(q=>({id:q.id, question:q.question, options:q.options})), questionIds: picked.map(q=>q.id), employee:{employeeId:emp.employeeId, name:emp.name, phone:emp.phone}, total: targetCount, timeLimitSec: 8*60 });
   }catch(e){ res.status(500).json({error:e.message}); }
 });
 app.post('/api/courses/:id/submit', (req,res)=>{
