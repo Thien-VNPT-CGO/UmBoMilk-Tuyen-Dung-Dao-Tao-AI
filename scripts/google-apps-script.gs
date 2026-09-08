@@ -158,6 +158,10 @@ function getHeadersForSheet(name) {
       return ['ID Đổi máy', 'Mã NV', 'Lý do', 'Trạng thái', 'Device ID Cũ', 'Device ID Mới'];
     case 'KET_QUA_TEST':
       return ['ID Kết quả', 'Mã NV', 'Tên NV', 'Số câu đúng', 'Tổng điểm', 'Kết quả', 'Thời gian nộp'];
+    case 'PHIEU_DOI_CA_TRAINING':
+      return ['ID','Mã NV','Họ tên','Ngày','Ca cũ','Ca mới','Lý do','Trạng thái','Ngày tạo','Hết hạn','Người duyệt'];
+    case 'PHIEU_DOI_CA_OFFICIAL':
+      return ['ID','Mã NV','Họ tên','Ngày','Ca cũ','Ca mới','NV thay ca','Lý do','Trạng thái','Ngày tạo','Người duyệt'];
     case 'RECORD_ZALO':
       return ['ID Record', 'Mã NV', 'Số Zalo', 'Mẫu tin', 'Trạng thái', 'Thời gian gửi'];
     default:
@@ -226,6 +230,10 @@ function formatPayloadToRow(name, payload) {
       return [payload.id || '', payload.employeeId || '', payload.reason || '', payload.status || '', payload.oldDeviceId || '', payload.newDeviceId || ''];
     case 'KET_QUA_TEST':
       return [payload.id || '', payload.employeeId || '', payload.name || '', payload.correctCount || 0, payload.score || 0, payload.result || '', payload.completedAt || now];
+    case 'PHIEU_DOI_CA_TRAINING':
+      return [payload.id || '', payload.employeeId || '', payload.employeeName || '', payload.toDate || payload.date || '', payload.fromShift || '', payload.toShift || '', payload.reason || '', payload.status || '', payload.createdAt || now, payload.expiresAt || '', payload.approvedBy || ''];
+    case 'PHIEU_DOI_CA_OFFICIAL':
+      return [payload.id || '', payload.requesterId || '', payload.requesterName || '', payload.date || '', payload.fromShift || '', payload.toShift || '', payload.targetEmployeeName || payload.acceptedBy || '', payload.reason || '', payload.status || '', payload.createdAt || now, payload.approvedBy || ''];
     case 'RECORD_ZALO':
       return [payload.id || '', payload.employeeId || '', payload.phone || '', payload.template || '', payload.status || '', payload.sentAt || now];
     default:

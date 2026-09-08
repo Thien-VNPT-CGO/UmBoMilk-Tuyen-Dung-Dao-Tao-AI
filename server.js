@@ -164,6 +164,7 @@ const SHEET_DEFINITIONS = {
   PHIEU_OFF_DOT_XUAT: { sheetName: 'PHIEU_OFF_DOT_XUAT', headers: ['ID','Mã NV','Họ tên','Chi nhánh','Ca','Ngày OFF','Lý do','Người thay','Trạng thái','Bước liên hoàn','Ngày tạo'] },
   PHIEU_DOI_THIET_BI: { sheetName: 'PHIEU_DOI_THIET_BI', headers: ['ID','Mã NV','Lý do','Thiết bị cũ','Thiết bị mới','Trạng thái','Ngày tạo','Hết hạn'] },
   PHIEU_DOI_CA_TRAINING: { sheetName: 'PHIEU_DOI_CA_TRAINING', headers: ['ID','Mã NV','Họ tên','Ngày','Ca cũ','Ca mới','Lý do','Trạng thái','Ngày tạo','Hết hạn','Người duyệt'] },
+  PHIEU_DOI_CA_OFFICIAL: { sheetName: 'PHIEU_DOI_CA_OFFICIAL', headers: ['ID','Mã NV','Họ tên','Ngày','Ca cũ','Ca mới','NV thay ca','Lý do','Trạng thái','Ngày tạo','Người duyệt'] },
   // Điểm danh
   RECORD_DIEM_DANH: { sheetName: 'RECORD_DIEM_DANH', headers: ['ID','Mã NV','Họ tên','Ngày','Ca','Chi nhánh','Giờ vào ca','GPS vào','Ảnh vào','Drive vào','Giờ ra ca','GPS ra','Ảnh ra','Drive ra','Trạng thái','Vi phạm','Phiên bản'] },
   RECORD_ZALO: { sheetName: 'RECORD_ZALO', headers: ['ID','Thời gian gửi','Người nhận','Loại','Nội dung','Trạng thái','Lỗi'] },
@@ -847,7 +848,7 @@ function isTestRecord(item){
     return false;
   }
   if(item.isTest === true || item.is_test === true) return true;
-  const name = (item.name || item.employeeName || item.applicantName || '').toString().trim().toLowerCase();
+  const name = (item.name || item.employeeName || item.applicantName || item.requesterName || item.targetEmployeeName || item.substituteName || '').toString().trim().toLowerCase();
   if(/\b(test|mock)\b/i.test(name) || /^nv [a-d] \(/i.test(name) || name.includes('thử nghiệm') || name.includes('thu nghiem') || name.includes('forcelogout') || name.includes('test submit') || name.includes('test force')) return true;
   const phone = (item.phone || item.receiver || '').toString().replace(/\D/g, '');
   if(phone.startsWith('09099') || phone === '0909990001' || phone === '0909990003' || phone === '0909990005') return true;
@@ -906,6 +907,7 @@ async function syncToGoogleSheet(item){
     EMERGENCY_REQUEST: 'PHIEU_OFF_DOT_XUAT',
     DEVICE_REQUEST: 'PHIEU_DOI_THIET_BI',
     TRAINING_SHIFT: 'PHIEU_DOI_CA_TRAINING',
+    SHIFT_SWAP: 'PHIEU_DOI_CA_OFFICIAL',
     TEST_RESULT: 'KET_QUA_TEST',
     ZALO: 'RECORD_ZALO'
   };
@@ -1084,6 +1086,8 @@ function addSyncQueue(entity, operation, payload, actor, source='WEB_HR'){
       OFF_REQUEST: 'PHIEU_OFF_HANG_TUAN',
       EMERGENCY_REQUEST: 'PHIEU_OFF_DOT_XUAT',
       DEVICE_REQUEST: 'PHIEU_DOI_THIET_BI',
+      TRAINING_SHIFT: 'PHIEU_DOI_CA_TRAINING',
+      SHIFT_SWAP: 'PHIEU_DOI_CA_OFFICIAL',
       TEST_RESULT: 'KET_QUA_TEST',
       ZALO: 'RECORD_ZALO'
     };
@@ -3975,15 +3979,18 @@ app.post('/api/employee/register-off', (req, res) => {
       existingSched.days = fullDays;
       existingSched.version = (existingSched.version || 1) + 1;
       existingSched.updated_at = getVietnamISOString();
+      addSyncQueue('SCHEDULE','UPDATE',existingSched,employeeId,'WEB_EMPLOYEE');
     } else {
-      db.schedules.push({
+      const newSched = {
         id: uuidv4(),
         employeeId: employeeId,
         weekStart: wStart,
         days: fullDays,
         version: 1,
         updated_at: getVietnamISOString()
-      });
+      };
+      db.schedules.push(newSched);
+      addSyncQueue('SCHEDULE','CREATE',newSched,employeeId,'WEB_EMPLOYEE');
     }
   }
 
@@ -4601,6 +4608,8 @@ async function syncSheetTab(sheetKey){
     case 'PHIEU_OFF_HANG_TUAN': dbCollection = db.offRequests.filter(r=>!isTestRecord(r)); dbLen = dbCollection.length;    break;
     case 'PHIEU_OFF_DOT_XUAT': dbCollection = db.emergencyRequests.filter(r=>!isTestRecord(r)); dbLen = dbCollection.length; break;
     case 'PHIEU_DOI_THIET_BI': dbCollection = db.deviceRequests.filter(r=>!isTestRecord(r)); dbLen = dbCollection.length; break;
+    case 'PHIEU_DOI_CA_TRAINING': dbCollection = (db.trainingShiftRequests||[]).filter(r=>!isTestRecord(r)); dbLen = dbCollection.length; break;
+    case 'PHIEU_DOI_CA_OFFICIAL': dbCollection = (db.shiftSwapRequests||[]).filter(r=>!isTestRecord(r)); dbLen = dbCollection.length; break;
     case 'KET_QUA_TEST':      dbCollection = db.testResults.filter(t=>!isTestRecord(t));   dbLen = dbCollection.length;  break;
     case 'SYNC_QUEUE':        dbCollection = db.syncQueue.filter(q=>!isTestRecord(q)&&!isTestRecord(q.payload));     dbLen = dbCollection.length;  break;
     default:                  dbCollection = null;               dbLen = 0;                              break;
@@ -4651,6 +4660,12 @@ async function syncSheetTab(sheetKey){
       case 'PHIEU_DOI_THIET_BI':
         rows = db.deviceRequests.filter(r=>!isTestRecord(r)).map(r=>[r.id, r.employeeId, r.reason, r.oldDeviceId||'', r.newDeviceId||'', r.status, r.createdAt, r.expiresAt]);
         break;
+      case 'PHIEU_DOI_CA_TRAINING':
+        rows = (db.trainingShiftRequests||[]).filter(r=>!isTestRecord(r)).map(r=>[r.id, r.employeeId, r.employeeName||'', r.toDate||r.date||'', r.fromShift||'', r.toShift||'', r.reason||'', r.status, r.createdAt, r.expiresAt||'', r.approvedBy||'']);
+        break;
+      case 'PHIEU_DOI_CA_OFFICIAL':
+        rows = (db.shiftSwapRequests||[]).filter(r=>!isTestRecord(r)).map(r=>[r.id, r.requesterId, r.requesterName||'', r.date||'', r.fromShift||'', r.toShift||'', r.targetEmployeeName||r.acceptedBy||'', r.reason||'', r.status, r.createdAt, r.approvedBy||'']);
+        break;
       case 'KET_QUA_TEST':
         rows = db.testResults.filter(t=>!isTestRecord(t)).map(t=>[t.id, t.employeeId, db.employees.find(e=>e.employeeId===t.employeeId)?.name||'', t.courseId, t.score, `${t.correct}/${t.total}`, t.result, t.timeSpent, t.createdAt]);
         break;
@@ -4672,6 +4687,8 @@ async function syncSheetTab(sheetKey){
       PHIEU_OFF_HANG_TUAN: { phone: -1, code: 1 },
       PHIEU_OFF_DOT_XUAT: { phone: -1, code: 1 },
       PHIEU_DOI_THIET_BI: { phone: -1, code: 1 },
+      PHIEU_DOI_CA_TRAINING: { phone: -1, code: 1 },
+      PHIEU_DOI_CA_OFFICIAL: { phone: -1, code: 1 },
       KET_QUA_TEST: { phone: -1, code: 1 },
       DRIVE_FILES: { phone: -1, code: 1 }
     };
@@ -6148,7 +6165,8 @@ app.post('/api/training/shift-change', (req,res)=>{
     id: reqId, employeeId, employeeName: emp.name, branchId: emp.branchId,
     date: toDate, fromDate, toDate, fromShift: currentShift, toShift, reason: reason||'',
     type: isAdd ? 'ADD_SHIFT' : 'CHANGE_SHIFT',
-    status:'PENDING', createdAt, expiresAt, version:1
+    status:'PENDING', createdAt, expiresAt, version:1,
+    isTest: (emp.isTest || isTestRecord(emp) || req.headers['x-is-test']==='true' || (req.body && req.body.isTest===true)) || undefined
   };
   db.trainingShiftRequests.unshift(newReq);
   audit(employeeId,'CREATE_TRAINING_SHIFT_CHANGE','TRAINING_SHIFT', null, newReq, req.ip);
@@ -6370,7 +6388,8 @@ app.post('/api/shift-swap', (req,res)=>{
     reason: reason||'',
     status: isDirect ? 'PENDING_TARGET' : 'PENDING_BROADCAST',
     createdAt: now.toISOString(), expiresAt, version:1,
-    acceptedBy: null, acceptedAt: null
+    acceptedBy: null, acceptedAt: null,
+    isTest: (emp.isTest || isTestRecord(emp) || req.headers['x-is-test']==='true' || (req.body && req.body.isTest===true)) || undefined
   };
   db.shiftSwapRequests.unshift(newReq);
   audit(requesterId,'CREATE_SHIFT_SWAP','SHIFT_SWAP',null,newReq, req.ip);
@@ -6467,7 +6486,7 @@ app.post('/api/shift-swap/:id/respond', (req,res)=>{
         let sched = db.schedules.find(s=>s.employeeId===e.employeeId && s.days.some(d=>d.date===r.date));
         if(sched){
           const day = sched.days.find(d=>d.date===r.date);
-          if(day){ day.shift=otherShift; day.status='WORKING'; day.substituteFor = idx===0 ? r.targetEmployeeId : r.requesterId; sched.version=(sched.version||1)+1; }
+          if(day){ day.shift=otherShift; day.status='WORKING'; day.substituteFor = idx===0 ? r.targetEmployeeId : r.requesterId; sched.version=(sched.version||1)+1; addSyncQueue('SCHEDULE','UPDATE',sched,employeeId,'WEB_EMPLOYEE'); }
         }
       });
       saveDB();
@@ -6547,7 +6566,8 @@ app.post('/api/shift-swap/hr-broadcast', authMiddleware, roleCheck(['Admin','HR'
     reason, isHrCreated: true, isUrgent: true, urgency: '<24h',
     status: 'PENDING_BROADCAST',
     createdAt: now.toISOString(), expiresAt, version:1,
-    createdByHr: req.user.username
+    createdByHr: req.user.username,
+    isTest: (emp.isTest || isTestRecord(emp) || req.headers['x-is-test']==='true' || (req.body && req.body.isTest===true)) || undefined
   };
   db.shiftSwapRequests.unshift(newReq);
   audit(req.user.username,'HR_CREATE_SHIFT_SWAP_URGENT','SHIFT_SWAP',null,newReq, req.ip);
@@ -6588,14 +6608,14 @@ app.post('/api/shift-swap/:id/approve', authMiddleware, roleCheck(['Admin','HR',
     let sched = db.schedules.find(s=>s.employeeId===requester.employeeId && s.days.some(d=>d.date===r.date));
     if(sched){
       const day = sched.days.find(d=>d.date===r.date);
-      if(day){ day.shift = r.toShift; day.status='WORKING'; day.substituteFor = targetId||null; sched.version=(sched.version||1)+1; }
+      if(day){ day.shift = r.toShift; day.status='WORKING'; day.substituteFor = targetId||null; sched.version=(sched.version||1)+1; addSyncQueue('SCHEDULE','UPDATE',sched,req.user.username,'WEB_HR'); }
     }
   }
   if(target){
     let sched = db.schedules.find(s=>s.employeeId===target.employeeId && s.days.some(d=>d.date===r.date));
     if(sched){
       const day = sched.days.find(d=>d.date===r.date);
-      if(day){ day.shift = r.fromShift; day.status='WORKING'; day.substituteFor = r.requesterId; sched.version=(sched.version||1)+1; }
+      if(day){ day.shift = r.fromShift; day.status='WORKING'; day.substituteFor = r.requesterId; sched.version=(sched.version||1)+1; addSyncQueue('SCHEDULE','UPDATE',sched,req.user.username,'WEB_HR'); }
     }
   }
 
@@ -6679,7 +6699,7 @@ function checkShiftSwap24h(){
             let sched = db.schedules.find(s=>s.employeeId===e.employeeId && s.days.some(d=>d.date===r.date));
             if(sched){
               const day = sched.days.find(d=>d.date===r.date);
-              if(day){ day.shift=otherShift; day.status='WORKING'; sched.version=(sched.version||1)+1; }
+              if(day){ day.shift=otherShift; day.status='WORKING'; sched.version=(sched.version||1)+1; addSyncQueue('SCHEDULE','UPDATE',sched,'SYSTEM','AUTO'); }
             }
           });
         }
@@ -7358,7 +7378,8 @@ app.post('/api/emergency-requests', (req,res)=>{
   const er = {
     id: reqId, employeeId, employeeName: emp.name, branchId: emp.branchId, shift: emp.shift,
     date, reason, status:'PENDING', cascadeStep:1, substituteId:null, substituteName:null,
-    createdAt: getVietnamISOString(), timeoutAt: new Date(Date.now()+2*60*1000).toISOString(), attempts:0, version:1
+    createdAt: getVietnamISOString(), timeoutAt: new Date(Date.now()+2*60*1000).toISOString(), attempts:0, version:1,
+    isTest: (emp.isTest || isTestRecord(emp) || req.headers['x-is-test']==='true' || (req.body && req.body.isTest===true)) || undefined
   };
   db.emergencyRequests.unshift(er);
   // AI đăng ký tạm lịch EMERGENCY_PENDING cho NV gửi yêu cầu
@@ -7373,13 +7394,15 @@ app.post('/api/emergency-requests', (req,res)=>{
       for(let i=0;i<7;i++){ const cur=new Date(wDate); cur.setDate(wDate.getDate()+i); const y=cur.getFullYear(); const m=String(cur.getMonth()+1).padStart(2,'0'); const d=String(cur.getDate()).padStart(2,'0'); const ds=`${y}-${m}-${d}`; days.push({date:ds, dayName:dayNames[i], shift: emp.shift, status: ds===date ? 'EMERGENCY_PENDING' : 'WORKING', substituteFor:null});}
       sched={ id: uuidv4(), employeeId, weekStart: ws, days, version:1, updated_at: getVietnamISOString()};
       db.schedules.push(sched);
+      addSyncQueue('SCHEDULE','CREATE',sched,employeeId,'WEB_EMPLOYEE');
     } else {
       const day = sched.days.find(d=>d.date===date);
-      if(day){ day.status='EMERGENCY_PENDING'; day.shift = emp.shift; }
+      if(day){ day.status='EMERGENCY_PENDING'; day.shift = emp.shift; sched.version=(sched.version||1)+1; addSyncQueue('SCHEDULE','UPDATE',sched,employeeId,'WEB_EMPLOYEE'); }
     }
     io.emit('schedules:update', db.schedules);
   }catch(e){ console.error('temp schedule error',e); }
   audit(employeeId,'EMERGENCY_REQUEST','OFF_REQUEST',null,er, req.ip);
+  addSyncQueue('EMERGENCY_REQUEST','CREATE',er,employeeId,'WEB_EMPLOYEE');
   saveDB();
   io.emit('emergencyRequests:update', db.emergencyRequests);
   notifyAdminAndHR({
@@ -7526,12 +7549,12 @@ app.post('/api/emergency-requests/:id/respond', (req,res)=>{
   const sched1 = db.schedules.find(s=>s.employeeId===er.employeeId && s.days.some(d=>d.date===er.date));
   if(sched1){
     const day = sched1.days.find(d=>d.date===er.date);
-    if(day){ day.status='EMERGENCY_OFF'; day.substituteFor = substituteId; }
+    if(day){ day.status='EMERGENCY_OFF'; day.substituteFor = substituteId; sched1.version=(sched1.version||1)+1; addSyncQueue('SCHEDULE','UPDATE',sched1,substituteId,'WEB_EMPLOYEE'); }
   }
   let sched2 = db.schedules.find(s=>s.employeeId===substituteId && s.days.some(d=>d.date===er.date));
   if(sched2){
     const day = sched2.days.find(d=>d.date===er.date);
-    if(day){ day.status='SUBSTITUTE'; day.substituteFor = er.employeeId; }
+    if(day){ day.status='SUBSTITUTE'; day.substituteFor = er.employeeId; sched2.version=(sched2.version||1)+1; addSyncQueue('SCHEDULE','UPDATE',sched2,substituteId,'WEB_EMPLOYEE'); }
   } else {
     // create schedule for substitute
     const weekStart = getMonday(new Date(er.date));
@@ -7539,11 +7562,11 @@ app.post('/api/emergency-requests/:id/respond', (req,res)=>{
     const existing = db.schedules.find(s=>s.employeeId===substituteId && s.weekStart===ws);
     if(existing){
       const d = existing.days.find(x=>x.date===er.date);
-      if(d){ d.status='SUBSTITUTE'; d.substituteFor=er.employeeId; }
+      if(d){ d.status='SUBSTITUTE'; d.substituteFor=er.employeeId; existing.version=(existing.version||1)+1; addSyncQueue('SCHEDULE','UPDATE',existing,substituteId,'WEB_EMPLOYEE'); }
     }
   }
   audit(substituteId,'APPROVE_SUBSTITUTE','EMERGENCY',null,er, req.ip);
-  addSyncQueue('EMERGENCY','UPDATE',er, substituteId, 'WEB_EMPLOYEE');
+  addSyncQueue('EMERGENCY_REQUEST','UPDATE',er, substituteId, 'WEB_EMPLOYEE');
   saveDB();
   io.emit('emergencyRequests:update', db.emergencyRequests);
   io.emit('schedules:update', db.schedules);
