@@ -7636,13 +7636,13 @@ async function syncQuizBankFromSheet(manualBy){
     if(parsed.length===0) return { ...out, error:'Sheet không có dòng câu hỏi hợp lệ (cần: Câu hỏi | A | B | C | D | Đáp án | Giải thích)' };
     let bank = db.testCourses.find(c=>c.id==='course_001') || db.testCourses[0];
     if(!bank){
-      bank = { id:'course_001', title:'Kiểm tra đầu ra - Ụm Bò Milk 2026', description:'Ngân hàng câu hỏi trắc nghiệm (tự động từ Google Sheet)', totalQuestions:0, minPerQuestion:5, questions:[], voiceSimulations:[], createdAt:getVietnamISOString() };
+      bank = { id:'course_001', title:'Kiểm tra đầu ra - Ụm Bò Milk 2026', description:'', totalQuestions:0, minPerQuestion:5, questions:[], voiceSimulations:[], createdAt:getVietnamISOString() };
       db.testCourses.unshift(bank);
     }
     bank.questions = parsed.map((q, idx)=>({ id: 'q_' + (idx + 1), ...q }));
     bank.totalQuestions = bank.questions.length;
     bank.minPerQuestion = 5;
-    bank.description = 'Ngân hàng câu hỏi trắc nghiệm (tự động từ Google Sheet 1h06TrHMRnBOHMkp7Ri4Rz8yRw8ptemQp0ftjMldHYdc)';
+    bank.description = '';
     bank.quizSource = { spreadsheetId: cfg.spreadsheetId, sheetName: cfg.sheetName, sheetUrl: cfg.sheetUrl, updatedAt: getVietnamISOString(), rowCount: parsed.length, by: manualBy||'AUTO_60S' };
     out.updated = parsed.length; out.total = bank.questions.length;
     audit(manualBy||'SYSTEM','SYNC_QUIZ_BANK','TEST',null,{total:bank.questions.length},'sheet-sync');
@@ -7715,7 +7715,7 @@ app.post('/api/courses/import', authMiddleware, roleCheck(['Admin','HR']), (req,
     if(norm.length===0) return res.status(400).json({error:'Không có câu hỏi hợp lệ (cần: Câu hỏi + 4 đáp án A–D + Đáp án đúng)'});
     let bank = db.testCourses.find(c=>c.id==='course_001') || db.testCourses[0];
     if(!bank){
-      bank = { id:'course_001', title:'Kiểm tra đầu ra - Ụm Bò Milk 2026', description:'Ngân hàng câu hỏi trắc nghiệm', totalQuestions:0, minPerQuestion:5, questions:[], voiceSimulations:[], createdAt:getVietnamISOString() };
+      bank = { id:'course_001', title:'Kiểm tra đầu ra - Ụm Bò Milk 2026', description:'', totalQuestions:0, minPerQuestion:5, questions:[], voiceSimulations:[], createdAt:getVietnamISOString() };
       db.testCourses.unshift(bank);
     }
     const seen = new Set(bank.questions.map(q=>String(q.question||'').trim().toLowerCase()));
