@@ -7750,6 +7750,14 @@ app.post('/api/quiz/open', async (req,res)=>{
     if(!emp) return res.status(404).json({error:'Không tìm thấy nhân viên'});
     if(emp.type!=='TRAINING' && !['TRAINING','WAITING_TEST','RETEST'].includes(emp.status)) return res.status(403).json({error:'Chỉ nhân viên Training mới được mở TEST đầu ra'});
 
+    // RÀNG BUỘC THI LẠI: NV đã nộp bài và trượt (RETEST) thì chờ HR mở đề mới — không tự mở lại.
+    // (Bài thi cũ đã bị hệ thống tự động xoá sau khi nộp.) Bỏ qua khi HR mở (có openedBy) hoặc đang test.
+    const _hasFreshQuiz = emp.testSchedule && emp.testSchedule.type==='ONLINE_QUIZ' && emp.testSchedule.status==='IN_PROGRESS' && Array.isArray(emp.testSchedule.questionIds) && emp.testSchedule.questionIds.length>0;
+    const _isTestReq = req.headers['x-is-test']==='true' || (req.body && req.body.isTest===true);
+    if(emp.status==='RETEST' && !_hasFreshQuiz && !(req.body && req.body.openedBy) && !_isTestReq){
+      return res.status(403).json({error:'Bài thi trước đã nộp và cần thi lại — vui lòng chờ HR mở đề thi mới và gửi đến.'});
+    }
+
     // RÀNG BUỘC REALTIME: Bỏ qua kiểm tra 7 ngày nếu:
     // 1. Request có force: true (HR bấm Mở ép)
     // 2. Nhân viên đã được HR đánh dấu Mở ép trước đó (emp.forceOpenTest hoặc emp.isForceUnlocked)
@@ -7878,6 +7886,9 @@ app.post('/api/courses/:id/submit', (req,res)=>{
     db.zaloRecords.unshift(zr);
     io.emit('zalo:update', db.zaloRecords);
   }
+  // RÀNG BUỘC: thi xong hệ thống tự động xoá bài thi (session 25 câu) — chống dùng lại đề cũ.
+  // ĐẠT -> ẩn Đào tạo (WAITING_OFFICIAL); trượt/thi lại -> giữ Đào tạo, chờ HR mở đề mới.
+  emp.testSchedule = null;
   emp.version=(emp.version||1)+1;
   emp.updated_at=getVietnamISOString();
   emp.sync_status = (emp.isTest || isTestRecord(emp)) ? 'TEST_BLOCKED' : 'PENDING';

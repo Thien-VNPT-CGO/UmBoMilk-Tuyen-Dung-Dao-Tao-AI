@@ -2356,6 +2356,7 @@ async function submitTest(auto){
     }
     employee = res.employee;
     localStorage.setItem('emp_data', JSON.stringify(employee));
+    try{ refreshNavVisibility(); }catch(e){} // Bài thi đã xoá: ĐẠT -> ẩn Đào tạo ngay; trượt -> giữ Đào tạo chờ HR mở đề mới
     loadElearning(); loadHome();
   }catch(e){ alert(e.message); window.testSubmitting=false; startTestTimer(); }
 }
