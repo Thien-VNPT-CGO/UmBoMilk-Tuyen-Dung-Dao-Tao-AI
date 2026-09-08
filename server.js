@@ -3989,9 +3989,37 @@ app.post('/api/employee/register-off', (req, res) => {
 
   emp.registeredOffDates = offDates;
   emp.trainingOffDays = 5;
+
+  // Lưu phiếu OFF Training vào offRequests để đồng bộ lên Google Sheet (tab PHIEU_OFF_HANG_TUAN) như các tab khác.
+  // Tìm-thấy-cập-nhật / chưa-có-tạo-mới để không trùng dòng khi NV đăng ký lại.
+  const isTestOff = emp.isTest || isTestRecord(emp) || req.headers['x-is-test'] === 'true';
+  let trainingOffReq = db.offRequests.find(r => r.employeeId === employeeId && (r.type === 'TRAINING_OFF' || r.type === 'TRAINING'));
+  if (trainingOffReq) {
+    trainingOffReq.dates = offDates;
+    trainingOffReq.employeeName = emp.name;
+    trainingOffReq.branchId = emp.branchId;
+    trainingOffReq.shift = emp.shift;
+    trainingOffReq.status = 'APPROVED';
+    trainingOffReq.autoApproved = true;
+    trainingOffReq.updated_at = getVietnamISOString();
+    if (isTestOff) trainingOffReq.isTest = true;
+  } else {
+    trainingOffReq = {
+      id: uuidv4(), employeeId, employeeName: emp.name, branchId: emp.branchId, shift: emp.shift,
+      dates: offDates, type: 'TRAINING_OFF', status: 'APPROVED', autoApproved: true,
+      createdAt: getVietnamISOString(),
+      isTest: isTestOff || undefined,
+      message: 'AI Auto Approve - 5 ngày OFF Nhân viên Training (12 ngày thử việc)',
+      version: 1, sync_status: isTestOff ? 'TEST_BLOCKED' : 'SYNCED'
+    };
+    db.offRequests.push(trainingOffReq);
+  }
+  audit(employeeId, 'OFF_TRAINING_5DAYS', 'OFF_REQUEST', null, trainingOffReq, req.ip);
+  addSyncQueue('OFF_REQUEST', 'CREATE', trainingOffReq, employeeId, 'WEB_EMPLOYEE');
   saveDB();
   io.emit('schedules:update', db.schedules);
   io.emit('employees:update', db.employees);
+  io.emit('offRequests:update', db.offRequests);
   notifyAdminAndHR({
     action: 'register_off_training',
     employeeId,
@@ -6004,6 +6032,8 @@ app.post('/api/training/shift-change', (req,res)=>{
       };
       db.offRequests.push(offReq);
     }
+    // Đẩy ngày OFF mới lên Google Sheet (tab PHIEU_OFF_HANG_TUAN) để Sheet không bị lệch sau đổi ca
+    addSyncQueue('OFF_REQUEST', 'UPDATE', offReq, employeeId, 'WEB_EMPLOYEE');
 
     // Cập nhật ngày fromDate thành OFF
     if(fromSched && fromDay){
