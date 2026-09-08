@@ -3207,7 +3207,7 @@ function openTestOptionModal(employeeId) {
             </div>
           </div>
           <button class="mt-4 w-full text-xs font-black bg-purple-600 hover:bg-purple-700 text-white py-2 rounded-xl transition">
-            Chọn Tùy Chọn 1 & Khóa Điểm Danh ➔
+            Gửi trắc nghiệm cho NV
           </button>
         </div>
 
@@ -3224,7 +3224,7 @@ function openTestOptionModal(employeeId) {
             </div>
           </div>
           <button class="mt-4 w-full text-xs font-black bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-xl transition">
-            Lên Lịch Phỏng Vấn Google Meet ➔
+            Tạo lịch TEST đầu ra
           </button>
         </div>
       </div>
