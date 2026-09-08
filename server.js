@@ -6930,6 +6930,74 @@ app.post('/api/schedules/approve-next-week', authMiddleware, roleCheck(['Admin',
   res.json({ success:true, weekStart: nextWeekStart, approved: drafts.length, warning, violations, message:`Đã duyệt lịch tuần sau ${nextWeekStart} cho ${drafts.length} NV và gửi đến Web App Nhân viên${warning ? ' - ' + warning : ''}` });
 });
 
+// ============ DUYỆT LỊCH ĐĂNG KÝ TEST (nút Admin) ============
+// Chính sách bật nút:
+// - VIP test OFF đang BẬT -> luôn cho duyệt (để admin test).
+// - VIP TẮT -> chỉ cho duyệt khi đã hết giờ đăng ký (ngoài khung T6 12:00-T7 15:00, tức sau 15h00 T7).
+// Khi duyệt: khóa đợt đăng ký OFF tuần sau + AI tạo (nếu chưa có) & duyệt lịch tuần sau cho NV chính thức + đồng bộ Sheet.
+app.get('/api/schedules/approve-test-status', authMiddleware, roleCheck(['Admin','HR','Manager']), (req,res)=>{
+  const nextWeekStart = getNextWeekStartStr();
+  const vip = !!db.settings?.off?.vipTestMode;
+  const windowOpen = isOffWindowOpen();
+  const locked = Array.isArray(db.settings?.off?.lockedWeeks) && db.settings.off.lockedWeeks.includes(nextWeekStart);
+  const drafts = db.schedules.filter(s=> s.weekStart===nextWeekStart && s.approvalStatus==='PENDING_APPROVAL').length;
+  const approved = db.schedules.filter(s=> s.weekStart===nextWeekStart && s.approvalStatus==='APPROVED').length;
+  const canApprove = vip || !windowOpen;
+  res.json({ weekStart: nextWeekStart, vipTestMode: vip, windowOpen, locked, drafts, approved, canApprove,
+    reason: vip ? 'VIP test đang BẬT - duyệt test mọi lúc' : (windowOpen ? 'Đang trong giờ đăng ký T6 12:00-T7 15:00 - nút mở sau 15h00 T7' : (locked ? 'Tuần này đã duyệt & khóa' : 'Đã hết giờ đăng ký - bấm để duyệt & khóa lịch')) });
+});
+app.post('/api/schedules/approve-test-week', authMiddleware, roleCheck(['Admin','HR']), async (req,res)=>{
+  const nextWeekStart = getNextWeekStartStr();
+  const vip = !!db.settings?.off?.vipTestMode;
+  if(!vip && isOffWindowOpen()) return res.status(400).json({error:'Đang trong giờ đăng ký OFF (T6 12:00-T7 15:00). Nút duyệt mở sau 15h00 Thứ 7 (hoặc bật VIP test để duyệt test).'});
+  // 1. Đảm bảo có draft (AI tự sắp lịch nếu chưa có)
+  let drafts = db.schedules.filter(s=> s.weekStart===nextWeekStart && s.approvalStatus==='PENDING_APPROVAL');
+  let generated = false;
+  if(drafts.length===0){
+    const gen = await generateNextWeekDraft(req.user.username+'_TEST_APPROVE');
+    if(gen.error) return res.status(400).json({error: gen.error});
+    generated = true;
+    drafts = db.schedules.filter(s=> s.weekStart===nextWeekStart && s.approvalStatus==='PENDING_APPROVAL');
+    if(drafts.length===0) return res.status(400).json({error:'Không tạo được lịch draft tuần sau (không có NV chính thức).'});
+  }
+  // 2. Kiểm tra min12 (cảnh báo như luồng duyệt thường)
+  const officials = db.employees.filter(e=> e.status==='OFFICIAL' || e.type==='OFFICIAL');
+  const violations=[];
+  drafts.forEach(d=>{
+    const emp = officials.find(e=> e.employeeId===d.employeeId);
+    if(!emp) return;
+    const stats = getOfficialMonthlyStats(emp.employeeId, nextWeekStart.slice(0,7));
+    const draftWorking = d.days.filter(day=> day.status==='WORKING').length;
+    if(stats.scheduledWorking + draftWorking <12) violations.push({ employeeId: emp.employeeId, name: emp.name, need: 12 - (stats.scheduledWorking + draftWorking) });
+  });
+  let warning = null;
+  if(violations.length>0) warning = `Cảnh báo: ${violations.length} NV chưa đạt min 12 ngày/tháng - vẫn cho duyệt, HR cần theo dõi`;
+  // 3. Duyệt + khóa đợt đăng ký + đồng bộ Sheet realtime
+  drafts.forEach(d=>{
+    d.approvalStatus='APPROVED';
+    d.approvedBy = req.user.username;
+    d.approvedAt = getVietnamISOString();
+    d.version = (d.version||1)+1;
+    const notif = { id: uuidv4(), to: d.employeeId, type:'SCHEDULE_APPROVED', title: `Lịch tuần sau ${nextWeekStart} đã được duyệt`, content: `Lịch làm việc tuần ${nextWeekStart} của bạn đã được ${req.user.username} duyệt${vip?' (chế độ test)':''}. Vui lòng kiểm tra Web App Nhân viên.`, createdAt: getVietnamISOString(), read:false };
+    db.notifications.push(notif);
+    const emp = db.employees.find(e=> e.employeeId===d.employeeId);
+    if(emp){
+      const zr = { id: uuidv4(), sent_at: getVietnamISOString(), receiver: emp.phone, type:'SCHEDULE_APPROVED', content: `[ỤM BÒ MILK] Lịch tuần ${nextWeekStart} của ${emp.name} đã duyệt: ${d.days.filter(day=> day.status==='WORKING').map(day=> day.dayName).join(', ')}`, status:'SENT', error:'' };
+      db.zaloRecords.unshift(zr);
+    }
+    addSyncQueue('SCHEDULE','UPDATE',d,req.user.username,'WEB_HR');
+  });
+  if(!db.settings.off) db.settings.off = {};
+  if(!Array.isArray(db.settings.off.lockedWeeks)) db.settings.off.lockedWeeks = [];
+  if(!db.settings.off.lockedWeeks.includes(nextWeekStart)) db.settings.off.lockedWeeks.push(nextWeekStart);
+  audit(req.user.username,'APPROVE_TEST_WEEK_SCHEDULE','SCHEDULE', { weekStart: nextWeekStart, generated }, { approved: drafts.length, locked: true, vip, warning }, req.ip);
+  saveDB();
+  io.emit('schedules:update', db.schedules);
+  io.emit('schedules:approved', { weekStart: nextWeekStart, count: drafts.length });
+  io.emit('notifications:update', db.notifications);
+  res.json({ success:true, weekStart: nextWeekStart, approved: drafts.length, generated, locked:true, vipTestMode: vip, warning, violations, message:`Đã duyệt lịch tuần sau ${nextWeekStart} cho ${drafts.length} NV${generated?' (AI vừa tự sắp lịch)':''}, khóa đợt đăng ký OFF & đồng bộ Sheet${warning ? ' - ' + warning : ''}` });
+});
+
 // API: Trigger thủ công tạo draft (để test hoặc khi OFF xong sớm)
 app.post('/api/schedules/generate-next-week-draft', authMiddleware, roleCheck(['Admin','HR']), async (req,res)=>{
   const result = await generateNextWeekDraft(req.user.username);
@@ -6994,6 +7062,12 @@ app.post('/api/off-requests', (req,res)=>{
   // Khung giờ đăng ký chỉ áp dụng cho Chính thức (Thứ 6 12:00 - Thứ 7 15:00), Training được đăng ký linh hoạt
   if(isOfficial && !bypass && !isOffWindowOpen()){
     return res.status(400).json({error:'Ngoài khung giờ đăng ký: Thứ 6 12:00 - Thứ 7 15:00'});
+  }
+
+  // RÀNG BUỘC KHÓA ĐỢT ĐĂNG KÝ: tuần đã được Admin/HR duyệt lịch thì khóa đăng ký OFF mới (VIP test được bỏ qua để test)
+  if(isOfficial && !db.settings?.off?.vipTestMode && Array.isArray(db.settings?.off?.lockedWeeks) && db.settings.off.lockedWeeks.length>0){
+    const lockedHit = (dates||[]).find(d=>{ try{ return db.settings.off.lockedWeeks.includes(toVietnamDateStr(getMonday(new Date(d)))); }catch(_){ return false; } });
+    if(lockedHit) return res.status(400).json({error:`Đợt đăng ký tuần ${fmtDMY(lockedHit)} đã được duyệt & khóa lịch. Vui lòng chờ đợt đăng ký tiếp theo.`});
   }
 
   if(isOfficial){

@@ -4357,7 +4357,7 @@ function renderSchedules(){
     `;
   }).join('');
   // Hiển thị duyệt lịch tuần sau nếu có draft
-  setTimeout(()=>safeCall(loadNextWeekDrafts()), 500);
+  setTimeout(()=>{ safeCall(loadNextWeekDrafts()); safeCall(loadTestWeekStatus()); }, 600);
 }
 async function loadNextWeekDrafts(){
   try{
@@ -4369,6 +4369,7 @@ async function loadNextWeekDrafts(){
       card.classList.add('hidden');
       return;
     }
+    if(typeof loadTestWeekStatus==='function') loadTestWeekStatus();
     card.classList.remove('hidden');
     listEl.innerHTML = res.drafts.map(d=>{
       const emp = employees.find(e=>e.employeeId===d.employeeId) || {name:d.employeeId, branchId:'', shift:''};
@@ -4389,16 +4390,44 @@ async function generateNextWeekDraft(){
     showToast('Đang tạo draft tuần sau...','info');
     const res = await api('/api/schedules/generate-next-week-draft', {method:'POST', headers:{Authorization:'Bearer '+token}});
     showToast(res.message||'Đã tạo draft tuần sau','success');
-    loadNextWeekDrafts();
     loadSchedules();
   }catch(e){ showToast(e.message,'error'); }
+}
+async function loadTestWeekStatus(){
+  try{
+    const res = await api('/api/schedules/approve-test-status', {headers:{Authorization:'Bearer '+token}});
+    const btn = document.getElementById('btnApproveTestWeek');
+    const txt = document.getElementById('testWeekStatusText');
+    if(!btn || !txt) return;
+    const base = `Tuần ${res.weekStart} — ${res.drafts} draft, ${res.approved} đã duyệt${res.locked?' (đã khóa đăng ký)':''}.`;
+    if(res.locked){
+      btn.disabled = true; btn.className='flex-1 bg-slate-200 text-slate-500 font-black py-3 rounded-xl flex items-center justify-center gap-2 cursor-not-allowed disabled:opacity-40 disabled:cursor-not-allowed';
+      txt.textContent = base + ' Nút khóa sau khi đã duyệt.';
+    } else if(!res.canApprove){
+      btn.disabled = true; btn.className='flex-1 bg-slate-200 text-slate-500 font-black py-3 rounded-xl flex items-center justify-center gap-2 cursor-not-allowed disabled:opacity-40 disabled:cursor-not-allowed';
+      txt.textContent = base + ' ' + res.reason;
+      txt.className='text-xs text-amber-700 mt-1 font-bold';
+    } else {
+      btn.disabled = false; btn.className='flex-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-black py-3 rounded-xl shadow flex items-center justify-center gap-2';
+      txt.textContent = base + ' ' + res.reason;
+      txt.className='text-xs text-emerald-700 mt-1 font-bold';
+    }
+  }catch(e){ const t=document.getElementById('testWeekStatusText'); if(t) t.textContent='Lỗi: '+(e.message||e); }
+}
+async function approveTestWeek(){
+  if(!confirm('Duyệt lịch đăng ký TEST: khóa đợt đăng ký OFF tuần sau, AI sắp lịch cho NV chính thức (nếu chưa có) và đồng bộ Sheet?')) return;
+  const btn=document.getElementById('btnApproveTestWeek'); if(btn) btn.disabled=true;
+  try{
+    const res=await api('/api/schedules/approve-test-week', {method:'POST', headers:{Authorization:'Bearer '+token}});
+    showToast(res.message||'Đã duyệt lịch đăng ký test','success');
+    loadTestWeekStatus(); loadNextWeekDrafts(); loadSchedules();
+  }catch(e){ showToast(e.message,'error'); const b=document.getElementById('btnApproveTestWeek'); if(b) b.disabled=false; loadTestWeekStatus(); }
 }
 async function approveNextWeek(){
   if(!confirm('Duyệt lịch tuần sau cho tất cả NV chính thức? Lịch sẽ được đẩy sang Web App nhân viên ngay (realtime).')) return;
   try{
     const res = await api('/api/schedules/approve-next-week', {method:'POST', headers:{Authorization:'Bearer '+token}});
     showToast(res.message||'Đã duyệt lịch tuần sau','success');
-    loadNextWeekDrafts();
     loadSchedules();
   }catch(e){ showToast(e.message,'error'); }
 }

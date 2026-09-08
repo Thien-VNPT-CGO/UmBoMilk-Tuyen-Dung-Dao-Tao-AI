@@ -522,6 +522,15 @@ body{font-family:'Be Vietnam Pro',sans-serif; -webkit-tap-highlight-color: trans
           </div>
         </div>
         <div id="scheduleGrid" class="grid gap-3"></div>
+        <!-- Duyệt lịch đăng ký TEST (VIP test / sau 15h00 T7) -->
+        <div id="testWeekApprovalCard" class="bg-white rounded-2xl border-2 border-purple-300 p-4 mt-4 shadow-sm">
+          <div class="font-black text-purple-900 flex items-center gap-2 text-sm"><i class="fa-solid fa-flask text-purple-600"></i> Duyệt lịch đăng ký TEST (NV chính thức)</div>
+          <div id="testWeekStatusText" class="text-xs text-slate-600 mt-1">Đang tải trạng thái...</div>
+          <div class="mt-3 flex gap-2">
+            <button id="btnApproveTestWeek" onclick="approveTestWeek()" class="flex-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-black py-3 rounded-xl shadow flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"><i class="fa-solid fa-check-circle"></i> Duyệt lịch đăng ký test</button>
+            <button onclick="loadTestWeekStatus()" class="bg-white border border-purple-200 text-purple-700 font-bold px-4 py-3 rounded-xl hover:bg-purple-50"><i class="fa-solid fa-rotate"></i> Tải lại</button>
+          </div>
+        </div>
         <!-- Duyệt lịch tuần sau (Official) -->
         <div id="nextWeekApprovalCard" class="hidden bg-white rounded-2xl border-2 border-amber-300 p-4 mt-4 shadow-sm">
           <div class="font-black text-amber-900 flex items-center gap-2 text-sm"><i class="fa-solid fa-calendar-check text-amber-600"></i> Duyệt lịch tuần sau (Official) - AI tự động</div>
