@@ -4977,6 +4977,7 @@ app.post('/api/employees/:id/evaluate-test', authMiddleware, (req, res) => {
   emp.status = resultStatus;
   emp.testScore = Math.round((totalScore / 20) * 100); // Scale to 100% for compatibility
   emp.testResult = isPassed ? `ĐẠT (${totalScore}/20đ)` : `CHƯA ĐẠT (${totalScore}/20đ)`;
+  emp.testScoredAt = getVietnamISOString(); // mốc TEST có điểm -> Thư mời tính hẹn ký HĐ +5 ngày
   
   if (!emp.testSchedule) emp.testSchedule = {};
   emp.testSchedule.status = 'EVALUATED';
@@ -7847,6 +7848,7 @@ app.post('/api/courses/:id/submit', (req,res)=>{
   const before = {...emp};
   emp.testScore = rounded;
   emp.testResult = result;
+  emp.testScoredAt = getVietnamISOString(); // mốc TEST có điểm -> Thư mời tính hẹn ký HĐ +5 ngày
   if(sess && sess.type==='ONLINE_QUIZ') sess.status='SUBMITTED';
   if(result==='FAILED'){
     emp.status='FAILED_TEST';

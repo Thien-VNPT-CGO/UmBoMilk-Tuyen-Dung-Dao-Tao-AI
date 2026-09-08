@@ -2227,7 +2227,31 @@ function copyAllCredentials(employeeId, key, name) {
     alert(text);
   });
 }
+// NV Training TEST ĐẠT: testResult 'DAT' (quiz ≥8) hoặc 'ĐẠT (...)' (chấm Meet)
+function isTrainingTestPassed(emp){
+  const r = String(emp?.testResult || '');
+  return r === 'DAT' || r.startsWith('ĐẠT');
+}
+// Khung hẹn ký HĐ chính thức: từ mốc TEST có điểm + 5 ngày tiếp theo
+function getOfficialSignWindow(emp){
+  const base = emp?.testScoredAt || emp?.testSchedule?.evaluation?.evaluatedAt || null;
+  let d = base ? new Date(base) : new Date();
+  if(isNaN(d)) d = new Date();
+  const vn = new Date(d.toLocaleString('en-US', {timeZone:'Asia/Ho_Chi_Minh'}));
+  const pad = n => String(n).padStart(2,'0');
+  const fmt = x => `${pad(x.getDate())}/${pad(x.getMonth()+1)}/${x.getFullYear()}`;
+  const end = new Date(vn); end.setDate(vn.getDate()+5);
+  return { from: fmt(vn), to: fmt(end) };
+}
 function generateTrainingInviteText(emp, key){
+  if(isTrainingTestPassed(emp)){
+    const branchFull = getBranchFull(emp.branchId);
+    const shiftMap = { 'CA_SANG':'Ca sáng: 07h00 - 12h00', 'CA_CHIEU':'Ca chiều: 12h00 - 18h00', 'CA_TOI':'Ca tối: 18h00 - 23h00' };
+    const shiftText = shiftMap[emp.shift] || emp.shift || '';
+    const nameUpper = (emp.name || '').toUpperCase();
+    const win = getOfficialSignWindow(emp);
+    return `🐮 [UMBO MILK] – CHÚC MỪNG BẠN ĐÃ ĐẠT TEST ĐẦU RA 🎉\n\nChào ${nameUpper} ❤️\nChúc mừng bạn đã ĐẠT bài kiểm tra đầu ra (${emp.testResult})! Bạn sắp trở thành Nhân viên chính thức của Ụm Bò Milk 🥛\n\n📌 MỜI KÝ HỢP ĐỒNG CHÍNH THỨC:\n• ⏰ Thời gian: từ ${win.from} đến ${win.to} (trong giờ hành chính)\n• 🏢 Chi nhánh: ${branchFull}\n• ⏱️ Ca làm việc: ${shiftText}\n\n👉 Bạn vui lòng sắp xếp thời gian đến công ty để ký hợp đồng chính thức trong thời gian trên nhé!\n❗Khi đi mang theo CCCD bản gốc để đối chiếu hồ sơ.\n\n---\n📛 Mã NV: ${emp.employeeId}\n🔑 Key: ${key.key || key}\n🌐 Link: ${window.location.origin}/employee`;
+  }
   const branchFull = getBranchFull(emp.branchId);
   const shiftMap = { 'CA_SANG':'Ca sáng: 07h00 - 12h00', 'CA_CHIEU':'Ca chiều: 12h00 - 18h00', 'CA_TOI':'Ca tối: 18h00 - 23h00' };
   const shiftText = shiftMap[emp.shift] || emp.shift || 'Ca chiều: 12h00 - 18h00';
@@ -2261,10 +2285,11 @@ function showTrainingInvite(employeeId){
   if(!emp) return showToast('Không tìm thấy nhân viên','error');
   const keyObj = (typeof dbKeysFind==='function' ? dbKeysFind(employeeId) : null) || {key: 'KEY-UNKNOWN'};
   const inviteText = generateTrainingInviteText(emp, keyObj);
-  openModal('📨 Thư mời Thử việc - ' + emp.name, `
+  const _passed = isTrainingTestPassed(emp);
+  openModal(_passed ? '📨 Thư mời Ký HĐ Chính thức - ' + emp.name : '📨 Thư mời Thử việc - ' + emp.name, `
     <div class="space-y-4">
-      <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800">
-        <div class="font-black flex items-center gap-2"><i class="fa-solid fa-circle-info text-amber-600"></i> HR bấm nút Thử việc xong, copy thư mời này gửi cho nhân viên</div>
+      <div class="${_passed ? 'bg-emerald-50 border border-emerald-200 text-emerald-800' : 'bg-amber-50 border border-amber-200 text-amber-800'} rounded-xl p-3 text-xs">
+        <div class="font-black flex items-center gap-2"><i class="fa-solid fa-circle-info ${_passed ? 'text-emerald-600' : 'text-amber-600'}"></i> ${_passed ? 'NV đã ĐẠT TEST - HR copy thư mời này gửi Zalo cho nhân viên để hẹn ký HĐ chính thức' : 'HR bấm nút Thử việc xong, copy thư mời này gửi cho nhân viên'}</div>
       </div>
       <div class="bg-white border-2 border-amber-300 rounded-2xl p-4 max-h-[400px] overflow-auto">
         <pre class="whitespace-pre-wrap text-xs leading-relaxed font-medium text-slate-800" id="modalInviteText">${inviteText}</pre>
@@ -3049,6 +3074,7 @@ function renderEmployeesStore(){
           <!-- Thao tác -->
           <td class="px-4 py-3.5 align-middle text-right whitespace-nowrap">
             <div class="flex items-center gap-1.5 justify-end flex-nowrap">
+              ${currentEmpStoreTab==='TRAINING' ? `<button onclick="openZaloChat('${e.phone}', '${e.name.replace(/'/g,`\\'`)}')" class="text-xs font-bold bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 rounded-xl shadow-2xs transition flex items-center gap-1" title="Mở Zalo gửi lịch/thông báo cho ${e.name} (${e.phone})"><i class="fa-brands fa-viber"></i> Zalo</button>` : ''}
               <button onclick="viewEmployee('${e.employeeId}')" class="text-xs font-bold bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-3 py-1.5 rounded-xl shadow-2xs transition">Xem</button>
               
               <!-- DYNAMIC TEST WORKFLOW BUTTONS -->
@@ -3117,7 +3143,7 @@ function renderEmployeesStore(){
                 return btns;
               })()}
 
-              ${currentEmpStoreTab==='TRAINING' ? `<button onclick="showTrainingInvite('${e.employeeId}')" class="text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-xl shadow-xs flex items-center gap-1" title="Xem và copy thư mời Thử việc cho NV này"><i class="fa-solid fa-envelope"></i> Thư mời</button>` : ''}
+              ${currentEmpStoreTab==='TRAINING' ? (()=>{ const _passed = isTrainingTestPassed(e); return `<button onclick="showTrainingInvite('${e.employeeId}')" class="text-xs font-bold ${_passed ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-amber-500 hover:bg-amber-600'} text-white px-3 py-1.5 rounded-xl shadow-xs flex items-center gap-1" title="${_passed ? 'TEST ĐẠT - Xem và copy thư mời ký HĐ chính thức' : 'Xem và copy thư mời Thử việc cho NV này'}"><i class="fa-solid fa-envelope"></i> Thư mời</button>`;})() : ''}
               
               <!-- OFFICIAL BUTTON - Admin: luôn bấm được | HR: chỉ khi Mở TEST đã hiển thị (completed >= 7) -->
               ${currentEmpStoreTab==='TRAINING' && e.status !== 'OFFICIAL' ? (() => {
