@@ -776,6 +776,24 @@ async function bootPullFromMasterSheet(manualBy){
   }catch(e){ console.error('[KÉO SHEET] Lỗi', e.message); return out; }
 }
 setTimeout(()=>{ bootPullFromMasterSheet().catch(()=>{}); }, 12000);
+// ============ TỰ ĐỘNG KÉO SHEET → WEB (Sheet 17iXM là kho chính) ============
+// Chạy định kỳ bootPullFromMasterSheet (NV/key/ứng viên) + pullRemainingTabsFromMasterSheet
+// (lịch/chấm công/OFF/đột xuất/thiết bị/test/drive). Hai hàm đã tự phát socket update
+// (employees/keys/applicants/schedules/attendances/...) nên cả web HR lẫn web NV refresh realtime.
+// Bỏ qua khi: đang Reset, đang chạy test/CI (giữ DB test sạch), hoặc 1 vòng kéo trước chưa xong.
+let isPullingSheet = false;
+async function autoPullSheetToWeb(){
+  if(isSystemResetting || isPullingSheet) return;
+  if(OUTBOUND_SYNC_DISABLED) return; // test/CI: không kéo dữ liệu thật vào DB test
+  isPullingSheet = true;
+  try{
+    await bootPullFromMasterSheet('AUTO_PULL');
+    await pullRemainingTabsFromMasterSheet('AUTO_PULL');
+  }catch(e){ console.error('[AUTO PULL SHEET] Lỗi', e.message); }
+  finally{ isPullingSheet = false; }
+}
+const SHEET_PULL_INTERVAL_MS = (parseInt(process.env.SHEET_PULL_INTERVAL_SEC || '60', 10) || 60) * 1000;
+setInterval(autoPullSheetToWeb, SHEET_PULL_INTERVAL_MS);
 
 // ============ HELPERS ============
 function audit(actor, action, entity, before, after, ip='127.0.0.1'){
@@ -3135,7 +3153,8 @@ async function pullRemainingTabsFromMasterSheet(manualBy){
         const v = num(row[iVer]); if(v!==null) g.version = Math.max(g.version||0, v);
       }
       for(const [sid, g] of groups){
-        let sched = db.schedules.find(s=>s.id===sid);
+        // Khớp theo ID trước, nếu lệch ID (lịch local tạo lại) thì khớp theo NV+tuần để không sinh bản ghi song song
+        let sched = db.schedules.find(s=>s.id===sid) || db.schedules.find(s=>s.employeeId===g.empId && s.weekStart===g.week);
         if(!sched){
           sched = { id: sid, employeeId: g.empId, weekStart: g.week||'', days: [...g.days.values()], version: g.version||1, updated_at: getVietnamISOString(), updated_by: manualBy||'PULL_SHEET', approvalStatus:'APPROVED' };
           db.schedules.push(sched); st.pulled++;
