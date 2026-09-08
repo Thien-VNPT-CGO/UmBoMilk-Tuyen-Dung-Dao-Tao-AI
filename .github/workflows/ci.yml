@@ -1,0 +1,31 @@
+# Ụm Bò Milk - CI: kiểm thử không hồi quy trên mỗi push/PR
+# - npm run test:ci tự khởi động server ở chế độ cách ly
+#   (NODE_ENV=test + DISABLE_OUTBOUND_SYNC=true -> không đẩy dữ liệu test ra Google Sheet production)
+# - Chạy toàn bộ test/*.test.js + test/verify_force_logout.js
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run test suite (isolated, no outbound sync)
+        run: npm run test:ci

@@ -55,6 +55,12 @@ function getAllWebhookUrls(){
 }
 
 const CORS_ORIGIN = ALLOWED_ORIGINS.includes('*') ? '*' : ALLOWED_ORIGINS;
+// Secret mặc định lấy từ ENV — không hard-code trong source (bảo mật)
+const DEFAULT_WEBHOOK_SECRET = process.env.GOOGLE_SHEET_WEBHOOK_SECRET || 'umbomilk_secret_2026';
+const DEFAULT_FINANCE_WEBHOOK_SECRET = process.env.FINANCE_WEBHOOK_SECRET || DEFAULT_WEBHOOK_SECRET;
+// Cờ tắt đẩy dữ liệu ra ngoài (Google Sheet/Zalo) — dùng khi chạy test/CI để dữ liệu test
+// không bao giờ rò rỉ ra production. Bật bằng DISABLE_OUTBOUND_SYNC=true hoặc NODE_ENV=test.
+const OUTBOUND_SYNC_DISABLED = process.env.DISABLE_OUTBOUND_SYNC === 'true' || process.env.NODE_ENV === 'test';
 
 const app = express();
 const server = http.createServer(app);
@@ -114,7 +120,7 @@ const DEFAULT_SETTINGS = {
     targetWebhookUrl: 'https://script.google.com/macros/s/AKfycbz_umbomilk_apps_script/exec',
     targetWebhookUrl1: 'https://script.google.com/macros/s/AKfycbxNfcYVUqqIgZPhXnGeY4aLdnH3ebJFutjGy-VIbxVEc1DV-l93RWo4ic6fc1IvYaM/exec',
     targetWebhookUrl2: 'https://script.google.com/macros/s/AKfycbxYZhMjR9riLFQfYEkgLfub33XtWlSP2IokghTt82Lb4SQVL4tKxQyNACr69yC0ACA/exec',
-    secret: 'umbomilk_secret_2026',
+    secret: DEFAULT_WEBHOOK_SECRET,
     serviceAccountEmail: 'umbomilk-hr@umbomilk-hr.iam.gserviceaccount.com',
     privateKey: '',
     formUrl: 'https://docs.google.com/forms/d/e/1FAIpQLSeteDABiq7mday0Yko-PyyUIW4uccicP7FJJt2evc7xbbWBfA/viewform',
@@ -128,7 +134,7 @@ const DEFAULT_SETTINGS = {
   },
   googleDrive: { rootFolderId: '1-Wy-Di6KvfeGCKoTV7TSuFQpY_yKNy-1', backupFolderId: '1-Wy-Di6KvfeGCKoTV7TSuFQpY_yKNy-1', driveUrl: 'https://drive.google.com/drive/folders/1-Wy-Di6KvfeGCKoTV7TSuFQpY_yKNy-1' },
   googleForm: { formUrl: 'https://docs.google.com/forms/d/e/1FAIpQLSd9rRG4QLvmLclPseVVmpgPdizij1XYwiSTCgc6x2BPMfA_AA/viewform', mapping: {} },
-  finance: { webhookUrl: 'https://script.google.com/macros/s/AKfycbxYZhMjR9riLFQfYEkgLfub33XtWlSP2IokghTt82Lb4SQVL4tKxQyNACr69yC0ACA/exec', secret: 'umbomilk_secret_2026', spreadsheetId: '13Y4rycVMq2-HXGySjaJJBl2YZswKEaK5WkSLWVkLjuY' },
+  finance: { webhookUrl: 'https://script.google.com/macros/s/AKfycbxYZhMjR9riLFQfYEkgLfub33XtWlSP2IokghTt82Lb4SQVL4tKxQyNACr69yC0ACA/exec', secret: DEFAULT_WEBHOOK_SECRET, spreadsheetId: '13Y4rycVMq2-HXGySjaJJBl2YZswKEaK5WkSLWVkLjuY' },
   ai: { provider: 'openai', baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o', temperature: 0.7 },
   zalo: { oaId: '', accessToken: '', template: '', reminderEnabled: true },
   calendar: { clientId: '', clientSecret: '', calendarId: 'primary', duration: 30, reminderOnce: true },
@@ -479,7 +485,7 @@ if(process.env.GOOGLE_PRIVATE_KEY) {
 }
 // Finance Webhook - đồng bộ sang Google Sheets Finance (4 sheet)
 if(process.env.FINANCE_WEBHOOK_URL){
-  if(!db.settings.finance) db.settings.finance={ webhookUrl: process.env.FINANCE_WEBHOOK_URL, secret: process.env.FINANCE_WEBHOOK_SECRET || 'umbomilk_secret_2026' };
+  if(!db.settings.finance) db.settings.finance={ webhookUrl: process.env.FINANCE_WEBHOOK_URL, secret: process.env.FINANCE_WEBHOOK_SECRET || DEFAULT_WEBHOOK_SECRET };
   else db.settings.finance.webhookUrl = process.env.FINANCE_WEBHOOK_URL;
   // Đồng bộ ngược để tương thích cũ
   db.settings.googleSheet.targetWebhookUrl2 = process.env.FINANCE_WEBHOOK_URL;
@@ -489,7 +495,7 @@ if(process.env.FINANCE_WEBHOOK_SECRET && db.settings.finance){
   db.settings.finance.secret = process.env.FINANCE_WEBHOOK_SECRET;
 }
 if(process.env.FINANCE_MASTER_ID){
-  if(!db.settings.finance) db.settings.finance={ webhookUrl: '', secret: 'umbomilk_secret_2026', spreadsheetId: process.env.FINANCE_MASTER_ID };
+  if(!db.settings.finance) db.settings.finance={ webhookUrl: '', secret: DEFAULT_WEBHOOK_SECRET, spreadsheetId: process.env.FINANCE_MASTER_ID };
   else db.settings.finance.spreadsheetId = process.env.FINANCE_MASTER_ID;
 }
 if(process.env.DATABASE_URL){
@@ -885,7 +891,7 @@ async function syncToGoogleSheet(item){
     }
   }
   const webhookUrls = getAllWebhookUrls();
-  const secret = process.env.GOOGLE_SHEET_WEBHOOK_SECRET || db.settings?.googleSheet?.secret || 'umbomilk_secret_2026';
+  const secret = process.env.GOOGLE_SHEET_WEBHOOK_SECRET || db.settings?.googleSheet?.secret || DEFAULT_WEBHOOK_SECRET;
   if(webhookUrls.length===0) throw new Error('Chưa cấu hình Google Sheet Webhook URL trong Cài đặt (cần 1 trong 3: WEBHOOK_URL / _1 / _2)');
   const allPlaceholder = webhookUrls.every(u=> u.includes('AKfycbz_umbomilk_apps_script') || u.includes('umbomilk_apps_script'));
   if(allPlaceholder) throw new Error('Webhook placeholder chưa cấu hình - dữ liệu sẽ được đồng bộ qua Sheets API 60s (nếu có ServiceAccount) hoặc lưu local');
@@ -1020,7 +1026,7 @@ function addSyncQueue(entity, operation, payload, actor, source='WEB_HR'){
     }
   }catch(e){}
   const webhookUrls = getAllWebhookUrls();
-  const secret = process.env.GOOGLE_SHEET_WEBHOOK_SECRET || db.settings?.googleSheet?.secret || 'umbomilk_secret_2026';
+  const secret = process.env.GOOGLE_SHEET_WEBHOOK_SECRET || db.settings?.googleSheet?.secret || DEFAULT_WEBHOOK_SECRET;
   const hasRealWebhook = webhookUrls.some(u=> !u.includes('AKfycbz_umbomilk_apps_script') && !u.includes('umbomilk_apps_script'));
   const isKeyEntity = entity==='KEY';
   let initialStatus = (webhookUrls.length===0 || !hasRealWebhook) ? 'UNCONFIGURED' : 'PENDING';
@@ -4191,7 +4197,7 @@ function realtimeAutomationPoller(){
     saveDB(); io.emit('sync:update', db.syncQueue);
   }
   // 4. Sync queue auto-retry (exponential backoff, realtime) - không retry nếu là placeholder hoặc KEY
-  const secret = process.env.GOOGLE_SHEET_WEBHOOK_SECRET || db.settings?.googleSheet?.secret || 'umbomilk_secret_2026';
+  const secret = process.env.GOOGLE_SHEET_WEBHOOK_SECRET || db.settings?.googleSheet?.secret || DEFAULT_WEBHOOK_SECRET;
   const webhookUrl = db.settings?.googleSheet?.targetWebhookUrl || '';
   const isPlaceholder = webhookUrl.includes('AKfycbz_umbomilk_apps_script') || webhookUrl.includes('umbomilk_apps_script');
   const hasWebhookConfig = !!(webhookUrl && secret && !isPlaceholder);
@@ -4773,6 +4779,7 @@ async function syncSheetTab(sheetKey){
 }
 async function syncAllTabsToSheetsRealtime(){
   if(isSystemResetting) return;
+  if(OUTBOUND_SYNC_DISABLED) return; // test/CI: không đẩy dữ liệu test ra Google Sheet production
   // === RÀNG BUỘC: Không sync khi Web DB rỗng (yêu cầu ràng buộc dữ liệu) ===
   // Chỉ chạy sync khi có dữ liệu thực tế trên web, tránh ping Sheet khi không có gì để đồng bộ
   // Sử dụng nullish coalescing ?? an toàn cho mọi trường hợp
@@ -4809,6 +4816,7 @@ let _sheetSyncDebounceTimer = null;
 
 function triggerRealtimeSheetSync(sheetKey){
   if(isSystemResetting) return;
+  if(OUTBOUND_SYNC_DISABLED) return; // test/CI: không đẩy dữ liệu test ra Google Sheet production
   if(sheetKey) _pendingSheetSyncs.add(sheetKey);
   clearTimeout(_sheetSyncDebounceTimer);
   _sheetSyncDebounceTimer = setTimeout(async ()=>{
@@ -8680,7 +8688,7 @@ app.post('/api/sync-queue/:id/retry', authMiddleware, async (req,res)=>{
 // Diagnostic: test webhook/secret mà không cần tạo queue - giúp admin kiểm tra ngay
 app.post('/api/sync/test-webhook', authMiddleware, roleCheck(['Admin']), async (req,res)=>{
   const webhookUrl = req.body.webhookUrl || db.settings?.googleSheet?.targetWebhookUrl;
-  const secret = req.body.secret || process.env.GOOGLE_SHEET_WEBHOOK_SECRET || db.settings?.googleSheet?.secret || 'umbomilk_secret_2026';
+  const secret = req.body.secret || process.env.GOOGLE_SHEET_WEBHOOK_SECRET || db.settings?.googleSheet?.secret || DEFAULT_WEBHOOK_SECRET;
   if(!webhookUrl) return res.status(400).json({ error:'Chưa cấu hình webhookUrl', hint:'Vào Cài đặt > Google Sheet > Webhook URL' });
   try{
     const testRes = await fetch(webhookUrl, {
@@ -8707,7 +8715,7 @@ app.post('/api/sync/test-webhook', authMiddleware, roleCheck(['Admin']), async (
 // Diagnostic: chi tiết sync queue + webhook config
 app.get('/api/sync/diagnostic', authMiddleware, roleCheck(['Admin']), (req,res)=>{
   const webhookUrl = db.settings?.googleSheet?.targetWebhookUrl;
-  const secret = process.env.GOOGLE_SHEET_WEBHOOK_SECRET || db.settings?.googleSheet?.secret || 'umbomilk_secret_2026';
+  const secret = process.env.GOOGLE_SHEET_WEBHOOK_SECRET || db.settings?.googleSheet?.secret || DEFAULT_WEBHOOK_SECRET;
   const counts = {};
   db.syncQueue.forEach(i=>{ counts[i.sync_status]=(counts[i.sync_status]||0)+1; });
   const topErrors = [...db.syncQueue.filter(i=>i.error).slice(0,5).map(i=>({id:i.id.slice(0,8), entity:i.entity, status:i.sync_status, retry:i.retryCount, error:i.error?.slice(0,150)}))];
@@ -9690,7 +9698,7 @@ app.post('/api/finance/sheets/master-data', financeAuthMiddleware, async (req,re
   // Đồng bộ lên Google Sheets Finance MASTER_DATA
   const financeId = db.settings.finance?.spreadsheetId || process.env.FINANCE_MASTER_ID || 'FINANCE_MASTER_ID';
   const webhookUrl = db.settings.finance?.webhookUrl || process.env.FINANCE_WEBHOOK_URL;
-  const secret = db.settings.finance?.secret || process.env.FINANCE_WEBHOOK_SECRET || 'umbomilk_secret_2026';
+  const secret = db.settings.finance?.secret || process.env.FINANCE_WEBHOOK_SECRET || DEFAULT_WEBHOOK_SECRET;
   if(webhookUrl){
     try{ await fetch(webhookUrl, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ secret, action:'UPSERT_EMPLOYEE', payload:{ bhCode, hoTen, branchGoc, status, ngayLenChinhThuc } }) }); }catch(e){ console.error('Finance MASTER_DATA sync error', e.message); }
   }
@@ -9705,7 +9713,7 @@ app.post('/api/finance/sheets/dong-phuc', financeAuthMiddleware, async (req,res)
   if(row){ Object.assign(row, { hoTen: hoTen||row.hoTen, soTien: soTien!=null?Number(soTien):row.soTien, ngay: ngay||row.ngay, ghiChu: ghiChu||row.ghiChu, updatedAt: getVietnamISOString() }); }
   else { row={ bhCode, hoTen: hoTen||'', soTien: Number(soTien)||0, ngay: ngay||getVietnamTodayStr(), ghiChu: ghiChu||'', createdAt: getVietnamISOString() }; db.financeDongPhuc.push(row); }
   const webhookUrl = db.settings.finance?.webhookUrl || process.env.FINANCE_WEBHOOK_URL;
-  const secret = db.settings.finance?.secret || process.env.FINANCE_WEBHOOK_SECRET || 'umbomilk_secret_2026';
+  const secret = db.settings.finance?.secret || process.env.FINANCE_WEBHOOK_SECRET || DEFAULT_WEBHOOK_SECRET;
   if(webhookUrl){ try{ await fetch(webhookUrl, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ secret, action:'UPSERT_DONGPHUC', payload: row }) }); }catch(e){} }
   saveDB(); io.emit('finance:dongPhuc:update', db.financeDongPhuc);
   res.json({ success:true, row });
@@ -9718,7 +9726,7 @@ app.post('/api/finance/sheets/kham-suc-khoe', financeAuthMiddleware, async (req,
   if(row){ Object.assign(row, { hoTen: hoTen||row.hoTen, soTien: soTien!=null?Number(soTien):row.soTien, ngay: ngay||row.ngay, ghiChu: ghiChu||row.ghiChu, updatedAt: getVietnamISOString() }); }
   else { row={ bhCode, hoTen: hoTen||'', soTien: Number(soTien)||0, ngay: ngay||getVietnamTodayStr(), ghiChu: ghiChu||'', createdAt: getVietnamISOString() }; db.financeKhamSK.push(row); }
   const webhookUrl = db.settings.finance?.webhookUrl || process.env.FINANCE_WEBHOOK_URL;
-  const secret = db.settings.finance?.secret || process.env.FINANCE_WEBHOOK_SECRET || 'umbomilk_secret_2026';
+  const secret = db.settings.finance?.secret || process.env.FINANCE_WEBHOOK_SECRET || DEFAULT_WEBHOOK_SECRET;
   if(webhookUrl){ try{ await fetch(webhookUrl, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ secret, action:'UPSERT_KHAMSUC', payload: row }) }); }catch(e){} }
   saveDB(); io.emit('finance:khamSK:update', db.financeKhamSK);
   res.json({ success:true, row });
