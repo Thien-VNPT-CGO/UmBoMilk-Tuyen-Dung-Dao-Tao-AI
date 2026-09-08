@@ -2225,7 +2225,7 @@ async function loadElearning(){
               <div class="font-black text-slate-800">${c.title}</div>
               <div class="text-xs text-slate-500 mt-1">${c.description}</div>
               <div class="mt-2 flex flex-wrap gap-2">
-                <span class="text-xs font-bold bg-purple-100 text-purple-700 px-2 py-1 rounded-full">${c.totalQuestions} câu trắc nghiệm</span>
+                <span class="text-xs font-bold bg-purple-100 text-purple-700 px-2 py-1 rounded-full">${Math.min(c.totalQuestions || 25, 25)} câu trắc nghiệm</span>
                 <span class="text-xs font-bold bg-pink-100 text-pink-700 px-2 py-1 rounded-full">Tổng 8 phút • Hết giờ tự động nộp</span>
               </div>
               <button onclick="startTest('${c.id}')" class="w-full mt-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-black py-2.5 rounded-xl">Bắt đầu làm TEST</button>
