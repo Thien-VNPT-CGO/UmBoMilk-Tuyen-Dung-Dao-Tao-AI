@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Cần xử lý — UMB HR Autopilot VIP{% endblock %}
+{% block content %}
+<div class="space-y-4">
+  <section class="card">
+    <div class="flex items-center justify-between">
+      <h1 class="text-xl font-bold">CẦN XỬ LÝ NGAY</h1>
+      <span class="text-xs text-slate-500">Chỉ việc Automation không tự giải quyết (§12)</span>
+    </div>
+    <div class="flex gap-2 mt-3 text-sm">
+      <button class="btn" onclick="loadInbox('OPEN')">OPEN</button>
+      <button class="btn" onclick="loadInbox('ACKNOWLEDGED')">ĐÃ NHẬN</button>
+      <button class="btn" onclick="loadInbox('RESOLVED')">XONG</button>
+      <button class="btn" onclick="loadInbox('ALL')">TẤT CẢ</button>
+    </div>
+  </section>
+  <section class="card"><div id="inbox-list" class="space-y-2 text-sm"><div class="skeleton h-8"></div></div></section>
+</div>
+<script>
+async function loadInbox(status) {
+  const box = document.getElementById('inbox-list');
+  box.innerHTML = '<div class="skeleton h-8"></div>';
+  const r = await fetch('/api/exceptions?status=' + status);
+  if (r.status === 401) { location.href = '/'; return; }
+  const j = await r.json();
+  box.innerHTML = '';
+  (j.items || []).forEach(x => {
+    const d = document.createElement('div');
+    d.className = 'row-flash border rounded-lg px-3 py-2 ' + (x.priority === 'CRITICAL' ? '!border-rose-500' : 'border-slate-200 dark:border-slate-700');
+    d.innerHTML = '<div class="flex items-center justify-between"><b>[' + x.priority + '] ' + x.category + '</b><span class="text-xs text-slate-500">' + x.status + '</span></div>'
+      + '<div>' + (x.summary || '') + '</div>'
+      + '<div class="text-xs text-slate-500">Gợi ý: ' + (x.suggested_action || '—') + '</div>'
+      + '<div class="flex gap-2 mt-1">'
+      + (x.status === 'OPEN' ? '<button class="btn" onclick="inboxAct(' + x.id + ',\'ack\')">NHẬN</button>' : '')
+      + (x.status !== 'RESOLVED' && x.status !== 'IGNORED' ? '<button class="btn-primary" onclick="inboxAct(' + x.id + ',\'resolve\')">XONG</button><button class="btn" onclick="inboxAct(' + x.id + ',\'ignore\')">BỎ QUA</button>' : '')
+      + '</div>';
+    box.appendChild(d);
+  });
+  if (!(j.items || []).length) box.innerHTML = '<div class="text-slate-500">Không có việc cần xử lý. 🎉</div>';
+}
+async function inboxAct(id, act) {
+  await fetch('/api/exceptions/' + id + '/' + act, { method: 'POST' });
+  loadInbox('OPEN');
+}
+loadInbox('OPEN');
+</script>
+{% endblock %}

@@ -1,0 +1,16 @@
+from app.db.models import (  # noqa: F401
+    AiEvaluation,
+    AuditLog,
+    AutomationJob,
+    ExceptionItem,
+    IdempotencyKey,
+    Lease,
+    Notification,
+    ReconciliationRecord,
+    Transcript,
+    VipLicenseDevice,
+    VipLicenseKey,
+    VipLicensePlan,
+    VipLicenseSession,
+    WorkflowState,
+)

@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+data/*.db
+data/*.db-journal
+*.log
+.pytest_cache/
+alembic/versions/*.pyc
+dist/
+build/
+*.spec

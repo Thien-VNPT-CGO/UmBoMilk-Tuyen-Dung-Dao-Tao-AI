@@ -775,7 +775,7 @@ async function bootPullFromMasterSheet(manualBy){
     return out;
   }catch(e){ console.error('[KÉO SHEET] Lỗi', e.message); return out; }
 }
-setTimeout(()=>{ bootPullFromMasterSheet().catch(()=>{}); }, 12000);
+if(!OUTBOUND_SYNC_DISABLED) setTimeout(()=>{ bootPullFromMasterSheet().catch(()=>{}); }, 12000); // test/CI: khong keo Sheet that vao DB test (AGENTS.md zero-leak)
 // ============ TỰ ĐỘNG KÉO SHEET → WEB (Sheet 17iXM là kho chính) ============
 // Chạy định kỳ bootPullFromMasterSheet (NV/key/ứng viên) + pullRemainingTabsFromMasterSheet
 // (lịch/chấm công/OFF/đột xuất/thiết bị/test/drive). Hai hàm đã tự phát socket update
@@ -2497,6 +2497,144 @@ app.post('/api/zalo/test', authMiddleware, roleCheck(['Admin']), async (req, res
   res.json({ success: true, record, settings: db.settings?.zalo });
 });
 
+// ============ P0 PHASE 1: Zalo inbound confirmation webhook (Master 6.4) ============
+// Outbound da co (sendZaloBotNotification). Inbound nhan xac nhan tham gia PV.
+// Provider: OfficialOA / ConfiguredWebhook / Mock(dev). Nhan webhook generic
+// {phone, text/content/message, message_id, ...} + verify secret tuy chon.
+function normalizeZaloText(s){
+  try{
+    return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  }catch(_){ return String(s || '').toLowerCase().trim(); }
+}
+function classifyZaloInbound(normText){
+  const t = ` ${normText} `;
+  const positive = ['xac nhan', 'dong y', 'tham gia', 'ok', 'okay', 'yes', 'co', 'confirm', 'da nhan'];
+  const negative = ['khong', 'ban', 'huy', 'cancel', 'nghi', 'tu choi', 'doi lich', 'xep lai'];
+  if(t.trim() === 'co' || t.trim() === 'ok' || t.trim() === 'yes') return 'POSITIVE';
+  const hasNeg = negative.some(k => t.includes(k));
+  const hasPos = positive.some(k => t.includes(k));
+  if(hasNeg && !t.includes('xac nhan')) return 'NEGATIVE';
+  if(hasPos) return 'POSITIVE';
+  return 'UNKNOWN';
+}
+app.post('/api/zalo/inbound', async (req, res) => {
+  const body = req.body || {};
+  const phone = body.phone || body.sender || body.from || body.user_id || body.follower_id || '';
+  const text = body.text || body.content || body.message || body.msg || '';
+  const messageId = body.message_id || body.msg_id || body.id || null;
+  const cfgSecret = process.env.ZALO_WEBHOOK_SECRET || db.settings?.zalo?.webhookSecret || '';
+  if(cfgSecret){
+    const got = req.headers['x-zalo-signature'] || req.headers['x-webhook-secret'] || body.secret || '';
+    if(got !== cfgSecret) return res.status(401).json({ error: 'Webhook secret khong hop le' });
+  }
+  if(!phone || !text) return res.status(400).json({ error: 'Thieu phone hoac text' });
+  const normPhone = String(phone).replace(/\D/g, '');
+  const nowMs = Date.now();
+  if(!global.__zaloInboundSeen) global.__zaloInboundSeen = [];
+  global.__zaloInboundSeen = global.__zaloInboundSeen.filter(x => nowMs - x.at < 60000);
+  const dup = global.__zaloInboundSeen.find(x => x.phone === normPhone && x.text === String(text));
+  if(dup && (!messageId || dup.messageId === messageId)){
+    return res.json({ success: true, deduped: true, classification: dup.classification });
+  }
+  const norm = normalizeZaloText(text);
+  const classification = classifyZaloInbound(norm);
+  // AGENTS.md zero-leak: test/CI goi webhook (x-is-test / NODE_ENV=test) thi chi xu ly
+  // in-memory + tra response, khong persist record/test-notify/saveDB.
+  const isTestCall = req.headers['x-is-test'] === 'true' || body.isTest || process.env.NODE_ENV === 'test' || OUTBOUND_SYNC_DISABLED;
+  const zr = {
+    id: uuidv4(), sent_at: getVietnamISOString(), receiver: `HR-INBOUND:${normPhone}`,
+    receiverName: '', type: 'ZALO_INBOUND', content: String(text), status: `INBOUND_${classification}`,
+    error: '', direction: 'INBOUND', phone: normPhone, normText: norm, messageId: messageId || undefined
+  };
+  if(!isTestCall) db.zaloRecords.unshift(zr);
+  let matched = null;
+  if(classification !== 'UNKNOWN'){
+    const cands = (db.interviews || []).filter(i => i.applicantPhone && String(i.applicantPhone).replace(/\D/g, '').endsWith(normPhone.slice(-9)) && (i.status === 'SCHEDULED' || i.confirmationStatus === 'WAITING_CONFIRM'));
+    matched = cands.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))[0] || null;
+    if(matched){
+      const before = { confirmationStatus: matched.confirmationStatus || 'WAITING_CONFIRM' };
+      if(classification === 'POSITIVE'){
+        matched.confirmationStatus = 'CONFIRMED';
+        matched.confirmedAt = getVietnamISOString();
+        matched.confirmSource = 'ZALO_INBOUND';
+      } else {
+        matched.confirmationStatus = 'NEED_RESCHEDULE';
+        matched.confirmSource = 'ZALO_INBOUND';
+      }
+      const appRec = db.applicants.find(a => a.id === matched.applicantId);
+      if(appRec){
+        const b2 = { ...appRec };
+        appRec.confirmationStatus = matched.confirmationStatus;
+        appRec.version = (appRec.version || 1) + 1;
+        appRec.updated_at = getVietnamISOString();
+        audit('ZALO_INBOUND', classification === 'POSITIVE' ? 'CONFIRM_INTERVIEW' : 'REQUEST_RESCHEDULE', 'APPLICANT', b2, appRec, req.ip);
+      }
+      audit('ZALO_INBOUND', 'PARSE_' + classification, 'INTERVIEW', before, { confirmationStatus: matched.confirmationStatus }, req.ip);
+    }
+  } else {
+    // Ambiguous -> Exception Inbox (HR review), khong tu quyet dinh (bo qua khi test)
+    if(!isTestCall){
+      try{
+        notifyAdminAndHR({ action: 'ZALO_INBOUND_UNKNOWN', employeeId: normPhone, employeeName: normPhone, title: 'Zalo phan hoi khong xac dinh', message: `SDT ${normPhone} nhan: "${text}" — can HR xem va xac nhan thu cong.`, type: 'warning', data: { phone: normPhone, text } });
+      }catch(_){}
+    }
+  }
+  global.__zaloInboundSeen.push({ phone: normPhone, text: String(text), messageId: messageId || null, classification, at: nowMs });
+  if(!isTestCall) saveDB();
+  io.emit('zalo:update', db.zaloRecords);
+  io.emit('interviews:update', db.interviews || []);
+  io.emit('applicants:update', db.applicants || []);
+  io.emit('zalo:received', { phone: normPhone, classification, interviewId: matched ? matched.id : null });
+  res.json({ success: true, classification, interviewId: matched ? matched.id : null, confirmationStatus: matched ? matched.confirmationStatus : null });
+});
+
+// ============ P0 PHASE 1: Interview business-hours validator (Master 6.2) ============
+// Rule: T2-T7, 08:00-17:00, 30 phut/slot, slot cuoi 16:30, khong Sunday, khong qua khu.
+// Khong dung LLM; deterministic. Giu tuong thich slotKey cu + them overlap that.
+function parseInterviewSlot(timeSlot){
+  if(!timeSlot || typeof timeSlot !== 'string') return null;
+  const parts = timeSlot.split('-');
+  if(parts.length !== 2) return null;
+  const a = parts[0].trim().split(':').map(Number);
+  const b = parts[1].trim().split(':').map(Number);
+  if(a.length !== 2 || b.length !== 2) return null;
+  if(a.some(isNaN) || b.some(isNaN)) return null;
+  const [sh, sm] = a; const [eh, em] = b;
+  if(sh < 0 || sh > 23 || eh < 0 || eh > 23 || sm < 0 || sm > 59 || em < 0 || em > 59) return null;
+  return { sh, sm, eh, em, startMins: sh * 60 + sm, endMins: eh * 60 + em };
+}
+function validateInterviewSlot(interviewDate, timeSlot){
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(interviewDate || '')) return { ok: false, error: 'Ngay phong van khong hop le (YYYY-MM-DD)' };
+  const slot = parseInterviewSlot(timeSlot);
+  if(!slot) return { ok: false, error: 'Khung gio khong hop le (vi du 08:00-08:30)' };
+  if(slot.endMins - slot.startMins !== 30) return { ok: false, error: 'Moi lich phong van 30 phut' };
+  if(slot.startMins < 8 * 60) return { ok: false, error: 'Lich phong van chi tu 08:00' };
+  if(slot.endMins > 17 * 60) return { ok: false, error: 'Lich phong van ket thuc truoc 17:00' };
+  if(slot.startMins > 16 * 60 + 30) return { ok: false, error: 'Slot cuoi trong ngay la 16:30' };
+  const d = new Date(interviewDate + 'T00:00:00');
+  if(isNaN(d.getTime())) return { ok: false, error: 'Ngay phong van khong hop le' };
+  if(d.getDay() === 0) return { ok: false, error: 'Khong dat lich phong van Chu nhat' };
+  const todayStr = getVietnamTodayStr();
+  if(interviewDate < todayStr) return { ok: false, error: 'Khong dat lich trong qua khu' };
+  if(interviewDate === todayStr){
+    const now = getVietnamNow();
+    const nowMins = now.getHours() * 60 + now.getMinutes();
+    if(slot.startMins <= nowMins) return { ok: false, error: 'Khong dat lich trong qua khu (gio da qua hom nay)' };
+  }
+  return { ok: true, slot };
+}
+function checkInterviewOverlap(interviewDate, startMins, endMins, excludeApplicantId){
+  if(!db.interviews) return null;
+  return db.interviews.find(i => {
+    if(i.interviewDate !== interviewDate) return false;
+    if(i.status === 'CANCELLED') return false;
+    if(excludeApplicantId && i.applicantId === excludeApplicantId) return false;
+    const s = parseInterviewSlot(i.timeSlot);
+    if(!s) return i.slotKey === `${interviewDate}_${startMins}`;
+    return startMins < s.endMins && s.startMins < endMins;
+  }) || null;
+}
+
 app.post('/api/applicants/:id/schedule-interview', authMiddleware, async (req, res) => {
   const { interviewDate, timeSlot, meetLink, notes } = req.body;
   const applicant = db.applicants.find(a => a.id === req.params.id);
@@ -2506,12 +2644,17 @@ app.post('/api/applicants/:id/schedule-interview', authMiddleware, async (req, r
   }
   if (!interviewDate || !timeSlot) return res.status(400).json({ error: 'Thiếu Ngày hoặc Khung giờ phỏng vấn' });
 
+  // P0 PHASE 1 (Master 6.2): enforce business hours that backend
+  const slotCheck = validateInterviewSlot(interviewDate, timeSlot);
+  if(!slotCheck.ok) return res.status(400).json({ error: slotCheck.error });
+
   if (!db.interviews) db.interviews = [];
 
   const slotKey = `${interviewDate}_${timeSlot}`;
 
   // Check 30-minute slot locking / conflict: Ensure no other applicant has booked this 30-min slot
-  const conflict = db.interviews.find(i => i.slotKey === slotKey && i.status !== 'CANCELLED' && i.applicantId !== applicant.id);
+  const conflict = db.interviews.find(i => i.slotKey === slotKey && i.status !== 'CANCELLED' && i.applicantId !== applicant.id)
+    || checkInterviewOverlap(interviewDate, slotCheck.slot.startMins, slotCheck.slot.endMins, applicant.id);
   if (conflict) {
     return res.status(409).json({
       error: `⚠️ Khung giờ ${timeSlot} ngày ${interviewDate} đã được đặt lịch phỏng vấn cho ứng viên "${conflict.applicantName}"! Vui lòng chọn khung giờ khác.`,
@@ -2542,6 +2685,12 @@ app.post('/api/applicants/:id/schedule-interview', authMiddleware, async (req, r
     interview.notes = notes || '';
     interview.scheduledBy = req.user.username;
     interview.updatedAt = getVietnamISOString();
+    // P0 PHASE 1: reschedule -> reset idempotent reminder flags (T30/T15/T5)
+    interview.reminderSent = false;
+    interview.reminderT30Sent = false;
+    interview.reminderT15Sent = false;
+    interview.reminderT5Sent = false;
+    interview.status = 'SCHEDULED';
   } else {
     interview = {
       id: uuidv4(),
@@ -2556,7 +2705,11 @@ app.post('/api/applicants/:id/schedule-interview', authMiddleware, async (req, r
       notes: notes || '',
       scheduledBy: req.user.username,
       status: 'SCHEDULED',
+      confirmationStatus: 'WAITING_CONFIRM',
       reminderSent: false,
+      reminderT30Sent: false,
+      reminderT15Sent: false,
+      reminderT5Sent: false,
       createdAt: getVietnamISOString()
     };
     db.interviews.push(interview);
@@ -2566,7 +2719,8 @@ app.post('/api/applicants/:id/schedule-interview', authMiddleware, async (req, r
   applicant.interview = interview;
 
   // Send Automatic Zalo Invite Notification via Zalo Bot Engine
-  const inviteContent = `[ỤM BÒ MILK - THƯ MỜI PHỎNG VẤN TRỰC TUYẾN]\n\nChào bạn ${applicant.name},\nChúc mừng bạn đã vượt qua vòng sơ tuyển hồ sơ AI của Ụm Bò Milk!\n\n📅 Thời gian: ${timeSlot} ngày ${interviewDate}\n🏢 Chi nhánh ứng tuyển: ${branchName}\n🎥 Link Google Meet phỏng vấn: ${generatedMeet}\n\nBạn vui lòng chuẩn bị trang phục lịch sự và truy cập vào đường link Google Meet trên trước 5 phút nhé! Trân trọng!`;
+  // P0 PHASE 1 (Master 15.3): tin nhan yeu cau XAC NHAN THAM GIA de inbound parse
+  const inviteContent = `[ỤM BÒ MILK - THƯ MỜI PHỎNG VẤN TRỰC TUYẾN]\n\nChào bạn ${applicant.name},\nChúc mừng bạn đã vượt qua vòng sơ tuyển hồ sơ AI của Ụm Bò Milk!\n\n📅 Thời gian: ${timeSlot} ngày ${interviewDate}\n🏢 Chi nhánh ứng tuyển: ${branchName}\n🎥 Link Google Meet phỏng vấn: ${generatedMeet}\n\nBạn vui lòng nhắn tin XÁC NHẬN THAM GIA (hoac OK) de giu lich. Neu ban khong the tham gia, vui long nhan HUY/BAN de HR xep lai. Vui long truy cap Meet truoc 5 phut! Tran trong!`;
 
   await sendZaloBotNotification({
     phone: applicant.phone,
@@ -2587,7 +2741,8 @@ app.post('/api/applicants/:id/schedule-interview', authMiddleware, async (req, r
   res.json({ success: true, interview, applicant });
 });
 
-// Background 30-Minute Prior Interview Reminder Poller + Auto-PASS after meet ends
+// Background Interview Reminder Poller (T-30/T-15/T-5) + Meet-end -> WAITING REVIEW (P0 PHASE 1, Master 6.1/6.3)
+// P0: TUYET DOI KHONG auto-PASS khi Meet ket thuc. Chi dat COMPLETED_WAITING_PROCESSING + applicant WAITING_HR_REVIEW.
 setInterval(async () => {
   if (!db.interviews || db.interviews.length === 0) return;
   const now = getVietnamNow();
@@ -2605,57 +2760,91 @@ setInterval(async () => {
       invStart.setHours(startH, startM, 0, 0);
       const startMs = invStart.getTime();
 
-      // ---- 30-MIN REMINDER ----
-      if (!inv.reminderSent) {
+      // ---- T-30 REMINDER (idempotent, giu tuong thich reminderSent) ----
+      if (!inv.reminderT30Sent && !inv.reminderSent) {
         const reminderMs = startMs - (30 * 60 * 1000);
         if (nowMs >= reminderMs && nowMs < startMs + (30 * 60 * 1000)) {
           inv.reminderSent = true;
+          inv.reminderT30Sent = true;
+          inv.reminderT30At = getVietnamISOString();
           const msg = `⏰ [NHẮC LỊCH PV 30 PHÚT] Chào ${inv.applicantName}, lịch phỏng vấn trực tuyến với Ụm Bò Milk sẽ bắt đầu lúc ${inv.timeSlot} ngày ${inv.interviewDate}. Bạn hãy chuẩn bị và tham gia qua Google Meet: ${inv.meetLink}`;
           await sendZaloBotNotification({ phone: inv.applicantPhone, name: inv.applicantName, content: msg, type: 'INTERVIEW_REMINDER_30MIN' });
-          io.emit('interview:reminder_due', { interview: inv, message: msg });
+          io.emit('interview:reminder_due', { interview: inv, message: msg, kind: 'T30' });
           saveDB();
           io.emit('interviews:update', db.interviews);
           console.log(`[30-MIN REMINDER] ${inv.applicantName} - ${inv.timeSlot}`);
         }
       }
+      // ---- T-15 REMINDER (P0 PHASE 1, idempotent) ----
+      if (!inv.reminderT15Sent) {
+        const reminder15Ms = startMs - (15 * 60 * 1000);
+        if (nowMs >= reminder15Ms && nowMs < startMs + (30 * 60 * 1000)) {
+          inv.reminderT15Sent = true;
+          inv.reminderT15At = getVietnamISOString();
+          const msg15 = `⏰ [NHẮC LỊCH PV 15 PHÚT] Chào ${inv.applicantName}, chỉ còn 15 phút nữa buổi phỏng vấn (${inv.timeSlot} ngày ${inv.interviewDate}) bắt đầu. Vui lòng sẵn sàng vào Meet: ${inv.meetLink}`;
+          await sendZaloBotNotification({ phone: inv.applicantPhone, name: inv.applicantName, content: msg15, type: 'INTERVIEW_REMINDER_15MIN' });
+          io.emit('interview:reminder_due', { interview: inv, message: msg15, kind: 'T15' });
+          saveDB();
+          io.emit('interviews:update', db.interviews);
+          console.log(`[15-MIN REMINDER] ${inv.applicantName} - ${inv.timeSlot}`);
+        }
+      }
+      // ---- T-5 HR PREPARE (P0 PHASE 1, idempotent, khong spam ung vien) ----
+      if (!inv.reminderT5Sent) {
+        const reminder5Ms = startMs - (5 * 60 * 1000);
+        if (nowMs >= reminder5Ms && nowMs < startMs + (30 * 60 * 1000)) {
+          inv.reminderT5Sent = true;
+          inv.reminderT5At = getVietnamISOString();
+          io.emit('interview:reminder_due', { interview: inv, message: `Chuẩn bị mở Meet cho ${inv.applicantName} (${inv.timeSlot})`, kind: 'T5_HR_PREPARE' });
+          try { io.emit('hr:action', { actor: 'SYSTEM', action: 'INTERVIEW_T5_PREPARE', applicantName: inv.applicantName, interviewId: inv.id, timestamp: getVietnamISOString() }); } catch(_){}
+          saveDB();
+          io.emit('interviews:update', db.interviews);
+          console.log(`[5-MIN HR PREPARE] ${inv.applicantName} - ${inv.timeSlot}`);
+        }
+      }
 
-      // ---- AUTO-PASS AFTER MEET ENDS ----
-      if (!inv.autoPassTriggered && endTimeStr) {
+      // ---- MEET END -> COMPLETED_WAITING_PROCESSING (KHONG auto-PASS, Master 6.1) ----
+      if (!inv.autoPassTriggered && !inv.processedAfterMeet && endTimeStr) {
         const [endH, endM] = endTimeStr.split(':').map(Number);
         const invEnd = new Date(inv.interviewDate);
         invEnd.setHours(endH, endM, 0, 0);
         const endMs = invEnd.getTime();
 
         if (nowMs >= endMs) {
-          // Auto-PASS the applicant
+          // P0 PHASE 1 (Master 6.1): KHONG auto-PASS. Chuyen sang cho HR review.
           const appRec = db.applicants.find(a => a.id === inv.applicantId);
           if (appRec && appRec.status === 'INTERVIEW') {
             const before = { ...appRec };
-            appRec.status = 'PASS';
+            appRec.status = 'WAITING_HR_REVIEW';
             appRec.version = (appRec.version || 1) + 1;
             appRec.updated_at = getVietnamISOString();
-            appRec.passedAt = getVietnamISOString();
-            appRec.passSource = 'AUTO_MEET_END';
-            inv.autoPassTriggered = true;
-            inv.status = 'COMPLETED';
-            audit('SYSTEM', 'AUTO_PASS_INTERVIEW', 'APPLICANT', before, appRec, 'auto-poller');
+            appRec.interviewCompletedAt = getVietnamISOString();
+            appRec.interviewResult = 'COMPLETED_WAITING_PROCESSING';
+            inv.autoPassTriggered = true; // giu flag cu de khong reprocess + tuong thich UI
+            inv.processedAfterMeet = true;
+            inv.status = 'COMPLETED_WAITING_PROCESSING';
+            inv.completedAt = getVietnamISOString();
+            audit('SYSTEM', 'INTERVIEW_COMPLETED_WAITING_REVIEW', 'APPLICANT', before, appRec, 'auto-poller');
             addSyncQueue('APPLICANT', 'UPDATE', appRec, 'SYSTEM', 'AUTO');
             saveDB();
             io.emit('applicants:update', db.applicants);
             io.emit('interviews:update', db.interviews);
-            // Special event for UI real-time update
+            // Giu compat event interview:auto_pass cho UI cu, nhung payload bao khong PASS tu dong
             io.emit('interview:auto_pass', {
               applicantId: appRec.id,
               applicantName: appRec.name,
               interviewId: inv.id,
               timeSlot: inv.timeSlot,
-              interviewDate: inv.interviewDate
+              interviewDate: inv.interviewDate,
+              autoPassDisabled: true,
+              nextStatus: 'WAITING_HR_REVIEW'
             });
-            console.log(`[AUTO-PASS] ${appRec.name} - Meet ended at ${endTimeStr}, auto-PASS triggered.`);
+            console.log(`[INTERVIEW END] ${appRec.name} - Meet ended at ${endTimeStr}, -> WAITING_HR_REVIEW (no auto-PASS).`);
           } else {
             // Mark as done even if already converted
             inv.autoPassTriggered = true;
-            inv.status = 'COMPLETED';
+            inv.processedAfterMeet = true;
+            inv.status = inv.status === 'SCHEDULED' ? 'COMPLETED_WAITING_PROCESSING' : inv.status;
             saveDB();
             io.emit('interviews:update', db.interviews);
           }
@@ -5010,9 +5199,19 @@ app.post('/api/employees/:id/evaluate-test', authMiddleware, (req, res) => {
   const isPassed = p1Total > 6 && p2Total > 6;
   const resultStatus = isPassed ? 'PASSED_TEST' : 'FAILED_TEST';
 
+  // P0 PHASE 1 (Master 6.5/19.4): them recommendation thang 10 de tuong thich VIP.
+  // AI/HR cham theo rubric 20 tieu chi (moi cau 1/0.5/0) nhung quyet dinh cuoi theo thang 10:
+  // <5 FAIL | 5-<8 RETEST | >=8 PASS_WAITING_OFFICIAL_APPROVAL. Khong tu promote/logout.
+  const totalScore10 = Math.round((totalScore / 2) * 100) / 100;
+  const recommendation = totalScore10 < 5 ? 'FAIL' : (totalScore10 < 8 ? 'RETEST' : 'PASS_WAITING_OFFICIAL_APPROVAL');
+
   emp.status = resultStatus;
   emp.testScore = Math.round((totalScore / 20) * 100); // Scale to 100% for compatibility
   emp.testResult = isPassed ? `ĐẠT (${totalScore}/20đ)` : `CHƯA ĐẠT (${totalScore}/20đ)`;
+  emp.testScore10 = totalScore10;
+  emp.testRecommendation = recommendation;
+  emp.testNeedsHrReview = true;
+  emp.testFinalPending = true;
   emp.testScoredAt = getVietnamISOString(); // mốc TEST có điểm -> Thư mời tính hẹn ký HĐ +5 ngày
   
   if (!emp.testSchedule) emp.testSchedule = {};
@@ -5024,6 +5223,9 @@ app.post('/api/employees/:id/evaluate-test', authMiddleware, (req, res) => {
     part2Score: p2Total,
     totalScore20: totalScore,
     totalScore100: emp.testScore,
+    totalScore10,
+    recommendation,
+    needsHrReview: true,
     isPassed,
     notes: notes || '',
     part1Details: part1Scores || [],
@@ -5032,10 +5234,33 @@ app.post('/api/employees/:id/evaluate-test', authMiddleware, (req, res) => {
     evaluatedAt: getVietnamISOString()
   };
   emp.updated_at = getVietnamISOString();
+  audit(req.user.username, 'EVALUATE_TEST', 'EMPLOYEE', null, { employeeId: emp.employeeId, totalScore20: totalScore, totalScore10, recommendation }, req.ip);
 
   saveDB();
   io.emit('employees:update', db.employees);
-  res.json({ success: true, employee: emp, totalScore, p1Total, p2Total, isPassed, resultStatus });
+  res.json({ success: true, employee: emp, totalScore, p1Total, p2Total, isPassed, resultStatus, totalScore10, recommendation, needsHrReview: true });
+});
+
+// ============ P0 PHASE 1: HR finalize TEST (Master 19: AI propose -> HR review -> FINAL) ============
+// Khong auto logout truoc HR confirm. Chi sau HR confirm FAIL moi duoc revoke theo policy.
+app.post('/api/vip/test/:id/finalize', authMiddleware, roleCheck(['Admin', 'HR']), (req, res) => {
+  const empId = req.params.id;
+  const { decision, hrScores, notes } = req.body || {};
+  const emp = db.employees.find(e => e.id === empId || e.employeeId === empId);
+  if(!emp) return res.status(404).json({ error: 'Khong tim thay nhan vien' });
+  if(!emp.testSchedule || !emp.testSchedule.evaluation) return res.status(400).json({ error: 'Nhan vien chua co AI evaluation de HR duyet' });
+  const allowed = ['FAIL', 'RETEST', 'PASS_WAITING_OFFICIAL_APPROVAL'];
+  if(!allowed.includes(decision)) return res.status(400).json({ error: 'Decision phai la FAIL | RETEST | PASS_WAITING_OFFICIAL_APPROVAL' });
+  const before = { testRecommendation: emp.testRecommendation, status: emp.status, testFinalPending: emp.testFinalPending };
+  emp.testFinalDecision = decision;
+  emp.testFinalPending = false;
+  emp.testNeedsHrReview = false;
+  emp.testHrOverride = { hrScores: hrScores || null, notes: notes || '', decidedBy: req.user.username, decidedAt: getVietnamISOString() };
+  if(emp.testSchedule.evaluation) emp.testSchedule.evaluation.finalDecision = decision;
+  audit(req.user.username, decision === 'FAIL' ? 'CONFIRM_TEST_RESULT' : 'HR_OVERRIDE_SCORE', 'EMPLOYEE', before, { testFinalDecision: decision }, req.ip);
+  saveDB();
+  io.emit('employees:update', db.employees);
+  res.json({ success: true, employee: emp });
 });
 
 function getShiftVi(s){
@@ -8995,6 +9220,46 @@ app.get('/api/admin/env', authMiddleware, roleCheck(['Admin']), (req,res)=>{
 app.post('/api/admin/env/sync', authMiddleware, roleCheck(['Admin']), (req,res)=>{
   const report = checkAndBroadcastRenderEnv(true);
   res.json({ success: true, message: 'Đã ép đồng bộ realtime 18 biến môi trường Render', data: report });
+});
+
+// ============ P0 PHASE 1: Security inventory endpoint (Master 6.6) ============
+// Liet ke endpoint cong khai (khong authMiddleware) de HR/Admin review.
+// Chi Admin/HR duoc xem. Khong tra secret.
+app.get('/api/vip/security/inventory', authMiddleware, roleCheck(['Admin', 'HR']), (req, res) => {
+  const publicEndpoints = [
+    { method: 'GET', path: '/', reason: 'Landing UI', action: 'KEEP_PUBLIC' },
+    { method: 'GET', path: '/admin', reason: 'Admin SPA (auth o API layer)', action: 'KEEP_PUBLIC' },
+    { method: 'GET', path: '/employee', reason: 'Employee SPA (auth o API layer)', action: 'KEEP_PUBLIC' },
+    { method: 'GET', path: '/finance', reason: 'Finance SPA (auth o API layer)', action: 'KEEP_PUBLIC' },
+    { method: 'GET', path: '/health', reason: 'Health check Render/CI', action: 'KEEP_PUBLIC' },
+    { method: 'POST', path: '/api/auth/login', reason: 'HR login + rate-limit', action: 'KEEP_PUBLIC' },
+    { method: 'POST', path: '/api/auth/employee-login', reason: 'Employee Key login + Device Binding', action: 'KEEP_PUBLIC' },
+    { method: 'POST', path: '/api/auth/finance-login', reason: 'Finance login', action: 'KEEP_PUBLIC' },
+    { method: 'POST', path: '/api/auth/device-request', reason: 'Doi thiet bi (HR duyet)', action: 'KEEP_PUBLIC' },
+    { method: 'POST', path: '/api/applicants', reason: 'Form inbound (chong trung SDT 409)', action: 'ADD_SIGNED_WEBHOOK' },
+    { method: 'POST', path: '/api/recruitment/form-submit', reason: 'Google Form/Sheet webhook', action: 'ADD_SIGNED_WEBHOOK' },
+    { method: 'POST', path: '/api/attendance/checkin', reason: 'Employee self-service (can employee token)', action: 'ADD_EMPLOYEE_AUTH' },
+    { method: 'POST', path: '/api/attendance/checkout', reason: 'Employee self-service (can employee token)', action: 'ADD_EMPLOYEE_AUTH' },
+    { method: 'POST', path: '/api/employee/register-off', reason: 'Training OFF (can employee token)', action: 'ADD_EMPLOYEE_AUTH' },
+    { method: 'POST', path: '/api/off-requests', reason: 'OFF (can employee token)', action: 'ADD_EMPLOYEE_AUTH' },
+    { method: 'POST', path: '/api/emergency-requests', reason: 'OFF dot xuat (can employee token)', action: 'ADD_EMPLOYEE_AUTH' },
+    { method: 'POST', path: '/api/emergency-requests/:id/respond', reason: 'Nhan thay ca (can signed token)', action: 'ADD_EMPLOYEE_AUTH' },
+    { method: 'POST', path: '/api/shift-swap', reason: 'Doi ca (can employee token)', action: 'ADD_EMPLOYEE_AUTH' },
+    { method: 'POST', path: '/api/shift-swap/:id/respond', reason: 'Phan hoi doi ca (can signed token)', action: 'ADD_EMPLOYEE_AUTH' },
+    { method: 'POST', path: '/api/training/shift-change', reason: 'Training doi ca (can employee token)', action: 'ADD_EMPLOYEE_AUTH' },
+    { method: 'POST', path: '/api/courses/:id/submit', reason: 'Nop bai E-learning (can employee token)', action: 'ADD_EMPLOYEE_AUTH' },
+    { method: 'POST', path: '/api/quiz/open', reason: 'Mo de thi (can employee token)', action: 'ADD_EMPLOYEE_AUTH' },
+    { method: 'GET', path: '/api/quiz/status', reason: 'Trang thai quiz', action: 'REVIEW' },
+    { method: 'GET', path: '/api/courses', reason: 'Danh sach khoa hoc', action: 'REVIEW' },
+    { method: 'GET', path: '/api/interviews', reason: 'Lich PV (can filter theo employee)', action: 'ADD_EMPLOYEE_AUTH' },
+    { method: 'GET', path: '/api/notifications', reason: 'Thong bao (can filter theo employee)', action: 'ADD_EMPLOYEE_AUTH' },
+    { method: 'GET', path: '/api/off-window', reason: 'Trang thai cua so OFF', action: 'KEEP_PUBLIC' },
+    { method: 'GET', path: '/api/attendance/official-monthly', reason: 'Bang cong thang (can employee token)', action: 'ADD_EMPLOYEE_AUTH' },
+    { method: 'GET', path: '/api/employee/me', reason: 'Verify token + forceLogout', action: 'KEEP_PUBLIC' },
+    { method: 'POST', path: '/api/zalo/inbound', reason: 'Zalo webhook (verify secret tuy chon)', action: 'KEEP_PUBLIC' },
+    { method: 'POST', path: '/api/render/deploy-hook', reason: 'Render deploy hook', action: 'KEEP_PUBLIC' }
+  ];
+  res.json({ success: true, count: publicEndpoints.length, endpoints: publicEndpoints, generatedAt: getVietnamISOString(), note: 'PHASE 1 inventory: KEEP_PUBLIC | ADD_EMPLOYEE_AUTH | ADD_SIGNED_WEBHOOK | REVIEW' });
 });
 
 // Webhook tiếp nhận deploy / thay đổi từ Render

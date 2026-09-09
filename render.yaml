@@ -65,9 +65,57 @@ services:
       - key: QUIZ_BANK_SHEET_NAME
         value: ""
 
-# Postgres free 90 ngày (tùy chọn, nếu cần 24/7 DB thay db.json)
-# databases:
-#   - name: umbomilk-db
-#     region: singapore
-#     plan: free
-#     ipAllowList: []
+  # UMB HR AUTOPILOT VIP (Python Control Center) — giao dien dieu hanh duy nhat cho HR.
+  # CANH BAO: plan free tu sleep khi khong co traffic -> automation 24/7
+  # (reminder, detector, morning brief) chet theo. Production that can plan
+  # tra phi (starter+) cho CA 2 services + DB (Master §46).
+  - type: web
+    name: umbvip
+    runtime: docker
+    region: singapore
+    plan: free
+    rootDir: umb-hr-autopilot-vip
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: VIP_ENV
+        value: production
+      - key: VIP_PORT
+        value: 10000
+      # Noi bo Render: Core service lang nghe PORT 10000
+      - key: NODE_CORE_URL
+        value: http://umbomilk-hr:10000
+      - key: DATABASE_URL
+        fromDatabase:
+          name: umbomilk-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: umbvip-redis
+          property: connectionString
+      - key: VIP_SECRET_KEY
+        generateValue: true
+      - key: VIP_SERVICE_SECRET
+        generateValue: true
+      # AI/Zalo/Google lay tu Node Core settings — chi set khi can dich vu truc tiep:
+      - key: AI_API_KEY
+        sync: false
+      - key: ZALO_WEBHOOK_SECRET
+        sync: false
+
+  # Redis cho jobs/locks/idempotency VIP (PHASE 9). Thieu thi DEGRADED + memory.
+  - type: redis
+    name: umbvip-redis
+    region: singapore
+    plan: free
+    maxmemoryPolicy: noeviction
+
+# Postgres cho VIP Stage A (workflow/license/...) + Stage B migration.
+# Free het han 90 ngay — production that dung plan tra phi + backup.
+databases:
+  - name: umbomilk-db
+    region: singapore
+    plan: free
+    ipAllowList: []

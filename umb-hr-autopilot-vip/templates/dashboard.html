@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — UMB HR Autopilot VIP{% endblock %}
+{% block content %}
+<div class="space-y-4" hx-get="/api/dashboard/today" hx-trigger="load, every 60s" hx-swap="none" id="today-wrap">
+  <section class="card">
+    <h1 class="text-xl font-bold">Chào buổi sáng, HR</h1>
+    <p class="text-sm text-slate-500" id="today-sub">Đang tải dữ liệu hôm nay… (skeleton, không reload full page ở phase sau)</p>
+    <div class="skeleton h-4 mt-2"></div>
+    <div class="skeleton h-4 w-2/3"></div>
+  </section>
+  <section class="card">
+    <div class="flex items-center justify-between">
+      <h2 class="font-semibold">CẦN XỬ LÝ NGAY</h2>
+      <span class="text-xs text-slate-500">Exception Inbox đầy đủ ở PHASE 3</span>
+    </div>
+    <div id="action-list" class="mt-2 space-y-2 text-sm"><div class="skeleton h-8"></div><div class="skeleton h-8"></div></div>
+  </section>
+  <section class="grid md:grid-cols-2 gap-4">
+    <div class="card"><h3 class="font-semibold">PHỎNG VẤN HÔM NAY</h3><div id="iv-count" class="text-3xl font-bold mt-1">…</div></div>
+    <div class="card"><h3 class="font-semibold">ỨNG VIÊN</h3><div id="app-count" class="text-3xl font-bold mt-1">…</div></div>
+  </section>
+  <section class="card">
+    <h3 class="font-semibold">AI COMMAND</h3>
+    <input disabled placeholder="Hãy nói cho tôi bạn muốn xử lý việc gì… (PHASE 8)" class="w-full mt-2 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-transparent opacity-60">
+  </section>
+  <section class="card">
+    <div class="flex items-center justify-between">
+      <h3 class="font-semibold">LIVE ACTIVITY</h3>
+      <span class="text-xs text-slate-500">Socket adapter buffer (mới nhất)</span>
+    </div>
+    <div id="live-list" hx-get="/api/vip/events/latest" hx-trigger="load, every 10s" class="mt-2 text-xs space-y-1"><div class="skeleton h-6"></div></div>
+  </section>
+</div>
+<script>
+document.body.addEventListener('htmx:afterRequest', e => {
+  if (!e.detail.requestConfig || !e.detail.requestConfig.path) return;
+  if (e.detail.requestConfig.path === '/api/dashboard/today') {
+    try {
+      const j = JSON.parse(e.detail.xhr.responseText);
+      document.getElementById('iv-count').textContent = j.counts ? j.counts.interviews : '—';
+      document.getElementById('app-count').textContent = j.counts ? j.counts.applicants : '—';
+      const box = document.getElementById('action-list');
+      box.innerHTML = '';
+      (j.needs_action || []).forEach(a => {
+        const d = document.createElement('div');
+        d.className = 'row-flash flex items-center justify-between border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2';
+        d.innerHTML = '<span>' + a.label + '</span><button class="btn-primary">XEM</button>';
+        box.appendChild(d);
+      });
+      if (!(j.needs_action || []).length) box.innerHTML = '<div class="text-slate-500">Không có việc cần xử lý. 🎉</div>';
+      document.getElementById('today-sub').textContent = j.degraded ? 'Dữ liệu qua Node adapter (degraded-safe).' : 'Realtime.';
+    } catch (_) {}
+  }
+  if (e.detail.requestConfig.path === '/api/vip/events/latest') {
+    try {
+      const j = JSON.parse(e.detail.xhr.responseText);
+      const box = document.getElementById('live-list');
+      box.innerHTML = '';
+      (j.events || []).slice(0, 10).forEach(ev => {
+        const d = document.createElement('div');
+        d.className = 'border-b border-slate-100 dark:border-slate-800 py-1';
+        d.textContent = (ev.occurred_at || '').slice(11, 19) + ' · ' + ev.event_type + ' · ' + (ev.node_event || '');
+        box.appendChild(d);
+      });
+      if (!(j.events || []).length) box.innerHTML = '<div class="text-slate-500">Chưa có event (Core offline hoặc chưa có thay đổi).</div>';
+    } catch (_) {}
+  }
+});
+</script>
+{% endblock %}

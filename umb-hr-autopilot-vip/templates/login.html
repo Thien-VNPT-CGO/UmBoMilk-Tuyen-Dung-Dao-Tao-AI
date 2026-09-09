@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kích hoạt — UMB HR Autopilot VIP</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>tailwind.config = { darkMode: 'class' };</script>
+</head>
+<body class="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
+<div class="w-full max-w-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow">
+  <h1 class="text-xl font-bold">UMB HR AUTOPILOT <span class="text-rose-600">VIP</span></h1>
+  <p class="text-sm text-slate-500 mt-1">Đăng nhập bằng tài khoản HR (xác thực qua Node Core, branch scope kế thừa).</p>
+  <form id="f" class="mt-4 space-y-3">
+    <input id="u" placeholder="Username" class="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-transparent">
+    <input id="p" type="password" placeholder="Password" class="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-transparent">
+    <button class="btn-primary w-full" type="submit" id="b">ĐĂNG NHẬP</button>
+    <div id="e" class="text-sm text-rose-600"></div>
+  </form>
+  <p class="text-xs text-slate-500 mt-3">License Center đầy đủ ở PHASE 10. Đây là login nền (cookie HttpOnly).</p>
+</div>
+<script>
+document.getElementById('f').addEventListener('submit', async e => {
+  e.preventDefault();
+  const b = document.getElementById('b');
+  b.textContent = 'ĐANG XỬ LÝ…'; b.disabled = true;
+  try {
+    const r = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: document.getElementById('u').value, password: document.getElementById('p').value }) });
+    if (!r.ok) throw new Error('Sai tài khoản');
+    location.href = '/dashboard';
+  } catch (err) { document.getElementById('e').textContent = err.message; b.textContent = 'ĐĂNG NHẬP'; b.disabled = false; }
+});
+</script>
+</body>
+</html>
