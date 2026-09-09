@@ -4,10 +4,3 @@ data/db*.json
 data/*.tmp
 .git
 .env.local
-# VIP python project: giu Core build nhe (VIP co Dockerfile + .dockerignore rieng)
-umb-hr-autopilot-vip/.venv
-umb-hr-autopilot-vip/dist
-umb-hr-autopilot-vip/build
-umb-hr-autopilot-vip/data
-umb-hr-autopilot-vip/.pytest_cache
-umb-hr-autopilot-vip/__pycache__
