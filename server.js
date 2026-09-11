@@ -4676,6 +4676,29 @@ async function createCalendarMeetEvent(interview, applicant){
     return null;
   }
 }
+function linkDriveUrlToAttendance(meta, url, driveFileId){
+  try{
+    if(!meta || !meta.attendanceId || !meta.slot) return;
+    if(meta.slot!=='checkIn' && meta.slot!=='checkOut') return;
+    const rec = db.attendances.find(a=>a.id===meta.attendanceId);
+    if(!rec || !rec[meta.slot]) return;
+    rec[meta.slot].driveUrl = url;
+    rec[meta.slot].driveFileId = driveFileId;
+    rec.updated_at = getVietnamISOString();
+    saveDB();
+    io.emit('attendances:update', db.attendances);
+    // Đẩy URL ảnh lên Sheet ngay (không chờ vòng 60s)
+    if(typeof triggerRealtimeSheetSync==='function') triggerRealtimeSheetSync('RECORD_DIEM_DANH');
+  }catch(e){ console.error('linkDriveUrl error', e.message); }
+}
+async function shareDrivePublicRead(token, fileId){
+  try{
+    await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`, {
+      method:'POST', headers:{ Authorization:`Bearer ${token}`, 'Content-Type':'application/json' },
+      body: JSON.stringify({ role:'reader', type:'anyone' })
+    });
+  }catch(e){ console.error('Drive share error', e.message); }
+}
 function addDriveFile(employeeId, dateStr, type, fileName, meta){
   const emp = db.employees.find(e=>e.employeeId===employeeId);
   if(!emp) return null;
@@ -4728,7 +4751,12 @@ function addDriveFile(employeeId, dateStr, type, fileName, meta){
               method:'POST', headers:{ Authorization:`Bearer ${token}`, 'Content-Type':`multipart/related; boundary=${boundary}`}, body: bodyBuffer
             });
             const upData = await upRes.json();
-            if(upData.id){ file.url = `https://drive.google.com/file/d/${upData.id}/view`; file.sync_status='SYNCED'; file.driveFileId = upData.id; file.mimeType=mimeType; io.emit('drive:update', db.driveFiles.slice(0,20)); saveDB(); return; }
+            if(upData.id){
+              file.url = `https://drive.google.com/file/d/${upData.id}/view`; file.sync_status='SYNCED'; file.driveFileId = upData.id; file.mimeType=mimeType;
+              await shareDrivePublicRead(token, upData.id); // HR mở link xem được ngay
+              linkDriveUrlToAttendance(meta, file.url, upData.id); // gắn URL vào điểm danh -> Sheet
+              io.emit('drive:update', db.driveFiles.slice(0,20)); saveDB(); return;
+            }
           } else {
             // Text file (Diem_danh.txt) – giữ logic cũ
             const boundary = '-------314159265358979323846';
@@ -4854,7 +4882,7 @@ async function syncSheetTab(sheetKey){
         }));
         break;
       case 'RECORD_DIEM_DANH':
-        rows = db.attendances.filter(a=>!isTestRecord(a)).map(a=>[a.id, a.employeeId, db.employees.find(e=>e.employeeId===a.employeeId)?.name||'', a.date, a.shift, a.branchId, a.checkIn?.time||'', a.checkIn?.gps||'', a.checkIn?.image ? 'co_anh' : '', a.checkIn?.drivePath||'', a.checkOut?.time||'', a.checkOut?.gps||'', a.checkOut?.image ? 'co_anh' : '', a.checkOut?.drivePath||'', a.status, (a.violations||[]).join(','), a.version]);
+        rows = db.attendances.filter(a=>!isTestRecord(a)).map(a=>[a.id, a.employeeId, db.employees.find(e=>e.employeeId===a.employeeId)?.name||'', a.date, a.shift, a.branchId, a.checkIn?.time||'', a.checkIn?.gps||'', a.checkIn?.image ? 'co_anh' : '', a.checkIn?.driveUrl||a.checkIn?.drivePath||'', a.checkOut?.time||'', a.checkOut?.gps||'', a.checkOut?.image ? 'co_anh' : '', a.checkOut?.driveUrl||a.checkOut?.drivePath||'', a.status, (a.violations||[]).join(','), a.version]);
         break;
       case 'RECORD_ZALO':
         rows = db.zaloRecords.filter(z=>!isTestRecord(z)).map(z=>[z.id, z.sent_at, z.receiver, z.type, z.content?.slice(0,200), z.status, z.error||'']);
@@ -5066,6 +5094,7 @@ setTimeout(()=>{ syncAllTabsToSheetsRealtime().catch(()=>{}); }, 15000);
 // Tự động đồng bộ ngay lập tức về Google Sheet 17iXM khi có thay đổi trên Web App
 const _pendingSheetSyncs = new Set();
 let _sheetSyncDebounceTimer = null;
+let _lastEnsureSheetsAt = 0;
 
 function triggerRealtimeSheetSync(sheetKey){
   if(isSystemResetting) return;
@@ -5074,6 +5103,12 @@ function triggerRealtimeSheetSync(sheetKey){
   clearTimeout(_sheetSyncDebounceTimer);
   _sheetSyncDebounceTimer = setTimeout(async ()=>{
     try{
+      // Tự tạo tab còn thiếu (kèm header) trước khi đẩy dòng realtime
+      const nowMs = Date.now();
+      if(nowMs - _lastEnsureSheetsAt > 60000){
+        _lastEnsureSheetsAt = nowMs;
+        try{ await ensureSheetsExist(); }catch(e){ console.error('[REALTIME SHEET ENSURE]', e.message); }
+      }
       const keysToSync = [..._pendingSheetSyncs];
       _pendingSheetSyncs.clear();
       if(keysToSync.length === 0){
@@ -5453,7 +5488,7 @@ app.post(['/api/attendance/checkin', '/api/attendance/check-in'], (req,res)=>{
   };
   db.attendances.push(newRec);
   // Drive realtime: tạo file ảnh + txt điểm danh (yêu cầu #8: thực lưu)
-  addDriveFile(employeeId, today, 'CHECK_IN', `Anh_chup_cua_hang.jpg`, { content: image, gps: newRec.checkIn.gps, time: newRec.checkIn.time });
+  addDriveFile(employeeId, today, 'CHECK_IN', `Anh_chup_cua_hang.jpg`, { content: image, gps: newRec.checkIn.gps, time: newRec.checkIn.time, attendanceId: newRec.id, slot: 'checkIn' });
   addDriveFile(employeeId, today, 'CHECK_IN', `Diem_danh.txt`, { content: `Điểm danh Vào ca UBM - ${emp.name} - ${today} ${newRec.checkIn.time} - GPS:${newRec.checkIn.gps} - Địa chỉ:${newRec.checkIn.address} - SĐT:${emp.phone} - Ca:${newRec.shift}` });
   audit(employeeId,'CHECKIN','ATTENDANCE',null,newRec, req.ip);
   addSyncQueue('ATTENDANCE','CREATE',newRec, employeeId, 'WEB_EMPLOYEE');
@@ -5564,7 +5599,7 @@ app.post(['/api/attendance/checkout', '/api/attendance/check-out'], (req,res)=>{
   record.status = 'COMPLETED';
   record.updated_at = now.toISOString();
   record.sync_status = 'PENDING';
-  addDriveFile(employeeId, today, 'CHECK_OUT', `Anh_chup_cua_hang.jpg`, { content: image, gps: record.checkOut.gps, time: record.checkOut.time });
+  addDriveFile(employeeId, today, 'CHECK_OUT', `Anh_chup_cua_hang.jpg`, { content: image, gps: record.checkOut.gps, time: record.checkOut.time, attendanceId: record.id, slot: 'checkOut' });
   addDriveFile(employeeId, today, 'CHECK_OUT', `Diem_danh.txt`, { content: `Điểm danh Ra ca UBM - ${emp.name} - ${today} ${record.checkOut.time} - GPS:${record.checkOut.gps} - Địa chỉ:${record.checkOut.address}` });
   addSyncQueue('ATTENDANCE','UPDATE',record, employeeId, 'WEB_EMPLOYEE');
   saveDB();
