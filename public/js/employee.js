@@ -334,8 +334,9 @@ function initNav(){
       lockMsg = '🔒 Đã hoàn thành 7 ngày Training';
     }
     
-    // Ràng buộc OFF cho Chính thức: Nếu là T6 nhưng chưa mở window
-    if(isOfficial && n.id === 'off' && isFriday){
+    // Ràng buộc OFF cho Chính thức: Nếu là T6 nhưng chưa mở window.
+    // VIP test (Admin bật): mở mọi lúc, bỏ khóa T6 < 12:00 (TH1/TH2 server vẫn giữ).
+    if(isOfficial && n.id === 'off' && isFriday && !window._offVipTest){
       // Tạm thời check local giờ T6 < 12:00
       if(now.getHours() < 12){
         isLocked = true;
@@ -370,7 +371,8 @@ function initNav(){
   if(mobile) mobile.innerHTML = visibleNav.map(n=>{
     let isLocked = false;
     if(!isOfficial && isLocked7Days && (n.id === 'attendance' || n.id === 'schedule')) isLocked = true;
-    if(isOfficial && n.id === 'off' && isFriday && now.getHours() < 12) isLocked = true;
+    // VIP test (Admin bật): NV chính thức đăng ký OFF mọi lúc, không khóa T6 < 12:00
+    if(isOfficial && n.id === 'off' && isFriday && now.getHours() < 12 && !window._offVipTest) isLocked = true;
 
     if(isLocked){
       return `
@@ -412,8 +414,8 @@ function switchTab(id){
     return;
   }
   // emergency (OFF đột xuất) được phép cho chính thức (Master Spec Mục 19)
-  // Ràng buộc OFF: T6 < 12:00
-  if(isOfficial && id === 'off' && getVietnamNow().getDay() === 5 && getVietnamNow().getHours() < 12){
+  // Ràng buộc OFF: T6 < 12:00 — VIP test (Admin bật) thì mở mọi lúc
+  if(isOfficial && id === 'off' && !window._offVipTest && getVietnamNow().getDay() === 5 && getVietnamNow().getHours() < 12){
     showToast('🔒 Chức năng Nghỉ OFF sẽ mở vào lúc 12:00 trưa nay (Thứ 6).', 'info');
     return;
   }

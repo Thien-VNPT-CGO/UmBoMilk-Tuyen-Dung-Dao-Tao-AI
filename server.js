@@ -5137,7 +5137,7 @@ app.post('/api/employees/:id/schedule-test', authMiddleware, (req, res) => {
       const existingTime = new Date(other.testSchedule.scheduledAt).getTime();
       const diffMs = Math.abs(newTime - existingTime);
       if (diffMs < MIN_GAP_MS) {
-        const existingTimeStr = new Date(other.testSchedule.scheduledAt).toLocaleString('vi-VN');
+        const existingTimeStr = new Date(other.testSchedule.scheduledAt).toLocaleString('vi-VN', {timeZone:'Asia/Ho_Chi_Minh'});
         return res.status(400).json({
           error: `Lịch phỏng vấn bị trùng hoặc quá gần lịch của NV ${other.name} (${other.employeeId}) vào lúc ${existingTimeStr}. Mỗi lịch phỏng vấn TEST phải cách nhau tối thiểu 1 tiếng 30 phút!`
         });
@@ -6968,7 +6968,7 @@ setInterval(checkShiftSwap24h, 60*60*1000);
 setTimeout(checkShiftSwap24h, 10000);
 
 // ============ WORKFLOW: OFF -> AI DRAFT TUẦN SAU -> HR DUYỆT -> GỬI NV ============
-function getNextMonday(d=new Date()){
+function getNextMonday(d=getVietnamNow()){
   const curMon = getMonday(d);
   const next = new Date(curMon); next.setDate(curMon.getDate()+7);
   return next;
