@@ -4400,15 +4400,25 @@ async function loadTestWeekStatus(){
     const txt = document.getElementById('testWeekStatusText');
     if(!btn || !txt) return;
     const base = `Tuần ${res.weekStart} — ${res.drafts} draft, ${res.approved} đã duyệt${res.locked?' (đã khóa đăng ký)':''}.`;
+    if(!btn._origHTML) btn._origHTML = btn.innerHTML;
     if(res.locked){
-      btn.disabled = true; btn.className='flex-1 bg-slate-200 text-slate-500 font-black py-3 rounded-xl flex items-center justify-center gap-2 cursor-not-allowed disabled:opacity-40 disabled:cursor-not-allowed';
-      txt.textContent = base + ' Nút khóa sau khi đã duyệt.';
+      // Đã khóa: hiện ai khóa/lúc nào + cho MỞ KHÓA (khóa nhầm/khóa sớm thì gỡ được)
+      const li = res.lockInfo ? ` Khóa bởi ${res.lockInfo.by} lúc ${res.lockInfo.at||''}.` : '';
+      btn.disabled = false; btn.onclick = unlockWeek;
+      btn.innerHTML = '<i class="fa-solid fa-lock-open"></i> MỞ KHÓA TUẦN ' + res.weekStart;
+      btn.className='flex-1 bg-amber-500 hover:bg-amber-600 text-white font-black py-3 rounded-xl shadow flex items-center justify-center gap-2';
+      txt.textContent = base + li + ' Bấm MỞ KHÓA để NV đăng ký OFF tiếp (TH1/TH2 giữ nguyên).';
+      txt.className='text-xs text-amber-700 mt-1 font-bold';
     } else if(!res.canApprove){
-      btn.disabled = true; btn.className='flex-1 bg-slate-200 text-slate-500 font-black py-3 rounded-xl flex items-center justify-center gap-2 cursor-not-allowed disabled:opacity-40 disabled:cursor-not-allowed';
+      btn.disabled = true; btn.onclick = approveTestWeek;
+      if(btn._origHTML) btn.innerHTML = btn._origHTML;
+      btn.className='flex-1 bg-slate-200 text-slate-500 font-black py-3 rounded-xl flex items-center justify-center gap-2 cursor-not-allowed disabled:opacity-40 disabled:cursor-not-allowed';
       txt.textContent = base + ' ' + res.reason;
       txt.className='text-xs text-amber-700 mt-1 font-bold';
     } else {
-      btn.disabled = false; btn.className='flex-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-black py-3 rounded-xl shadow flex items-center justify-center gap-2';
+      btn.disabled = false; btn.onclick = approveTestWeek;
+      if(btn._origHTML) btn.innerHTML = btn._origHTML;
+      btn.className='flex-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-black py-3 rounded-xl shadow flex items-center justify-center gap-2';
       txt.textContent = base + ' ' + res.reason;
       txt.className='text-xs text-emerald-700 mt-1 font-bold';
     }
@@ -4422,6 +4432,15 @@ async function approveTestWeek(){
     showToast(res.message||'Đã duyệt lịch đăng ký test','success');
     loadTestWeekStatus(); loadNextWeekDrafts(); loadSchedules();
   }catch(e){ showToast(e.message,'error'); const b=document.getElementById('btnApproveTestWeek'); if(b) b.disabled=false; loadTestWeekStatus(); }
+}
+async function unlockWeek(){
+  if(!confirm('Mở khóa đợt đăng ký OFF tuần sau? NV sẽ đăng ký OFF tiếp được (TH1/TH2 giữ nguyên).')) return;
+  const btn=document.getElementById('btnApproveTestWeek'); if(btn) btn.disabled=true;
+  try{
+    const res=await api('/api/schedules/unlock-week', {method:'POST', headers:{Authorization:'Bearer '+token}, body:JSON.stringify({})});
+    showToast(res.message||'Đã mở khóa tuần','success');
+    loadTestWeekStatus(); loadNextWeekDrafts(); loadSchedules();
+  }catch(e){ showToast(e.message,'error'); loadTestWeekStatus(); }
 }
 async function approveNextWeek(){
   if(!confirm('Duyệt lịch tuần sau cho tất cả NV chính thức? Lịch sẽ được đẩy sang Web App nhân viên ngay (realtime).')) return;

@@ -7168,7 +7168,15 @@ app.get('/api/schedules/approve-test-status', authMiddleware, roleCheck(['Admin'
   const drafts = db.schedules.filter(s=> s.weekStart===nextWeekStart && s.approvalStatus==='PENDING_APPROVAL').length;
   const approved = db.schedules.filter(s=> s.weekStart===nextWeekStart && s.approvalStatus==='APPROVED').length;
   const canApprove = vip || !windowOpen;
-  res.json({ weekStart: nextWeekStart, vipTestMode: vip, windowOpen, locked, drafts, approved, canApprove,
+  // Ai khoa/luc nao (de HR doi chieu khi nut bi khoa ma khong nho da bam)
+  let lockInfo = null;
+  if(locked){
+    const alogs = (db.auditLogs||[]).filter(a=> a.entity==='SCHEDULE' && (a.action==='APPROVE_TEST_WEEK_SCHEDULE' || a.action==='UNLOCK_WEEK_SCHEDULE') && a.after && a.after.weekStart===nextWeekStart);
+    // audit unshift moi nhat len dau
+    const lastLock = alogs.find(a=> a.action==='APPROVE_TEST_WEEK_SCHEDULE');
+    if(lastLock) lockInfo = { by: lastLock.actor, at: lastLock.timestamp };
+  }
+  res.json({ weekStart: nextWeekStart, vipTestMode: vip, windowOpen, locked, lockInfo, drafts, approved, canApprove,
     reason: vip ? 'VIP test đang BẬT - duyệt test mọi lúc' : (windowOpen ? 'Đang trong giờ đăng ký T6 12:00-T7 15:00 - nút mở sau 15h00 T7' : (locked ? 'Tuần này đã duyệt & khóa' : 'Đã hết giờ đăng ký - bấm để duyệt & khóa lịch')) });
 });
 app.post('/api/schedules/approve-test-week', authMiddleware, roleCheck(['Admin','HR']), async (req,res)=>{
@@ -7221,6 +7229,21 @@ app.post('/api/schedules/approve-test-week', authMiddleware, roleCheck(['Admin',
   io.emit('schedules:approved', { weekStart: nextWeekStart, count: drafts.length });
   io.emit('notifications:update', db.notifications);
   res.json({ success:true, weekStart: nextWeekStart, approved: drafts.length, generated, locked:true, vipTestMode: vip, warning, violations, message:`Đã duyệt lịch tuần sau ${nextWeekStart} cho ${drafts.length} NV${generated?' (AI vừa tự sắp lịch)':''}, khóa đợt đăng ký OFF & đồng bộ Sheet${warning ? ' - ' + warning : ''}` });
+});
+
+// API: Mở khóa đợt đăng ký OFF tuần sau (khi khóa nhầm/khóa sớm, Admin/HR mở lại cho NV đăng ký tiếp)
+app.post('/api/schedules/unlock-week', authMiddleware, roleCheck(['Admin','HR']), (req,res)=>{
+  const weekStart = (req.body && req.body.weekStart) || getNextWeekStartStr();
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(weekStart)) return res.status(400).json({error:'weekStart không hợp lệ (YYYY-MM-DD)'});
+  if(!db.settings.off) db.settings.off = {};
+  if(!Array.isArray(db.settings.off.lockedWeeks)) db.settings.off.lockedWeeks = [];
+  const before = [...db.settings.off.lockedWeeks];
+  db.settings.off.lockedWeeks = db.settings.off.lockedWeeks.filter(w=> w!==weekStart);
+  const wasLocked = before.length !== db.settings.off.lockedWeeks.length;
+  audit(req.user.username,'UNLOCK_WEEK_SCHEDULE','SCHEDULE', { weekStart, lockedWeeks: before }, { weekStart, lockedWeeks: db.settings.off.lockedWeeks }, req.ip);
+  saveDB();
+  io.emit('schedules:update', db.schedules);
+  res.json({ success:true, weekStart, wasLocked, locked:false, message: wasLocked ? `Đã mở khóa đăng ký OFF tuần ${weekStart} - NV có thể đăng ký tiếp (TH1/TH2 giữ nguyên)` : `Tuần ${weekStart} vốn không bị khóa` });
 });
 
 // API: Trigger thủ công tạo draft (để test hoặc khi OFF xong sớm)

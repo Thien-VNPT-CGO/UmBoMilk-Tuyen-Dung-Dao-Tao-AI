@@ -137,4 +137,34 @@ describe('VIP test OFF 2 ngay/tuan + gio VN', () => {
     const d = new Date(ws + 'T00:00:00');
     assert.equal(d.getDay(), 1, 'weekStart phai la Thu 2, got ' + ws);
   });
+
+  it('8. Status co lockInfo + unlock tuan chua khoa (an toan, khong doi du lieu)', async () => {
+    const s = await api('/api/schedules/approve-test-status', {}, adminToken);
+    assert.equal(s.status, 200);
+    assert.ok('lockInfo' in s.body, JSON.stringify(s.body));
+    const u = await api('/api/schedules/unlock-week', {
+      method: 'POST', body: JSON.stringify({ weekStart: '2099-01-04' })
+    }, adminToken);
+    assert.equal(u.status, 200, JSON.stringify(u.body));
+    assert.equal(u.body.wasLocked, false);
+    assert.equal(u.body.locked, false);
+  });
+
+  it('9. Unlock: sai weekStart -> 400, thieu auth -> 401', async () => {
+    const bad = await api('/api/schedules/unlock-week', {
+      method: 'POST', body: JSON.stringify({ weekStart: 'not-a-date' })
+    }, adminToken);
+    assert.equal(bad.status, 400, JSON.stringify(bad.body));
+    const noAuth = await api('/api/schedules/unlock-week', {
+      method: 'POST', body: JSON.stringify({})
+    });
+    assert.equal(noAuth.status, 401, JSON.stringify(noAuth.body));
+  });
+
+  it('10. Admin UI co nut Mo khoa + hien ai khoa', async () => {
+    const src = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'admin.js'), 'utf8');
+    assert.ok(src.includes('unlockWeek'), 'thieu unlockWeek');
+    assert.ok(src.includes('lockInfo'), 'thieu lockInfo');
+    assert.ok(src.includes('MỞ KHÓA TUẦN'), 'thieu nut Mo khoa');
+  });
 });
