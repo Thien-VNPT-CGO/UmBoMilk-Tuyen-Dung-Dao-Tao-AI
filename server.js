@@ -7246,6 +7246,34 @@ app.post('/api/schedules/unlock-week', authMiddleware, roleCheck(['Admin','HR'])
   res.json({ success:true, weekStart, wasLocked, locked:false, message: wasLocked ? `Đã mở khóa đăng ký OFF tuần ${weekStart} - NV có thể đăng ký tiếp (TH1/TH2 giữ nguyên)` : `Tuần ${weekStart} vốn không bị khóa` });
 });
 
+// API: Xóa lịch tuần (Admin only - destructive, có confirm 2 lớp ở UI).
+// Xóa toàn bộ schedules của weekStart + gỡ khóa + xóa offRequests trùng tuần
+// để đăng ký lại từ đầu. Ghi audit đầy đủ trước khi xóa.
+app.post('/api/schedules/delete-week', authMiddleware, roleCheck(['Admin']), (req,res)=>{
+  const weekStart = req.body && req.body.weekStart;
+  if(!weekStart || !/^\d{4}-\d{2}-\d{2}$/.test(weekStart)) return res.status(400).json({error:'weekStart không hợp lệ (YYYY-MM-DD, VD 2026-09-14)'});
+  const weekDates = []; { const mon = new Date(weekStart); for(let i=0;i<7;i++){ const d = new Date(mon); d.setDate(mon.getDate()+i); weekDates.push(toVietnamDateStr(d)); } }
+  const schedHit = db.schedules.filter(s=> s.weekStart===weekStart);
+  const offHit = db.offRequests.filter(r=> r.dates && r.dates.some(d=> weekDates.includes(d)));
+  const before = {
+    weekStart,
+    schedules: schedHit.length,
+    offRequests: offHit.length,
+    offSummary: offHit.map(r=> ({ employeeId: r.employeeId, dates: r.dates })),
+    wasLocked: Array.isArray(db.settings?.off?.lockedWeeks) && db.settings.off.lockedWeeks.includes(weekStart)
+  };
+  db.schedules = db.schedules.filter(s=> s.weekStart!==weekStart);
+  db.offRequests = db.offRequests.filter(r=> !(r.dates && r.dates.some(d=> weekDates.includes(d))));
+  if(db.settings.off && Array.isArray(db.settings.off.lockedWeeks)){
+    db.settings.off.lockedWeeks = db.settings.off.lockedWeeks.filter(w=> w!==weekStart);
+  }
+  audit(req.user.username,'DELETE_WEEK_SCHEDULE','SCHEDULE', before, { weekStart, deletedSchedules: schedHit.length, deletedOffRequests: offHit.length }, req.ip);
+  saveDB();
+  io.emit('schedules:update', db.schedules);
+  io.emit('offRequests:update', db.offRequests);
+  res.json({ success:true, weekStart, deletedSchedules: schedHit.length, deletedOffRequests: offHit.length, message:`Đã xóa ${schedHit.length} lịch + ${offHit.length} phiếu OFF tuần ${weekStart} (mở khóa đăng ký)` });
+});
+
 // API: Trigger thủ công tạo draft (để test hoặc khi OFF xong sớm)
 app.post('/api/schedules/generate-next-week-draft', authMiddleware, roleCheck(['Admin','HR']), async (req,res)=>{
   const result = await generateNextWeekDraft(req.user.username);

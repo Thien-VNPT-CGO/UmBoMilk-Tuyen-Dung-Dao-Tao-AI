@@ -4450,6 +4450,18 @@ async function approveNextWeek(){
     loadSchedules();
   }catch(e){ showToast(e.message,'error'); }
 }
+async function deleteNextWeek(){
+  let st=null;
+  try{ st = await api('/api/schedules/approve-test-status', {headers:{Authorization:'Bearer '+token}}); }catch(e){ showToast(e.message,'error'); return; }
+  const ws = st.weekStart;
+  if(!confirm(`XÓA TOÀN BỘ lịch tuần ${ws} (${st.approved} đã duyệt/draft)? NV sẽ phải đăng ký OFF lại từ đầu.`)) return;
+  if(!confirm(`CHỐT XÓA tuần ${ws}? Hành động này KHÔNG khôi phục được (đã ghi audit).`)) return;
+  try{
+    const res = await api('/api/schedules/delete-week', {method:'POST', headers:{Authorization:'Bearer '+token}, body:JSON.stringify({weekStart: ws})});
+    showToast(res.message||'Đã xóa lịch tuần','success');
+    loadTestWeekStatus(); loadNextWeekDrafts(); loadSchedules();
+  }catch(e){ showToast(e.message,'error'); }
+}
 
 // Requests - Trung tâm duyệt phiếu
 async function loadRequests(){
