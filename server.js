@@ -338,6 +338,8 @@ function saveDB() {
     if(Array.isArray(clone.emergencyRequests)) clone.emergencyRequests = clone.emergencyRequests.filter(r => !isTestRecord(r));
     if(Array.isArray(clone.deviceRequests)) clone.deviceRequests = clone.deviceRequests.filter(r => !isTestRecord(r));
     if(Array.isArray(clone.driveFiles)) clone.driveFiles = clone.driveFiles.filter(f => !isTestRecord(f));
+    if(Array.isArray(clone.shiftSwapRequests)) clone.shiftSwapRequests = clone.shiftSwapRequests.filter(r => !isTestRecord(r));
+    if(Array.isArray(clone.trainingShiftRequests)) clone.trainingShiftRequests = clone.trainingShiftRequests.filter(r => !isTestRecord(r));
     if(Array.isArray(clone.zaloRecords)) clone.zaloRecords = clone.zaloRecords.filter(z => !isTestRecord(z));
     if(clone.settings){
       if(clone.settings.googleSheet?.privateKey && !clone.settings.googleSheet.privateKey.startsWith('enc:') && clone.settings.googleSheet.privateKey.length>20 && !clone.settings.googleSheet.privateKey.includes('•')){
