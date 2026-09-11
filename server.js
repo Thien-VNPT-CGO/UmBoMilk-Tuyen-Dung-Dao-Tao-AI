@@ -7347,6 +7347,39 @@ app.get('/api/off-requests', authMiddleware, (req,res)=>{
   if(status) list = list.filter(r=>r.status===status);
   res.json(list);
 });
+// API: Admin thu hồi phiếu OFF (xóa phiếu + trả lịch về mặc định chưa đăng ký)
+app.post('/api/off-requests/:id/revoke', authMiddleware, roleCheck(['Admin']), (req,res)=>{
+  const r = db.offRequests.find(x=>x.id===req.params.id);
+  if(!r) return res.status(404).json({error:'Không tìm thấy phiếu OFF'});
+  const emp = db.employees.find(e=>e.employeeId===r.employeeId);
+  const before = { ...r, dates:[...(r.dates||[])] };
+  const revokedDates = new Set(r.dates||[]);
+  // 1. Restore lịch: ngày OFF của phiếu này -> WORKING + ca mặc định của NV
+  let restoredDays = 0;
+  if(emp){
+    db.schedules.forEach(s=>{
+      if(s.employeeId!==r.employeeId) return;
+      let touched = false;
+      (s.days||[]).forEach(d=>{
+        if(revokedDates.has(d.date) && d.status==='OFF'){ d.status='WORKING'; d.shift=emp.shift; touched = true; restoredDays++; }
+      });
+      if(touched){ s.version=(s.version||1)+1; s.updated_at=getVietnamISOString(); }
+    });
+    // 2. Training: gỡ ngày khỏi registeredOffDates (về chưa đăng ký)
+    if((emp.type==='TRAINING'||emp.status==='TRAINING') && Array.isArray(emp.registeredOffDates)){
+      const rest = emp.registeredOffDates.filter(d=>!revokedDates.has(d));
+      if(rest.length!==emp.registeredOffDates.length){ emp.registeredOffDates=rest; emp.trainingOffDays=rest.length; emp.updated_at=getVietnamISOString(); }
+    }
+  }
+  // 3. Xóa phiếu
+  db.offRequests = db.offRequests.filter(x=>x.id!==r.id);
+  audit(req.user.username,'REVOKE_OFF_REQUEST','OFF_REQUEST', before, { revoked:true, restoredDays, employeeId:r.employeeId }, req.ip);
+  saveDB();
+  io.emit('offRequests:update', db.offRequests);
+  io.emit('schedules:update', db.schedules);
+  io.emit('employees:update', db.employees);
+  res.json({ success:true, restoredDays, message:`Đã thu hồi phiếu OFF của ${r.employeeName||r.employeeId} (${(r.dates||[]).length} ngày) - lịch đã về WORKING như chưa đăng ký` });
+});
 app.post('/api/off-requests', (req,res)=>{
   const employeeId = req.body.employeeId || req.user?.employeeId;
   const { dates } = req.body;

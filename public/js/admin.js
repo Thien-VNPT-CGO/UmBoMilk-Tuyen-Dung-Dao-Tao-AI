@@ -4709,12 +4709,24 @@ function renderOffAdmin(){
   const el=document.getElementById('offRequestsAdmin');
   if(!el) return;
   if(offRequests.length===0) return el.innerHTML='<div class="text-xs text-slate-400 text-center py-2">Chưa có OFF hàng tuần</div>';
+  const isAdmin = currentUser && (currentUser.role==='Admin' || currentUser.username==='admin');
   el.innerHTML = offRequests.slice(0,10).map(r=>`
     <div class="flex justify-between items-center border border-slate-200 rounded-xl px-3 py-2 bg-white">
       <div><div class="font-bold text-sm">${r.employeeName||r.employeeId} • ${getBranchDisplay(r.branchId)} • ${r.shift}</div><div class="text-xs text-slate-500">${r.dates.map(d=>fmtDMY(d)).join(', ')} • ${r.autoApproved?'Auto Approve':''}</div></div>
-      <span class="text-[11px] font-black px-2 py-1 rounded-full bg-pink-100 text-pink-700">${getStatusVi(r.status)}</span>
+      <div class="flex items-center gap-2">
+        <span class="text-[11px] font-black px-2 py-1 rounded-full bg-pink-100 text-pink-700">${getStatusVi(r.status)}</span>
+        ${isAdmin?`<button onclick="revokeOffRequest('${r.id}')" title="Thu hồi phiếu: xóa + trả lịch về chưa đăng ký" class="text-[11px] font-black px-2 py-1 rounded-full bg-red-50 text-red-600 border border-red-200 hover:bg-red-100">Thu hồi</button>`:''}
+      </div>
     </div>
   `).join('');
+}
+async function revokeOffRequest(id){
+  if(!confirm('Thu hồi phiếu OFF này? Lịch các ngày OFF sẽ về WORKING như chưa đăng ký.')) return;
+  try{
+    const res = await api('/api/off-requests/'+id+'/revoke', {method:'POST', headers:{Authorization:'Bearer '+token}});
+    showToast(res.message||'Đã thu hồi phiếu OFF','success');
+    loadRequests();
+  }catch(e){ showToast(e.message,'error'); }
 }
 
 // Attendance
