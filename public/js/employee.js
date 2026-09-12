@@ -614,7 +614,6 @@ function connectSocket(){
     }
     if(ev === 'notifications:update'){
       playNotificationSound();
-      if(_umbAiAvatar) playAiAvatarNotification();
     }
     document.getElementById('syncBadge').textContent='CẬP NHẬT TRỰC TIẾP';
     setTimeout(()=>document.getElementById('syncBadge').textContent='ĐÃ ĐỒNG BỘ',1200);
@@ -2827,147 +2826,24 @@ function mountTtsFab(){
 }
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', mountTtsFab); else mountTtsFab();
 
-// AI Avatar - Con AI dễ thương di chuyển mượt trên web app
+// AI Avatar - ĐÃ GỠ theo yêu cầu HR (không còn con AI nổi trên web nhân viên)
 let _umbAiAvatar = null;
 let _umbAiAvatarAnim = null;
 function createAiAvatar(){
-  if(document.getElementById('umbAiAvatar')) return;
-  const avatar = document.createElement('div');
-  avatar.id = 'umbAiAvatar';
-  avatar.title = 'UmBoMilk AI - Trợ lý thông minh';
-  avatar.innerHTML = `
-    <div class="umb-ai-body">
-      <div class="umb-ai-head">
-        <div class="umb-ai-ear left"></div>
-        <div class="umb-ai-ear right"></div>
-        <div class="umb-ai-face">
-          <div class="umb-ai-eye left"><div class="umb-ai-pupil"></div></div>
-          <div class="umb-ai-eye right"><div class="umb-ai-pupil"></div></div>
-          <div class="umb-ai-mouth"></div>
-          <div class="umb-ai-blush left"></div>
-          <div class="umb-ai-blush right"></div>
-        </div>
-        <div class="umb-ai-antenna"><div class="umb-ai-antenna-ball"></div></div>
-      </div>
-      <div class="umb-ai-body-main">
-        <div class="umb-ai-arm left"></div>
-        <div class="umb-ai-arm right"></div>
-        <div class="umb-ai-leg left"></div>
-        <div class="umb-ai-leg right"></div>
-      </div>
-      <div class="umb-ai-notification-ring"></div>
-    </div>
-  `;
-  avatar.style.cssText = `
-    position: fixed;
-    bottom: 100px;
-    right: 20px;
-    z-index: 9999;
-    width: 80px;
-    height: 80px;
-    pointer-events: none;
-    transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
-    transform: translate(0, 0);
-  `;
-  
-  const style = document.createElement('style');
-  style.textContent = `
-    .umb-ai-body { width: 100%; height: 100%; position: relative; transform-origin: center bottom; }
-    .umb-ai-head { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 56px; height: 56px; }
-    .umb-ai-ear { position: absolute; top: 14px; width: 12px; height: 18px; background: linear-gradient(135deg, #ec4899, #f43f5e); border-radius: 50% 50% 0 0; box-shadow: inset -2px 0 4px rgba(236,72,153,0.3); }
-    .umb-ai-ear.left { left: -6px; transform: rotate(-15deg); }
-    .umb-ai-ear.right { right: -6px; transform: rotate(15deg); }
-    .umb-ai-face { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(180deg, #fff0f8 0%, #ffe4f0 100%); border-radius: 50%; border: 2px solid #fce7f3; box-shadow: inset 0 -4px 8px rgba(236,72,153,0.1), 0 4px 16px rgba(236,72,153,0.2); display: flex; flex-direction: column; align-items: center; justify-content: center; padding-top: 8px; }
-    .umb-ai-eye { width: 14px; height: 14px; background: #1e1e1e; border-radius: 50%; position: relative; margin: 0 6px; overflow: hidden; }
-    .umb-ai-pupil { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 7px; height: 7px; background: #fff; border-radius: 50%; transition: transform 0.3s ease; }
-    .umb-ai-mouth { width: 10px; height: 6px; border-bottom: 2px solid #ec4899; border-radius: 0 0 10px 10px; margin-top: 4px; transition: all 0.3s ease; }
-    .umb-ai-mouth.happy { width: 16px; height: 8px; border-bottom: 2px solid #ec4899; border-radius: 0 0 20px 20px; }
-    .umb-ai-mouth.speak { animation: umbAiSpeak 0.2s ease infinite; border-radius: 50%; width: 8px; height: 8px; }
-    .umb-ai-blush { position: absolute; bottom: 14px; width: 10px; height: 10px; background: rgba(236,72,153,0.3); border-radius: 50%; }
-    .umb-ai-blush.left { left: 8px; }
-    .umb-ai-blush.right { right: 8px; }
-    .umb-ai-antenna { position: absolute; top: -18px; left: 50%; transform: translateX(-50%); width: 3px; height: 18px; background: linear-gradient(to bottom, #ec4899, #be185d); border-radius: 2px; }
-    .umb-ai-antenna-ball { position: absolute; top: -8px; left: 50%; transform: translateX(-50%); width: 10px; height: 10px; background: linear-gradient(135deg, #ec4899, #f43f5e); border-radius: 50%; box-shadow: 0 0 8px rgba(236,72,153,0.6); animation: umbAiPulse 2s ease-in-out infinite; }
-    .umb-ai-body-main { position: absolute; top: 48px; left: 50%; transform: translateX(-50%); width: 48px; height: 36px; }
-    .umb-ai-arm { position: absolute; top: 4px; width: 8px; height: 22px; background: linear-gradient(135deg, #ec4899, #f43f5e); border-radius: 4px; }
-    .umb-ai-arm.left { left: 0; transform-origin: top center; animation: umbAiArmWave 3s ease-in-out infinite; }
-    .umb-ai-arm.right { right: 0; transform-origin: top center; animation: umbAiArmWave 3s ease-in-out infinite reverse; }
-    .umb-ai-leg { position: absolute; bottom: 0; width: 10px; height: 14px; background: linear-gradient(135deg, #be185d, #ec4899); border-radius: 0 0 8px 8px; }
-    .umb-ai-leg.left { left: 8px; }
-    .umb-ai-leg.right { right: 8px; }
-    .umb-ai-notification-ring { position: absolute; top: -8px; right: -8px; width: 24px; height: 24px; background: #ef4444; border-radius: 50%; display: none; align-items: center; justify-content: center; font-size: 10px; font-weight: bold; color: white; box-shadow: 0 0 0 0 rgba(239,68,68,0.7); animation: umbAiRingPulse 1.5s ease-out infinite; }
-    .umb-ai-notification-ring.show { display: flex; }
-    @keyframes umbAiPulse { 0%, 100% { transform: translateX(-50%) scale(1); opacity: 1; } 50% { transform: translateX(-50%) scale(1.2); opacity: 0.7; } }
-    @keyframes umbAiArmWave { 0%, 100% { transform: rotate(-10deg); } 50% { transform: rotate(30deg); } }
-    @keyframes umbAiSpeak { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(0.3); } }
-    @keyframes umbAiRingPulse { 0% { box-shadow: 0 0 0 0 rgba(239,68,68,0.7); } 100% { box-shadow: 0 0 0 12px rgba(239,68,68,0); } }
-    @keyframes umbAiFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
-    @keyframes umbAiBounce { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
-    #umbAiAvatar.moving { animation: umbAiFloat 3s ease-in-out infinite; }
-    #umbAiAvatar.happy .umb-ai-mouth { width: 16px; height: 8px; border-radius: 0 0 20px 20px; }
-    #umbAiAvatar.speaking .umb-ai-mouth { animation: umbAiSpeak 0.15s ease infinite; border-radius: 50%; width: 8px; height: 8px; }
-    #umbAiAvatar.excited { animation: umbAiBounce 0.5s ease 3; }
-  `;
-  document.head.appendChild(style);
-  document.body.appendChild(avatar);
-  _umbAiAvatar = avatar;
-  startAiAvatarMovement();
-  return avatar;
+  try{
+    if(_umbAiAvatarAnim) clearTimeout(_umbAiAvatarAnim);
+    const old = document.getElementById('umbAiAvatar');
+    if(old) old.remove();
+  }catch(e){}
+  _umbAiAvatar = null;
+  return null;
 }
-function startAiAvatarMovement(){
-  if(!_umbAiAvatar) return;
-  const positions = [
-    { x: 'calc(100% - 100px)', y: 'calc(100% - 180px)' },  // Bottom right
-    { x: '20px', y: 'calc(100% - 180px)' },                 // Bottom left
-    { x: 'calc(100% - 100px)', y: '100px' },                 // Top right
-    { x: '20px', y: '100px' },                               // Top left
-    { x: '50%', y: '50%' },                                  // Center
-  ];
-  let currentPos = 0;
-  function moveToNext(){
-    if(!_umbAiAvatar) return;
-    const pos = positions[currentPos];
-    _umbAiAvatar.style.transition = 'transform 3s cubic-bezier(0.4, 0, 0.2, 1)';
-    _umbAiAvatar.style.transform = `translate(${pos.x}, ${pos.y})`;
-    currentPos = (currentPos + 1) % positions.length;
-    _umbAiAvatarAnim = setTimeout(moveToNext, 4000);
-  }
-  _umbAiAvatar.classList.add('moving');
-  moveToNext();
-}
-function stopAiAvatarMovement(){
-  if(_umbAiAvatarAnim) clearTimeout(_umbAiAvatarAnim);
-  if(_umbAiAvatar) _umbAiAvatar.classList.remove('moving');
-}
-function playAiAvatarNotification(){
-  if(!_umbAiAvatar) return;
-  const ring = _umbAiAvatar.querySelector('.umb-ai-notification-ring');
-  if(ring){
-    ring.textContent = '!';
-    ring.classList.add('show');
-    _umbAiAvatar.classList.add('excited', 'speaking');
-    setTimeout(()=>{
-      _umbAiAvatar.classList.remove('excited', 'speaking');
-      ring.classList.remove('show');
-    }, 3000);
-  }
-}
-function speakWithAiAvatar(text){
-  if(!window._ttsEnabled || !('speechSynthesis' in window)) return;
-  if(!_umbAiAvatar) createAiAvatar();
-  _umbAiAvatar.classList.add('speaking');
-  speakUmb(text);
-  setTimeout(()=>{ if(_umbAiAvatar) _umbAiAvatar.classList.remove('speaking'); }, 3000);
-}
-// Override speakUmb to use AI avatar
-const _originalSpeakUmb = speakUmb;
-speakUmb = function(text){
-  _originalSpeakUmb(text);
-  if(_umbAiAvatar) _umbAiAvatar.classList.add('speaking');
-  setTimeout(()=>{ if(_umbAiAvatar) _umbAiAvatar.classList.remove('speaking'); }, 3000);
-};
-// Initialize AI Avatar when app loads
-if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', createAiAvatar); else createAiAvatar();
+function startAiAvatarMovement(){ try{ if(_umbAiAvatarAnim) clearTimeout(_umbAiAvatarAnim); }catch(e){} return; }
+function stopAiAvatarMovement(){ try{ if(_umbAiAvatarAnim) clearTimeout(_umbAiAvatarAnim); }catch(e){} return; }
+function playAiAvatarNotification(){ return; }
+function speakWithAiAvatar(text){ try{ speakUmb(text); }catch(e){} }
+// speakUmb giữ nguyên (không override avatar) — âm thanh thông báo vẫn hoạt động
+// Không tự khởi tạo avatar nữa (đã gỡ theo yêu cầu)
 
 // Overlay load chung
 function umbSetLoading(on, msg){
