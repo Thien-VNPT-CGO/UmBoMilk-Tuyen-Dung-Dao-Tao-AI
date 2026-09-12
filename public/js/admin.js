@@ -630,6 +630,10 @@ function connectSocket(){
       // also update global badges
       updatePendingCount();
       updateModeBadge();
+      if(ev === 'notifications:update'){
+        playNotificationSound();
+        if(_umbAiAvatar) playAiAvatarNotification();
+      }
     });
   });
   // Automation heartbeat realtime
@@ -4251,6 +4255,20 @@ function renderSchedules(){
                       badgeClass=d.autoOff?'bg-amber-100 text-amber-700 border border-amber-200':'bg-slate-200 text-slate-600';
                       detailText=d.autoOff?('⚖ '+(d.autoOffReason||'AI chống trùng ca')):'—';
                       detailClass=d.autoOff?'text-amber-700':'text-slate-400';
+                    } else if(d.status === 'WORKING_DOUBLE'){
+                      badgeText = '⚡ LÀM 2 CA';
+                      badgeClass = 'bg-gradient-to-r from-amber-500 via-pink-500 to-rose-600 text-white font-black shadow-lg animate-pulse';
+                      detailText = `<div class="mt-1 flex flex-col gap-1 text-left w-full">
+                        ${dayAllShifts.map((s, idx) => {
+                          const norm = normalizeShift(s);
+                          const sVi = norm==='CA_SANG'?'Sáng':norm==='CA_CHIEU'?'Chiều':'Tối';
+                          const sBg = norm==='CA_SANG'?'bg-amber-100 text-amber-900 border-amber-300':norm==='CA_CHIEU'?'bg-pink-100 text-pink-900 border-pink-300':'bg-indigo-100 text-indigo-900 border-indigo-300';
+                          const sTime = SHIFT_DETAIL[norm]?.time || '';
+                          return `<div class="px-1.5 py-0.5 rounded border text-[11px] font-black ${sBg} flex justify-between"><span>Ca ${idx+1}: ${sVi}</span><span class="font-mono text-[10px] opacity-75">${sTime}</span></div>`;
+                        }).join('')}
+                        ${d.doubleShiftInfo ? `<div class="text-[10px] font-bold bg-amber-100 text-amber-800 px-2 py-1 rounded-full mt-1 border border-amber-200">Ca thêm từ: ${getShiftVi(d.doubleShiftInfo.originalShift)} (${d.doubleShiftInfo.originalEmployeeName || ''})</div>` : ''}
+                      </div>`;
+                      detailClass = 'w-full';
                     } else if(isFuture || dayAllShifts.length > 1){
                       badgeText = dayAllShifts.length > 1 ? `${dayAllShifts.length} CA LÀM VIỆC` : 'SẮP TỚI';
                       badgeClass = dayAllShifts.length > 1 ? 'bg-gradient-to-r from-pink-500 to-rose-600 text-white font-black shadow-xs' : 'bg-blue-50 text-blue-700 border border-blue-200';
@@ -5730,8 +5748,15 @@ function showToast(msg, type='success'){
   if(type==='success'){ try{ t.animate([{transform:'translateX(0)'},{transform:'translateX(-4px)'},{transform:'translateX(4px)'},{transform:'translateX(0)'}],{duration:300}); }catch(e){} }
   setTimeout(()=>{ t.classList.add('umb-hide'); setTimeout(()=>t.remove(),260); }, type==='error'?4000:3000);
 }
-// Am thanh thong bao UmBoMilk (Web Speech API, giong Viet) + nut bat/tat
+// Am thanh thong bao UmBoMilk (Web Speech API, giọng Adam - chậm, rõ ràng) + nut bat/tat
 if(typeof window._ttsEnabled==='undefined') window._ttsEnabled = localStorage.getItem('umb_tts')!=='off';
+let _adamVoice = null;
+function getAdamVoice(){
+  if(_adamVoice) return _adamVoice;
+  const voices = speechSynthesis.getVoices();
+  _adamVoice = voices.find(v => v.name.includes('Adam') || v.name.includes('Google UK English Male') || v.name.includes('Microsoft George') || (v.lang==='en-US' && v.name.includes('Male'))) || voices.find(v => v.lang.startsWith('en')) || null;
+  return _adamVoice;
+}
 function speakUmb(text){
   try{
     if(!window._ttsEnabled || !('speechSynthesis' in window)) return;
@@ -5739,8 +5764,31 @@ function speakUmb(text){
     if(!clean) return;
     speechSynthesis.cancel();
     const u=new SpeechSynthesisUtterance('UmBoMilk có thông báo mới. '+clean);
-    u.lang='vi-VN'; u.rate=1; u.pitch=1;
+    const adamVoice = getAdamVoice();
+    if(adamVoice) u.voice = adamVoice;
+    u.lang = adamVoice?.lang || 'en-US';
+    u.rate = 0.7;  // Chậm, rõ ràng
+    u.pitch = 1.0;
+    u.volume = 1.0;
     speechSynthesis.speak(u);
+  }catch(e){}
+}
+function playNotificationSound(){
+  try{
+    if(!window._ttsEnabled) return;
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+    oscillator.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);
+    oscillator.frequency.setValueAtTime(660, audioCtx.currentTime + 0.1);
+    oscillator.frequency.setValueAtTime(880, audioCtx.currentTime + 0.2);
+    gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+    oscillator.start(audioCtx.currentTime);
+    oscillator.stop(audioCtx.currentTime + 0.5);
   }catch(e){}
 }
 document.addEventListener('pointerdown', ()=>{ try{ if(window._ttsEnabled && 'speechSynthesis' in window) speechSynthesis.getVoices(); }catch(e){} }, {once:true});
@@ -5754,13 +5802,154 @@ function toggleUmbTts(btn){
 function mountTtsFab(){
   if(document.getElementById('ttsFab')) return;
   const b=document.createElement('button');
-  b.id='ttsFab'; b.title='Bật/tắt âm thanh thông báo';
+  b.id='ttsFab'; b.title='Bật/tắt âm thanh thông báo (Giọng Adam)';
   b.className='fixed bottom-4 left-4 z-[200] w-11 h-11 rounded-full bg-white border border-pink-200 shadow-xl text-pink-600 flex items-center justify-center text-lg';
   b.innerHTML=`<i class="fa-solid ${window._ttsEnabled?'fa-volume-high':'fa-volume-xmark'}"></i>`;
   b.onclick=()=>toggleUmbTts(b);
   document.body.appendChild(b);
 }
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', mountTtsFab); else mountTtsFab();
+
+// AI Avatar - Con AI dễ thương di chuyển mượt trên web app
+let _umbAiAvatar = null;
+let _umbAiAvatarAnim = null;
+function createAiAvatar(){
+  if(document.getElementById('umbAiAvatar')) return;
+  const avatar = document.createElement('div');
+  avatar.id = 'umbAiAvatar';
+  avatar.title = 'UmBoMilk AI - Trợ lý thông minh';
+  avatar.innerHTML = `
+    <div class="umb-ai-body">
+      <div class="umb-ai-head">
+        <div class="umb-ai-ear left"></div>
+        <div class="umb-ai-ear right"></div>
+        <div class="umb-ai-face">
+          <div class="umb-ai-eye left"><div class="umb-ai-pupil"></div></div>
+          <div class="umb-ai-eye right"><div class="umb-ai-pupil"></div></div>
+          <div class="umb-ai-mouth"></div>
+          <div class="umb-ai-blush left"></div>
+          <div class="umb-ai-blush right"></div>
+        </div>
+        <div class="umb-ai-antenna"><div class="umb-ai-antenna-ball"></div></div>
+      </div>
+      <div class="umb-ai-body-main">
+        <div class="umb-ai-arm left"></div>
+        <div class="umb-ai-arm right"></div>
+        <div class="umb-ai-leg left"></div>
+        <div class="umb-ai-leg right"></div>
+      </div>
+      <div class="umb-ai-notification-ring"></div>
+    </div>
+  `;
+  avatar.style.cssText = `
+    position: fixed;
+    bottom: 100px;
+    right: 20px;
+    z-index: 9999;
+    width: 80px;
+    height: 80px;
+    pointer-events: none;
+    transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+    transform: translate(0, 0);
+  `;
+  
+  const style = document.createElement('style');
+  style.textContent = `
+    .umb-ai-body { width: 100%; height: 100%; position: relative; transform-origin: center bottom; }
+    .umb-ai-head { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 56px; height: 56px; }
+    .umb-ai-ear { position: absolute; top: 14px; width: 12px; height: 18px; background: linear-gradient(135deg, #ec4899, #f43f5e); border-radius: 50% 50% 0 0; box-shadow: inset -2px 0 4px rgba(236,72,153,0.3); }
+    .umb-ai-ear.left { left: -6px; transform: rotate(-15deg); }
+    .umb-ai-ear.right { right: -6px; transform: rotate(15deg); }
+    .umb-ai-face { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(180deg, #fff0f8 0%, #ffe4f0 100%); border-radius: 50%; border: 2px solid #fce7f3; box-shadow: inset 0 -4px 8px rgba(236,72,153,0.1), 0 4px 16px rgba(236,72,153,0.2); display: flex; flex-direction: column; align-items: center; justify-content: center; padding-top: 8px; }
+    .umb-ai-eye { width: 14px; height: 14px; background: #1e1e1e; border-radius: 50%; position: relative; margin: 0 6px; overflow: hidden; }
+    .umb-ai-pupil { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 7px; height: 7px; background: #fff; border-radius: 50%; transition: transform 0.3s ease; }
+    .umb-ai-mouth { width: 10px; height: 6px; border-bottom: 2px solid #ec4899; border-radius: 0 0 10px 10px; margin-top: 4px; transition: all 0.3s ease; }
+    .umb-ai-mouth.happy { width: 16px; height: 8px; border-bottom: 2px solid #ec4899; border-radius: 0 0 20px 20px; }
+    .umb-ai-mouth.speak { animation: umbAiSpeak 0.2s ease infinite; border-radius: 50%; width: 8px; height: 8px; }
+    .umb-ai-blush { position: absolute; bottom: 14px; width: 10px; height: 10px; background: rgba(236,72,153,0.3); border-radius: 50%; }
+    .umb-ai-blush.left { left: 8px; }
+    .umb-ai-blush.right { right: 8px; }
+    .umb-ai-antenna { position: absolute; top: -18px; left: 50%; transform: translateX(-50%); width: 3px; height: 18px; background: linear-gradient(to bottom, #ec4899, #be185d); border-radius: 2px; }
+    .umb-ai-antenna-ball { position: absolute; top: -8px; left: 50%; transform: translateX(-50%); width: 10px; height: 10px; background: linear-gradient(135deg, #ec4899, #f43f5e); border-radius: 50%; box-shadow: 0 0 8px rgba(236,72,153,0.6); animation: umbAiPulse 2s ease-in-out infinite; }
+    .umb-ai-body-main { position: absolute; top: 48px; left: 50%; transform: translateX(-50%); width: 48px; height: 36px; }
+    .umb-ai-arm { position: absolute; top: 4px; width: 8px; height: 22px; background: linear-gradient(135deg, #ec4899, #f43f5e); border-radius: 4px; }
+    .umb-ai-arm.left { left: 0; transform-origin: top center; animation: umbAiArmWave 3s ease-in-out infinite; }
+    .umb-ai-arm.right { right: 0; transform-origin: top center; animation: umbAiArmWave 3s ease-in-out infinite reverse; }
+    .umb-ai-leg { position: absolute; bottom: 0; width: 10px; height: 14px; background: linear-gradient(135deg, #be185d, #ec4899); border-radius: 0 0 8px 8px; }
+    .umb-ai-leg.left { left: 8px; }
+    .umb-ai-leg.right { right: 8px; }
+    .umb-ai-notification-ring { position: absolute; top: -8px; right: -8px; width: 24px; height: 24px; background: #ef4444; border-radius: 50%; display: none; align-items: center; justify-content: center; font-size: 10px; font-weight: bold; color: white; box-shadow: 0 0 0 0 rgba(239,68,68,0.7); animation: umbAiRingPulse 1.5s ease-out infinite; }
+    .umb-ai-notification-ring.show { display: flex; }
+    @keyframes umbAiPulse { 0%, 100% { transform: translateX(-50%) scale(1); opacity: 1; } 50% { transform: translateX(-50%) scale(1.2); opacity: 0.7; } }
+    @keyframes umbAiArmWave { 0%, 100% { transform: rotate(-10deg); } 50% { transform: rotate(30deg); } }
+    @keyframes umbAiSpeak { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(0.3); } }
+    @keyframes umbAiRingPulse { 0% { box-shadow: 0 0 0 0 rgba(239,68,68,0.7); } 100% { box-shadow: 0 0 0 12px rgba(239,68,68,0); } }
+    @keyframes umbAiFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+    @keyframes umbAiBounce { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+    #umbAiAvatar.moving { animation: umbAiFloat 3s ease-in-out infinite; }
+    #umbAiAvatar.happy .umb-ai-mouth { width: 16px; height: 8px; border-radius: 0 0 20px 20px; }
+    #umbAiAvatar.speaking .umb-ai-mouth { animation: umbAiSpeak 0.15s ease infinite; border-radius: 50%; width: 8px; height: 8px; }
+    #umbAiAvatar.excited { animation: umbAiBounce 0.5s ease 3; }
+  `;
+  document.head.appendChild(style);
+  document.body.appendChild(avatar);
+  _umbAiAvatar = avatar;
+  startAiAvatarMovement();
+  return avatar;
+}
+function startAiAvatarMovement(){
+  if(!_umbAiAvatar) return;
+  const positions = [
+    { x: 'calc(100% - 100px)', y: 'calc(100% - 180px)' },
+    { x: '20px', y: 'calc(100% - 180px)' },
+    { x: 'calc(100% - 100px)', y: '100px' },
+    { x: '20px', y: '100px' },
+    { x: '50%', y: '50%' },
+  ];
+  let currentPos = 0;
+  function moveToNext(){
+    if(!_umbAiAvatar) return;
+    const pos = positions[currentPos];
+    _umbAiAvatar.style.transition = 'transform 3s cubic-bezier(0.4, 0, 0.2, 1)';
+    _umbAiAvatar.style.transform = `translate(${pos.x}, ${pos.y})`;
+    currentPos = (currentPos + 1) % positions.length;
+    _umbAiAvatarAnim = setTimeout(moveToNext, 4000);
+  }
+  _umbAiAvatar.classList.add('moving');
+  moveToNext();
+}
+function stopAiAvatarMovement(){
+  if(_umbAiAvatarAnim) clearTimeout(_umbAiAvatarAnim);
+  if(_umbAiAvatar) _umbAiAvatar.classList.remove('moving');
+}
+function playAiAvatarNotification(){
+  if(!_umbAiAvatar) return;
+  const ring = _umbAiAvatar.querySelector('.umb-ai-notification-ring');
+  if(ring){
+    ring.textContent = '!';
+    ring.classList.add('show');
+    _umbAiAvatar.classList.add('excited', 'speaking');
+    setTimeout(()=>{
+      _umbAiAvatar.classList.remove('excited', 'speaking');
+      ring.classList.remove('show');
+    }, 3000);
+  }
+}
+function speakWithAiAvatar(text){
+  if(!window._ttsEnabled || !('speechSynthesis' in window)) return;
+  if(!_umbAiAvatar) createAiAvatar();
+  _umbAiAvatar.classList.add('speaking');
+  speakUmb(text);
+  setTimeout(()=>{ if(_umbAiAvatar) _umbAiAvatar.classList.remove('speaking'); }, 3000);
+}
+const _originalSpeakUmb = speakUmb;
+speakUmb = function(text){
+  _originalSpeakUmb(text);
+  if(_umbAiAvatar) _umbAiAvatar.classList.add('speaking');
+  setTimeout(()=>{ if(_umbAiAvatar) _umbAiAvatar.classList.remove('speaking'); }, 3000);
+};
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', createAiAvatar); else createAiAvatar();
+
 // Overlay load chung
 function umbSetLoading(on, msg){
   let ov=document.getElementById('umbLoading');
