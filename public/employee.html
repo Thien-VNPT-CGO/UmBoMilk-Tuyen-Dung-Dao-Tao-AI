@@ -528,15 +528,16 @@ button { min-height:44px; }
         </div>
       </section>
 
-      <!-- OFF ĐỘT XUẤT -->
+      <!-- OFF CA LÀM -->
       <section id="tab-emergency" class="tab-section hidden">
-        <div class="section-title"><div class="title-icon" style="background:linear-gradient(135deg,#f97316,#ef4444)"><i class="fa-solid fa-triangle-exclamation"></i></div>OFF đột xuất & Tìm người thay</div>
+        <div class="section-title"><div class="title-icon" style="background:linear-gradient(135deg,#f97316,#ef4444)"><i class="fa-solid fa-triangle-exclamation"></i></div>OFF CA LÀM & Tìm người thay</div>
         <div class="card">
           <div class="text-xs font-bold bg-amber-50 border border-amber-200 rounded-xl p-3 text-amber-700 mb-4"><i class="fa-solid fa-robot mr-1 text-amber-600"></i> TH3: Tối đa 1 ngày/tuần • AI tạm đăng ký OFF → Ưu tiên cùng CN cùng ca (2 phút) → cùng CN khác ca (30 phút) → hủy nếu không có người thay</div>
+          <div id="emShiftInfo" class="text-xs font-bold bg-sky-50 border border-sky-200 rounded-xl p-3 text-sky-800 mb-4"></div>
           <div class="space-y-3">
             <input id="emDate" type="date" class="w-full px-4 py-3 rounded-xl border border-pink-200 text-sm focus:border-pink-400 focus:ring-2 focus:ring-pink-100 outline-none">
-            <textarea id="emReason" placeholder="Lý do OFF đột xuất (bắt buộc)" rows="2" class="w-full px-4 py-3 rounded-xl border border-pink-200 text-sm focus:border-pink-400 focus:ring-2 focus:ring-pink-100 outline-none"></textarea>
-            <button onclick="submitEmergency()" class="w-full text-white font-black py-3.5 rounded-2xl shadow text-sm" style="background:linear-gradient(135deg,#ec4899,#f43f5e)"><i class="fa-solid fa-paper-plane mr-2"></i>Gửi yêu cầu OFF đột xuất</button>
+            <textarea id="emReason" placeholder="Lý do OFF CA LÀM (bắt buộc)" rows="2" class="w-full px-4 py-3 rounded-xl border border-pink-200 text-sm focus:border-pink-400 focus:ring-2 focus:ring-pink-100 outline-none"></textarea>
+            <button onclick="submitEmergency()" class="w-full text-white font-black py-3.5 rounded-2xl shadow text-sm" style="background:linear-gradient(135deg,#ec4899,#f43f5e)"><i class="fa-solid fa-paper-plane mr-2"></i>Gửi yêu cầu OFF CA LÀM</button>
           </div>
         </div>
         <div class="grid lg:grid-cols-2 gap-3 mt-3">

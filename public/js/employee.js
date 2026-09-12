@@ -35,7 +35,7 @@ const NAV = [
   {id:'salary', icon:'fa-sack-dollar', label:'Lương AI'},
   {id:'off', icon:'fa-umbrella-beach', label:'Nghỉ OFF'},
   {id:'shiftSwap', icon:'fa-people-arrows', label:'Đổi ca'},
-  {id:'emergency', icon:'fa-triangle-exclamation', label:'OFF đột xuất'},
+  {id:'emergency', icon:'fa-triangle-exclamation', label:'OFF CA LÀM'},
   {id:'elearning', icon:'fa-graduation-cap', label:'E-learning'},
   {id:'notifs', icon:'fa-bell', label:'Thông báo'},
   {id:'account', icon:'fa-user', label:'Tài khoản'},
@@ -120,7 +120,7 @@ function getStatusVi(s){
     WAITING_OFFICIAL:'Chờ chính thức',
     ARCHIVED:'Đã lưu trữ',
     SUBSTITUTE:'Thay ca',
-    EMERGENCY_OFF:'OFF đột xuất',
+    EMERGENCY_OFF:'OFF CA LÀM',
     ABSENT:'Vắng',
     PRESENT:'Có mặt',
     NO_CHECKOUT:'Thiếu ra ca',
@@ -241,12 +241,12 @@ function getVisibleNav(){
       return true;
     });
   } else {
-    // Official: ẩn elearning + notifs, mở emergency (OFF đột xuất) + đổi ca + OFF theo window (Master Spec Mục 19)
+    // Official: ẩn elearning + notifs, mở emergency (OFF CA LÀM) + đổi ca + OFF theo window (Master Spec Mục 19)
     const offOpen = isOffWindowOpen();
     return NAV.filter(n => {
       if(!baseFilter(n)) return false;
       if(n.id === 'elearning') return false;
-      // emergency (OFF đột xuất) mở cho chính thức - tối đa 1 lần/tuần, phải có người thay
+      // emergency (OFF CA LÀM) mở cho chính thức - tối đa 1 lần/tuần, phải có người thay
       if(n.id === 'off') return offOpen; // chỉ hiện trong T6 12:00 - T7 15:00
       if(n.id === 'shiftSwap') return true; // Đổi ca luôn hiện cho chính thức
       return true;
@@ -297,7 +297,7 @@ function isTabAllowed(id){
   const isOfficial = employee.status === 'OFFICIAL' || employee.type === 'OFFICIAL';
   if(TRAINING_HIDDEN_TABS.includes(id) && !isOfficial) return false;
   if(!isOfficial && id === 'off' && isTraining5OffDaysCompleted()) return false;
-  // emergency (OFF đột xuất) cho phép chính thức - Master Spec Mục 19 (tối đa 1 lần/tuần, phải có người thay)
+  // emergency (OFF CA LÀM) cho phép chính thức - Master Spec Mục 19 (tối đa 1 lần/tuần, phải có người thay)
   if(isOfficial && id === 'off' && !isOffWindowOpen()) return false;
   if(id === 'elearning' && !isElearningUnlocked()) return false;
   if(!isOfficial && (id === 'attendance' || id === 'schedule') && isTraining7DaysCompleted()) return false;
@@ -409,12 +409,12 @@ function isTraining7DaysCompleted() {
 function switchTab(id){
   const isOfficial = employee && (employee.status === 'OFFICIAL' || employee.type === 'OFFICIAL');
 
-  // Ngăn TRAINING truy cập Nghỉ OFF / OFF đột xuất
+  // Ngăn TRAINING truy cập Nghỉ OFF / OFF CA LÀM
   if(TRAINING_HIDDEN_TABS.includes(id) && !isOfficial){
     showToast('Chức năng này chỉ mở khi HR duyệt bạn lên Nhân viên Chính thức 🔒','error');
     return;
   }
-  // emergency (OFF đột xuất) được phép cho chính thức (Master Spec Mục 19)
+  // emergency (OFF CA LÀM) được phép cho chính thức (Master Spec Mục 19)
   // Ràng buộc OFF: T6 < 12:00 — VIP test (Admin bật) thì mở mọi lúc
   if(isOfficial && id === 'off' && !window._offVipTest && getVietnamNow().getDay() === 5 && getVietnamNow().getHours() < 12){
     showToast('🔒 Chức năng Nghỉ OFF sẽ mở vào lúc 12:00 trưa nay (Thứ 6).', 'info');
@@ -2023,7 +2023,7 @@ async function loadEmergency(){
       lock.innerHTML = `
         <div class="text-center py-4">
           <i class="fa-solid fa-lock text-slate-400 text-3xl mb-3 block"></i>
-          <div class="font-black text-slate-700 text-sm">CHƯA MỞ CHỨC NĂNG OFF ĐỘT XUẤT</div>
+          <div class="font-black text-slate-700 text-sm">CHƯA MỞ CHỨC NĂNG OFF CA LÀM</div>
           <div class="text-xs text-slate-500 mt-2">Vui lòng chờ lịch tuần sau được hiển thị (sau khi AI duyệt OFF tuần - khung T6 12:00 → T7 15:00).</div>
         </div>
       `;
@@ -2032,6 +2032,9 @@ async function loadEmergency(){
       if(formCard) formCard.style.display = '';
       const lock = document.getElementById('emergencyLockedNotice');
       if(lock) lock.remove();
+      // OFF CA LAM: hien ca hien tai se chuyen OFF khi gui (nguoi thay hien sau khi co nguoi nhan)
+      const shiftInfo = document.getElementById('emShiftInfo');
+      if(shiftInfo && employee) shiftInfo.innerHTML = `Ca hiện tại của bạn: <b>${getShiftVi(normalizeShift(employee.shift))} (${employee.shift}) • ${getBranchDisplay(employee.branchId)}</b> — Gửi yêu cầu là ca này chuyển sang OFF, AI tìm người thay thế.`;
     }
 
     myEmergencies = await api('/api/emergency-requests');
@@ -2048,6 +2051,7 @@ async function loadEmergency(){
           <span class="bg-white border px-2 py-0.5 rounded-full">Thay: ${r.substituteName||'Đang tìm...'}</span>
           <span class="bg-slate-900 text-white px-2 py-0.5 rounded-full">Timeout: ${fmtDMYTime(r.timeoutAt).split(' ')[1] || fmtDMYTime(r.timeoutAt)}</span>
         </div>
+        ${r.status==='APPROVED'&&r.substituteName?`<div class="text-[11px] font-black mt-1 px-2 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700">Ca của bạn đã OFF — ${r.substituteName} đang thay ca ngày ${fmtDMY(r.date)}</div>`:''}
         ${isPending?'<div class="text-[11px] text-amber-700 mt-1">AI đã tạm đăng ký OFF ngày này, đang gửi thông báo tìm người thay (TH3). Nếu sau 2p+30p không có ai nhận, phiếu sẽ tự hủy.</div>':''}
         ${r.reasonReject?'<div class="text-[11px] text-red-600 mt-1">Lý do hủy: '+r.reasonReject+'</div>':''}
       </div>`;
@@ -2078,7 +2082,7 @@ async function submitEmergency(){
   if(!date||!reason) return showToast('Thiếu ngày hoặc lý do','error');
   try{
     const res = await api('/api/emergency-requests', {method:'POST', body:JSON.stringify({employeeId:employee.employeeId, date, reason})});
-    showToast('Đã gửi OFF đột xuất - đang tìm người thay ca','success');
+    showToast('Đã gửi OFF CA LÀM - đang tìm người thay ca','success');
     loadEmergency();
   }catch(e){ showToast(e.message,'error'); }
 }

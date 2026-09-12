@@ -134,7 +134,7 @@ function getStatusVi(status) {
     ARCHIVED: 'Đã lưu trữ',
     WORKING: 'Đang làm việc',
     SUBSTITUTE: 'Làm thay',
-    EMERGENCY_OFF: 'Nghỉ đột xuất',
+    EMERGENCY_OFF: 'Nghỉ OFF ca',
     OFF: 'Nghỉ',
     NONE: 'Nghỉ',
     ACTIVE: 'Hoạt động',
@@ -825,7 +825,7 @@ function renderKPI(kpi){
     {label:'Đi trễ hôm nay', value:kpi.lateToday||0, icon:'fa-stopwatch', color:'bg-amber-500'},
     {label:'Vắng mặt', value:kpi.absent||0, icon:'fa-user-slash', color:'bg-slate-500'},
     {label:'OFF hôm nay', value:kpi.offToday||0, icon:'fa-umbrella-beach', color:'bg-sky-500'},
-    {label:'OFF đột xuất', value:kpi.emergencyOff||0, icon:'fa-triangle-exclamation', color:'bg-orange-500'},
+    {label:'OFF CA LÀM', value:kpi.emergencyOff||0, icon:'fa-triangle-exclamation', color:'bg-orange-500'},
     {label:'Phiếu chờ', value:kpi.pendingRequests||0, icon:'fa-hourglass-half', color:'bg-fuchsia-500'},
     {label:'Thiếu Check-out', value:kpi.missingCheckout||0, icon:'fa-right-from-bracket', color:'bg-yellow-600'},
   ];
@@ -2420,7 +2420,7 @@ function getEmployeeTrainingProgress(emp) {
       const month = wDate.getMonth()+1;
       const weekInMonth = Math.ceil(wDate.getDate()/7);
       const weekLabel = `Tuần ${weekInMonth} - T${month}`;
-      // Nếu có schedule chi tiết cho tuần đó, đếm realtime (đã ẩn OFF đột xuất trên HR)
+      // Nếu có schedule chi tiết cho tuần đó, đếm realtime (đã ẩn OFF CA LÀM trên HR)
       let working = 0, off = 0;
       if(sched && sched.days){
         sched.days.forEach(d=>{
@@ -2432,21 +2432,21 @@ function getEmployeeTrainingProgress(emp) {
         if(sched.days.length<7){
           const weekDates = [];
           for(let i=0;i<7;i++){ const cur=new Date(wDate); cur.setDate(wDate.getDate()+i); weekDates.push(toVietnamDateStr(cur)); }
-          // Nếu schedule thiếu, ước tính (không tính OFF đột xuất trên HR)
+          // Nếu schedule thiếu, ước tính (không tính OFF CA LÀM trên HR)
           if(working+off <7){
             const remaining = 7 - (working+off);
             working += remaining;
           }
         }
       } else {
-        // Không có schedule: tính từ offRequests cho tuần target (không tính OFF đột xuất trên HR)
+        // Không có schedule: tính từ offRequests cho tuần target (không tính OFF CA LÀM trên HR)
         const weekDates = [];
         for(let i=0;i<7;i++){ const cur=new Date(wDate); cur.setDate(wDate.getDate()+i); weekDates.push(toVietnamDateStr(cur)); }
         off = allOff.filter(r=>r.employeeId===emp.employeeId && r.status==='APPROVED').reduce((s,r)=> s + r.dates.filter(d=> weekDates.includes(d)).length,0);
         working = 7 - off;
         if(working<0) working=0;
       }
-      // Ràng buộc: off tối đa 2 (OFF đột xuất đã ẩn trên HR)
+      // Ràng buộc: off tối đa 2 (OFF CA LÀM đã ẩn trên HR)
       const offLabel = `${off}/2`;
       const workingLabel = `${working}/7`;
       const percent = Math.round((working/7)*100);
@@ -2513,7 +2513,7 @@ function getEmployeeTrialWindowInfo(emp) {
       const schedToday = (typeof schedules!=='undefined' ? schedules : []).find(s=>s.employeeId===emp.employeeId && s.days.some(d=>d.date===today));
       const dayToday = schedToday ? schedToday.days.find(d=>d.date===today) : null;
       const statusToday = dayToday ? dayToday.status : 'WORKING';
-      const label = statusToday==='OFF' ? 'Nghỉ OFF' : statusToday==='EMERGENCY_OFF' ? 'OFF đột xuất' : statusToday==='EMERGENCY_PENDING' ? 'Chờ duyệt OFF' : 'Đang làm việc';
+      const label = statusToday==='OFF' ? 'Nghỉ OFF' : statusToday==='EMERGENCY_OFF' ? 'OFF CA LÀM' : statusToday==='EMERGENCY_PENDING' ? 'Chờ duyệt OFF' : 'Đang làm việc';
       const sub = `Chính thức • ${emp.branchId} • ${emp.shift}`;
       return { label, sub };
     }catch(e){
@@ -4697,7 +4697,7 @@ async function handleDevice(id, action){
 function renderEmergencyAdmin(){
   const el=document.getElementById('emergencyListAdmin');
   if(!el) return;
-  if(emergencyRequests.length===0) return el.innerHTML='<div class="text-xs text-slate-400 text-center py-4">Không có OFF đột xuất</div>';
+  if(emergencyRequests.length===0) return el.innerHTML='<div class="text-xs text-slate-400 text-center py-4">Không có OFF CA LÀM</div>';
   el.innerHTML = emergencyRequests.map(r=>`
     <div class="border rounded-xl p-3 ${r.status==='PENDING'?'bg-pink-50 border-pink-200':'bg-white border-slate-200'}">
       <div class="flex justify-between"><span class="font-bold text-sm">${r.employeeName||r.employeeId}</span><span class="text-[11px] font-black px-2 py-1 rounded-full ${r.status==='PENDING'?'bg-pink-500 text-white':r.status==='APPROVED'?'bg-pink-500 text-white':'bg-red-100 text-red-700'}">${getStatusVi(r.status)}</span></div>

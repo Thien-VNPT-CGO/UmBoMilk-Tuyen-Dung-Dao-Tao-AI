@@ -4338,7 +4338,7 @@ function realtimeAutomationPoller(){
       const ws = toVietnamDateStr(getMonday(new Date(r.date)));
       const sched = db.schedules.find(s=>s.employeeId===r.employeeId && s.weekStart===ws);
       if(sched){ const day=sched.days.find(d=>d.date===r.date); if(day && day.status==='EMERGENCY_PENDING'){ day.status='WORKING'; day.shift = db.employees.find(e=>e.employeeId===r.employeeId)?.shift || 'CA_SANG'; } }
-      const zr = { id: uuidv4(), sent_at: getVietnamISOString(), receiver: db.employees.find(e=>e.employeeId===r.employeeId)?.phone, type:'EMERGENCY_REJECTED', content:`[TH3 Poller] OFF đột xuất ngày ${r.date} bị HỦY do không có người thay`, status:'SENT', error:'' };
+      const zr = { id: uuidv4(), sent_at: getVietnamISOString(), receiver: db.employees.find(e=>e.employeeId===r.employeeId)?.phone, type:'EMERGENCY_REJECTED', content:`[TH3 Poller] OFF CA LÀM ngày ${r.date} bị HỦY do không có người thay`, status:'SENT', error:'' };
       db.zaloRecords.unshift(zr);
       io.emit('emergencyRequests:update', db.emergencyRequests);
       io.emit('zalo:update', db.zaloRecords);
@@ -7826,14 +7826,14 @@ app.post('/api/emergency-requests', (req,res)=>{
   const { employeeId, date, reason } = req.body;
   const emp = db.employees.find(e=>e.employeeId===employeeId);
   if(!emp) return res.status(404).json({error:'Không tìm thấy'});
-  if(emp.status!=='OFFICIAL') return res.status(403).json({error:'Chỉ Nhân viên Chính thức (status OFFICIAL) mới được tạo phiếu OFF đột xuất'});
-  // TH2: Check monthly min 12 days for OFF đột xuất
+  if(emp.status!=='OFFICIAL') return res.status(403).json({error:'Chỉ Nhân viên Chính thức (status OFFICIAL) mới được tạo phiếu OFF CA LÀM'});
+  // TH2: Check monthly min 12 days for OFF CA LÀM
   const monthStr = String(date).slice(0,7);
   const chk = validateOfficialMonthlyMin12(employeeId, monthStr, [date]);
-  if(!chk.valid) return res.status(400).json({error:`Tháng ${monthStr} sau khi OFF đột xuất sẽ chỉ còn ${chk.workingAfter} ngày làm. Tối thiểu 12 ngày/tháng.`, detail:chk});
+  if(!chk.valid) return res.status(400).json({error:`Tháng ${monthStr} sau khi OFF CA LÀM sẽ chỉ còn ${chk.workingAfter} ngày làm. Tối thiểu 12 ngày/tháng.`, detail:chk});
   // Check max 1 per week
   const weekCount = db.emergencyRequests.filter(r=>r.employeeId===employeeId && r.status==='APPROVED' && isSameWeek(r.createdAt, getVietnamISOString())).length;
-  if(weekCount>=1) return res.status(400).json({error:'Đã đạt giới hạn 1 OFF đột xuất/tuần'});
+  if(weekCount>=1) return res.status(400).json({error:'Đã đạt giới hạn 1 OFF CA LÀM/tuần'});
   if(!reason) return res.status(400).json({error:'Lý do bắt buộc'});
   const reqId = uuidv4();
   const er = {
@@ -7872,7 +7872,7 @@ app.post('/api/emergency-requests', (req,res)=>{
     employeeName: emp.name,
     branchId: emp.branchId,
     title: `Đơn khẩn cấp: ${emp.name}`,
-    message: `${emp.name} (${employeeId}) vừa gửi đơn xin nghỉ đột xuất ngày ${fmtDMY(date)}: "${reason}". AI đang tự động tìm người thế ca.`,
+    message: `${emp.name} (${employeeId}) vừa gửi đơn xin nghỉ OFF ca ngày ${fmtDMY(date)}: "${reason}". AI đang tự động tìm người thế ca.`,
     type: 'error',
     data: { requestId: reqId, date, reason }
   });
@@ -7930,9 +7930,9 @@ function handleEmergencyCascade(request){
             }catch(e){}
             saveDB();
             io.emit('emergencyRequests:update', db.emergencyRequests);
-            const zr = { id: uuidv4(), sent_at: getVietnamISOString(), receiver: db.employees.find(e=>e.employeeId===r2.employeeId)?.phone, type:'EMERGENCY_REJECTED', content:`[TH3] OFF đột xuất ngày ${r2.date} bị HỦY do không có người thay ca sau 2 phút + 30 phút. Vui lòng liên hệ quản lý.`, status:'SENT', error:'' };
+            const zr = { id: uuidv4(), sent_at: getVietnamISOString(), receiver: db.employees.find(e=>e.employeeId===r2.employeeId)?.phone, type:'EMERGENCY_REJECTED', content:`[TH3] OFF CA LÀM ngày ${r2.date} bị HỦY do không có người thay ca sau 2 phút + 30 phút. Vui lòng liên hệ quản lý.`, status:'SENT', error:'' };
             db.zaloRecords.unshift(zr);
-            db.notifications.unshift({ id: uuidv4(), to: r2.employeeId, type:'EMERGENCY_REJECTED', title:'OFF đột xuất bị hủy', content:`Phiếu OFF đột xuất ngày ${r2.date} bị hủy do không tìm được người thay ca (TH3).`, requestId: r2.id, createdAt: getVietnamISOString(), read:false });
+            db.notifications.unshift({ id: uuidv4(), to: r2.employeeId, type:'EMERGENCY_REJECTED', title:'OFF CA LÀM bị hủy', content:`Phiếu OFF CA LÀM ngày ${r2.date} bị hủy do không tìm được người thay ca (TH3).`, requestId: r2.id, createdAt: getVietnamISOString(), read:false });
             io.emit('zalo:update', db.zaloRecords);
             io.emit('notifications:update', db.notifications);
           }
@@ -7949,7 +7949,7 @@ function handleEmergencyCascade(request){
         }catch(e){}
         saveDB();
         io.emit('emergencyRequests:update', db.emergencyRequests);
-        const zr = { id: uuidv4(), sent_at: getVietnamISOString(), receiver: db.employees.find(e=>e.employeeId===r.employeeId)?.phone, type:'EMERGENCY_REJECTED', content:`OFF đột xuất ngày ${r.date} bị hủy do không có ứng viên thay ca (cùng CN).`, status:'SENT', error:'' };
+        const zr = { id: uuidv4(), sent_at: getVietnamISOString(), receiver: db.employees.find(e=>e.employeeId===r.employeeId)?.phone, type:'EMERGENCY_REJECTED', content:`OFF CA LÀM ngày ${r.date} bị hủy do không có ứng viên thay ca (cùng CN).`, status:'SENT', error:'' };
         db.zaloRecords.unshift(zr);
         io.emit('zalo:update', db.zaloRecords);
       }
@@ -7977,7 +7977,7 @@ function handleEmergencyCascade(request){
           r2.reasonReject='[TH3] Không tìm được người thay ca (khác ca) sau 30 phút';
           try{ const ws=toVietnamDateStr(getMonday(new Date(r2.date))); const sched=db.schedules.find(s=>s.employeeId===r2.employeeId && s.weekStart===ws); if(sched){ const day=sched.days.find(d=>d.date===r2.date); if(day && day.status==='EMERGENCY_PENDING'){ day.status='WORKING'; io.emit('schedules:update', db.schedules); }}}catch(e){}
           saveDB(); io.emit('emergencyRequests:update', db.emergencyRequests);
-          const zr = { id: uuidv4(), sent_at: getVietnamISOString(), receiver: db.employees.find(e=>e.employeeId===r2.employeeId)?.phone, type:'EMERGENCY_REJECTED', content:`OFF đột xuất ngày ${r2.date} bị hủy do không có người thay`, status:'SENT', error:'' };
+          const zr = { id: uuidv4(), sent_at: getVietnamISOString(), receiver: db.employees.find(e=>e.employeeId===r2.employeeId)?.phone, type:'EMERGENCY_REJECTED', content:`OFF CA LÀM ngày ${r2.date} bị hủy do không có người thay`, status:'SENT', error:'' };
           db.zaloRecords.unshift(zr); io.emit('zalo:update', db.zaloRecords);
         }
       }, 30*60*1000);
@@ -8041,7 +8041,7 @@ app.post('/api/emergency-requests/:id/respond', (req,res)=>{
     type: 'success',
     data: { requestId: er.id, substituteId, originalEmployeeId: er.employeeId }
   });
-  const zr = { id: uuidv4(), sent_at: getVietnamISOString(), receiver: db.employees.find(e=>e.employeeId===er.employeeId)?.phone, type:'EMERGENCY_APPROVED', content:`OFF đột xuất ngày ${er.date} đã được duyệt, người thay: ${subEmp.name}`, status:'SENT', error:'' };
+  const zr = { id: uuidv4(), sent_at: getVietnamISOString(), receiver: db.employees.find(e=>e.employeeId===er.employeeId)?.phone, type:'EMERGENCY_APPROVED', content:`OFF CA LÀM ngày ${er.date} đã được duyệt, người thay: ${subEmp.name}`, status:'SENT', error:'' };
   db.zaloRecords.unshift(zr);
   io.emit('zalo:update', db.zaloRecords);
   res.json(er);
