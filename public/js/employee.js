@@ -241,29 +241,43 @@ function getVisibleNav(){
       return true;
     });
     } else {
-      // Official: ẩn elearning + notifs, mở emergency (OFF CA LÀM) + đổi ca + OFF theo window (Master Spec Mục 19)
+      // Official: mặc định chỉ Trang chủ; Admin bật cờ nào ở Cài đặt thì hiện chức năng đó
       const offOpen = isOffWindowOpen();
+      const F = window._empFeatures || {};
       return NAV.filter(n => {
         if(!baseFilter(n)) return false;
+        if(n.id === 'home') return true;
         if(n.id === 'elearning') return false;
-        // emergency (OFF CA LÀM) mở cho chính thức - tối đa 1 lần/tuần, phải có người thay
-        if(n.id === 'off') return offOpen; // chỉ hiện trong T6 12:00 - T7 15:00
+        // emergency (OFF CA LÀM) mở cho chính thức khi Admin bật + tối đa 1 lần/tuần, phải có người thay
+        if(n.id === 'off') return !!F.empOff && offOpen; // cờ Cài đặt + chỉ hiện trong T6 12:00 - T7 15:00
         if(n.id === 'shiftSwap') return !!window._shiftSwapEnabled; // Theo Cài đặt: tắt=ẩn khỏi web NV, bật=NV chính thức thấy và dùng được
+        if(n.id === 'attendance') return !!F.empAttendance;
+        if(n.id === 'schedule') return !!F.empSchedule;
+        if(n.id === 'salary') return !!F.empSalary;
+        if(n.id === 'emergency') return !!F.empEmergency;
+        if(n.id === 'account') return !!F.empAccount;
         return true;
       });
     }
 }
 
-// Cờ tính năng từ server (/api/employee/me -> features) — HR bật/tắt realtime
+// Cờ tính năng từ server (/api/employee/me -> features) — Admin bật/tắt ở Cài đặt, realtime
 if(typeof window._shiftSwapEnabled === 'undefined') window._shiftSwapEnabled = false;
+if(typeof window._empFeatures === 'undefined') window._empFeatures = {};
 function syncFeatureFlags(me){
   try{
-    const on = !!(me && me.features && me.features.employeeShiftSwap);
+    const F = (me && me.features) || {};
+    window._empFeatures = {
+      empAttendance: !!F.empAttendance, empSchedule: !!F.empSchedule, empSalary: !!F.empSalary,
+      empOff: !!F.empOff, empEmergency: !!F.empEmergency, empAccount: !!F.empAccount
+    };
+    const on = !!F.employeeShiftSwap;
     if(window._shiftSwapEnabled !== on){
       window._shiftSwapEnabled = on;
       try{ refreshNavVisibility(); }catch(e){}
     } else {
       window._shiftSwapEnabled = on;
+      try{ refreshNavVisibility(); }catch(e){}
     }
   }catch(e){}
 }
@@ -311,6 +325,17 @@ function isTabAllowed(id){
   const isOfficial = employee.status === 'OFFICIAL' || employee.type === 'OFFICIAL';
   if(TRAINING_HIDDEN_TABS.includes(id) && !isOfficial) return false;
   if(!isOfficial && id === 'off' && isTraining5OffDaysCompleted()) return false;
+  // Cờ Cài đặt cho NV chính thức: tắt=ẩn (chặn mở trực tiếp), bật=mở
+  if(isOfficial){
+    const F = window._empFeatures || {};
+    if(id==='attendance' && !F.empAttendance) return false;
+    if(id==='schedule' && !F.empSchedule) return false;
+    if(id==='salary' && !F.empSalary) return false;
+    if(id==='off' && !F.empOff) return false;
+    if(id==='shiftSwap' && !window._shiftSwapEnabled) return false;
+    if(id==='emergency' && !F.empEmergency) return false;
+    if(id==='account' && !F.empAccount) return false;
+  }
   // emergency (OFF CA LÀM) cho phép chính thức - Master Spec Mục 19 (tối đa 1 lần/tuần, phải có người thay)
   if(isOfficial && id === 'off' && !isOffWindowOpen()) return false;
   if(id === 'elearning' && !isElearningUnlocked()) return false;
@@ -2148,17 +2173,34 @@ async function loadEmergency(){
         <div class="mt-2 flex gap-2"><button onclick="respondEmergency('${r.id}','APPROVE')" class="flex-1 bg-emerald-600 text-white text-xs font-bold py-1.5 rounded-lg">✅ Đồng ý thay ca${isDifferentShift?' (2 ca)':''}</button><button onclick="respondEmergency('${r.id}','REJECT')" class="flex-1 bg-white border text-xs font-bold py-1.5 rounded-lg">Từ chối</button></div>
       </div>`;
     }).join('') || (inviteNotifs.length? inviteNotifs.map(n=>`<div class="border border-blue-200 bg-blue-50 rounded-xl p-3"><div class="font-bold text-sm">${n.title}</div><div class="text-xs">${n.content}</div><div class="text-[11px] text-blue-600">${n.step===1?'2 phút cùng ca':'30 phút khác ca'}</div><button onclick="respondEmergency('${n.requestId}','APPROVE')" class="mt-2 w-full bg-emerald-600 text-white text-xs font-bold py-1.5 rounded-lg">✅ Đồng ý thay ca</button></div>`).join('') : '<div class="text-xs text-slate-400 text-center py-2">Không có lời mời thay ca</div>');
+    // Chống spam: còn yêu cầu chờ duyệt thì khóa nút gửi + hiện chờ Admin
+    try{
+      const pend = (mine||[]).find(r=>r.status==='PENDING');
+      const btn = document.getElementById('btnSubmitEmergency');
+      const note = document.getElementById('emergencyWaitNote');
+      if(btn){
+        btn.disabled = !!pend;
+        btn.classList.toggle('opacity-50', !!pend);
+        btn.classList.toggle('cursor-not-allowed', !!pend);
+      }
+      if(note){
+        if(pend){ note.classList.remove('hidden'); note.innerHTML = `⏳ Yêu cầu OFF CA LÀM ngày <b>${fmtDMY(pend.date)}</b> đang <b>chờ Admin duyệt</b> — nút gửi đã khóa chống spam, duyệt xong sẽ tự mở lại.`; }
+        else note.classList.add('hidden');
+      }
+    }catch(e){}
   }catch(e){}
 }
 async function submitEmergency(){
   const date=document.getElementById('emDate').value;
   const reason=document.getElementById('emReason').value.trim();
   if(!date||!reason) return showToast('Thiếu ngày hoặc lý do','error');
+  const btn=document.getElementById('btnSubmitEmergency');
   try{
+    if(btn){ btn.disabled=true; btn.classList.add('opacity-50','cursor-not-allowed'); }
     const res = await api('/api/emergency-requests', {method:'POST', body:JSON.stringify({employeeId:employee.employeeId, date, reason})});
-    showToast('Đã gửi OFF CA LÀM - đang tìm người thay ca','success');
+    showToast('Đã gửi OFF CA LÀM - đang chờ Admin duyệt (nút gửi đã khóa chống spam)','success');
     loadEmergency();
-  }catch(e){ showToast(e.message,'error'); }
+  }catch(e){ showToast(e.message,'error'); try{ loadEmergency(); }catch(_){ if(btn){ btn.disabled=false; btn.classList.remove('opacity-50','cursor-not-allowed'); } } }
 }
 async function respondEmergency(requestId, action){
   try{
@@ -2186,6 +2228,7 @@ let shiftSwapRequests=[];
 async function loadShiftSwap(){
   try{
     try{ const gn=document.getElementById('swapGateNote'); if(gn) gn.classList.toggle('hidden', !!window._shiftSwapEnabled); }catch(e){}
+    try{ let c=''; try{ c=localStorage.getItem(swapKeyStorage())||''; }catch(e){} setOffWorkLock(!c); }catch(e){}
     // Load all employees cùng chi nhánh để chọn người thay thế
     const branchEmps = await api('/api/employees?branch='+employee.branchId).catch(()=>[]);
     const emps = Array.isArray(branchEmps) ? branchEmps : (branchEmps.data||[]);
@@ -2290,18 +2333,45 @@ async function respondShiftSwap(requestId, action){
     loadShiftSwap();
   }catch(e){ showToast(e.message,'error'); }
 }
-// Đổi OFF <-> ca làm (NV tự xin, Admin duyệt mới lật lịch)
+// Đổi OFF <-> ca làm: mở bằng key 1 lần do Admin cấp, gửi xong khóa ngay
+function swapKeyStorage(){ return 'swapKey_'+((employee&&employee.employeeId)||'me'); }
+function setOffWorkLock(locked){
+  const form=document.getElementById('offWorkForm');
+  const box=document.getElementById('offWorkKeyBox');
+  const note=document.getElementById('offWorkLockedNote');
+  if(form) form.classList.toggle('hidden', locked);
+  if(box) box.classList.toggle('hidden', !locked);
+  if(note) note.classList.toggle('hidden', !locked);
+}
+async function activateOffWorkKey(){
+  const code=(document.getElementById('offWorkKey')?.value||'').trim().toUpperCase();
+  if(!code) return showToast('Nhập key Admin cấp','error');
+  try{
+    await api('/api/swap-keys/activate', {method:'POST', body:JSON.stringify({employeeId:employee.employeeId, code})});
+    try{ localStorage.setItem(swapKeyStorage(), code); }catch(e){}
+    setOffWorkLock(false);
+    showToast('Key hợp lệ - form đã mở cho 1 lần đổi','success');
+  }catch(e){ showToast(e.message,'error'); }
+}
 async function submitOffWorkSwap(){
+  const code=(function(){ try{ return localStorage.getItem(swapKeyStorage())||''; }catch(e){ return ''; } })();
+  if(!code){ setOffWorkLock(true); return showToast('Form đang khóa - nhập key Admin cấp để mở','error'); }
   const offDate=document.getElementById('offWorkOffDate')?.value;
   const workDate=document.getElementById('offWorkWorkDate')?.value;
   const reason=document.getElementById('offWorkReason')?.value.trim()||'';
   if(!offDate || !workDate) return showToast('Chọn đủ ngày OFF và ngày làm','error');
   if(!reason) return showToast('Vui lòng nhập lý do (bắt buộc)','error');
   try{
-    const res=await api('/api/off-work-swap', {method:'POST', body:JSON.stringify({requesterId:employee.employeeId, offDate, workDate, reason})});
-    showToast(res.message||'Đã gửi yêu cầu đổi OFF ↔ ca làm','success');
+    const res=await api('/api/off-work-swap', {method:'POST', body:JSON.stringify({requesterId:employee.employeeId, offDate, workDate, reason, swapCode:code})});
+    try{ localStorage.removeItem(swapKeyStorage()); }catch(e){}
+    const ki=document.getElementById('offWorkKey'); if(ki) ki.value='';
+    setOffWorkLock(true);
+    showToast((res.message||'Đã gửi yêu cầu đổi OFF ↔ ca làm')+' - key đã dùng, form đã khóa','success');
     loadShiftSwap();
-  }catch(e){ showToast(e.message,'error'); }
+  }catch(e){
+    if(/key/i.test(e.message||'')){ try{ localStorage.removeItem(swapKeyStorage()); }catch(_){} setOffWorkLock(true); }
+    showToast(e.message,'error');
+  }
 }
 async function loadOffWorkSwap(){
   const el=document.getElementById('myOffWorkList');

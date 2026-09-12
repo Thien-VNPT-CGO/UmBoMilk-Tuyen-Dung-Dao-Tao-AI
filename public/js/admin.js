@@ -5348,6 +5348,12 @@ async function loadSettings(){
     if (document.getElementById('setOffMax')) document.getElementById('setOffMax').value = s.off?.maxPerWeek || 2;
     if (document.getElementById('setOffVip')) document.getElementById('setOffVip').checked = !!s.off?.vipTestMode;
     if (document.getElementById('setShiftSwap')) document.getElementById('setShiftSwap').checked = !!s.features?.employeeShiftSwap;
+    if (document.getElementById('setFeatAttendance')) document.getElementById('setFeatAttendance').checked = !!s.features?.empAttendance;
+    if (document.getElementById('setFeatSchedule')) document.getElementById('setFeatSchedule').checked = !!s.features?.empSchedule;
+    if (document.getElementById('setFeatSalary')) document.getElementById('setFeatSalary').checked = !!s.features?.empSalary;
+    if (document.getElementById('setFeatOff')) document.getElementById('setFeatOff').checked = !!s.features?.empOff;
+    if (document.getElementById('setFeatEmergency')) document.getElementById('setFeatEmergency').checked = !!s.features?.empEmergency;
+    if (document.getElementById('setFeatAccount')) document.getElementById('setFeatAccount').checked = !!s.features?.empAccount;
     if (document.getElementById('setTestMin')) document.getElementById('setTestMin').value = s.test?.minPerQuestion || 5;
     // ENV lock - khóa khi dùng Render ENV (server.js:386)
     const envLocked = data.envLocked || {};
@@ -5509,7 +5515,7 @@ async function saveSettings(){
     attendance:{lateThreshold:parseInt(document.getElementById('setLateTh').value), earlyLeaveThreshold:parseInt(document.getElementById('setEarlyTh').value), penaltyLate:parseInt(document.getElementById('setPenaltyLate').value), penaltyAbsent:parseInt(document.getElementById('setPenaltyAbsent').value)},
     payroll:{trainingRate:parseInt(document.getElementById('setTrainRate').value), officialRate:parseInt(document.getElementById('setOffRate').value)},
     off:{maxPerWeek:parseInt(document.getElementById('setOffMax').value)},
-    features:{employeeShiftSwap:!!document.getElementById('setShiftSwap')?.checked},
+    features:{employeeShiftSwap:!!document.getElementById('setShiftSwap')?.checked, empAttendance:!!document.getElementById('setFeatAttendance')?.checked, empSchedule:!!document.getElementById('setFeatSchedule')?.checked, empSalary:!!document.getElementById('setFeatSalary')?.checked, empOff:!!document.getElementById('setFeatOff')?.checked, empEmergency:!!document.getElementById('setFeatEmergency')?.checked, empAccount:!!document.getElementById('setFeatAccount')?.checked},
     test:{minPerQuestion:parseInt(document.getElementById('setTestMin').value)},
   };
   try{
@@ -5764,6 +5770,47 @@ async function loadShiftSwapAdmin(){
     }).join('');
   }catch(e){ console.error('loadShiftSwapAdmin',e); }
   try{ loadOffWorkAdmin(); }catch(e){}
+  try{ loadSwapKeys(); }catch(e){}
+}
+async function loadSwapKeys(){
+  const box=document.getElementById('swapKeyAdminBox');
+  const listEl=document.getElementById('swapKeyAdminList');
+  const sel=document.getElementById('swapKeyEmployee');
+  const isAdmin=(typeof currentUser!=='undefined' && currentUser && currentUser.role==='Admin');
+  if(box && !isAdmin){ box.innerHTML='<div class="mt-3 text-xs font-bold bg-white border border-amber-200 rounded-xl px-3 py-2 text-amber-700">🔒 Chỉ tài khoản Admin mới được cấp key.</div>'; }
+  try{
+    if(sel){
+      if(employees.length===0){ try{ await loadEmployees(); }catch(e){} }
+      const opts=(employees||[]).filter(e=>e.status==='OFFICIAL').map(e=>`<option value="${e.employeeId}">${e.name} - ${e.employeeId} - ${e.branchId}</option>`).join('');
+      const cur=sel.value;
+      sel.innerHTML=`<option value="">-- Chọn NV --</option>`+opts;
+      if(cur) sel.value=cur;
+    }
+  }catch(e){}
+  if(!listEl) return;
+  if(!isAdmin){ listEl.innerHTML='<div class="p-4 text-center text-xs text-slate-400">Chỉ Admin xem được danh sách key.</div>'; return; }
+  try{
+    const list=await api('/api/swap-keys', {headers:{Authorization:'Bearer '+token}});
+    if(!list.length) return listEl.innerHTML='<div class="p-4 text-center text-xs text-slate-400">Chưa cấp key nào</div>';
+    listEl.innerHTML=list.slice(0,30).map(k=>`
+      <div class="bg-white border rounded-xl px-3 py-2 flex justify-between items-center gap-2 ${k.status==='UNUSED'?'border-emerald-200':'border-slate-200 opacity-60'}">
+        <div class="min-w-0"><span class="font-mono font-black text-sm">${k.code}</span><span class="text-xs text-slate-500 ml-2">${k.employeeName||''} (${k.employeeId})</span><div class="text-[11px] text-slate-400">Cấp bởi ${k.createdBy||'—'} • ${fmtDMYTime(k.createdAt)}${k.usedAt?' • Dùng lúc '+fmtDMYTime(k.usedAt):''}</div></div>
+        <span class="text-[11px] font-black px-2 py-1 rounded-full ${k.status==='UNUSED'?'bg-emerald-500 text-white':'bg-slate-200 text-slate-500'}">${k.status==='UNUSED'?'CHƯA DÙNG':'ĐÃ DÙNG'}</span>
+      </div>`).join('');
+  }catch(e){ listEl.innerHTML='<div class="p-4 text-center text-xs text-slate-400">Không tải được</div>'; }
+}
+async function issueSwapKey(){
+  if(typeof currentUser!=='undefined' && currentUser && currentUser.role!=='Admin') return showToast('Chỉ tài khoản Admin mới được cấp key','error');
+  const employeeId=document.getElementById('swapKeyEmployee')?.value;
+  if(!employeeId) return showToast('Chọn nhân viên theo mã NV','error');
+  if(!confirm(`Cấp key đổi OFF ↔ ca làm (1 lần) cho ${employeeId}?`)) return;
+  try{
+    const res=await api('/api/swap-keys', {method:'POST', headers:{Authorization:'Bearer '+token}, body:JSON.stringify({employeeId})});
+    const out=document.getElementById('swapKeyResult');
+    if(out) out.innerHTML=`✅ Key mới: <span class="font-mono text-base bg-white border border-amber-300 rounded-lg px-3 py-1">${res.key.code}</span> <span class="text-amber-700">— gửi cho NV, dùng 1 lần.</span>`;
+    showToast(res.message||'Đã cấp key','success');
+    loadSwapKeys();
+  }catch(e){ showToast(e.message,'error'); }
 }
 async function loadOffWorkAdmin(){
   const el=document.getElementById('offWorkAdminList');

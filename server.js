@@ -149,7 +149,7 @@ const DEFAULT_SETTINGS = {
   off: { openDay: 5, openHour: 12, closeDay: 6, closeHour: 15, maxPerWeek: 2, vipTestMode: false },
   test: { minPerQuestion: 5, totalQuestions: 25, passScore: 8, retakeMin: 5, maxRetest: 3 },
   security: { sessionTimeout: 120, deviceBind: true },
-  features: { employeeShiftSwap: false }
+  features: { employeeShiftSwap: false, empAttendance: false, empSchedule: false, empSalary: false, empOff: false, empEmergency: false, empAccount: false }
 };
 
 // ============ GOOGLE SHEET AUTO-TABS DEFINITIONS - Realtime 1:1 per HR tab ============
@@ -197,6 +197,7 @@ let db = {
   deviceRequests: [],
   trainingShiftRequests: [],
   shiftSwapRequests: [],
+  swapKeys: [],
   testCourses: [],
   testResults: [],
   settings: DEFAULT_SETTINGS,
@@ -294,12 +295,14 @@ function loadDB() {
       // ensure payroll shifts
       if (!db.settings.payroll) db.settings.payroll = DEFAULT_SETTINGS.payroll;
       if (!db.settings.features) db.settings.features = { ...DEFAULT_SETTINGS.features };
+      Object.keys(DEFAULT_SETTINGS.features).forEach(k=>{ if(db.settings.features[k]===undefined) db.settings.features[k]=DEFAULT_SETTINGS.features[k]; });
       if (!db.payrollPeriods) db.payrollPeriods = [];
       if (!db.attendanceAdjustments) db.attendanceAdjustments = [];
       if (!db.overtimeRequests) db.overtimeRequests = [];
       if (!db.leaveRequests) db.leaveRequests = [];
       if (!db.trainingShiftRequests) db.trainingShiftRequests = [];
       if (!db.shiftSwapRequests) db.shiftSwapRequests = [];
+      if (!db.swapKeys) db.swapKeys = [];
       if (!db.penalties) db.penalties = [];
       if (!db.driveFiles) db.driveFiles = [];
       if (!db.payrollSnapshots) db.payrollSnapshots = [];
@@ -346,6 +349,7 @@ function saveDB() {
     if(Array.isArray(clone.deviceRequests)) clone.deviceRequests = clone.deviceRequests.filter(r => !isTestRecord(r));
     if(Array.isArray(clone.driveFiles)) clone.driveFiles = clone.driveFiles.filter(f => !isTestRecord(f));
     if(Array.isArray(clone.shiftSwapRequests)) clone.shiftSwapRequests = clone.shiftSwapRequests.filter(r => !isTestRecord(r));
+    if(Array.isArray(clone.swapKeys)) clone.swapKeys = clone.swapKeys.filter(r => !isTestRecord(r));
     if(Array.isArray(clone.trainingShiftRequests)) clone.trainingShiftRequests = clone.trainingShiftRequests.filter(r => !isTestRecord(r));
     if(Array.isArray(clone.zaloRecords)) clone.zaloRecords = clone.zaloRecords.filter(z => !isTestRecord(z));
     if(clone.settings){
@@ -1327,7 +1331,7 @@ app.get('/api/employee/me', (req,res)=>{
         }
       }
     }
-    res.json({ employee: emp, valid:true, features:{ employeeShiftSwap: !!(db.settings && db.settings.features && db.settings.features.employeeShiftSwap) } });
+    res.json({ employee: emp, valid:true, features:{ employeeShiftSwap: !!(db.settings && db.settings.features && db.settings.features.employeeShiftSwap), empAttendance: !!(db.settings && db.settings.features && db.settings.features.empAttendance), empSchedule: !!(db.settings && db.settings.features && db.settings.features.empSchedule), empSalary: !!(db.settings && db.settings.features && db.settings.features.empSalary), empOff: !!(db.settings && db.settings.features && db.settings.features.empOff), empEmergency: !!(db.settings && db.settings.features && db.settings.features.empEmergency), empAccount: !!(db.settings && db.settings.features && db.settings.features.empAccount) } });
   }catch(e){
     return res.status(401).json({ error:'Token không hợp lệ', forceLogout:true });
   }
@@ -6984,10 +6988,17 @@ app.post('/api/shift-swap/hr-broadcast', authMiddleware, roleCheck(['Admin','HR'
 // NV Chính thức xin đổi: ngày OFF <-> ngày WORKING của chính mình. Admin/HR duyệt mới lật lịch.
 app.post('/api/off-work-swap', (req,res)=>{
   const requesterId = req.body.requesterId || req.body.employeeId || req.user?.employeeId;
-  const { offDate, workDate, reason } = req.body;
+  const { offDate, workDate, reason, swapCode } = req.body;
   const emp = db.employees.find(e=>e.employeeId===requesterId);
   if(!emp) return res.status(404).json({error:'Không tìm thấy nhân viên yêu cầu'});
   if(emp.type!=='OFFICIAL' && emp.status!=='OFFICIAL') return res.status(403).json({error:'Chỉ nhân viên Chính thức mới được đổi OFF <-> ca làm'});
+  // Key kích hoạt 1 lần do Admin cấp theo mã NV: bắt buộc, đúng NV, chưa dùng
+  const code = String(swapCode||'').trim().toUpperCase();
+  if(!code) return res.status(400).json({error:'Vui lòng nhập key kích hoạt do Admin cấp'});
+  if(!db.swapKeys) db.swapKeys = [];
+  const keyRec = db.swapKeys.find(k=>k.code===code && k.employeeId===requesterId);
+  if(!keyRec) return res.status(403).json({error:'Key không đúng mã nhân viên của bạn'});
+  if(keyRec.status!=='UNUSED') return res.status(403).json({error:'Key đã được dùng 1 lần, vui lòng xin key mới từ Admin'});
   if(!offDate || !workDate) return res.status(400).json({error:'Thiếu ngày OFF và ngày làm (offDate, workDate)'});
   if(offDate===workDate) return res.status(400).json({error:'Hai ngày phải khác nhau'});
   if(!reason || !String(reason).trim()) return res.status(400).json({error:'Lý do là bắt buộc - vui lòng nhập lý do đổi'});
@@ -7011,6 +7022,9 @@ app.post('/api/off-work-swap', (req,res)=>{
     isTest: (emp.isTest || isTestRecord(emp) || req.headers['x-is-test']==='true' || (req.body && req.body.isTest===true)) || undefined
   };
   db.shiftSwapRequests.unshift(newReq);
+  // Key 1 lần: gửi thành công là khóa ngay
+  keyRec.status='USED'; keyRec.usedAt=getVietnamISOString(); keyRec.requestId=newReq.id;
+  keyRec.version=(keyRec.version||1)+1;
   audit(requesterId,'CREATE_OFF_WORK_SWAP','SHIFT_SWAP',null,newReq, req.ip);
   addSyncQueue('SHIFT_SWAP','CREATE',newReq, requesterId, 'WEB_EMPLOYEE');
   saveDB();
@@ -7089,6 +7103,49 @@ app.post('/api/off-work-swap/:id/reject', authMiddleware, roleCheck(['Admin','HR
   db.notifications.push({ id: uuidv4(), to: r.requesterId, type:'OFF_WORK_SWAP_REJECTED', title:`Đổi OFF <-> ca làm bị từ chối`, content:`Yêu cầu đổi ${r.offDate} <-> ${r.workDate} đã bị ${req.user.username} từ chối.`, createdAt: getVietnamISOString(), read:false });
   io.emit('notifications:update', db.notifications);
   res.json({success:true, request:r, message:'Đã từ chối yêu cầu đổi OFF <-> ca làm'});
+});
+// ============ KEY KÍCH HOẠT ĐỔI OFF <-> CA LÀM (1 key = 1 lần, theo mã NV) ============
+// Chỉ duy nhất tài khoản Admin được cấp key
+function genSwapCode(){
+  const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let c='';
+  for(let i=0;i<6;i++) c+=chars[Math.floor(Math.random()*chars.length)];
+  return 'SWAP-'+c;
+}
+app.post('/api/swap-keys', authMiddleware, roleCheck(['Admin']), (req,res)=>{
+  const { employeeId } = req.body;
+  const emp = db.employees.find(e=>e.employeeId===employeeId);
+  if(!emp) return res.status(404).json({error:'Không tìm thấy nhân viên với mã này'});
+  if(!db.swapKeys) db.swapKeys = [];
+  let code = genSwapCode();
+  while(db.swapKeys.some(k=>k.code===code)) code = genSwapCode();
+  const rec = {
+    id: uuidv4(), code, employeeId, employeeName: emp.name, branchId: emp.branchId,
+    status: 'UNUSED', createdBy: req.user.username, createdAt: getVietnamISOString(),
+    usedAt: null, requestId: null, version: 1,
+    isTest: (emp.isTest || isTestRecord(emp)) || undefined
+  };
+  db.swapKeys.unshift(rec);
+  audit(req.user.username,'ISSUE_SWAP_KEY','SWAP_KEY',null,rec,req.ip);
+  saveDB();
+  res.json({success:true, key: rec, message:`Đã cấp key ${code} cho ${emp.name} (${employeeId}) - dùng 1 lần duy nhất`});
+});
+app.get('/api/swap-keys', authMiddleware, roleCheck(['Admin']), (req,res)=>{
+  const { employeeId, status } = req.query;
+  let list = [...(db.swapKeys||[])];
+  if(employeeId) list = list.filter(k=>k.employeeId===employeeId);
+  if(status) list = list.filter(k=>k.status===status);
+  res.json(list);
+});
+// NV kiểm tra key trước khi mở form (không tiêu thụ key)
+app.post('/api/swap-keys/activate', (req,res)=>{
+  const employeeId = req.body.employeeId || req.user?.employeeId;
+  const code = String(req.body.code||'').trim().toUpperCase();
+  if(!employeeId || !code) return res.status(400).json({error:'Thiếu mã NV hoặc key'});
+  const rec = (db.swapKeys||[]).find(k=>k.code===code && k.employeeId===employeeId);
+  if(!rec) return res.status(403).json({error:'Key không đúng mã nhân viên của bạn'});
+  if(rec.status!=='UNUSED') return res.status(403).json({error:'Key đã được dùng 1 lần, vui lòng xin key mới từ Admin'});
+  res.json({success:true, message:'Key hợp lệ - bạn có thể gửi 1 yêu cầu đổi OFF <-> ca làm'});
 });
 // Admin đổi thủ công 1 ngày: OFF <-> ngày ca làm việc (không cần NV yêu cầu)
 app.post('/api/schedules/manual-flip', authMiddleware, roleCheck(['Admin','HR','Manager']), (req,res)=>{
@@ -8062,6 +8119,9 @@ app.post('/api/emergency-requests', (req,res)=>{
   // Check max 1 per week
   const weekCount = db.emergencyRequests.filter(r=>r.employeeId===employeeId && r.status==='APPROVED' && isSameWeek(r.createdAt, getVietnamISOString())).length;
   if(weekCount>=1) return res.status(400).json({error:'Đã đạt giới hạn 1 OFF CA LÀM/tuần'});
+  // Chống spam: đang có yêu cầu chờ duyệt thì phải đợi, không được gửi thêm
+  const pendingOne = db.emergencyRequests.find(r=>r.employeeId===employeeId && r.status==='PENDING');
+  if(pendingOne) return res.status(409).json({error:'Bạn đã có yêu cầu OFF CA LÀM đang chờ duyệt, vui lòng đợi Admin xử lý xong mới gửi tiếp', request: pendingOne});
   if(!reason) return res.status(400).json({error:'Lý do bắt buộc'});
   const reqId = uuidv4();
   const er = {
@@ -9446,6 +9506,7 @@ app.post('/api/admin/delete-employee-everywhere', authMiddleware, roleCheck(['Ad
   extraRemoved.deviceRequests = drop('deviceRequests', r=>r.employeeId===empCode);
   extraRemoved.trainingShiftRequests = drop('trainingShiftRequests', r=>r.employeeId===empCode);
   extraRemoved.shiftSwapRequests = drop('shiftSwapRequests', r=>r.requesterId===empCode || r.targetEmployeeId===empCode || r.acceptedBy===empCode);
+  extraRemoved.swapKeys = drop('swapKeys', r=>r.employeeId===empCode);
   extraRemoved.driveFiles = drop('driveFiles', f=>f.employeeId===empCode);
   extraRemoved.notifications = drop('notifications', n=>n.to===empCode || n.requestId===targetId);
   extraRemoved.syncQueue = drop('syncQueue', q=>isTestRecord(q) ? false : (q && q.payload && (q.payload.id===targetId || q.payload.employeeId===empCode)));
@@ -9861,7 +9922,7 @@ app.post('/api/system/reset', authMiddleware, roleCheck(['Admin']), async (req,r
     isSystemResetting = true;
     try{
       const keepSettings = db.settings;
-      db.employees=[]; db.applicants=[]; db.interviews=[]; db.attendances=[]; db.schedules=[]; db.offRequests=[]; db.emergencyRequests=[]; db.deviceRequests=[]; db.trainingShiftRequests=[]; db.shiftSwapRequests=[]; db.testResults=[]; db.keys=[]; db.zaloRecords=[]; db.notifications=[]; db.syncQueue=[]; db.auditLogs=[];
+      db.employees=[]; db.applicants=[]; db.interviews=[]; db.attendances=[]; db.schedules=[]; db.offRequests=[];       db.emergencyRequests=[]; db.deviceRequests=[]; db.trainingShiftRequests=[]; db.shiftSwapRequests=[]; db.swapKeys=[]; db.testResults=[]; db.keys=[]; db.zaloRecords=[]; db.notifications=[]; db.syncQueue=[]; db.auditLogs=[];
       db.driveFiles=[]; db.payrollSnapshots=[]; db.overtimeRequests=[]; db.leaveRequests=[]; db.payrollPeriods=[]; db.attendanceAdjustments=[]; db.penalties=[]; db.financeKeys=[];
       db.settings = keepSettings || DEFAULT_SETTINGS;
       // RÀNG BUỘC REALTIME: Lưu rỗng ngay lập tức vào ổ cứng và phát socket để web app lập tức sạch 100%

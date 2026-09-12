@@ -550,7 +550,8 @@ button:active{transform:scale(.97)}
           <div class="space-y-3">
             <input id="emDate" type="date" class="w-full px-4 py-3 rounded-xl border border-pink-200 text-sm focus:border-pink-400 focus:ring-2 focus:ring-pink-100 outline-none">
             <textarea id="emReason" placeholder="Lý do OFF CA LÀM (bắt buộc)" rows="2" class="w-full px-4 py-3 rounded-xl border border-pink-200 text-sm focus:border-pink-400 focus:ring-2 focus:ring-pink-100 outline-none"></textarea>
-            <button onclick="submitEmergency()" class="w-full text-white font-black py-3.5 rounded-2xl shadow text-sm" style="background:linear-gradient(135deg,#ec4899,#f43f5e)"><i class="fa-solid fa-paper-plane mr-2"></i>Gửi yêu cầu OFF CA LÀM</button>
+            <button id="btnSubmitEmergency" onclick="submitEmergency()" class="w-full text-white font-black py-3.5 rounded-2xl shadow text-sm" style="background:linear-gradient(135deg,#ec4899,#f43f5e)"><i class="fa-solid fa-paper-plane mr-2"></i>Gửi yêu cầu OFF CA LÀM</button>
+            <div id="emergencyWaitNote" class="hidden text-xs font-bold bg-amber-50 border border-amber-200 rounded-xl p-3 text-amber-700"></div>
           </div>
         </div>
         <div class="grid lg:grid-cols-2 gap-3 mt-3">
@@ -587,14 +588,21 @@ button:active{transform:scale(.97)}
           <div class="card"><div class="font-black text-sm text-pink-900 mb-3">Lời mời đổi ca (bạn được mời)</div><div id="shiftSwapInviteList" class="space-y-2"></div></div>
         </div>
         <div class="card mt-3">
-          <div class="font-black text-sm text-pink-900 flex items-center gap-2"><i class="fa-solid fa-repeat text-emerald-600"></i> Đổi OFF ↔ Ca làm (chờ Admin duyệt)</div>
-          <div class="text-xs text-slate-500 mt-1">Chọn 1 ngày OFF và 1 ngày làm của chính bạn để hoán đổi. Admin duyệt mới lật lịch.</div>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
-            <div><label class="text-xs font-bold text-slate-700">Ngày OFF của bạn</label><input id="offWorkOffDate" type="date" class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm focus:border-pink-400 outline-none"></div>
-            <div><label class="text-xs font-bold text-slate-700">Ngày làm muốn đổi</label><input id="offWorkWorkDate" type="date" class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm focus:border-pink-400 outline-none"></div>
+          <div class="font-black text-sm text-pink-900 flex items-center gap-2"><i class="fa-solid fa-key text-emerald-600"></i> Đổi OFF ↔ Ca làm (cần key kích hoạt)</div>
+          <div class="text-xs text-slate-500 mt-1">Key do Admin cấp theo mã NV, dùng 1 lần duy nhất. Đổi xong khóa lại, chỉ còn lịch sử.</div>
+          <div id="offWorkKeyBox" class="mt-3 flex gap-2">
+            <input id="offWorkKey" placeholder="Nhập key: SWAP-XXXXXX" class="flex-1 px-4 py-3 rounded-xl border border-emerald-200 text-sm font-mono uppercase focus:border-emerald-400 outline-none">
+            <button onclick="activateOffWorkKey()" class="bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-black px-5 rounded-xl text-sm shadow">Kích hoạt</button>
           </div>
-          <div class="mt-3"><label class="text-xs font-bold text-slate-700">Lý do <span class="text-red-500">*</span></label><textarea id="offWorkReason" rows="2" placeholder="Nhập lý do đổi OFF ↔ ca làm..." class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm outline-none focus:border-pink-400"></textarea></div>
-          <button onclick="submitOffWorkSwap()" class="w-full mt-3 text-white font-black py-3.5 rounded-2xl shadow text-sm" style="background:linear-gradient(135deg,#10b981,#059669)"><i class="fa-solid fa-paper-plane mr-2"></i>Gửi yêu cầu đổi OFF ↔ ca làm</button>
+          <div id="offWorkForm" class="hidden">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+              <div><label class="text-xs font-bold text-slate-700">Ngày OFF của bạn</label><input id="offWorkOffDate" type="date" class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm focus:border-pink-400 outline-none"></div>
+              <div><label class="text-xs font-bold text-slate-700">Ngày làm muốn đổi</label><input id="offWorkWorkDate" type="date" class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm focus:border-pink-400 outline-none"></div>
+            </div>
+            <div class="mt-3"><label class="text-xs font-bold text-slate-700">Lý do <span class="text-red-500">*</span></label><textarea id="offWorkReason" rows="2" placeholder="Nhập lý do đổi OFF ↔ ca làm..." class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm outline-none focus:border-pink-400"></textarea></div>
+            <button onclick="submitOffWorkSwap()" class="w-full mt-3 text-white font-black py-3.5 rounded-2xl shadow text-sm" style="background:linear-gradient(135deg,#10b981,#059669)"><i class="fa-solid fa-paper-plane mr-2"></i>Gửi yêu cầu đổi OFF ↔ ca làm</button>
+          </div>
+          <div id="offWorkLockedNote" class="mt-3 text-xs font-bold bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-500">🔒 Form đang khóa — nhập key Admin cấp để mở 1 lần đổi.</div>
         </div>
         <div class="card mt-3"><div class="font-black text-sm text-pink-900 mb-3">Yêu cầu OFF ↔ ca làm của bạn</div><div id="myOffWorkList" class="space-y-2"></div></div>
       </section>
