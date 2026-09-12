@@ -5801,6 +5801,8 @@ async function handleOffWorkAdmin(id, action){
     const res=await api('/api/off-work-swap/'+id+'/'+action, {method:'POST', headers:{Authorization:'Bearer '+token}});
     showToast(res.message||'Đã xử lý','success');
     loadOffWorkAdmin();
+    try{ if(typeof loadSchedules==='function') loadSchedules(); }catch(e){}
+    try{ if(typeof loadRequests==='function') loadRequests(); }catch(e){}
   }catch(e){ showToast(e.message,'error'); }
 }
 async function manualFlipSchedule(){
@@ -5814,6 +5816,8 @@ async function manualFlipSchedule(){
   try{
     const res=await api('/api/schedules/manual-flip', {method:'POST', headers:{Authorization:'Bearer '+token}, body:JSON.stringify({employeeId, date, toStatus, toShift, reason})});
     showToast(res.message||'Đã đổi lịch thủ công','success');
+    try{ loadOffWorkAdmin(); }catch(e){}
+    try{ if(typeof loadSchedules==='function') loadSchedules(); }catch(e){}
   }catch(e){ showToast(e.message,'error'); }
 }
 let hrShiftSwapSending=false;

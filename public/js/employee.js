@@ -248,7 +248,7 @@ function getVisibleNav(){
         if(n.id === 'elearning') return false;
         // emergency (OFF CA LÀM) mở cho chính thức - tối đa 1 lần/tuần, phải có người thay
         if(n.id === 'off') return offOpen; // chỉ hiện trong T6 12:00 - T7 15:00
-        if(n.id === 'shiftSwap') return !!window._shiftSwapEnabled; // HR bật mới hiện
+        if(n.id === 'shiftSwap') return true; // Luôn hiện tab Đổi ca cho Chính thức: đổi 24h do HR gate ở server, đổi OFF↔ca làm chờ Admin duyệt
         return true;
       });
     }
@@ -2183,6 +2183,7 @@ async function respondEmergency(requestId, action){
 let shiftSwapRequests=[];
 async function loadShiftSwap(){
   try{
+    try{ const gn=document.getElementById('swapGateNote'); if(gn) gn.classList.toggle('hidden', !!window._shiftSwapEnabled); }catch(e){}
     // Load all employees cùng chi nhánh để chọn người thay thế
     const branchEmps = await api('/api/employees?branch='+employee.branchId).catch(()=>[]);
     const emps = Array.isArray(branchEmps) ? branchEmps : (branchEmps.data||[]);
