@@ -3364,6 +3364,9 @@ async function pullRemainingTabsFromMasterSheet(manualBy){
           sched = { id: sid, employeeId: g.empId, weekStart: g.week||'', days: [...g.days.values()], version: g.version||1, updated_at: getVietnamISOString(), updated_by: manualBy||'PULL_SHEET', approvalStatus:'APPROVED' };
           db.schedules.push(sched); st.pulled++;
         } else {
+          // GIỮ DỮ LIỆU HIỆN TẠI: lịch local mới hơn Sheet (version cao hơn) thì không lấy dòng Sheet cũ đè lên
+          const sheetVer = (typeof g.version==='number') ? g.version : null;
+          if(sheetVer!==null && (sched.version||0)>sheetVer){ st.skipped++; continue; }
           let dirty=false;
           for(const d of g.days.values()){
             const ex = (sched.days||[]).find(x=>x.date===d.date);

@@ -248,7 +248,7 @@ function getVisibleNav(){
         if(n.id === 'elearning') return false;
         // emergency (OFF CA LÀM) mở cho chính thức - tối đa 1 lần/tuần, phải có người thay
         if(n.id === 'off') return offOpen; // chỉ hiện trong T6 12:00 - T7 15:00
-        if(n.id === 'shiftSwap') return true; // Luôn hiện tab Đổi ca cho Chính thức: đổi 24h do HR gate ở server, đổi OFF↔ca làm chờ Admin duyệt
+        if(n.id === 'shiftSwap') return !!window._shiftSwapEnabled; // Theo Cài đặt: tắt=ẩn khỏi web NV, bật=NV chính thức thấy và dùng được
         return true;
       });
     }
@@ -570,6 +570,8 @@ function showApp(){
   document.getElementById('avatarFallback').textContent=employee.name.split(' ').pop()[0];
   document.getElementById('homeAvatar').textContent=employee.name.split(' ').pop()[0];
   initNav();
+  // Đồng bộ cờ Đổi ca từ Cài đặt ngay khi mở app (tắt=ẩn tab, bật=NV chính thức thấy) — syncFeatureFlags tự refresh nav khi cờ đổi
+  api('/api/employee/me').then(me=>{ try{ syncFeatureFlags(me); }catch(e){} }).catch(()=>{});
   // Lấy cờ VIP test OFF trước để tab OFF hiện ngay nếu Admin đang bật
   syncOffWindowFlag().then(()=>{ try{ refreshNavVisibility(); }catch(e){} });
   // Ẩn/hiện các tab theo quyền TRAINING (bao gồm e-learning)
