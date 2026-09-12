@@ -1,4 +1,7 @@
 FROM node:20-alpine
+# RÀNG BUỘC GIỜ VN: Alpine không có tzdata -> Asia/Ho_Chi_Minh rơi về UTC (lệch +7h).
+RUN apk add --no-cache tzdata
+ENV TZ=Asia/Ho_Chi_Minh
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --only=production

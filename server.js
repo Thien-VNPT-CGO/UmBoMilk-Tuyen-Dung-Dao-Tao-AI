@@ -1,3 +1,7 @@
+// RÀNG BUỘC GIỜ VN: toàn hệ thống chạy múi giờ Asia/Ho_Chi_Minh.
+// Render/Docker mặc định UTC -> mọi getHours/getDay/setHours/toISOString lệch +7h.
+// Ép ngay dòng đầu (trước mọi new Date) + Dockerfile cài tzdata.
+process.env.TZ = process.env.TZ || 'Asia/Ho_Chi_Minh';
 require('dotenv').config();
 const express = require('express');
 const http = require('http');

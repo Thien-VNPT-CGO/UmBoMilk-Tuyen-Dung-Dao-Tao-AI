@@ -16,6 +16,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: TZ
+        value: Asia/Ho_Chi_Minh
       - key: PORT
         value: 10000
       - key: JWT_SECRET
