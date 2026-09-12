@@ -9291,6 +9291,83 @@ app.post('/api/admin/delete-sheet-rows', authMiddleware, roleCheck(['Admin']), a
     res.json({ success:true, sheet: sheetName, deleted: targets.length, rows: targets.map(i=>i+1) });
   }catch(e){ res.status(500).json({ error: e.message }); }
 });
+// Admin: XÓA ĐA NĂNG theo Mã NV — xóa vĩnh viễn mọi tab local CÓ mã NV đó + xóa dòng trên Google Sheet.
+// CẢNH BÁO: endpoint này CỐ Ý vượt khóa bảo vệ 17iXM (chỉ Admin, có audit + xác nhận 2 lớp ở UI).
+// Dùng khi NV nghỉ hẳn và muốn sạch cả Web lẫn Sheet. Không thể khôi phục.
+app.post('/api/admin/delete-employee-everywhere', authMiddleware, roleCheck(['Admin']), async (req,res)=>{
+  const code = String(req.body.employeeId || req.body.code || '').trim();
+  if(!code) return res.status(400).json({ error:'Thiếu mã nhân viên (employeeId)' });
+  const target = db.employees.find(e=>e.id===code || e.employeeId===code);
+  if(!target) return res.status(404).json({ error:'Không tìm thấy nhân viên với mã ' + code });
+  const targetId = target.id;
+  const empCode = target.employeeId;
+  // 1. Xóa local toàn diện (tái dùng cascade chuẩn: applicants/interviews/employees/keys/attendances/schedules/off/emergency/testResults/zalo)
+  if(typeof cascadeDeletePerson==='function') cascadeDeletePerson(target, req.user.username, req.ip);
+  else {
+    db.employees = db.employees.filter(e=>e.id!==targetId && e.employeeId!==empCode);
+    saveDB();
+  }
+  // 2. Dọn thêm các tab cascade chưa phủ: thiết bị / đổi ca / drive / thông báo
+  const extraRemoved = {};
+  function drop(col, fn){ if(!Array.isArray(db[col])) return 0; const b=db[col].length; db[col]=db[col].filter(x=>!fn(x)); return b-db[col].length; }
+  extraRemoved.deviceRequests = drop('deviceRequests', r=>r.employeeId===empCode);
+  extraRemoved.trainingShiftRequests = drop('trainingShiftRequests', r=>r.employeeId===empCode);
+  extraRemoved.shiftSwapRequests = drop('shiftSwapRequests', r=>r.requesterId===empCode || r.targetEmployeeId===empCode || r.acceptedBy===empCode);
+  extraRemoved.driveFiles = drop('driveFiles', f=>f.employeeId===empCode);
+  extraRemoved.notifications = drop('notifications', n=>n.to===empCode || n.requestId===targetId);
+  extraRemoved.syncQueue = drop('syncQueue', q=>isTestRecord(q) ? false : (q && q.payload && (q.payload.id===targetId || q.payload.employeeId===empCode)));
+  saveDB();
+  io.emit('deviceRequests:update', db.deviceRequests);
+  io.emit('trainingShiftRequests:update', db.trainingShiftRequests);
+  io.emit('shiftSwapRequests:update', db.shiftSwapRequests);
+  io.emit('schedules:update', db.schedules);
+  io.emit('employees:update', db.employees);
+  // 3. Xóa dòng trên Google Sheet (mọi tab định nghĩa, cả 2 file Form + Database) theo ID hoặc Mã NV ở cột A/B
+  const sheetResults = [];
+  try{
+    const ids = [...new Set([db.settings?.googleSheet?.spreadsheetId, db.settings?.googleSheet?.targetDatabaseSpreadsheetId].filter(Boolean))];
+    const token = await getGoogleAccessToken();
+    if(!token || ids.length===0){
+      sheetResults.push({ skipped:true, note:'Chưa cấu hình ServiceAccount — chỉ xóa local, Sheet GIỮ NGUYÊN' });
+    } else {
+      const tabs = [...new Set(Object.values(SHEET_DEFINITIONS).map(d=>d.sheetName))];
+      for(const spreadsheetId of ids){
+        let meta = null;
+        try{
+          const mr = await fetch('https://sheets.googleapis.com/v4/spreadsheets/'+spreadsheetId, { headers:{ Authorization:'Bearer '+token }});
+          if(mr.ok) meta = await mr.json();
+        }catch(e){}
+        const gridOf = (name)=>{ const t=(meta && meta.sheets||[]).find(s=>s.properties && s.properties.title===name); return t ? t.properties.sheetId : null; };
+        for(const sheetName of tabs){
+          try{
+            const vr = await fetch('https://sheets.googleapis.com/v4/spreadsheets/'+spreadsheetId+'/values/'+encodeURIComponent(sheetName)+'!A1:B5000', { headers:{ Authorization:'Bearer '+token }});
+            if(!vr.ok) continue;
+            const values = (await vr.json()).values || [];
+            const hits = [];
+            for(let i=1;i<values.length;i++){
+              const c0=String(values[i][0]||'').trim(), c1=String(values[i][1]||'').trim();
+              if(c0===targetId || c0===empCode || c1===targetId || c1===empCode) hits.push(i);
+            }
+            if(hits.length===0) continue;
+            const gridId = gridOf(sheetName);
+            if(gridId===null || gridId===undefined){ sheetResults.push({ spreadsheetId: spreadsheetId.slice(0,8)+'…', sheet: sheetName, error:'Không lấy được gridId' }); continue; }
+            hits.sort((a,b)=>b-a);
+            const dr = await fetch('https://sheets.googleapis.com/v4/spreadsheets/'+spreadsheetId+':batchUpdate', {
+              method:'POST', headers:{ Authorization:'Bearer '+token, 'Content-Type':'application/json' },
+              body: JSON.stringify({ requests: hits.map(idx=>({ deleteDimension:{ range:{ sheetId: gridId, dimension:'ROWS', startIndex: idx, endIndex: idx+1 }} })) })
+            });
+            const dj = await dr.json().catch(()=>({}));
+            if(dj.error) sheetResults.push({ spreadsheetId: spreadsheetId.slice(0,8)+'…', sheet: sheetName, error: dj.error.message });
+            else sheetResults.push({ spreadsheetId: spreadsheetId.slice(0,8)+'…', sheet: sheetName, deleted: hits.length, rows: hits.map(i=>i+1) });
+          }catch(e){ sheetResults.push({ spreadsheetId: spreadsheetId.slice(0,8)+'…', sheet: sheetName, error: e.message }); }
+        }
+      }
+    }
+  }catch(e){ sheetResults.push({ error: e.message }); }
+  audit(req.user.username,'DELETE_EMPLOYEE_EVERYWHERE','EMPLOYEE', { id: targetId, employeeId: empCode, name: target.name }, { extraRemoved, sheets: sheetResults }, req.ip);
+  emitForceLogout(empCode, 'Tài khoản của bạn đã bị xóa vĩnh viễn khỏi hệ thống (Admin xóa đa năng).');
+  res.json({ success:true, id: targetId, employeeId: empCode, name: target.name, extraRemoved, sheets: sheetResults, note:'Đã xóa vĩnh viễn local + Sheet (nếu có token). Không thể khôi phục.' });
+});
 // ============ AUDIT / SYNC / ZALO / NOTIF ============
 app.get('/api/audit-logs', authMiddleware, (req,res)=> res.json(db.auditLogs));
 app.get('/api/sync-queue', authMiddleware, (req,res)=> res.json(db.syncQueue));

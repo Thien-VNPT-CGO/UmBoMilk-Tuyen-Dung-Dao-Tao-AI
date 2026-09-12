@@ -996,6 +996,57 @@ async function syncDownDeletions(){
     showToast(e.message||'Lỗi đồng bộ xóa', 'error');
   }
 }
+// Xóa đa năng theo Mã NV (Admin): xóa vĩnh viễn mọi tab Web + dòng Google Sheet — xác nhận 2 lớp
+function openDeleteEverywhereModal(){
+  if(currentUser?.role !== 'Admin'){
+    showToast('Chỉ Admin mới được xóa đa năng', 'error');
+    return;
+  }
+  openModal('Xóa đa năng theo Mã NV (Admin)', `
+    <div class="space-y-4">
+      <div class="bg-red-50 border border-red-300 rounded-xl p-3 text-xs text-red-800">
+        <div class="font-black flex items-center gap-2"><i class="fa-solid fa-triangle-exclamation text-red-600"></i> XÓA VĨNH VIỄN — KHÔNG KHÔI PHỤC</div>
+        <div class="mt-1">Nhập <b>Mã NV</b> (vd: <span class="font-mono">CN261_UBM..._NV...</span>). Hệ thống xóa ngay mọi tab Web có mã này (hồ sơ, key, lịch, chấm công, OFF, đột xuất, thiết bị, đổi ca, test, drive, thông báo) <b>đồng thời xóa dòng trên Google Sheet</b>. NV bị force logout tức thì.</div>
+      </div>
+      <div>
+        <label class="text-xs font-bold text-slate-700">Mã nhân viên (ID hoặc Mã NV)</label>
+        <input id="delEverywhereId" class="w-full mt-1 px-3 py-2.5 rounded-xl border border-red-200 focus:border-red-400 focus:ring-2 focus:ring-red-100 outline-none font-mono text-sm" placeholder="CN261_UBM..._NV...">
+      </div>
+      <div class="flex justify-end gap-2">
+        <button onclick="closeModal()" class="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm">Hủy</button>
+        <button onclick="submitDeleteEverywhere()" class="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-black text-sm flex items-center gap-2"><i class="fa-solid fa-user-slash"></i> Xóa vĩnh viễn</button>
+      </div>
+      <div id="delEverywhereResult" class="hidden text-xs font-bold rounded-xl p-3"></div>
+    </div>
+  `);
+}
+async function submitDeleteEverywhere(){
+  const input = document.getElementById('delEverywhereId');
+  const resEl = document.getElementById('delEverywhereResult');
+  const code = input?.value.trim();
+  if(!code){ showToast('Vui lòng nhập Mã NV', 'error'); return; }
+  if(!confirm(`XÁC NHẬN LẦN 1: Xóa vĩnh viễn mọi dữ liệu của "${code}" trên Web + Google Sheet?\n\nKhông thể khôi phục!`)) return;
+  const retype = prompt(`XÁC NHẬN LẦN 2: Nhập lại chính xác Mã NV "${code}" để xóa:`);
+  if(retype === null) return;
+  if(String(retype).trim() !== code){ showToast('Mã nhập lại không khớp — đã hủy', 'error'); return; }
+  try{
+    resEl.classList.remove('hidden');
+    resEl.className='text-xs font-bold rounded-xl p-3 bg-blue-50 text-blue-700 border border-blue-200';
+    resEl.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Đang xóa đa năng...';
+    const res = await api('/api/admin/delete-employee-everywhere', { method:'POST', headers:{ Authorization:'Bearer '+token }, body: JSON.stringify({ employeeId: code }) });
+    const sheetInfo = Array.isArray(res.sheets) ? res.sheets.filter(s=>s.deleted).map(s=>`${s.sheet}: ${s.deleted} dòng`).join(', ') || 'Sheet giữ nguyên (chưa có token)' : '';
+    resEl.className='text-xs font-bold rounded-xl p-3 bg-emerald-50 text-emerald-700 border border-emerald-200';
+    resEl.innerHTML=`<i class="fa-solid fa-circle-check"></i> Đã xóa vĩnh viễn <b>${res.name}</b> (${res.employeeId}). ${sheetInfo}`;
+    showToast(`Đã xóa đa năng ${res.employeeId}`, 'success');
+    loadEmployees();
+    if(typeof loadSchedules === 'function') loadSchedules();
+    setTimeout(()=>{ closeModal(); }, 1800);
+  }catch(e){
+    resEl.className='text-xs font-bold rounded-xl p-3 bg-red-50 text-red-700 border border-red-200';
+    resEl.innerHTML='<i class="fa-solid fa-triangle-exclamation"></i> '+ (e.message||'Lỗi xóa đa năng');
+    showToast(e.message||'Lỗi xóa đa năng', 'error');
+  }
+}
 function renderDashAudit(){
   const el=document.getElementById('dashAudit');
   if(!el) return;
