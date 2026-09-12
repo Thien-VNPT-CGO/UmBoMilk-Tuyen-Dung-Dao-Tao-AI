@@ -1386,16 +1386,26 @@ async function loadSchedule(){
           // Chỉ ẩn tuần sau nếu chưa đăng ký OFF; nếu đã có OFF phê duyệt thì hiển thị luôn kể cả draft PENDING (để NV thấy OFF ngay)
           if(!hasOffForNextWeek) return false;
         }
-        // Ẩn các tuần tới xa hơn (chỉ hiện hiện tại và tuần sau)
+        // Chỉ hiện tuần hiện tại (0) và tuần sau (1): ẩn tuần cũ (<0) lẫn tuần xa (>1) để lịch không lặp/thừa thẻ
         const weekDate = new Date(s.weekStart);
         const curMon = getMonday(getVietnamNow());
         const diffWeeks = Math.round((weekDate - curMon)/(7*24*60*60*1000));
-        if(diffWeeks>1) return false;
+        if(diffWeeks>1 || diffWeeks<0) return false;
         return true;
       });
+      // Chống hiển thị trùng: mỗi tuần chỉ 1 thẻ lịch dù API có trả trùng
+      {
+        const _seenWeeks = new Set();
+        displaySchedules = displaySchedules.filter(s=>{ if(!s || !s.weekStart || _seenWeeks.has(s.weekStart)) return false; _seenWeeks.add(s.weekStart); return true; });
+      }
       if(displaySchedules.length===0){
         return el.innerHTML='<div class="bg-white rounded-2xl border border-slate-200 p-8 text-center text-sm text-slate-400">Chưa có lịch tuần sau - vui lòng đăng ký OFF 2 ngày (T6 12:00 - T7 15:00) để AI sắp lịch</div>';
       }
+    }
+    // Chống hiển thị trùng thẻ tuần cho mọi loại NV (dù API có trả trùng)
+    {
+      const _seenAll = new Set();
+      displaySchedules = displaySchedules.filter(s=>{ if(!s || !s.weekStart || _seenAll.has(s.weekStart)) return false; _seenAll.add(s.weekStart); return true; });
     }
     const today = getVietnamTodayStr();
     const offBanner = (!isOfficial && isTraining5OffDaysCompleted()) ? `
