@@ -6977,6 +6977,136 @@ app.post('/api/shift-swap/hr-broadcast', authMiddleware, roleCheck(['Admin','HR'
   io.emit('zalo:update', db.zaloRecords);
   res.json({success:true, request:newReq, message:`HR đã gửi yêu cầu <24h tới ${branchEmps.length} NV cùng CN ${emp.branchId} với nội dung khác`});
 });
+// ============ ĐỔI OFF <-> CA LÀM (NV yêu cầu, Admin đổi thủ công) ============
+// NV Chính thức xin đổi: ngày OFF <-> ngày WORKING của chính mình. Admin/HR duyệt mới lật lịch.
+app.post('/api/off-work-swap', (req,res)=>{
+  const requesterId = req.body.requesterId || req.body.employeeId || req.user?.employeeId;
+  const { offDate, workDate, reason } = req.body;
+  const emp = db.employees.find(e=>e.employeeId===requesterId);
+  if(!emp) return res.status(404).json({error:'Không tìm thấy nhân viên yêu cầu'});
+  if(emp.type!=='OFFICIAL' && emp.status!=='OFFICIAL') return res.status(403).json({error:'Chỉ nhân viên Chính thức mới được đổi OFF <-> ca làm'});
+  if(!offDate || !workDate) return res.status(400).json({error:'Thiếu ngày OFF và ngày làm (offDate, workDate)'});
+  if(offDate===workDate) return res.status(400).json({error:'Hai ngày phải khác nhau'});
+  if(!reason || !String(reason).trim()) return res.status(400).json({error:'Lý do là bắt buộc - vui lòng nhập lý do đổi'});
+  const schedOff = db.schedules.find(s=>s.employeeId===requesterId && (s.days||[]).some(d=>d.date===offDate));
+  const schedWork = db.schedules.find(s=>s.employeeId===requesterId && (s.days||[]).some(d=>d.date===workDate));
+  if(!schedOff || !schedWork) return res.status(404).json({error:'Không tìm thấy lịch của 1 trong 2 ngày'});
+  const dayOff = schedOff.days.find(d=>d.date===offDate);
+  const dayWork = schedWork.days.find(d=>d.date===workDate);
+  if(!dayOff || !dayWork) return res.status(404).json({error:'Không tìm thấy ngày trong lịch'});
+  if(dayOff.status!=='OFF') return res.status(400).json({error:`Ngày ${offDate} hiện là ${dayOff.status}, không phải OFF`});
+  if(dayWork.status!=='WORKING' && dayWork.status!=='SUBSTITUTE' && dayWork.status!=='WORKING_DOUBLE') return res.status(400).json({error:`Ngày ${workDate} hiện là ${dayWork.status}, không phải ngày làm`});
+  const dup = (db.shiftSwapRequests||[]).find(r=>r.type==='OFF_WORK_SWAP' && r.requesterId===requesterId && r.status.includes('PENDING') && ((r.offDate===offDate && r.workDate===workDate)||(r.offDate===workDate && r.workDate===offDate)));
+  if(dup) return res.status(409).json({error:'Đã có yêu cầu đổi OFF <-> ca làm đang chờ cho cặp ngày này', request: dup});
+  const now = getVietnamNow();
+  const newReq = {
+    id: uuidv4(), type: 'OFF_WORK_SWAP',
+    requesterId, requesterName: emp.name, branchId: emp.branchId,
+    offDate, workDate, reason: String(reason).trim(),
+    status: 'PENDING',
+    createdAt: now.toISOString(), version: 1,
+    isTest: (emp.isTest || isTestRecord(emp) || req.headers['x-is-test']==='true' || (req.body && req.body.isTest===true)) || undefined
+  };
+  db.shiftSwapRequests.unshift(newReq);
+  audit(requesterId,'CREATE_OFF_WORK_SWAP','SHIFT_SWAP',null,newReq, req.ip);
+  addSyncQueue('SHIFT_SWAP','CREATE',newReq, requesterId, 'WEB_EMPLOYEE');
+  saveDB();
+  io.emit('shiftSwap:update', db.shiftSwapRequests);
+  io.emit('shiftSwapRequests:update', db.shiftSwapRequests);
+  notifyAdminAndHR({
+    action: 'off_work_swap_request',
+    employeeId: requesterId, employeeName: emp.name, branchId: emp.branchId,
+    title: `NV ${emp.name} xin đổi OFF <-> ca làm`,
+    message: `${emp.name} (${requesterId}) xin đổi OFF ${fmtDMY(offDate)} <-> làm ${fmtDMY(workDate)}. Lý do: ${reason}`,
+    type: 'info', data: { requestId: newReq.id, offDate, workDate }
+  });
+  io.emit('notifications:update', db.notifications);
+  res.json({success:true, request:newReq, message:'Đã gửi yêu cầu đổi OFF <-> ca làm, chờ Admin/HR duyệt'});
+});
+app.get('/api/off-work-swap', authMiddleware, (req,res)=>{
+  let list = (db.shiftSwapRequests||[]).filter(r=>r.type==='OFF_WORK_SWAP');
+  const scope = branchScopeFilter(req);
+  if(scope) list = list.filter(r=> scope.includes(r.branchId));
+  const { employeeId, status } = req.query;
+  if(employeeId) list = list.filter(r=> r.requesterId===employeeId);
+  if(status) list = list.filter(r=> r.status===status);
+  res.json(list);
+});
+function flipOffWorkDay(employeeId, dateStr, toOff, toShift){
+  const sched = db.schedules.find(s=>s.employeeId===employeeId && (s.days||[]).some(d=>d.date===dateStr));
+  if(!sched) return null;
+  const day = sched.days.find(d=>d.date===dateStr);
+  if(!day) return null;
+  const emp = db.employees.find(e=>e.employeeId===employeeId);
+  if(toOff){
+    day.status='OFF'; day.shift='OFF'; day.shifts=[];
+    delete day.shift2; delete day.shift3; delete day.secondShift; delete day.autoOff; delete day.autoOffReason;
+  } else {
+    const sh = toShift || day.shift==='OFF' ? (toShift || (emp?emp.shift:'CA_TOI')) : day.shift;
+    const finalShift = (sh && sh!=='OFF') ? sh : (emp?emp.shift:'CA_TOI');
+    day.status='WORKING'; day.shift=finalShift; day.shifts=[finalShift];
+    delete day.autoOff; delete day.autoOffReason;
+  }
+  sched.version=(sched.version||1)+1;
+  sched.updated_at=getVietnamISOString();
+  return { sched, day };
+}
+app.post('/api/off-work-swap/:id/approve', authMiddleware, roleCheck(['Admin','HR','Manager']), (req,res)=>{
+  const r = (db.shiftSwapRequests||[]).find(x=>x.id===req.params.id && x.type==='OFF_WORK_SWAP');
+  if(!r) return res.status(404).json({error:'Không tìm thấy yêu cầu đổi OFF <-> ca làm'});
+  if(r.status==='APPROVED' || r.status==='REJECTED') return res.status(400).json({error:'Yêu cầu đã xử lý'});
+  const emp = db.employees.find(e=>e.employeeId===r.requesterId);
+  if(emp && emp.branchId && req.user.role==='Manager' && !req.user.branchScope.includes(emp.branchId)) return res.status(403).json({error:'Manager chỉ xử lý CN được phân quyền'});
+  const f1 = flipOffWorkDay(r.requesterId, r.offDate, false, emp?emp.shift:null);
+  const f2 = flipOffWorkDay(r.requesterId, r.workDate, true);
+  if(!f1 || !f2) return res.status(404).json({error:'Không tìm thấy lịch của 1 trong 2 ngày (có thể đã bị xóa tuần)'});
+  r.status='APPROVED'; r.approvedBy=req.user.username; r.approvedAt=getVietnamISOString(); r.version=(r.version||1)+1;
+  audit(req.user.username,'APPROVE_OFF_WORK_SWAP','SHIFT_SWAP',null,r,req.ip);
+  addSyncQueue('SHIFT_SWAP','UPDATE',r,req.user.username,'WEB_HR');
+  addSyncQueue('SCHEDULE','UPDATE',f1.sched,req.user.username,'WEB_HR');
+  if(f2.sched!==f1.sched) addSyncQueue('SCHEDULE','UPDATE',f2.sched,req.user.username,'WEB_HR');
+  saveDB();
+  io.emit('shiftSwap:update', db.shiftSwapRequests);
+  io.emit('shiftSwapRequests:update', db.shiftSwapRequests);
+  io.emit('schedules:update', db.schedules);
+  db.notifications.push({ id: uuidv4(), to: r.requesterId, type:'OFF_WORK_SWAP_APPROVED', title:`Đổi OFF <-> ca làm đã duyệt`, content:`${r.offDate} (OFF) <-> ${r.workDate} (làm) đã được ${req.user.username} duyệt. Lịch đã cập nhật.`, createdAt: getVietnamISOString(), read:false });
+  io.emit('notifications:update', db.notifications);
+  res.json({success:true, request:r, message:`Đã duyệt: ${r.offDate} thành ngày làm, ${r.workDate} thành OFF`});
+});
+app.post('/api/off-work-swap/:id/reject', authMiddleware, roleCheck(['Admin','HR','Manager']), (req,res)=>{
+  const r = (db.shiftSwapRequests||[]).find(x=>x.id===req.params.id && x.type==='OFF_WORK_SWAP');
+  if(!r) return res.status(404).json({error:'Không tìm thấy yêu cầu đổi OFF <-> ca làm'});
+  if(r.status==='APPROVED' || r.status==='REJECTED') return res.status(400).json({error:'Yêu cầu đã xử lý'});
+  r.status='REJECTED'; r.approvedBy=req.user.username; r.approvedAt=getVietnamISOString(); r.version=(r.version||1)+1;
+  audit(req.user.username,'REJECT_OFF_WORK_SWAP','SHIFT_SWAP',null,r,req.ip);
+  addSyncQueue('SHIFT_SWAP','UPDATE',r,req.user.username,'WEB_HR');
+  saveDB();
+  io.emit('shiftSwap:update', db.shiftSwapRequests);
+  io.emit('shiftSwapRequests:update', db.shiftSwapRequests);
+  db.notifications.push({ id: uuidv4(), to: r.requesterId, type:'OFF_WORK_SWAP_REJECTED', title:`Đổi OFF <-> ca làm bị từ chối`, content:`Yêu cầu đổi ${r.offDate} <-> ${r.workDate} đã bị ${req.user.username} từ chối.`, createdAt: getVietnamISOString(), read:false });
+  io.emit('notifications:update', db.notifications);
+  res.json({success:true, request:r, message:'Đã từ chối yêu cầu đổi OFF <-> ca làm'});
+});
+// Admin đổi thủ công 1 ngày: OFF <-> ngày ca làm việc (không cần NV yêu cầu)
+app.post('/api/schedules/manual-flip', authMiddleware, roleCheck(['Admin','HR','Manager']), (req,res)=>{
+  const { employeeId, date, toStatus, toShift, reason } = req.body;
+  if(!employeeId || !date || !toStatus) return res.status(400).json({error:'Thiếu employeeId, date, toStatus (OFF/WORKING)'});
+  if(!['OFF','WORKING'].includes(toStatus)) return res.status(400).json({error:'toStatus chỉ nhận OFF hoặc WORKING'});
+  const emp = db.employees.find(e=>e.employeeId===employeeId);
+  if(!emp) return res.status(404).json({error:'Không tìm thấy nhân viên'});
+  if(emp.branchId && req.user.role==='Manager' && !req.user.branchScope.includes(emp.branchId)) return res.status(403).json({error:'Manager chỉ xử lý CN được phân quyền'});
+  const before = db.schedules.find(s=>s.employeeId===employeeId && (s.days||[]).some(d=>d.date===date));
+  const beforeDay = before ? {...before.days.find(d=>d.date===date)} : null;
+  const out = flipOffWorkDay(employeeId, date, toStatus==='OFF', toShift);
+  if(!out) return res.status(404).json({error:'Không tìm thấy lịch chứa ngày này'});
+  audit(req.user.username,'MANUAL_FLIP_OFF_WORK','SCHEDULE',beforeDay,{ employeeId, date, toStatus, toShift: out.day.shift, reason: reason||'' },req.ip);
+  addSyncQueue('SCHEDULE','UPDATE',out.sched,req.user.username,'WEB_HR');
+  saveDB();
+  io.emit('schedules:update', db.schedules);
+  db.notifications.push({ id: uuidv4(), to: employeeId, type:'SCHEDULE_MANUAL_FLIP', title:`Lịch ngày ${date} đã được đổi thủ công`, content:`${req.user.username} đã đổi ${date}: ${beforeDay?beforeDay.status:'?'} → ${toStatus} (${out.day.shift}). Lý do: ${reason||'—'}`, createdAt: getVietnamISOString(), read:false });
+  io.emit('notifications:update', db.notifications);
+  res.json({success:true, day: out.day, message:`Đã đổi ${date} sang ${toStatus} (${out.day.shift})`});
+});
 // HR duyệt yêu cầu đổi ca chính thức
 app.post('/api/shift-swap/:id/approve', authMiddleware, roleCheck(['Admin','HR','Manager']), (req,res)=>{
   const r = db.shiftSwapRequests.find(x=>x.id===req.params.id);

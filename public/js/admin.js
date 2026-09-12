@@ -5763,6 +5763,58 @@ async function loadShiftSwapAdmin(){
       </div>`;
     }).join('');
   }catch(e){ console.error('loadShiftSwapAdmin',e); }
+  try{ loadOffWorkAdmin(); }catch(e){}
+}
+async function loadOffWorkAdmin(){
+  const el=document.getElementById('offWorkAdminList');
+  const sel=document.getElementById('flipEmployee');
+  try{
+    if(sel){
+      if(employees.length===0){ try{ await loadEmployees(); }catch(e){} }
+      const opts=(employees||[]).filter(e=>e.status==='OFFICIAL').map(e=>`<option value="${e.employeeId}">${e.name} - ${e.employeeId} - ${e.branchId} - ${e.shift}</option>`).join('');
+      const cur=sel.value;
+      sel.innerHTML=`<option value="">-- Chọn NV --</option>`+opts;
+      if(cur) sel.value=cur;
+    }
+  }catch(e){}
+  if(!el) return;
+  try{
+    const list=await api('/api/off-work-swap', {headers:{Authorization:'Bearer '+token}});
+    if(!list.length) return el.innerHTML='<div class="p-8 text-center text-sm text-slate-400">Chưa có yêu cầu OFF ↔ ca làm nào</div>';
+    el.innerHTML=list.map(r=>`
+      <div class="p-3 border-b border-emerald-50 last:border-0">
+        <div class="flex justify-between items-start gap-3">
+          <div class="min-w-0 flex-1">
+            <div class="font-bold text-sm">${r.requesterName} <span class="font-mono text-xs text-slate-500">${r.requesterId}</span> <span class="text-[11px] font-black px-2 py-0.5 rounded-full border ${r.status==='PENDING'?'bg-emerald-100 text-emerald-700 border-emerald-200':r.status==='APPROVED'?'bg-slate-900 text-white':'bg-red-100 text-red-700'}">${r.status}</span></div>
+            <div class="text-xs text-slate-600 mt-1">${r.branchId} • OFF ${fmtDMY(r.offDate)} ↔ Làm ${fmtDMY(r.workDate)} • Lý do: ${r.reason||'—'}</div>
+          </div>
+        </div>
+        ${r.status==='PENDING'?`<div class="mt-2 flex gap-2 pt-2 border-t border-slate-100">
+          <button onclick="handleOffWorkAdmin('${r.id}','approve')" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold">Duyệt (lật 2 ngày)</button>
+          <button onclick="handleOffWorkAdmin('${r.id}','reject')" class="px-3 py-1 bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 rounded-lg text-xs font-bold">Từ chối</button>
+        </div>`:''}
+      </div>`).join('');
+  }catch(e){ el.innerHTML='<div class="p-8 text-center text-sm text-slate-400">Không tải được</div>'; }
+}
+async function handleOffWorkAdmin(id, action){
+  try{
+    const res=await api('/api/off-work-swap/'+id+'/'+action, {method:'POST', headers:{Authorization:'Bearer '+token}});
+    showToast(res.message||'Đã xử lý','success');
+    loadOffWorkAdmin();
+  }catch(e){ showToast(e.message,'error'); }
+}
+async function manualFlipSchedule(){
+  const employeeId=document.getElementById('flipEmployee')?.value;
+  const date=document.getElementById('flipDate')?.value;
+  const toStatus=document.getElementById('flipToStatus')?.value;
+  const toShift=document.getElementById('flipToShift')?.value||undefined;
+  const reason=document.getElementById('flipReason')?.value.trim()||'';
+  if(!employeeId||!date||!toStatus) return showToast('Chọn đủ NV, ngày, trạng thái muốn đổi','error');
+  if(!confirm(`Đổi thủ công ${employeeId} ngày ${date} sang ${toStatus}?`)) return;
+  try{
+    const res=await api('/api/schedules/manual-flip', {method:'POST', headers:{Authorization:'Bearer '+token}, body:JSON.stringify({employeeId, date, toStatus, toShift, reason})});
+    showToast(res.message||'Đã đổi lịch thủ công','success');
+  }catch(e){ showToast(e.message,'error'); }
 }
 let hrShiftSwapSending=false;
 async function hrCreateShiftSwap(){

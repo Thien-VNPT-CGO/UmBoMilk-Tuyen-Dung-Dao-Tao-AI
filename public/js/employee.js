@@ -2226,6 +2226,7 @@ async function loadShiftSwap(){
         <div class="mt-2 flex gap-2"><button onclick="respondShiftSwap('${r.id}','ACCEPT')" class="flex-1 bg-emerald-600 text-white text-xs font-bold py-1.5 rounded-lg">✅ Chấp nhận${isDifferentShift?' (2 ca)':''}</button><button onclick="respondShiftSwap('${r.id}','REJECT')" class="flex-1 bg-white border text-xs font-bold py-1.5 rounded-lg">Từ chối</button></div>
       </div>`;
     }).join('') || '<div class="text-xs text-slate-400 text-center py-2">Không có lời mời đổi ca</div>';
+    try{ loadOffWorkSwap(); }catch(e){}
   }catch(e){ console.error('loadShiftSwap',e); }
 }
 let shiftSwapSending=false;
@@ -2285,6 +2286,32 @@ async function respondShiftSwap(requestId, action){
     showToast(msg,'success');
     loadShiftSwap();
   }catch(e){ showToast(e.message,'error'); }
+}
+// Đổi OFF <-> ca làm (NV tự xin, Admin duyệt mới lật lịch)
+async function submitOffWorkSwap(){
+  const offDate=document.getElementById('offWorkOffDate')?.value;
+  const workDate=document.getElementById('offWorkWorkDate')?.value;
+  const reason=document.getElementById('offWorkReason')?.value.trim()||'';
+  if(!offDate || !workDate) return showToast('Chọn đủ ngày OFF và ngày làm','error');
+  if(!reason) return showToast('Vui lòng nhập lý do (bắt buộc)','error');
+  try{
+    const res=await api('/api/off-work-swap', {method:'POST', body:JSON.stringify({requesterId:employee.employeeId, offDate, workDate, reason})});
+    showToast(res.message||'Đã gửi yêu cầu đổi OFF ↔ ca làm','success');
+    loadShiftSwap();
+  }catch(e){ showToast(e.message,'error'); }
+}
+async function loadOffWorkSwap(){
+  const el=document.getElementById('myOffWorkList');
+  if(!el) return;
+  try{
+    const list=await api('/api/shift-swap?employeeId='+employee.employeeId).catch(()=>[]);
+    const mine=(Array.isArray(list)?list:[]).filter(r=>r.type==='OFF_WORK_SWAP');
+    el.innerHTML=mine.map(r=>`
+      <div class="border rounded-xl p-3 ${r.status==='PENDING'?'bg-emerald-50 border-emerald-200':'bg-white'}">
+        <div class="flex justify-between items-start"><span class="font-bold text-sm">OFF ${fmtDMY(r.offDate)} ↔ Làm ${fmtDMY(r.workDate)}</span><span class="text-[11px] font-black px-2 py-1 rounded-full ${r.status==='PENDING'?'bg-emerald-500 text-white':r.status==='APPROVED'?'bg-slate-900 text-white':'bg-red-100 text-red-700'}">${getStatusVi(r.status)}</span></div>
+        <div class="text-xs text-slate-500 mt-1">Lý do: ${r.reason||'—'}</div>
+      </div>`).join('')||'<div class="text-xs text-slate-400 text-center py-2">Chưa có yêu cầu OFF ↔ ca làm</div>';
+  }catch(e){ el.innerHTML='<div class="text-xs text-slate-400 text-center py-2">Không tải được</div>'; }
 }
 
 // Device
