@@ -1416,7 +1416,7 @@ async function loadSchedule(){
     ` : '';
     el.innerHTML = offBanner + displaySchedules.map(s=>{
       const isCurrentWeek = isDateInCurrentWeek(new Date(s.weekStart));
-      const workingDays = s.days.filter(d => d.status === 'WORKING' || d.status === 'SUBSTITUTE').length;
+      const workingDays = s.days.filter(d => d.status === 'WORKING' || d.status === 'SUBSTITUTE' || d.status === 'WORKING_DOUBLE').length;
       
       const isTraining = employee.type==='TRAINING' || employee.status==='TRAINING' || employee.status==='WAITING_TEST';
       return `
@@ -1449,6 +1449,9 @@ async function loadSchedule(){
             if (d.shift2 && d.shift2 !== 'OFF' && !dayShifts.includes(d.shift2)) dayShifts.push(d.shift2);
             if (d.shift3 && d.shift3 !== 'OFF' && !dayShifts.includes(d.shift3)) dayShifts.push(d.shift3);
             if (d.additionalShift && d.additionalShift !== 'OFF' && !dayShifts.includes(d.additionalShift)) dayShifts.push(d.additionalShift);
+            // OFF ca lam A->B: ca thu 2 nam o secondShift / doubleShiftInfo
+            if (d.secondShift && d.secondShift !== 'OFF' && !dayShifts.includes(d.secondShift)) dayShifts.push(d.secondShift);
+            if (d.doubleShiftInfo && d.doubleShiftInfo.originalShift && !dayShifts.includes(d.doubleShiftInfo.originalShift)) dayShifts.push(d.doubleShiftInfo.originalShift);
             if (typeof myApprovedShiftReqs !== 'undefined' && Array.isArray(myApprovedShiftReqs)) {
               myApprovedShiftReqs.filter(r => r.date === d.date).forEach(r => {
                 if (r.toShift && !dayShifts.includes(r.toShift)) dayShifts.push(r.toShift);
@@ -1531,7 +1534,7 @@ async function loadSchedule(){
                         </div>`;
                       }).join('')}
                       <span class="text-[10px] font-black bg-pink-100 text-pink-700 py-0.5 px-2 rounded-full border border-pink-200 text-center mt-0.5">
-                        ⚡ ${dayShifts.length} ca/ngày (Rút ngắn training)
+                        ⚡ ${dayShifts.length} ca/ngày${d.doubleShiftInfo ? ' (thay '+(d.doubleShiftInfo.originalEmployeeName||'')+')' : ''}
                       </span>
                     </div>
                     `;

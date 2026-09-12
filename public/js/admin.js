@@ -631,8 +631,7 @@ function connectSocket(){
       updatePendingCount();
       updateModeBadge();
       if(ev === 'notifications:update'){
-        playNotificationSound();
-        if(_umbAiAvatar) playAiAvatarNotification();
+        try{ playAiAvatarNotification('Có thông báo mới'); }catch(e){ try{ playNotificationSound(); }catch(_){} }
       }
     });
   });
@@ -699,7 +698,7 @@ function connectSocket(){
     const icon = icons[data.action] || '🔔';
     const toastType = data.type || 'info';
     showToast(`${icon} [${data.title || 'Nhân viên'}] ${data.message || ''}`, toastType);
-    speakUmb(`${data.title || 'Nhân viên'}. ${data.message || ''}`);
+    try{ playAiAvatarNotification(`${data.title || 'Nhân viên'}. ${data.message || ''}`); }catch(e){ try{ speakUmb(`${data.title || 'Nhân viên'}. ${data.message || ''}`); }catch(_){} }
 
     // Tự động cập nhật số lượng chờ duyệt và làm mới tab liên quan
     updatePendingCount();
@@ -4228,6 +4227,8 @@ function renderSchedules(){
                     const att = (typeof attendances!=='undefined' ? attendances : []).find(a=>a.employeeId===(emp.employeeId||emp.id) && a.date===d.date);
                     const isWaiting = d.status==='WAITING_OFFICIAL';
                     const isOffDay = d.status==='OFF';
+                    const isEmergencyOff = d.status==='EMERGENCY_OFF';
+                    const isEmergencyPending = d.status==='EMERGENCY_PENDING';
                     const isFuture = d.date > todayStr;
                     const dayAllShifts = [];
                     if (Array.isArray(d.shifts)) {
@@ -4237,6 +4238,9 @@ function renderSchedules(){
                     if (d.shift2 && d.shift2 !== 'OFF' && !dayAllShifts.includes(d.shift2)) dayAllShifts.push(d.shift2);
                     if (d.shift3 && d.shift3 !== 'OFF' && !dayAllShifts.includes(d.shift3)) dayAllShifts.push(d.shift3);
                     if (d.additionalShift && d.additionalShift !== 'OFF' && !dayAllShifts.includes(d.additionalShift)) dayAllShifts.push(d.additionalShift);
+                    // OFF ca lam: ca thu 2 nam o secondShift / doubleShiftInfo (A OFF -> B lam 2 ca)
+                    if (d.secondShift && d.secondShift !== 'OFF' && !dayAllShifts.includes(d.secondShift)) dayAllShifts.push(d.secondShift);
+                    if (d.doubleShiftInfo && d.doubleShiftInfo.originalShift && !dayAllShifts.includes(d.doubleShiftInfo.originalShift)) dayAllShifts.push(d.doubleShiftInfo.originalShift);
                     if (typeof trainingShiftRequests !== 'undefined' && Array.isArray(trainingShiftRequests)) {
                       trainingShiftRequests.filter(r => (r.employeeId === emp.employeeId || r.employeeId === emp.id) && r.date === d.date && r.status === 'APPROVED' && r.type === 'ADD_SHIFT').forEach(r => {
                         if (r.toShift && !dayAllShifts.includes(r.toShift)) dayAllShifts.push(r.toShift);
@@ -4253,8 +4257,18 @@ function renderSchedules(){
                     } else if(isOffDay){
                       badgeText=d.autoOff?'NGHỈ (AI CÂN)':'NGHỈ (OFF)';
                       badgeClass=d.autoOff?'bg-amber-100 text-amber-700 border border-amber-200':'bg-slate-200 text-slate-600';
-                      detailText=d.autoOff?('⚖ '+(d.autoOffReason||'AI chống trùng ca')):'—';
+                      detailText=(d.substituteFor?('Thay: '+d.substituteFor+' • '):'')+(d.autoOff?('⚖ '+(d.autoOffReason||'AI chống trùng ca')):'—');
                       detailClass=d.autoOff?'text-amber-700':'text-slate-400';
+                    } else if(isEmergencyOff){
+                      badgeText='OFF CA LÀM';
+                      badgeClass='bg-orange-500 text-white font-black shadow';
+                      detailText=(d.substituteFor?('Người thay: '+d.substituteFor):'Đã OFF — có người thay');
+                      detailClass='text-orange-700 font-bold';
+                    } else if(isEmergencyPending){
+                      badgeText='CHỜ DUYỆT OFF';
+                      badgeClass='bg-amber-400 text-white font-black';
+                      detailText='AI đang tìm người thay';
+                      detailClass='text-amber-700';
                     } else if(d.status === 'WORKING_DOUBLE'){
                       badgeText = '⚡ LÀM 2 CA';
                       badgeClass = 'bg-gradient-to-r from-amber-500 via-pink-500 to-rose-600 text-white font-black shadow-lg animate-pulse';
@@ -4360,11 +4374,11 @@ function renderSchedules(){
                         detailClass='text-emerald-700';
                       }
                     }
-                    const baseBg = isWaiting ? 'bg-slate-100 border-slate-200' : isOffDay ? 'bg-slate-50 border-slate-200' : badgeText.includes('VẮNG') ? 'bg-red-50 border-red-200' : badgeText.includes('THIẾU') ? 'bg-amber-50 border-amber-200' : badgeText.includes('TRỄ')||badgeText.includes('VỀ SỚM') ? 'bg-orange-50 border-orange-200' : badgeText.includes('ĐÚNG GIỜ') ? 'bg-emerald-50 border-emerald-200' : isFuture ? 'bg-blue-50/50 border-blue-200' : 'bg-white border-pink-300 shadow-2xs';
+                    const baseBg = isWaiting ? 'bg-slate-100 border-slate-200' : (isOffDay||isEmergencyOff) ? 'bg-orange-50/60 border-orange-200' : badgeText.includes('VẮNG') ? 'bg-red-50 border-red-200' : badgeText.includes('THIẾU') ? 'bg-amber-50 border-amber-200' : badgeText.includes('TRỄ')||badgeText.includes('VỀ SỚM') ? 'bg-orange-50 border-orange-200' : badgeText.includes('ĐÚNG GIỜ') ? 'bg-emerald-50 border-emerald-200' : isFuture ? 'bg-blue-50/50 border-blue-200' : 'bg-white border-pink-300 shadow-2xs';
                     return `
                       <div class="rounded-xl border p-3 text-center ${baseBg}">
-                        <div class="text-sm font-black ${isOffDay?'text-slate-600': d.isWorking?'text-pink-700':'text-slate-600'}">${d.dayName}</div>
-                        <div class="text-base font-mono font-bold ${isOffDay?'text-slate-500':'text-pink-900'}">${fmtDMYShort(d.date)}</div>
+                        <div class="text-sm font-black ${(isOffDay||isEmergencyOff)?'text-orange-700': d.isWorking?'text-pink-700':'text-slate-600'}">${d.dayName}</div>
+                        <div class="text-base font-mono font-bold ${(isOffDay||isEmergencyOff)?'text-orange-800':'text-pink-900'}">${fmtDMYShort(d.date)}</div>
                         <div class="text-xs font-medium text-slate-500">${fmtDMY(d.date)}</div>
                         <div class="text-xs font-black mt-1.5 px-2 py-1 rounded-full ${badgeClass}">${badgeText}</div>
                         ${d.substituteFor?`<div class="text-xs text-slate-500 mt-1 truncate">Thay: ${d.substituteFor}</div>`:''}
@@ -5748,84 +5762,98 @@ function showToast(msg, type='success'){
   if(type==='success'){ try{ t.animate([{transform:'translateX(0)'},{transform:'translateX(-4px)'},{transform:'translateX(4px)'},{transform:'translateX(0)'}],{duration:300}); }catch(e){} }
   setTimeout(()=>{ t.classList.add('umb-hide'); setTimeout(()=>t.remove(),260); }, type==='error'?4000:3000);
 }
-// Am thanh thong bao UmBoMilk (Web Speech API, giọng Adam - chậm, rõ ràng) + nut bat/tat
+// Am thanh UmBoMilk: giong Adam cham ro + AI Avatar thay loa HR
 if(typeof window._ttsEnabled==='undefined') window._ttsEnabled = localStorage.getItem('umb_tts')!=='off';
 let _adamVoice = null;
-function getAdamVoice(){
-  if(_adamVoice) return _adamVoice;
-  const voices = speechSynthesis.getVoices();
-  _adamVoice = voices.find(v => v.name.includes('Adam') || v.name.includes('Google UK English Male') || v.name.includes('Microsoft George') || (v.lang==='en-US' && v.name.includes('Male'))) || voices.find(v => v.lang.startsWith('en')) || null;
-  return _adamVoice;
+function _hasVn(s){ try{ return /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(String(s||'')); }catch(e){ return false; } }
+function getAdamVoice(text){
+  try{
+    const voices = speechSynthesis.getVoices()||[];
+    if(!voices.length) return null;
+    if(_adamVoice && !_hasVn(text)) return _adamVoice;
+    // Adam / ElevenLabs / Male EN cho tieng Anh
+    const adam = voices.find(v => /adam/i.test(v.name)) || voices.find(v => /Google UK English Male/i.test(v.name)) || voices.find(v => /Microsoft (George|Guy|Christopher)/i.test(v.name)) || voices.find(v => v.lang==='en-US' && /male|daniel|david|george/i.test(v.name));
+    if(adam && !_hasVn(text)){ _adamVoice = adam; return adam; }
+    // Tieng Viet: uu tien Google Tieng Viet / Microsoft An / HoaiMy de doc cham ro
+    if(_hasVn(text)){
+      return voices.find(v => v.lang==='vi-VN' && /google/i.test(v.name)) || voices.find(v => v.lang==='vi-VN') || voices.find(v => v.lang.startsWith('vi')) || adam || voices[0];
+    }
+    _adamVoice = adam || voices.find(v => v.lang.startsWith('en')) || voices[0] || null;
+    return _adamVoice;
+  }catch(e){ return null; }
 }
+if('speechSynthesis' in window){ try{ speechSynthesis.onvoiceschanged = ()=>{ _adamVoice=null; getAdamVoice(''); }; }catch(e){} }
 function speakUmb(text){
   try{
     if(!window._ttsEnabled || !('speechSynthesis' in window)) return;
     const clean=String(text||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim().slice(0,140);
     if(!clean) return;
     speechSynthesis.cancel();
-    const u=new SpeechSynthesisUtterance('UmBoMilk có thông báo mới. '+clean);
-    const adamVoice = getAdamVoice();
-    if(adamVoice) u.voice = adamVoice;
-    u.lang = adamVoice?.lang || 'en-US';
-    u.rate = 0.7;  // Chậm, rõ ràng
-    u.pitch = 1.0;
+    const isVn = _hasVn(clean);
+    const u=new SpeechSynthesisUtterance((isVn?'Um Bò Milk có thông báo mới. ':'UmBoMilk new notification. ')+clean);
+    const v = getAdamVoice(clean);
+    if(v){ u.voice = v; u.lang = v.lang || (isVn?'vi-VN':'en-US'); }
+    else u.lang = isVn?'vi-VN':'en-US';
+    u.rate = 0.82;  // Cham, ro rang (0.82 thay 0.7 qua cham gay meo tieng)
+    u.pitch = 0.95;
     u.volume = 1.0;
     speechSynthesis.speak(u);
   }catch(e){}
 }
+let _umbAudioCtx = null;
 function playNotificationSound(){
   try{
     if(!window._ttsEnabled) return;
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const oscillator = audioCtx.createOscillator();
-    const gainNode = audioCtx.createGain();
-    oscillator.connect(gainNode);
-    gainNode.connect(audioCtx.destination);
-    oscillator.type = 'sine';
-    oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);
-    oscillator.frequency.setValueAtTime(660, audioCtx.currentTime + 0.1);
-    oscillator.frequency.setValueAtTime(880, audioCtx.currentTime + 0.2);
-    gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
-    oscillator.start(audioCtx.currentTime);
-    oscillator.stop(audioCtx.currentTime + 0.5);
+    _umbAudioCtx = _umbAudioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = _umbAudioCtx;
+    if(ctx.state==='suspended') ctx.resume();
+    const t = ctx.currentTime;
+    [[880,0],[660,0.12],[880,0.24]].forEach(([f,dt])=>{
+      const o=ctx.createOscillator(), g=ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.type='sine'; o.frequency.setValueAtTime(f,t+dt);
+      g.gain.setValueAtTime(0.0001,t+dt);
+      g.gain.exponentialRampToValueAtTime(0.3,t+dt+0.02);
+      g.gain.exponentialRampToValueAtTime(0.01,t+dt+0.22);
+      o.start(t+dt); o.stop(t+dt+0.25);
+    });
   }catch(e){}
 }
-document.addEventListener('pointerdown', ()=>{ try{ if(window._ttsEnabled && 'speechSynthesis' in window) speechSynthesis.getVoices(); }catch(e){} }, {once:true});
-function toggleUmbTts(btn){
+document.addEventListener('pointerdown', ()=>{ try{ if(window._ttsEnabled && 'speechSynthesis' in window) speechSynthesis.getVoices(); if(_umbAudioCtx && _umbAudioCtx.state==='suspended') _umbAudioCtx.resume(); }catch(e){} }, {once:true});
+function toggleUmbTts(){
   window._ttsEnabled=!window._ttsEnabled;
-  localStorage.setItem('umb_tts', window._ttsEnabled?'on':'off');
-  if(btn) btn.innerHTML=`<i class="fa-solid ${window._ttsEnabled?'fa-volume-high':'fa-volume-xmark'}"></i>`;
+  try{ localStorage.setItem('umb_tts', window._ttsEnabled?'on':'off'); }catch(e){}
   if(!window._ttsEnabled){ try{ speechSynthesis.cancel(); }catch(e){} }
   else speakUmb('Đã bật âm thanh thông báo');
+  try{ syncAiAvatarSoundIcon(); }catch(e){}
+  return window._ttsEnabled;
 }
-function mountTtsFab(){
-  if(document.getElementById('ttsFab')) return;
-  const b=document.createElement('button');
-  b.id='ttsFab'; b.title='Bật/tắt âm thanh thông báo (Giọng Adam)';
-  b.className='fixed bottom-4 left-4 z-[200] w-11 h-11 rounded-full bg-white border border-pink-200 shadow-xl text-pink-600 flex items-center justify-center text-lg';
-  b.innerHTML=`<i class="fa-solid ${window._ttsEnabled?'fa-volume-high':'fa-volume-xmark'}"></i>`;
-  b.onclick=()=>toggleUmbTts(b);
-  document.body.appendChild(b);
-}
-if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', mountTtsFab); else mountTtsFab();
+// Loa cu (ttsFab) da thay bang AI Avatar — giu ham de khong vo code cu, nhung khong tao nut loa nua
+function mountTtsFab(){ try{ document.getElementById('ttsFab')?.remove(); }catch(e){} }
 
-// AI Avatar - Con AI dễ thương di chuyển mượt trên web app
+// AI Avatar - con AI dep hien dai de thuong, di chuyen muot khap HR, thay loa
 let _umbAiAvatar = null;
 let _umbAiAvatarAnim = null;
+function syncAiAvatarSoundIcon(){
+  try{
+    const ic = document.querySelector('#umbAiAvatar .umb-ai-sound');
+    if(ic) ic.innerHTML = window._ttsEnabled ? '<i class="fa-solid fa-volume-high"></i>' : '<i class="fa-solid fa-volume-xmark"></i>';
+    const av = document.getElementById('umbAiAvatar');
+    if(av) av.classList.toggle('muted', !window._ttsEnabled);
+  }catch(e){}
+}
 function createAiAvatar(){
-  if(document.getElementById('umbAiAvatar')) return;
+  if(document.getElementById('umbAiAvatar')){ try{ syncAiAvatarSoundIcon(); }catch(e){} return; }
   const avatar = document.createElement('div');
   avatar.id = 'umbAiAvatar';
-  avatar.title = 'UmBoMilk AI - Trợ lý thông minh';
+  avatar.title = 'UmBoMilk AI — Click: bat/tat am thanh (giong Adam). Tu di chuyen muot.';
   avatar.innerHTML = `
     <div class="umb-ai-body">
       <div class="umb-ai-head">
         <div class="umb-ai-ear left"></div>
         <div class="umb-ai-ear right"></div>
         <div class="umb-ai-face">
-          <div class="umb-ai-eye left"><div class="umb-ai-pupil"></div></div>
-          <div class="umb-ai-eye right"><div class="umb-ai-pupil"></div></div>
+          <div class="umb-ai-eyes"><div class="umb-ai-eye left"><div class="umb-ai-pupil"></div></div><div class="umb-ai-eye right"><div class="umb-ai-pupil"></div></div></div>
           <div class="umb-ai-mouth"></div>
           <div class="umb-ai-blush left"></div>
           <div class="umb-ai-blush right"></div>
@@ -5835,120 +5863,139 @@ function createAiAvatar(){
       <div class="umb-ai-body-main">
         <div class="umb-ai-arm left"></div>
         <div class="umb-ai-arm right"></div>
-        <div class="umb-ai-leg left"></div>
-        <div class="umb-ai-leg right"></div>
+        <div class="umb-ai-belly">UB</div>
       </div>
       <div class="umb-ai-notification-ring"></div>
+      <div class="umb-ai-sound"><i class="fa-solid fa-volume-high"></i></div>
+      <div class="umb-ai-bubble"></div>
     </div>
   `;
   avatar.style.cssText = `
     position: fixed;
-    bottom: 100px;
-    right: 20px;
+    left: calc(100vw - 110px);
+    top: calc(100vh - 170px);
     z-index: 9999;
-    width: 80px;
-    height: 80px;
-    pointer-events: none;
-    transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
-    transform: translate(0, 0);
+    width: 72px;
+    height: 86px;
+    cursor: pointer;
+    pointer-events: auto;
+    transition: left 3.2s cubic-bezier(0.45,0,0.2,1), top 3.2s cubic-bezier(0.45,0,0.2,1);
+    filter: drop-shadow(0 6px 14px rgba(236,72,153,.35));
   `;
   
   const style = document.createElement('style');
   style.textContent = `
-    .umb-ai-body { width: 100%; height: 100%; position: relative; transform-origin: center bottom; }
-    .umb-ai-head { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 56px; height: 56px; }
-    .umb-ai-ear { position: absolute; top: 14px; width: 12px; height: 18px; background: linear-gradient(135deg, #ec4899, #f43f5e); border-radius: 50% 50% 0 0; box-shadow: inset -2px 0 4px rgba(236,72,153,0.3); }
-    .umb-ai-ear.left { left: -6px; transform: rotate(-15deg); }
-    .umb-ai-ear.right { right: -6px; transform: rotate(15deg); }
-    .umb-ai-face { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(180deg, #fff0f8 0%, #ffe4f0 100%); border-radius: 50%; border: 2px solid #fce7f3; box-shadow: inset 0 -4px 8px rgba(236,72,153,0.1), 0 4px 16px rgba(236,72,153,0.2); display: flex; flex-direction: column; align-items: center; justify-content: center; padding-top: 8px; }
-    .umb-ai-eye { width: 14px; height: 14px; background: #1e1e1e; border-radius: 50%; position: relative; margin: 0 6px; overflow: hidden; }
-    .umb-ai-pupil { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 7px; height: 7px; background: #fff; border-radius: 50%; transition: transform 0.3s ease; }
-    .umb-ai-mouth { width: 10px; height: 6px; border-bottom: 2px solid #ec4899; border-radius: 0 0 10px 10px; margin-top: 4px; transition: all 0.3s ease; }
-    .umb-ai-mouth.happy { width: 16px; height: 8px; border-bottom: 2px solid #ec4899; border-radius: 0 0 20px 20px; }
-    .umb-ai-mouth.speak { animation: umbAiSpeak 0.2s ease infinite; border-radius: 50%; width: 8px; height: 8px; }
-    .umb-ai-blush { position: absolute; bottom: 14px; width: 10px; height: 10px; background: rgba(236,72,153,0.3); border-radius: 50%; }
-    .umb-ai-blush.left { left: 8px; }
-    .umb-ai-blush.right { right: 8px; }
-    .umb-ai-antenna { position: absolute; top: -18px; left: 50%; transform: translateX(-50%); width: 3px; height: 18px; background: linear-gradient(to bottom, #ec4899, #be185d); border-radius: 2px; }
-    .umb-ai-antenna-ball { position: absolute; top: -8px; left: 50%; transform: translateX(-50%); width: 10px; height: 10px; background: linear-gradient(135deg, #ec4899, #f43f5e); border-radius: 50%; box-shadow: 0 0 8px rgba(236,72,153,0.6); animation: umbAiPulse 2s ease-in-out infinite; }
-    .umb-ai-body-main { position: absolute; top: 48px; left: 50%; transform: translateX(-50%); width: 48px; height: 36px; }
-    .umb-ai-arm { position: absolute; top: 4px; width: 8px; height: 22px; background: linear-gradient(135deg, #ec4899, #f43f5e); border-radius: 4px; }
-    .umb-ai-arm.left { left: 0; transform-origin: top center; animation: umbAiArmWave 3s ease-in-out infinite; }
-    .umb-ai-arm.right { right: 0; transform-origin: top center; animation: umbAiArmWave 3s ease-in-out infinite reverse; }
-    .umb-ai-leg { position: absolute; bottom: 0; width: 10px; height: 14px; background: linear-gradient(135deg, #be185d, #ec4899); border-radius: 0 0 8px 8px; }
-    .umb-ai-leg.left { left: 8px; }
-    .umb-ai-leg.right { right: 8px; }
-    .umb-ai-notification-ring { position: absolute; top: -8px; right: -8px; width: 24px; height: 24px; background: #ef4444; border-radius: 50%; display: none; align-items: center; justify-content: center; font-size: 10px; font-weight: bold; color: white; box-shadow: 0 0 0 0 rgba(239,68,68,0.7); animation: umbAiRingPulse 1.5s ease-out infinite; }
+    .umb-ai-body { width: 100%; height: 100%; position: relative; transform-origin: center bottom; animation: umbAiFloat 2.6s ease-in-out infinite; }
+    .umb-ai-head { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 56px; height: 52px; }
+    .umb-ai-ear { position: absolute; top: 12px; width: 12px; height: 16px; background: linear-gradient(135deg, #f472b6, #e11d48); border-radius: 50%; }
+    .umb-ai-ear.left { left: -5px; transform: rotate(-18deg); }
+    .umb-ai-ear.right { right: -5px; transform: rotate(18deg); }
+    .umb-ai-face { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(180deg, #ffffff 0%, #ffe4f0 100%); border-radius: 46% 46% 50% 50%; border: 2px solid #fbcfe8; box-shadow: inset 0 -4px 8px rgba(236,72,153,.12), 0 4px 16px rgba(236,72,153,.25); display: flex; flex-direction: column; align-items: center; justify-content: center; padding-top: 6px; }
+    .umb-ai-eyes { display: flex; gap: 10px; }
+    .umb-ai-eye { width: 13px; height: 15px; background: #1f2937; border-radius: 50%; position: relative; overflow: hidden; }
+    .umb-ai-pupil { position: absolute; top: 3px; left: 3px; width: 5px; height: 5px; background: #fff; border-radius: 50%; animation: umbAiLook 4s ease-in-out infinite; }
+    .umb-ai-mouth { width: 12px; height: 7px; border-bottom: 2.5px solid #e11d48; border-radius: 0 0 12px 12px; margin-top: 3px; transition: all .25s ease; }
+    .umb-ai-blush { position: absolute; bottom: 12px; width: 9px; height: 6px; background: rgba(244,114,182,.55); border-radius: 50%; filter: blur(.3px); }
+    .umb-ai-blush.left { left: 7px; }
+    .umb-ai-blush.right { right: 7px; }
+    .umb-ai-antenna { position: absolute; top: -15px; left: 50%; transform: translateX(-50%); width: 3px; height: 15px; background: linear-gradient(to bottom, #f472b6, #be185d); border-radius: 2px; }
+    .umb-ai-antenna-ball { position: absolute; top: -7px; left: 50%; transform: translateX(-50%); width: 9px; height: 9px; background: radial-gradient(circle at 30% 30%, #fff, #ec4899 60%, #be185d); border-radius: 50%; box-shadow: 0 0 10px rgba(236,72,153,.8); animation: umbAiPulse 2s ease-in-out infinite; }
+    .umb-ai-body-main { position: absolute; top: 48px; left: 50%; transform: translateX(-50%); width: 44px; height: 34px; background: linear-gradient(180deg, #ec4899, #be185d); border-radius: 14px 14px 18px 18px; box-shadow: 0 4px 10px rgba(190,24,93,.35); }
+    .umb-ai-arm { position: absolute; top: 4px; width: 9px; height: 20px; background: linear-gradient(180deg, #f9a8d4, #db2777); border-radius: 6px; }
+    .umb-ai-arm.left { left: -7px; transform-origin: top center; animation: umbAiArmWave 2.4s ease-in-out infinite; }
+    .umb-ai-arm.right { right: -7px; transform-origin: top center; animation: umbAiArmWave 2.4s ease-in-out infinite reverse; }
+    .umb-ai-belly { position: absolute; inset: 8px 8px 5px 8px; background: #fff1f7; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 900; color: #be185d; letter-spacing: .5px; }
+    .umb-ai-notification-ring { position: absolute; top: -10px; right: -10px; min-width: 24px; height: 24px; padding: 0 5px; background: #ef4444; border: 2px solid #fff; border-radius: 999px; display: none; align-items: center; justify-content: center; font-size: 11px; font-weight: 900; color: white; box-shadow: 0 0 0 0 rgba(239,68,68,.7); animation: umbAiRingPulse 1.2s ease-out infinite; z-index: 3; }
     .umb-ai-notification-ring.show { display: flex; }
-    @keyframes umbAiPulse { 0%, 100% { transform: translateX(-50%) scale(1); opacity: 1; } 50% { transform: translateX(-50%) scale(1.2); opacity: 0.7; } }
-    @keyframes umbAiArmWave { 0%, 100% { transform: rotate(-10deg); } 50% { transform: rotate(30deg); } }
-    @keyframes umbAiSpeak { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(0.3); } }
-    @keyframes umbAiRingPulse { 0% { box-shadow: 0 0 0 0 rgba(239,68,68,0.7); } 100% { box-shadow: 0 0 0 12px rgba(239,68,68,0); } }
-    @keyframes umbAiFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
-    @keyframes umbAiBounce { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
-    #umbAiAvatar.moving { animation: umbAiFloat 3s ease-in-out infinite; }
-    #umbAiAvatar.happy .umb-ai-mouth { width: 16px; height: 8px; border-radius: 0 0 20px 20px; }
-    #umbAiAvatar.speaking .umb-ai-mouth { animation: umbAiSpeak 0.15s ease infinite; border-radius: 50%; width: 8px; height: 8px; }
-    #umbAiAvatar.excited { animation: umbAiBounce 0.5s ease 3; }
+    .umb-ai-sound { position: absolute; bottom: -8px; right: -8px; width: 26px; height: 26px; background: #fff; border: 2px solid #fbcfe8; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #db2777; box-shadow: 0 2px 8px rgba(0,0,0,.15); z-index: 3; }
+    #umbAiAvatar.muted .umb-ai-sound { color: #9ca3af; border-color: #e5e7eb; }
+    #umbAiAvatar.muted { filter: grayscale(.3) drop-shadow(0 6px 14px rgba(0,0,0,.15)); }
+    .umb-ai-bubble { position: absolute; bottom: calc(100% + 8px); right: 0; max-width: 220px; background: #fff; border: 2px solid #fbcfe8; color: #831843; font-size: 11px; font-weight: 700; padding: 6px 9px; border-radius: 12px 12px 4px 12px; box-shadow: 0 4px 14px rgba(0,0,0,.15); display: none; line-height: 1.35; z-index: 4; }
+    .umb-ai-bubble.show { display: block; animation: umbAiBubbleIn .3s ease; }
+    @keyframes umbAiPulse { 0%, 100% { transform: translateX(-50%) scale(1); opacity: 1; } 50% { transform: translateX(-50%) scale(1.25); opacity: .7; } }
+    @keyframes umbAiArmWave { 0%, 100% { transform: rotate(-12deg); } 50% { transform: rotate(28deg); } }
+    @keyframes umbAiSpeak { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(.35); } }
+    @keyframes umbAiRingPulse { 0% { box-shadow: 0 0 0 0 rgba(239,68,68,.7); } 100% { box-shadow: 0 0 0 14px rgba(239,68,68,0); } }
+    @keyframes umbAiFloat { 0%, 100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-7px) rotate(1deg); } }
+    @keyframes umbAiBounce { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12); } }
+    @keyframes umbAiLook { 0%, 100% { transform: translate(0,0); } 25% { transform: translate(2px,1px); } 50% { transform: translate(-2px,0); } 75% { transform: translate(1px,-1px); } }
+    @keyframes umbAiBubbleIn { from { opacity: 0; transform: translateY(6px) scale(.95); } to { opacity: 1; transform: none; } }
+    #umbAiAvatar.speaking .umb-ai-mouth { animation: umbAiSpeak .16s ease infinite; border-radius: 50%; width: 8px; height: 8px; background: #881337; border: none; }
+    #umbAiAvatar.excited .umb-ai-body { animation: umbAiBounce .45s ease 3, umbAiFloat 2.6s ease-in-out infinite; }
   `;
   document.head.appendChild(style);
   document.body.appendChild(avatar);
   _umbAiAvatar = avatar;
+  avatar.addEventListener('click', (e)=>{ e.stopPropagation(); const on = toggleUmbTts(); showAiBubble(on?'Đã bật âm thanh — giọng Adam chậm rõ 🔊':'Đã tắt âm thanh 🔇'); });
+  syncAiAvatarSoundIcon();
   startAiAvatarMovement();
   return avatar;
 }
+function _umbRandomPos(){
+  const pad = 90, w = Math.max(320, window.innerWidth - pad*2), h = Math.max(260, window.innerHeight - 200);
+  return { left: Math.round(pad*0.4 + Math.random()*w), top: Math.round(70 + Math.random()*h) };
+}
 function startAiAvatarMovement(){
   if(!_umbAiAvatar) return;
-  const positions = [
-    { x: 'calc(100% - 100px)', y: 'calc(100% - 180px)' },
-    { x: '20px', y: 'calc(100% - 180px)' },
-    { x: 'calc(100% - 100px)', y: '100px' },
-    { x: '20px', y: '100px' },
-    { x: '50%', y: '50%' },
-  ];
-  let currentPos = 0;
+  if(_umbAiAvatarAnim) clearTimeout(_umbAiAvatarAnim);
+  // Di chuyen muot nhat: left/top + cubic-bezier, random khap viewport, dung lai khi hover
   function moveToNext(){
     if(!_umbAiAvatar) return;
-    const pos = positions[currentPos];
-    _umbAiAvatar.style.transition = 'transform 3s cubic-bezier(0.4, 0, 0.2, 1)';
-    _umbAiAvatar.style.transform = `translate(${pos.x}, ${pos.y})`;
-    currentPos = (currentPos + 1) % positions.length;
-    _umbAiAvatarAnim = setTimeout(moveToNext, 4000);
+    if(_umbAiAvatar.matches(':hover')){ _umbAiAvatarAnim = setTimeout(moveToNext, 1500); return; }
+    if(document.hidden){ _umbAiAvatarAnim = setTimeout(moveToNext, 4000); return; }
+    const p = _umbRandomPos();
+    _umbAiAvatar.style.left = p.left + 'px';
+    _umbAiAvatar.style.top = p.top + 'px';
+    _umbAiAvatarAnim = setTimeout(moveToNext, 5200 + Math.random()*2500);
   }
-  _umbAiAvatar.classList.add('moving');
   moveToNext();
 }
 function stopAiAvatarMovement(){
   if(_umbAiAvatarAnim) clearTimeout(_umbAiAvatarAnim);
-  if(_umbAiAvatar) _umbAiAvatar.classList.remove('moving');
 }
-function playAiAvatarNotification(){
-  if(!_umbAiAvatar) return;
-  const ring = _umbAiAvatar.querySelector('.umb-ai-notification-ring');
-  if(ring){
-    ring.textContent = '!';
-    ring.classList.add('show');
-    _umbAiAvatar.classList.add('excited', 'speaking');
-    setTimeout(()=>{
-      _umbAiAvatar.classList.remove('excited', 'speaking');
-      ring.classList.remove('show');
-    }, 3000);
-  }
+function showAiBubble(text, ms){
+  try{
+    if(!_umbAiAvatar) return;
+    const b = _umbAiAvatar.querySelector('.umb-ai-bubble');
+    if(!b) return;
+    b.textContent = String(text||'').slice(0,160);
+    b.classList.add('show');
+    clearTimeout(b._t);
+    b._t = setTimeout(()=>b.classList.remove('show'), ms||2800);
+  }catch(e){}
+}
+function playAiAvatarNotification(msg){
+  try{
+    if(!_umbAiAvatar) createAiAvatar();
+    if(!_umbAiAvatar) return;
+    // AI phat am thanh thay loa: beep + TTS Adam
+    playNotificationSound();
+    if(msg) speakUmb(msg);
+    const ring = _umbAiAvatar.querySelector('.umb-ai-notification-ring');
+    if(ring){
+      const c = (parseInt(ring.textContent)||0)+1;
+      ring.textContent = c>9?'9+':String(c||'!');
+      ring.classList.add('show');
+      _umbAiAvatar.classList.add('excited', 'speaking');
+      if(msg) showAiBubble(msg, 3500);
+      setTimeout(()=>{
+        _umbAiAvatar.classList.remove('excited', 'speaking');
+        ring.classList.remove('show'); ring.textContent='';
+      }, 3500);
+    }
+  }catch(e){}
 }
 function speakWithAiAvatar(text){
-  if(!window._ttsEnabled || !('speechSynthesis' in window)) return;
   if(!_umbAiAvatar) createAiAvatar();
-  _umbAiAvatar.classList.add('speaking');
-  speakUmb(text);
-  setTimeout(()=>{ if(_umbAiAvatar) _umbAiAvatar.classList.remove('speaking'); }, 3000);
+  playAiAvatarNotification(text);
 }
-const _originalSpeakUmb = speakUmb;
-speakUmb = function(text){
-  _originalSpeakUmb(text);
-  if(_umbAiAvatar) _umbAiAvatar.classList.add('speaking');
-  setTimeout(()=>{ if(_umbAiAvatar) _umbAiAvatar.classList.remove('speaking'); }, 3000);
-};
-if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', createAiAvatar); else createAiAvatar();
+// Mieng AI nhay theo TTS (giong Adam) — giu hieu ung ma khong de quy
+if(typeof window._umbSpeakWrapped==='undefined'){
+  window._umbSpeakWrapped = true;
+  const _origSpeak = speakUmb;
+  speakUmb = function(t){ try{ _origSpeak(t); }catch(e){} try{ if(_umbAiAvatar){ _umbAiAvatar.classList.add('speaking'); setTimeout(()=>_umbAiAvatar && _umbAiAvatar.classList.remove('speaking'), 3200); } }catch(e){} };
+}
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', ()=>{ try{ createAiAvatar(); mountTtsFab(); }catch(e){} }); else { try{ createAiAvatar(); mountTtsFab(); }catch(e){} }
 
 // Overlay load chung
 function umbSetLoading(on, msg){

@@ -6807,24 +6807,41 @@ app.post('/api/shift-swap/:id/respond', (req,res)=>{
   }
   if(action==='ACCEPT'){
     if(r.status==='PENDING_TARGET'){
-      // TH1 chấp nhận -> AI cập nhật lịch 2 NV ngay
+      // TH1 chấp nhận -> AI cập nhật lịch 2 NV ngay (A OFF + B 2 ca neu khac ca)
       const requester = db.employees.find(e=>e.employeeId===r.requesterId);
       const target = db.employees.find(e=>e.employeeId===r.targetEmployeeId);
+      if(requester && target && requester.branchId && target.branchId && requester.branchId!==target.branchId){
+        return res.status(403).json({error:'Chỉ NV cùng chi nhánh mới được đổi OFF ca này'});
+      }
       const requesterShift = requester?.shift || r.fromShift;
       const targetShift = target?.shift || r.toShift;
       const isDoubleShift = r.doubleShift === true || (requesterShift !== targetShift);
       
       r.status='APPROVED'; r.acceptedBy=employeeId; r.acceptedAt=getVietnamISOString(); r.approvedAt=getVietnamISOString();
       r.doubleShift = isDoubleShift;
-      // Đổi lịch 2 NV
+      function ensureSwapWeek(employeeIdSW, dateStr, empShift){
+        const ws = toVietnamDateStr(getMonday(new Date(dateStr)));
+        let sc = db.schedules.find(s=>s.employeeId===employeeIdSW && s.weekStart===ws);
+        if(!sc){
+          const dayNames=['T2','T3','T4','T5','T6','T7','CN'];
+          const wDate = getMonday(new Date(dateStr));
+          const days=[];
+          for(let i=0;i<7;i++){ const cur=new Date(wDate); cur.setDate(wDate.getDate()+i); const ds=toVietnamDateStr(cur); days.push({date:ds, dayName:dayNames[i], shift: empShift||'CA_SANG', status:'OFF', substituteFor:null}); }
+          sc={ id: uuidv4(), employeeId: employeeIdSW, weekStart: ws, days, version:1, updated_at: getVietnamISOString()};
+          db.schedules.push(sc);
+          addSyncQueue('SCHEDULE','CREATE',sc,employeeId,'WEB_EMPLOYEE');
+        }
+        return sc;
+      }
+      // Đổi lịch 2 NV (dam bao co lich ca khi chua co — VD 19/09/2026)
       [requester, target].forEach((e, idx)=>{
         if(!e) return;
-        let sched = db.schedules.find(s=>s.employeeId===e.employeeId && s.days.some(d=>d.date===r.date));
-        if(sched){
+        let sched = ensureSwapWeek(e.employeeId, r.date, idx===0?requesterShift:targetShift);
+        {
           const day = sched.days.find(d=>d.date===r.date);
           if(day){
             if(idx===0){
-              // Requester: gets OFF (if double shift) or gets target's shift (normal swap)
+              // Requester A: OFF ca lam viec (neu khac ca) + luu nguoi thay B
               if(isDoubleShift){
                 day.status = 'OFF';
                 day.shift = requesterShift;
@@ -6836,11 +6853,12 @@ app.post('/api/shift-swap/:id/respond', (req,res)=>{
                 day.substituteFor = r.targetEmployeeId;
               }
             } else {
-              // Target: gets both shifts (double shift) or gets requester's shift (normal swap)
+              // Target B: giu ca goc + them ca cua A => 2 ca (VD B chieu + A sang)
               if(isDoubleShift){
                 day.status = 'WORKING_DOUBLE';
                 day.shift = targetShift; // Target's original shift
                 day.secondShift = requesterShift; // Requester's shift
+                day.shifts = [...new Set([targetShift, requesterShift].filter(Boolean))];
                 day.substituteFor = r.requesterId;
                 day.doubleShiftInfo = {
                   originalEmployeeId: r.requesterId,
@@ -7538,13 +7556,6 @@ app.post('/api/off-requests', (req,res)=>{
         return res.status(409).json({error:`[TH1] Ngày ${date} đã OFF trên lịch của ${o?o.name+' ('+o.employeeId+')':schedHit.employeeId} (cùng chi nhánh + cùng ca). Cùng CN cùng ca không được trùng OFF trong 1 ngày.`});
       }
     }
-        });
-        if(schedHit){
-          const o = db.employees.find(e=>e.employeeId===schedHit.employeeId);
-          return res.status(409).json({error:`[TH1] Ngày ${date} đã OFF trên lịch của ${o?o.name+' ('+o.employeeId+')':schedHit.employeeId} (cùng chi nhánh + cùng ca). Cùng CN cùng ca không được trùng OFF trong 1 ngày.`});
-        }
-      }
-    }
 
     // TH1/TH2: Đảm bảo 1 tháng tối thiểu 12 ngày làm việc (OFFICIAL)
     const monthsSet = new Set(dates.map(d=>d.slice(0,7)));
@@ -7678,7 +7689,9 @@ app.post('/api/off-requests', (req,res)=>{
     // 1. Cùng CN + Cùng Ca: không trùng ca làm việc trong 1 ngày (giữ tối đa 1 NV WORKING)
     // 2. Cùng CN + Khác Ca: ĐƯỢC trùng ngày làm việc
     // 3. Khác CN: ĐƯỢC trùng ngày làm việc
-    const coord = coordinateBranchShifts(weekStr, employeeId);
+    // Test guard: NV test khong can lich voi NV that (giu 2 OFF / 5 WORKING chuan cho test)
+    const _isTestActor = emp.isTest || isTestRecord(emp);
+    const coord = _isTestActor ? null : coordinateBranchShifts(weekStr, employeeId);
     if(coord && coord.resolved) coordResult = coord;
     addSyncQueue('SCHEDULE', 'UPDATE', sched, employeeId, 'WEB_EMPLOYEE');
   }
@@ -7733,10 +7746,11 @@ function coordinateBranchShifts(weekStart, actor){
       const emp = byEmp.get(s.employeeId);
       if(!emp) continue;
       if(!(emp.type==='OFFICIAL' || emp.status==='OFFICIAL')) continue;
+      const testFlag = (emp.isTest || isTestRecord(emp)) ? 'TEST' : 'REAL';
       for(const d of (s.days||[])){
         if(d.status!=='WORKING') continue;
         const shift = d.shift || emp.shift;
-        const key = `${emp.branchId}|${d.date}|${shift}`;
+        const key = `${testFlag}|${emp.branchId}|${d.date}|${shift}`;
         if(!groups.has(key)) groups.set(key, []);
         groups.get(key).push({ sched: s, day: d, emp });
       }
@@ -7785,12 +7799,12 @@ function coordinateBranchShifts(weekStart, actor){
         it.day.status='OFF';
         it.day.shift='OFF';
         it.day.autoOff=true;
-        it.day.autoOffReason=`AI cân lịch: giữ ${keeper.emp.name} trực ${key.split('|')[2]} ngày ${it.day.date}`;
+        it.day.autoOffReason=`AI cân lịch: giữ ${keeper.emp.name} trực ${key.split('|')[3]} ngày ${it.day.date}`;
         weekWorkCount.set(it.emp.employeeId, (weekWorkCount.get(it.emp.employeeId)||0)-1);
         it.sched.version=(it.sched.version||1)+1;
         it.sched.updated_at=getVietnamISOString();
         result.resolved.push({ employeeId: it.emp.employeeId, name: it.emp.name, date: it.day.date, keeper: keeper.emp.employeeId, slot: key });
-        db.notifications.unshift({ id: uuidv4(), to: it.emp.employeeId, type:'SCHEDULE_COORDINATED', title:'AI cân lịch chống trùng ca', content:`Ngày ${it.day.date}: bạn chuyển sang OFF (giữ ${keeper.emp.name} trực ca ${key.split('|')[2]}).`, createdAt: getVietnamISOString(), read:false });
+        db.notifications.unshift({ id: uuidv4(), to: it.emp.employeeId, type:'SCHEDULE_COORDINATED', title:'AI cân lịch chống trùng ca', content:`Ngày ${it.day.date}: bạn chuyển sang OFF (giữ ${keeper.emp.name} trực ca ${key.split('|')[3]}).`, createdAt: getVietnamISOString(), read:false });
       }
     }
     if(result.resolved.length){
@@ -8082,30 +8096,51 @@ app.post('/api/emergency-requests/:id/respond', (req,res)=>{
     return res.json({ message:'Đã từ chối, hệ thống tiếp tục tìm người khác' });
   }
   // APPROVE
+  const reqEmp0 = db.employees.find(e=>e.employeeId===er.employeeId);
+  // Rang buoc: 2 NV phai cung chi nhanh (A sang OFF 19/09 tim B chieu cung CN)
+  if(reqEmp0 && subEmp && reqEmp0.branchId && subEmp.branchId && reqEmp0.branchId!==subEmp.branchId){
+    return res.status(403).json({error:'Chỉ nhân viên cùng chi nhánh mới được thay OFF ca này ('+reqEmp0.branchId+' vs '+subEmp.branchId+')'});
+  }
   er.status='APPROVED';
   er.substituteId = substituteId;
   er.substituteName = subEmp.name;
   er.approvedAt = getVietnamISOString();
   er.doubleShift = !!doubleShift;
-  const reqEmp = db.employees.find(e=>e.employeeId===er.employeeId);
-  const requesterShift = reqEmp?.shift || er.shift;
+  const reqEmp2 = db.employees.find(e=>e.employeeId===er.employeeId);
+  const requesterShift = reqEmp2?.shift || er.shift;
   const substituteShift = subEmp.shift;
   const isDoubleShift = !!doubleShift || (requesterShift !== substituteShift);
-  // Update schedules for both
-  const sched1 = db.schedules.find(s=>s.employeeId===er.employeeId && s.days.some(d=>d.date===er.date));
-  if(sched1){
-    const day = sched1.days.find(d=>d.date===er.date);
-    if(day){ day.status='EMERGENCY_OFF'; day.substituteFor = substituteId; sched1.version=(sched1.version||1)+1; addSyncQueue('SCHEDULE','UPDATE',sched1,substituteId,'WEB_EMPLOYEE'); }
+  // Ham dam bao tuan lich ton tai (de A hien OFF + B hien 2 ca ngay 19/09/2026 ca khi chua co lich)
+  function ensureWeekSchedule(employeeId, dateStr, empShift){
+    const ws = toVietnamDateStr(getMonday(new Date(dateStr)));
+    let sc = db.schedules.find(s=>s.employeeId===employeeId && s.weekStart===ws);
+    if(!sc){
+      const dayNames=['T2','T3','T4','T5','T6','T7','CN'];
+      const wDate = getMonday(new Date(dateStr));
+      const days=[];
+      for(let i=0;i<7;i++){ const cur=new Date(wDate); cur.setDate(wDate.getDate()+i); const ds=toVietnamDateStr(cur); days.push({date:ds, dayName:dayNames[i], shift: empShift||'CA_SANG', status:'OFF', substituteFor:null}); }
+      sc={ id: uuidv4(), employeeId, weekStart: ws, days, version:1, updated_at: getVietnamISOString()};
+      db.schedules.push(sc);
+      addSyncQueue('SCHEDULE','CREATE',sc,substituteId,'WEB_EMPLOYEE');
+    }
+    return sc;
   }
-  let sched2 = db.schedules.find(s=>s.employeeId===substituteId && s.days.some(d=>d.date===er.date));
-  if(sched2){
+  // Update schedules for both
+  const sched1 = ensureWeekSchedule(er.employeeId, er.date, requesterShift);
+  {
+    const day = sched1.days.find(d=>d.date===er.date);
+    if(day){ day.status='EMERGENCY_OFF'; day.shift = requesterShift; day.substituteFor = substituteId; sched1.version=(sched1.version||1)+1; addSyncQueue('SCHEDULE','UPDATE',sched1,substituteId,'WEB_EMPLOYEE'); }
+  }
+  let sched2 = ensureWeekSchedule(substituteId, er.date, substituteShift);
+  {
     const day = sched2.days.find(d=>d.date===er.date);
     if(day){
       if(isDoubleShift){
-        // Double shift: Employee B keeps their shift AND takes Employee A's shift
+        // B giu ca goc + them ca cua A: VD B chieu + A sang => ngay do B lam 2 ca sang+chieu
         day.status = 'WORKING_DOUBLE';
         day.shift = substituteShift; // Employee B's original shift
         day.secondShift = requesterShift; // Employee A's shift
+        day.shifts = [...new Set([substituteShift, requesterShift].filter(Boolean))];
         day.substituteFor = er.employeeId;
         day.doubleShiftInfo = {
           originalEmployeeId: er.employeeId,
@@ -8121,34 +8156,6 @@ app.post('/api/emergency-requests/:id/respond', (req,res)=>{
       }
       sched2.version = (sched2.version||1)+1;
       addSyncQueue('SCHEDULE','UPDATE',sched2,substituteId,'WEB_EMPLOYEE');
-    }
-  } else {
-    // create schedule for substitute
-    const weekStart = getMonday(new Date(er.date));
-    const ws = toVietnamDateStr(weekStart);
-    const existing = db.schedules.find(s=>s.employeeId===substituteId && s.weekStart===ws);
-    if(existing){
-      const d = existing.days.find(x=>x.date===er.date);
-      if(d){
-        if(isDoubleShift){
-          d.status = 'WORKING_DOUBLE';
-          d.shift = substituteShift;
-          d.secondShift = requesterShift;
-          d.substituteFor = er.employeeId;
-          d.doubleShiftInfo = {
-            originalEmployeeId: er.employeeId,
-            originalEmployeeName: er.employeeName,
-            originalShift: requesterShift,
-            acceptedAt: getVietnamISOString()
-          };
-        } else {
-          d.status = 'SUBSTITUTE';
-          d.shift = requesterShift;
-          d.substituteFor = er.employeeId;
-        }
-        existing.version = (existing.version||1)+1;
-        addSyncQueue('SCHEDULE','UPDATE',existing,substituteId,'WEB_EMPLOYEE');
-      }
     }
   }
   audit(substituteId,'APPROVE_SUBSTITUTE','EMERGENCY',null,er, req.ip);
