@@ -6826,7 +6826,7 @@ app.post('/api/shift-swap/:id/respond', (req,res)=>{
           const dayNames=['T2','T3','T4','T5','T6','T7','CN'];
           const wDate = getMonday(new Date(dateStr));
           const days=[];
-          for(let i=0;i<7;i++){ const cur=new Date(wDate); cur.setDate(wDate.getDate()+i); const ds=toVietnamDateStr(cur); days.push({date:ds, dayName:dayNames[i], shift: empShift||'CA_SANG', status:'OFF', substituteFor:null}); }
+          for(let i=0;i<7;i++){ const cur=new Date(wDate); cur.setDate(wDate.getDate()+i); const ds=toVietnamDateStr(cur); days.push({date:ds, dayName:dayNames[i], shift: empShift||'CA_SANG', status:'WORKING', substituteFor:null}); }
           sc={ id: uuidv4(), employeeId: employeeIdSW, weekStart: ws, days, version:1, updated_at: getVietnamISOString()};
           db.schedules.push(sc);
           addSyncQueue('SCHEDULE','CREATE',sc,employeeId,'WEB_EMPLOYEE');
@@ -8118,7 +8118,7 @@ app.post('/api/emergency-requests/:id/respond', (req,res)=>{
       const dayNames=['T2','T3','T4','T5','T6','T7','CN'];
       const wDate = getMonday(new Date(dateStr));
       const days=[];
-      for(let i=0;i<7;i++){ const cur=new Date(wDate); cur.setDate(wDate.getDate()+i); const ds=toVietnamDateStr(cur); days.push({date:ds, dayName:dayNames[i], shift: empShift||'CA_SANG', status:'OFF', substituteFor:null}); }
+      for(let i=0;i<7;i++){ const cur=new Date(wDate); cur.setDate(wDate.getDate()+i); const ds=toVietnamDateStr(cur); days.push({date:ds, dayName:dayNames[i], shift: empShift||'CA_SANG', status:'WORKING', substituteFor:null}); }
       sc={ id: uuidv4(), employeeId, weekStart: ws, days, version:1, updated_at: getVietnamISOString()};
       db.schedules.push(sc);
       addSyncQueue('SCHEDULE','CREATE',sc,substituteId,'WEB_EMPLOYEE');
