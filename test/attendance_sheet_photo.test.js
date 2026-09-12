@@ -35,4 +35,21 @@ describe('Diem danh sync Sheet kem anh', () => {
     assert.ok(SRC.includes('!isTestRecord(a)'), 'mat loc test attendance');
     assert.ok(SRC.includes('OUTBOUND_SYNC_DISABLED') , 'mat guard test CI');
   });
+
+  it('6. Web: bam thumbnail xem full anh (lightbox + Esc)', () => {
+    const admin = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'admin.js'), 'utf8');
+    assert.ok(admin.includes('function openPhotoViewer'), 'thieu lightbox');
+    assert.ok(admin.includes('closePhotoViewerEsc'), 'thieu dong bang Esc');
+    assert.ok(admin.includes('onclick="openPhotoViewer(this.src)"'), 'thumbnail chua mo lightbox');
+    assert.ok(admin.includes('a.checkOut?.image'), 'thieu thumbnail check-out');
+    assert.ok(admin.includes('Xem ảnh trên Drive'), 'thieu link Drive tren the');
+  });
+
+  it('7. Sheet: thumbnail =IMAGE() rieng 2 cot anh, fallback giu marker', () => {
+    assert.ok(SRC.includes('=IMAGE("'), 'thieu cong thuc IMAGE');
+    assert.ok(SRC.includes('!I2:I'), 'thieu cot anh vao');
+    assert.ok(SRC.includes('!M2:M'), 'thieu cot anh ra');
+    assert.ok(SRC.includes("sheetKey==='RECORD_DIEM_DANH'"), 'IMAGE phai gioi han tab diem danh');
+    assert.ok(SRC.includes('valueInputOption=USER_ENTERED'), 'cot anh can USER_ENTERED de parse formula');
+  });
 });

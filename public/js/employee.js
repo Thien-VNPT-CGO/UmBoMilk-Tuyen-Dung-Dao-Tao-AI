@@ -48,8 +48,9 @@ function fmtDMY(dateStr){
     const d = String(dateStr).split('T')[0];
     const p = d.split('-');
     if(p.length===3) return `${p[2]}/${p[1]}/${p[0]}`;
+    // Fallback: ép múi giờ VN mặc định (không lấy giờ máy/UTC)
     const dt = new Date(dateStr);
-    if(!isNaN(dt)) return String(dt.getDate()).padStart(2,'0')+'/'+String(dt.getMonth()+1).padStart(2,'0')+'/'+dt.getFullYear();
+    if(!isNaN(dt)) return dt.toLocaleDateString('en-CA',{timeZone:'Asia/Ho_Chi_Minh'}).split('-').reverse().join('/');
     return dateStr;
   }catch(e){ return dateStr; }
 }
@@ -1936,7 +1937,9 @@ async function loadOff(){
       `;
       const offDatesEl=document.getElementById('offDates');
       offDatesEl.innerHTML = dates.map(d=>{
-        const dayIdx = new Date(d).getDay();
+        // Giờ VN mặc định: parse YYYY-MM-DD theo parts, không phụ thuộc múi giờ máy
+        const dp = String(d).split('T')[0].split('-').map(Number);
+        const dayIdx = (dp.length===3 && !isNaN(dp[0])) ? new Date(dp[0], dp[1]-1, dp[2]).getDay() : new Date(d).getDay();
         const dayName=['CN','T2','T3','T4','T5','T6','T7'][dayIdx];
         return `<label class="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-2 cursor-pointer hover:bg-sky-50"><input type="checkbox" value="${d}" class="offCheck rounded"> <span class="text-xs font-bold">${dayName} ${fmtDMY(d)}</span></label>`;
       }).join('');

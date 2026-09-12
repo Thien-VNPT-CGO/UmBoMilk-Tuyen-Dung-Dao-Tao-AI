@@ -73,8 +73,9 @@ function fmtDMY(dateStr){
     const d = String(dateStr).split('T')[0];
     const p = d.split('-');
     if(p.length===3) return `${p[2]}/${p[1]}/${p[0]}`;
+    // Fallback: ép múi giờ VN mặc định (không lấy giờ máy/UTC)
     const dt = new Date(dateStr);
-    if(!isNaN(dt)) return String(dt.getDate()).padStart(2,'0')+'/'+String(dt.getMonth()+1).padStart(2,'0')+'/'+dt.getFullYear();
+    if(!isNaN(dt)) return dt.toLocaleDateString('en-CA',{timeZone:'Asia/Ho_Chi_Minh'}).split('-').reverse().join('/');
     return dateStr;
   }catch(e){ return dateStr; }
 }
@@ -3291,7 +3292,8 @@ function openOption2ScheduleModal(employeeId) {
   const e = employees.find(x => x.employeeId === employeeId || x.id === employeeId);
   const name = e ? e.name : employeeId;
 
-  const d = new Date();
+  // Giờ VN mặc định (không lấy giờ máy): deadline = giờ VN hiện tại + 2h
+  const d = getVietnamNow();
   d.setHours(d.getHours() + 2, 0, 0, 0);
   const defaultIsoStr = new Date().toLocaleString('sv-SE', {timeZone: 'Asia/Ho_Chi_Minh'}).replace(' ', 'T').slice(0,16);
   const defaultMeet = 'https://meet.google.com/ubm-test-' + Math.random().toString(36).substring(7);
@@ -4761,11 +4763,29 @@ function renderAttendancesList(){
           <div class="bg-orange-50 border border-orange-200 rounded-xl p-2"><div class="font-black text-orange-700">CHECK-OUT</div><div>${a.checkOut?.time||'— Chưa'}</div><div class="text-[11px] text-slate-500 truncate">${a.checkOut?.gps||''}</div><div class="text-[11px] truncate">${a.checkOut?.drivePath||''}</div></div>
         </div>
         <div class="flex flex-wrap gap-1">${(a.violations||[]).map(v=>`<span class="text-[11px] font-bold bg-red-100 text-red-700 px-2 py-0.5 rounded-full">${v}</span>`).join('')||'<span class="text-[11px] bg-pink-100 text-pink-700 px-2 py-0.5 rounded-full">Không vi phạm</span>'}</div>
-        ${a.checkIn?.image?`<img src="${a.checkIn.image}" class="w-full h-24 object-cover rounded-xl border">`:''}
+        ${a.checkIn?.image?`<img src="${a.checkIn.image}" onclick="openPhotoViewer(this.src)" title="Bấm để xem toàn bộ ảnh" class="w-full h-24 object-cover rounded-xl border cursor-zoom-in hover:opacity-90">`:''}
+        ${a.checkOut?.image?`<img src="${a.checkOut.image}" onclick="openPhotoViewer(this.src)" title="Bấm để xem toàn bộ ảnh check-out" class="w-full h-24 object-cover rounded-xl border cursor-zoom-in hover:opacity-90">`:''}
+        ${a.checkIn?.driveUrl||a.checkOut?.driveUrl?`<a href="${a.checkOut?.driveUrl||a.checkIn.driveUrl}" target="_blank" class="text-[11px] font-bold text-blue-600 hover:underline">Xem ảnh trên Drive</a>`:''}
       </div>
     </div>
   `}).join('');
 }
+// Lightbox xem toàn bộ ảnh chấm công (bấm thumbnail để phóng to, bấm nền/Esc để đóng)
+function openPhotoViewer(src){
+  closePhotoViewer();
+  const ov = document.createElement('div');
+  ov.id = 'photoViewerOverlay';
+  ov.className = 'fixed inset-0 z-[100] flex items-center justify-center bg-black/85 p-4';
+  ov.innerHTML = `<img src="${src}" class="max-w-full max-h-full rounded-xl shadow-2xl object-contain">`;
+  ov.onclick = closePhotoViewer;
+  document.addEventListener('keydown', closePhotoViewerEsc);
+  document.body.appendChild(ov);
+}
+function closePhotoViewer(){
+  document.getElementById('photoViewerOverlay')?.remove();
+  document.removeEventListener('keydown', closePhotoViewerEsc);
+}
+function closePhotoViewerEsc(e){ if(e.key==='Escape') closePhotoViewer(); }
 
 // Zalo
 async function loadZalo(){

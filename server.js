@@ -5048,6 +5048,24 @@ async function syncSheetTab(sheetKey){
         method:'PUT', headers:{ Authorization:`Bearer ${token}`, 'Content-Type':'application/json'},
         body: JSON.stringify({ values: merged })
       });
+      // Thumbnail ảnh trong Sheet (chỉ RECORD_DIEM_DANH): cột I/M = công thức IMAGE từ URL Drive (cột J/N).
+      // Ghi RIÊNG 2 cột ảnh bằng USER_ENTERED để không reinterpret SĐT/mã NV ở các cột khác (vẫn RAW).
+      // Không có URL -> giữ marker cũ (admin xem ảnh trên web app / link Drive).
+      if(sheetKey==='RECORD_DIEM_DANH'){
+        try{
+          const toImg = (u, marker)=> (typeof u==='string' && u.startsWith('http')) ? `=IMAGE("${u.replace(/"/g,'')}",1)` : (marker||'');
+          const colI = merged.map(r=> [toImg(r[9], r[8])]);
+          const colM = merged.map(r=> [toImg(r[13], r[12])]);
+          await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(def.sheetName)}!I2:I${endRow}?valueInputOption=USER_ENTERED`, {
+            method:'PUT', headers:{ Authorization:`Bearer ${token}`, 'Content-Type':'application/json'},
+            body: JSON.stringify({ values: colI })
+          });
+          await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(def.sheetName)}!M2:M${endRow}?valueInputOption=USER_ENTERED`, {
+            method:'PUT', headers:{ Authorization:`Bearer ${token}`, 'Content-Type':'application/json'},
+            body: JSON.stringify({ values: colM })
+          });
+        }catch(e){ console.error('[SHEET IMAGE] thumbnail that bai (giu link URL):', e.message); }
+      }
       // Nếu có dòng test bị dọn hoặc dòng trùng SĐT bị dọn (merged ngắn hơn existing), xóa vùng thừa để dọn sạch
       const oldEndRow = 1 + existing.length;
       if((droppedTest > 0 || droppedDupPhone > 0) && oldEndRow > endRow){

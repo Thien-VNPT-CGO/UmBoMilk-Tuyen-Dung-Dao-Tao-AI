@@ -189,8 +189,15 @@ test('Comprehensive Attendance, Training Shifts, 5 Days OFF & HR Approval Center
   // -------------------------------------------------------------
   let trainingShiftReqId = '';
   let trainingAddShiftReqId = '';
-  const futureDate1 = '2026-09-12';
-  const futureDate2 = '2026-09-13';
+  // Ngay dong (cach hien tai >12h theo quy tac, tranh Chu nhat) — trach hardcode het han
+  function dynDate(offsetDays){
+    const d = new Date(); d.setDate(d.getDate()+offsetDays); d.setHours(12,0,0,0);
+    while(d.getDay()===0) d.setDate(d.getDate()+1);
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+  const futureDate1 = dynDate(3);
+  let futureDate2 = dynDate(4);
+  if(futureDate2===futureDate1){ const d=new Date(futureDate1+'T12:00:00'); d.setDate(d.getDate()+1); futureDate2=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
 
   await t.test('2. Nhân viên Training: Đổi ca & Thêm ca lưu lịch sử đầy đủ và trả về cho web app', async () => {
     // 2A: Yêu cầu Đổi ca (CHANGE_SHIFT)
