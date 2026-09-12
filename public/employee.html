@@ -175,6 +175,19 @@ button { min-height:44px; }
 /* Fade-up animation for tab sections */
 @keyframes fadeUp { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:none} }
 .tab-section { animation:fadeUp .22s ease; }
+/* Hieu ung chung Umb: toast truot + mo dan, nut nhan, skeleton load, overlay */
+@keyframes umbSlideIn{from{transform:translateX(40px);opacity:0}to{transform:none;opacity:1}}
+@keyframes umbFadeOut{to{opacity:0;transform:translateY(-8px)}}
+.umb-toast{animation:umbSlideIn .25s ease;cursor:pointer;max-width:min(92vw,380px)}
+.umb-toast.umb-hide{animation:umbFadeOut .25s ease forwards}
+button{transition:transform .12s ease}
+button:active{transform:scale(.97)}
+@keyframes umbShimmer{to{background-position:-200% 0}}
+.umb-skel{background:linear-gradient(90deg,#f1f5f9 25%,#fce7f3 50%,#f1f5f9 75%);background-size:200% 100%;animation:umbShimmer 1.2s infinite;border-radius:.75rem}
+#umbLoading{position:fixed;inset:0;z-index:300;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.75)}
+#umbLoading .spin{width:44px;height:44px;border-radius:9999px;border:4px solid #fbcfe8;border-top-color:#ec4899;animation:umbSpin 1s linear infinite}
+@keyframes umbSpin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.umb-toast,.tab-section,#umbLoading,.umb-skel,button{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body class="bg-[#fdf2f8] min-h-screen">

@@ -147,7 +147,8 @@ const DEFAULT_SETTINGS = {
   payroll: { trainingRate: 21000, officialRate: 25500, shifts: DEFAULT_SHIFTS },
   off: { openDay: 5, openHour: 12, closeDay: 6, closeHour: 15, maxPerWeek: 2, vipTestMode: false },
   test: { minPerQuestion: 5, totalQuestions: 25, passScore: 8, retakeMin: 5, maxRetest: 3 },
-  security: { sessionTimeout: 120, deviceBind: true }
+  security: { sessionTimeout: 120, deviceBind: true },
+  features: { employeeShiftSwap: false }
 };
 
 // ============ GOOGLE SHEET AUTO-TABS DEFINITIONS - Realtime 1:1 per HR tab ============
@@ -288,9 +289,10 @@ function loadDB() {
       // ensure branches correct (CN2 fix)
       db.branches = DEFAULT_BRANCHES;
       if (!db.settings) db.settings = DEFAULT_SETTINGS;
-      else db.settings = { ...DEFAULT_SETTINGS, ...db.settings, googleSheet: { ...DEFAULT_SETTINGS.googleSheet, ...(db.settings.googleSheet||{}) }, quizBank: { ...DEFAULT_SETTINGS.quizBank, ...(db.settings.quizBank||{}) }, ai: { ...DEFAULT_SETTINGS.ai, ...(db.settings.ai||{}) }, zalo: { ...DEFAULT_SETTINGS.zalo, ...(db.settings.zalo||{}) }, calendar: { ...DEFAULT_SETTINGS.calendar, ...(db.settings.calendar||{}) }, attendance: { ...DEFAULT_SETTINGS.attendance, ...(db.settings.attendance||{}) }, off: { ...DEFAULT_SETTINGS.off, ...(db.settings.off||{}) } };
+      else db.settings = { ...DEFAULT_SETTINGS, ...db.settings, googleSheet: { ...DEFAULT_SETTINGS.googleSheet, ...(db.settings.googleSheet||{}) }, quizBank: { ...DEFAULT_SETTINGS.quizBank, ...(db.settings.quizBank||{}) }, ai: { ...DEFAULT_SETTINGS.ai, ...(db.settings.ai||{}) }, zalo: { ...DEFAULT_SETTINGS.zalo, ...(db.settings.zalo||{}) }, calendar: { ...DEFAULT_SETTINGS.calendar, ...(db.settings.calendar||{}) }, attendance: { ...DEFAULT_SETTINGS.attendance, ...(db.settings.attendance||{}) }, off: { ...DEFAULT_SETTINGS.off, ...(db.settings.off||{}) }, features: { ...DEFAULT_SETTINGS.features, ...(db.settings.features||{}) } };
       // ensure payroll shifts
       if (!db.settings.payroll) db.settings.payroll = DEFAULT_SETTINGS.payroll;
+      if (!db.settings.features) db.settings.features = { ...DEFAULT_SETTINGS.features };
       if (!db.payrollPeriods) db.payrollPeriods = [];
       if (!db.attendanceAdjustments) db.attendanceAdjustments = [];
       if (!db.overtimeRequests) db.overtimeRequests = [];
@@ -1317,7 +1319,7 @@ app.get('/api/employee/me', (req,res)=>{
         }
       }
     }
-    res.json({ employee: emp, valid:true });
+    res.json({ employee: emp, valid:true, features:{ employeeShiftSwap: !!(db.settings && db.settings.features && db.settings.features.employeeShiftSwap) } });
   }catch(e){
     return res.status(401).json({ error:'Token không hợp lệ', forceLogout:true });
   }
@@ -5339,6 +5341,9 @@ function getActiveShiftForAttendance(employeeId, mockNow) {
   const sched = db.schedules.find(s => s.employeeId === employeeId && s.days.some(d => d.date === today));
   const day = sched ? sched.days.find(d => d.date === today) : null;
 
+  // RÀNG BUỘC: ngày OFF (kể cả OFF CA LÀM đã duyệt) thì không điểm danh
+  if(day && (day.status === 'OFF' || day.status === 'EMERGENCY_OFF')) return 'OFF';
+
   const scheduledShifts = [];
   if (day && (day.status === 'WORKING' || day.status === 'SUBSTITUTE')) {
     if (Array.isArray(day.shifts) && day.shifts.length > 0) {
@@ -5433,6 +5438,16 @@ app.post(['/api/attendance/checkin', '/api/attendance/check-in'], (req,res)=>{
   const now = (req.body.mockTime && (req.body.isTest || req.headers['x-is-test'])) ? new Date(req.body.mockTime) : getVietnamNow();
   const detectedShift = getActiveShiftForAttendance(employeeId, now);
   const targetShift = shift || detectedShift || emp.shift || 'CA_SANG';
+
+  // RÀNG BUỘC: ngày OFF theo lịch (kể cả OFF CA LÀM đã duyệt) thì không điểm danh
+  const todaySched = db.schedules.find(s=>s.employeeId===employeeId && (s.days||[]).some(d=>d.date===today));
+  const todayDay = todaySched ? todaySched.days.find(d=>d.date===today) : null;
+  if(todayDay && (todayDay.status==='OFF' || todayDay.status==='EMERGENCY_OFF')){
+    return res.status(400).json({error:'Hôm nay bạn OFF theo lịch làm việc - không cần điểm danh. Hẹn gặp lại ca sau!'});
+  }
+  if(targetShift==='OFF'){
+    return res.status(400).json({error:'Hôm nay bạn OFF theo lịch làm việc - không cần điểm danh. Hẹn gặp lại ca sau!'});
+  }
 
   let record = db.attendances.find(a=>a.employeeId===employeeId && a.date===today && a.shift===targetShift);
   if(record && record.checkIn) return res.status(400).json({error:`Đã Check-in ca ${getShiftVi(targetShift)} hôm nay`});
@@ -6659,6 +6674,10 @@ app.post(['/api/training/shift-change/:id/reject', '/api/training/shift-requests
 // TH2: Không tìm được người -> gửi toàn chi nhánh, nếu có người chấp nhận -> AI tự duyệt sau 24h
 if(!db.shiftSwapRequests) db.shiftSwapRequests=[];
 app.post('/api/shift-swap', (req,res)=>{
+  // HR kiểm soát: chức năng đổi ca NV chỉ mở khi HR bật (Cài đặt)
+  if(!(db.settings && db.settings.features && db.settings.features.employeeShiftSwap)){
+    return res.status(403).json({error:'Chức năng đổi ca đang tạm khóa - vui lòng liên hệ HR mở.'});
+  }
   const requesterId = req.body.requesterId || req.body.employeeId || req.user?.employeeId;
   const { date, fromShift, toShift, targetEmployeeId, reason } = req.body;
   const emp = db.employees.find(e=>e.employeeId===requesterId);

@@ -30,6 +30,13 @@ test('Comprehensive Attendance, Training Shifts, 5 Days OFF & HR Approval Center
   adminToken = auth.token;
   assert.ok(adminToken, 'Admin đăng nhập thành công');
 
+  // Bat chuc nang doi ca NV cho suite nay (mac dinh HR tat)
+  await fetch(`${BASE}/api/settings`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
+    body: JSON.stringify({ path: 'features.employeeShiftSwap', value: true })
+  });
+
   if (fs.existsSync(DATA_FILE)) {
     const db = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
     initialEmployeesCount = (db.employees || []).length;
@@ -384,6 +391,13 @@ test('Comprehensive Attendance, Training Shifts, 5 Days OFF & HR Approval Center
   await fetch(`${BASE}/api/admin/clean-test-data`, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${adminToken}` }
+  });
+
+  // Tra chuc nang doi ca ve tat (mac dinh HR tat)
+  await fetch(`${BASE}/api/settings`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
+    body: JSON.stringify({ path: 'features.employeeShiftSwap', value: false })
   });
 
   // Verify no test employees remain in db.json

@@ -240,18 +240,32 @@ function getVisibleNav(){
       if(n.id === 'elearning') return isElearningUnlocked();
       return true;
     });
-  } else {
-    // Official: ẩn elearning + notifs, mở emergency (OFF CA LÀM) + đổi ca + OFF theo window (Master Spec Mục 19)
-    const offOpen = isOffWindowOpen();
-    return NAV.filter(n => {
-      if(!baseFilter(n)) return false;
-      if(n.id === 'elearning') return false;
-      // emergency (OFF CA LÀM) mở cho chính thức - tối đa 1 lần/tuần, phải có người thay
-      if(n.id === 'off') return offOpen; // chỉ hiện trong T6 12:00 - T7 15:00
-      if(n.id === 'shiftSwap') return true; // Đổi ca luôn hiện cho chính thức
-      return true;
-    });
-  }
+    } else {
+      // Official: ẩn elearning + notifs, mở emergency (OFF CA LÀM) + đổi ca + OFF theo window (Master Spec Mục 19)
+      const offOpen = isOffWindowOpen();
+      return NAV.filter(n => {
+        if(!baseFilter(n)) return false;
+        if(n.id === 'elearning') return false;
+        // emergency (OFF CA LÀM) mở cho chính thức - tối đa 1 lần/tuần, phải có người thay
+        if(n.id === 'off') return offOpen; // chỉ hiện trong T6 12:00 - T7 15:00
+        if(n.id === 'shiftSwap') return !!window._shiftSwapEnabled; // HR bật mới hiện
+        return true;
+      });
+    }
+}
+
+// Cờ tính năng từ server (/api/employee/me -> features) — HR bật/tắt realtime
+if(typeof window._shiftSwapEnabled === 'undefined') window._shiftSwapEnabled = false;
+function syncFeatureFlags(me){
+  try{
+    const on = !!(me && me.features && me.features.employeeShiftSwap);
+    if(window._shiftSwapEnabled !== on){
+      window._shiftSwapEnabled = on;
+      try{ refreshNavVisibility(); }catch(e){}
+    } else {
+      window._shiftSwapEnabled = on;
+    }
+  }catch(e){}
 }
 
 // Cập nhật nav sau khi employee data thay đổi (realtime #5,6)
@@ -503,14 +517,17 @@ document.getElementById('loginForm')?.addEventListener('submit', async (e)=>{
   const errEl=document.getElementById('loginError');
   const box=document.getElementById('deviceResetBox');
   try{
+    if(typeof umbSetLoading==='function') umbSetLoading(true,'Đang đăng nhập...');
     const data = await api('/api/auth/employee-login', {method:'POST', body:JSON.stringify({employeeId, key, deviceId})});
     token=data.token; employee=data.employee; empKey=data.key.key;
     localStorage.setItem('emp_token', token);
     localStorage.setItem('emp_data', JSON.stringify(employee));
     localStorage.setItem('emp_key', empKey);
     errEl.classList.add('hidden'); box.classList.add('hidden');
+    if(typeof umbSetLoading==='function') umbSetLoading(false);
     showApp();
   }catch(err){
+    if(typeof umbSetLoading==='function') umbSetLoading(false);
     errEl.textContent=err.message;
     errEl.classList.remove('hidden');
     if(err.message.includes('thiết bị khác')){
@@ -583,6 +600,7 @@ function connectSocket(){
     updateModeBadge();
   });
   socket.on('disconnect', ()=>{
+    window._settingsSocketBound = false; // socket moi o lan ket noi sau -> dang ky lai
     updateModeBadge();
   });
   const evs=['employees:update','attendances:update','schedules:update','offRequests:update','emergencyRequests:update','trainingShiftRequests:update','notifications:update','testResults:update','zalo:update','drive:update','overtime:update','leave:update','automation:heartbeat','sync:update'];
@@ -600,10 +618,12 @@ function connectSocket(){
     updateModeBadge();
     // Khi có cập nhật employees, refresh data của nhân viên hiện tại + cập nhật nav (dùng /api/employee/me để tránh branchScope filter)
     if(ev === 'employees:update' && employee){
-      try{
-        const me = await api('/api/employee/me');
-        if(me && me.employee){
-          const fresh = me.employee;
+    try{
+      const me = await api('/api/employee/me');
+      if(me && me.employee){ 
+      syncFeatureFlags(me);
+      const fresh = me.employee;
+          syncFeatureFlags(me);
           const wasUnlocked = isElearningUnlocked();
           employee = fresh;
           localStorage.setItem('emp_data', JSON.stringify(employee));
@@ -646,6 +666,16 @@ function connectSocket(){
       }
     }catch(e){}
   });
+  // Realtime cờ HR bật/tắt đổi ca: refresh me để lấy features.employeeShiftSwap
+  if(!window._settingsSocketBound && typeof socket!=='undefined' && socket){
+    window._settingsSocketBound = true;
+    socket.on('settings:update', async ()=>{
+      try{
+        const me2 = await api('/api/employee/me');
+        if(me2){ syncFeatureFlags(me2); try{ refreshNavVisibility(); }catch(e){} }
+      }catch(e){}
+    });
+  }
   // Ràng buộc: Nếu tài khoản không tồn tại thì force logout về đăng nhập
   socket.on('employee:forceLogout', (data)=>{
     if(!employee) return;
@@ -677,6 +707,7 @@ function connectSocket(){
         }
       } else if(res.ok){
         const data = await res.json().catch(()=>({}));
+        syncFeatureFlags(data);
         // Kiểm tra status ngay cả khi 200 nhưng đã bị ARCHIVED (fallback poll)
         if(data.employee && ['ARCHIVED','TERMINATED','RESIGNED'].includes(data.employee.status)){
           triggerForceLogoutUI(`Tài khoản đã bị ${data.employee.status} - liên hệ HR`);
@@ -1089,6 +1120,21 @@ async function loadAttendanceTab(){
       cardCheckin.parentElement.insertBefore(shiftMsg, cardCheckin);
     }
 
+    // RÀNG BUỘC: hôm nay OFF theo lịch (kể cả OFF CA LÀM đã duyệt) -> không điểm danh
+    try{
+      const scToday = (typeof mySchedules!=='undefined' && mySchedules) || [];
+      const recToday = scToday.flatMap(s=>s.days||[]).find(d=>d.date===today);
+      if(recToday && (recToday.status==='OFF' || recToday.status==='EMERGENCY_OFF')){
+        if(cardCheckin) cardCheckin.classList.add('hidden');
+        if(cardCheckout) cardCheckout.classList.add('hidden');
+        if(shiftMsg){ shiftMsg.classList.remove('hidden'); shiftMsg.innerHTML='🏖️ Hôm nay bạn OFF theo lịch làm việc — không cần điểm danh.<br>Hẹn gặp lại ca sau!'; }
+        return;
+      } else {
+        if(cardCheckin) cardCheckin.classList.remove('hidden');
+        if(cardCheckout) cardCheckout.classList.remove('hidden');
+      }
+    }catch(e){}
+
     const showAiInfo = (html, cls)=>{
       if(!aiInfo) return;
       aiInfo.className = 'card mt-3 p-3 text-xs font-bold text-center '+cls;
@@ -1417,7 +1463,7 @@ async function loadSchedule(){
               bgColor = 'bg-orange-50/30';
               borderColor = 'border-orange-100';
               statusClass = 'bg-orange-500 text-white';
-              statusText = 'ĐỘT XUẤT';
+              statusText = 'OFF CA LÀM';
             } else if(d.status === 'WORKING') {
               bgColor = 'bg-white';
               borderColor = isToday ? 'border-pink-400' : 'border-slate-100';
@@ -2374,10 +2420,23 @@ async function submitTest(auto){
 async function loadNotifications(){
   try{
     myNotifs = await api('/api/notifications?employeeId='+employee.employeeId);
+    // Gon + dep: dot chua doc, padding chat, doc thong bao moi den
+    if(!Array.isArray(window._lastNotifIds)) window._lastNotifIds = null;
+    const unreadNow = myNotifs.filter(n=>!n.read);
+    if(window._lastNotifIds){
+      const fresh = unreadNow.filter(n=>!window._lastNotifIds.includes(n.id));
+      if(fresh.length>0){
+        const f = fresh[0];
+        showToast(`🔔 ${f.title||'Thông báo mới'}`, 'info');
+        speakUmb(`${f.title||''}. ${f.content||f.message||''}`);
+      }
+    }
+    window._lastNotifIds = myNotifs.map(n=>n.id);
     document.getElementById('notifList').innerHTML = myNotifs.map(n=>`
-      <div class="bg-white border rounded-2xl p-4 flex justify-between gap-3 ${n.read?'opacity-60':''}">
-        <div><div class="font-bold text-sm">${n.title}</div><div class="text-xs text-slate-600 mt-1">${n.content}</div><div class="text-[11px] text-slate-400 mt-1">${fmtDMYTime(n.createdAt)}</div></div>
-        ${!n.read?`<button onclick="markRead('${n.id}')" class="text-xs font-bold bg-pink-500 text-white px-3 py-1 rounded-full h-fit">Đã đọc</button>`:''}
+      <div class="bg-white border ${n.read?'border-slate-200':'border-pink-300'} rounded-2xl p-3 flex gap-2.5 ${n.read?'opacity-60':''}">
+        <span class="mt-1.5 w-2 h-2 rounded-full shrink-0 ${n.read?'bg-slate-300':'bg-pink-500'}"></span>
+        <div class="flex-1 min-w-0"><div class="font-bold text-[13px] leading-snug">${n.title}</div><div class="text-xs text-slate-600 mt-0.5 leading-snug">${n.content}</div><div class="text-[10px] text-slate-400 mt-1">${fmtDMYTime(n.createdAt)}</div></div>
+        ${!n.read?`<button onclick="markRead('${n.id}')" class="text-[11px] font-bold bg-pink-500 text-white px-2.5 py-1 rounded-full h-fit shrink-0">Đã đọc</button>`:''}
       </div>
     `).join('') || '<div class="bg-white rounded-2xl border p-8 text-center text-sm text-slate-400">Không có thông báo</div>';
     document.getElementById('notifCount').textContent=myNotifs.filter(n=>!n.read).length;
@@ -2637,11 +2696,53 @@ async function loadSalaryTab() {
 }
 
 function showToast(msg, type='success'){
+  const icons={success:'✅',error:'⛔',info:'🔔'};
   const t=document.createElement('div');
-  t.className=`fixed bottom-20 lg:bottom-4 right-4 z-50 px-4 py-3 rounded-xl shadow-xl text-sm font-bold ${type==='success'?'bg-pink-500 text-white':'bg-red-600 text-white'}`;
-  t.textContent=msg;
+  t.className=`umb-toast fixed bottom-20 lg:bottom-4 right-4 z-50 px-4 py-3 rounded-xl shadow-xl text-sm font-bold flex items-center gap-2 ${type==='success'?'bg-pink-500 text-white':type==='info'?'bg-sky-600 text-white':'bg-red-600 text-white'}`;
+  t.innerHTML=`<span>${icons[type]||icons.success}</span><span></span>`;
+  t.lastChild.textContent=msg;
+  t.onclick=()=>t.remove();
   document.body.appendChild(t);
-  setTimeout(()=>t.remove(),2500);
+  setTimeout(()=>{ t.classList.add('umb-hide'); setTimeout(()=>t.remove(),260); },2600);
+}
+// Am thanh thong bao UmBoMilk (Web Speech API, giong Viet) + nut bat/tat
+if(typeof window._ttsEnabled==='undefined') window._ttsEnabled = localStorage.getItem('umb_tts')!=='off';
+function speakUmb(text){
+  try{
+    if(!window._ttsEnabled || !('speechSynthesis' in window)) return;
+    const clean=String(text||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim().slice(0,140);
+    if(!clean) return;
+    speechSynthesis.cancel();
+    const u=new SpeechSynthesisUtterance('UmBoMilk có thông báo mới. '+clean);
+    u.lang='vi-VN'; u.rate=1; u.pitch=1;
+    speechSynthesis.speak(u);
+  }catch(e){}
+}
+document.addEventListener('pointerdown', ()=>{ try{ if(window._ttsEnabled && 'speechSynthesis' in window) speechSynthesis.getVoices(); }catch(e){} }, {once:true});
+function toggleUmbTts(btn){
+  window._ttsEnabled=!window._ttsEnabled;
+  localStorage.setItem('umb_tts', window._ttsEnabled?'on':'off');
+  if(btn) btn.textContent=window._ttsEnabled?'🔊':'🔇';
+  if(!window._ttsEnabled){ try{ speechSynthesis.cancel(); }catch(e){} }
+  else speakUmb('Đã bật âm thanh thông báo');
+}
+function mountTtsFab(){
+  if(document.getElementById('ttsFab')) return;
+  const b=document.createElement('button');
+  b.id='ttsFab'; b.title='Bật/tắt âm thanh thông báo';
+  b.className='fixed bottom-24 lg:bottom-6 left-4 z-50 w-11 h-11 rounded-full bg-white border border-pink-200 shadow-xl text-lg flex items-center justify-center';
+  b.textContent=window._ttsEnabled?'🔊':'🔇';
+  b.onclick=()=>toggleUmbTts(b);
+  document.body.appendChild(b);
+}
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', mountTtsFab); else mountTtsFab();
+// Overlay load chung
+function umbSetLoading(on, msg){
+  let ov=document.getElementById('umbLoading');
+  if(on){
+    if(!ov){ ov=document.createElement('div'); ov.id='umbLoading'; ov.innerHTML='<div class="text-center"><div class="spin" style="margin:0 auto"></div><div class="text-xs font-bold text-pink-600 mt-2">'+(msg||'Đang tải...')+'</div></div>'; document.body.appendChild(ov); }
+    else ov.style.display='flex';
+  } else if(ov){ ov.style.display='none'; }
 }
 
 if(token && employee) showApp();

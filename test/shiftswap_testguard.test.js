@@ -27,10 +27,13 @@ describe('Chong ro ri test vao phieu doi ca', () => {
     const r = await api('/api/auth/login', { method: 'POST', body: JSON.stringify({ username: 'admin', password: 'Master@@2027' }) });
     adminToken = r.body.token || (await api('/api/auth/login', { method: 'POST', body: JSON.stringify({ username: 'admin', password: 'admin123' }) })).body.token;
     assert.ok(adminToken, 'admin login');
+    // Bat chuc nang doi ca NV cho test nay
+    await api('/api/settings', { method: 'PUT', body: JSON.stringify({ path: 'features.employeeShiftSwap', value: true }) }, adminToken);
   });
 
   after(async () => {
     try {
+      await api('/api/settings', { method: 'PUT', body: JSON.stringify({ path: 'features.employeeShiftSwap', value: false }) }, adminToken);
       if (empId) await api(`/api/employees/${empId}?hard=true`, { method: 'DELETE' }, adminToken);
     } catch (_) {}
   });

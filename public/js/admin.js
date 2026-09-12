@@ -436,14 +436,17 @@ document.getElementById('loginForm')?.addEventListener('submit', async (e)=>{
   const password=document.getElementById('password').value;
   const errEl=document.getElementById('loginError');
   try{
+    if(typeof umbSetLoading==='function') umbSetLoading(true,'Đang đăng nhập...');
     const data = await api('/api/auth/login', {method:'POST', body:JSON.stringify({username,password})});
     token=data.token;
     currentUser=data.user;
     localStorage.setItem('admin_token', token);
     localStorage.setItem('admin_user', JSON.stringify(currentUser));
     errEl.classList.add('hidden');
+    if(typeof umbSetLoading==='function') umbSetLoading(false);
     showApp();
   }catch(err){
+    if(typeof umbSetLoading==='function') umbSetLoading(false);
     errEl.textContent=err.message;
     errEl.classList.remove('hidden');
   }
@@ -692,6 +695,7 @@ function connectSocket(){
     const icon = icons[data.action] || '🔔';
     const toastType = data.type || 'info';
     showToast(`${icon} [${data.title || 'Nhân viên'}] ${data.message || ''}`, toastType);
+    speakUmb(`${data.title || 'Nhân viên'}. ${data.message || ''}`);
 
     // Tự động cập nhật số lượng chờ duyệt và làm mới tab liên quan
     updatePendingCount();
@@ -5259,6 +5263,7 @@ async function loadSettings(){
     if (document.getElementById('setPenaltyAbsent')) document.getElementById('setPenaltyAbsent').value = s.attendance?.penaltyAbsent || 100000;
     if (document.getElementById('setOffMax')) document.getElementById('setOffMax').value = s.off?.maxPerWeek || 2;
     if (document.getElementById('setOffVip')) document.getElementById('setOffVip').checked = !!s.off?.vipTestMode;
+    if (document.getElementById('setShiftSwap')) document.getElementById('setShiftSwap').checked = !!s.features?.employeeShiftSwap;
     if (document.getElementById('setTestMin')) document.getElementById('setTestMin').value = s.test?.minPerQuestion || 5;
     // ENV lock - khóa khi dùng Render ENV (server.js:386)
     const envLocked = data.envLocked || {};
@@ -5420,6 +5425,7 @@ async function saveSettings(){
     attendance:{lateThreshold:parseInt(document.getElementById('setLateTh').value), earlyLeaveThreshold:parseInt(document.getElementById('setEarlyTh').value), penaltyLate:parseInt(document.getElementById('setPenaltyLate').value), penaltyAbsent:parseInt(document.getElementById('setPenaltyAbsent').value)},
     payroll:{trainingRate:parseInt(document.getElementById('setTrainRate').value), officialRate:parseInt(document.getElementById('setOffRate').value)},
     off:{maxPerWeek:parseInt(document.getElementById('setOffMax').value)},
+    features:{employeeShiftSwap:!!document.getElementById('setShiftSwap')?.checked},
     test:{minPerQuestion:parseInt(document.getElementById('setTestMin').value)},
   };
   try{
@@ -5714,18 +5720,53 @@ function showToast(msg, type='success'){
   };
   const icons = { success:'fa-circle-check', error:'fa-circle-exclamation', info:'fa-circle-info', warning:'fa-triangle-exclamation' };
   const t=document.createElement('div');
-  t.className=`fixed bottom-4 right-4 z-[200] px-4 py-3 rounded-xl shadow-2xl text-sm font-bold flex items-center gap-2 border ${colors[type]||colors.success} animate-[slideIn_0.3s_ease]`;
-  t.style.animation='slideIn 0.3s ease';
-  t.innerHTML=`<i class="fa-solid ${icons[type]||icons.success} text-base"></i> <span>${msg}</span>`;
+  t.className=`umb-toast fixed bottom-4 right-4 z-[200] px-4 py-3 rounded-xl shadow-2xl text-sm font-bold flex items-center gap-2 border ${colors[type]||colors.success}`;
+  t.innerHTML=`<i class="fa-solid ${icons[type]||icons.success} text-base"></i> <span></span>`;
+  t.lastChild.textContent=msg;
+  t.onclick=()=>t.remove();
   document.body.appendChild(t);
   // Hiệu ứng thông báo HR: thêm rung nhẹ cho success
-  if(type==='success'){ t.animate([{transform:'translateX(0)'},{transform:'translateX(-4px)'},{transform:'translateX(4px)'},{transform:'translateX(0)'}],{duration:300}); }
-  setTimeout(()=>{ t.style.opacity='0'; t.style.transform='translateY(10px)'; setTimeout(()=>t.remove(),300); }, type==='error'?4000:3000);
-  // Thêm style keyframes nếu chưa có
-  if(!document.getElementById('toastStyle')){
-    const s=document.createElement('style'); s.id='toastStyle'; s.textContent='@keyframes slideIn{from{opacity:0;transform:translateY(20px) scale(0.95)} to{opacity:1;transform:translateY(0) scale(1)}}';
-    document.head.appendChild(s);
-  }
+  if(type==='success'){ try{ t.animate([{transform:'translateX(0)'},{transform:'translateX(-4px)'},{transform:'translateX(4px)'},{transform:'translateX(0)'}],{duration:300}); }catch(e){} }
+  setTimeout(()=>{ t.classList.add('umb-hide'); setTimeout(()=>t.remove(),260); }, type==='error'?4000:3000);
+}
+// Am thanh thong bao UmBoMilk (Web Speech API, giong Viet) + nut bat/tat
+if(typeof window._ttsEnabled==='undefined') window._ttsEnabled = localStorage.getItem('umb_tts')!=='off';
+function speakUmb(text){
+  try{
+    if(!window._ttsEnabled || !('speechSynthesis' in window)) return;
+    const clean=String(text||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim().slice(0,140);
+    if(!clean) return;
+    speechSynthesis.cancel();
+    const u=new SpeechSynthesisUtterance('UmBoMilk có thông báo mới. '+clean);
+    u.lang='vi-VN'; u.rate=1; u.pitch=1;
+    speechSynthesis.speak(u);
+  }catch(e){}
+}
+document.addEventListener('pointerdown', ()=>{ try{ if(window._ttsEnabled && 'speechSynthesis' in window) speechSynthesis.getVoices(); }catch(e){} }, {once:true});
+function toggleUmbTts(btn){
+  window._ttsEnabled=!window._ttsEnabled;
+  localStorage.setItem('umb_tts', window._ttsEnabled?'on':'off');
+  if(btn) btn.innerHTML=`<i class="fa-solid ${window._ttsEnabled?'fa-volume-high':'fa-volume-xmark'}"></i>`;
+  if(!window._ttsEnabled){ try{ speechSynthesis.cancel(); }catch(e){} }
+  else speakUmb('Đã bật âm thanh thông báo');
+}
+function mountTtsFab(){
+  if(document.getElementById('ttsFab')) return;
+  const b=document.createElement('button');
+  b.id='ttsFab'; b.title='Bật/tắt âm thanh thông báo';
+  b.className='fixed bottom-4 left-4 z-[200] w-11 h-11 rounded-full bg-white border border-pink-200 shadow-xl text-pink-600 flex items-center justify-center text-lg';
+  b.innerHTML=`<i class="fa-solid ${window._ttsEnabled?'fa-volume-high':'fa-volume-xmark'}"></i>`;
+  b.onclick=()=>toggleUmbTts(b);
+  document.body.appendChild(b);
+}
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', mountTtsFab); else mountTtsFab();
+// Overlay load chung
+function umbSetLoading(on, msg){
+  let ov=document.getElementById('umbLoading');
+  if(on){
+    if(!ov){ ov=document.createElement('div'); ov.id='umbLoading'; ov.innerHTML='<div class="text-center"><div class="spin" style="margin:0 auto"></div><div class="text-xs font-bold text-pink-600 mt-2">'+(msg||'Đang tải...')+'</div></div>'; document.body.appendChild(ov); }
+    else ov.style.display='flex';
+  } else if(ov){ ov.style.display='none'; }
 }
 
 // Init
