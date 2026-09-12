@@ -16,6 +16,7 @@ const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { pickFair } = require('./services/fairPick');
 
 // === ENV & SECURITY CONFIG (Realtime & Automation foundation) ===
 const PORT = process.env.PORT || 3000;
@@ -5735,13 +5736,15 @@ app.get('/api/schedules', authMiddleware, (req,res)=>{
       const group = groupMapWeek[key];
       if(group.length>1){
         const workCount={}; group.forEach(e=> workCount[e.employeeId]=0);
+        const lastDay={}; group.forEach(e=> lastDay[e.employeeId]=-1);
         for(let i=0;i<7;i++){
           const cur = new Date(currentMonday); cur.setDate(currentMonday.getDate()+i);
           const yy = cur.getFullYear(); const mm = String(cur.getMonth()+1).padStart(2,'0'); const dd = String(cur.getDate()).padStart(2,'0');
           const dateStr = `${yy}-${mm}-${dd}`;
-          // Chọn NV ít ngày nhất
-          let chosen=group[0]; let min=workCount[chosen.employeeId];
-          for(const emp of group){ if(workCount[emp.employeeId] < min){ min=workCount[emp.employeeId]; chosen=emp; } }
+          // Chon NV it ngay nhat; hoa thi nguoi lau nhat chua lam (dam bao 2 nguoi chia 3/4)
+          const chosenId = pickFair(group.map(e=>e.employeeId), workCount, lastDay, i);
+          const chosen = group.find(e=>e.employeeId===chosenId) || group[0];
+          lastDay[chosen.employeeId]=i;
           if(!weekDayStatus[dateStr]) weekDayStatus[dateStr]=new Set();
           weekDayStatus[dateStr].add(key);
           // Tạm lưu để tạo days sau
@@ -7087,7 +7090,9 @@ async function generateNextWeekDraft(triggerBy='SYSTEM'){
     const group = groupMap[key];
     if(group.length<=1) continue;
     const workCount={}; group.forEach(e=> workCount[e.employeeId]=0);
-    for(const dateStr of nextWeekDates){
+    const lastDay={}; group.forEach(e=> lastDay[e.employeeId]=-1);
+    for(let di=0; di<nextWeekDates.length; di++){
+      const dateStr = nextWeekDates[di];
       const available = group.filter(emp=> !(offMap[emp.employeeId] && offMap[emp.employeeId].has(dateStr)));
       if(available.length===0){
         group.forEach(emp=> empDayStatus[emp.employeeId][dateStr]='OFF');
@@ -7097,11 +7102,13 @@ async function generateNextWeekDraft(triggerBy='SYSTEM'){
         const sole = available[0];
         group.forEach(emp=> empDayStatus[emp.employeeId][dateStr] = (emp.employeeId===sole.employeeId) ? 'WORKING' : 'OFF');
         workCount[sole.employeeId]++;
+        lastDay[sole.employeeId]=di;
         continue;
       }
-      // Chọn NV ít ngày nhất trong available - đảm bảo cùng CN cùng ca không trùng ngày WORKING
-      let chosen=available[0]; let min=workCount[chosen.employeeId];
-      for(const emp of available){ if(workCount[emp.employeeId] < min){ min=workCount[emp.employeeId]; chosen=emp; } }
+      // Chọn NV ít ngày nhất; hòa thì người lâu nhất chưa làm (đảm bảo 2 người chia 3/4)
+      const chosenId = pickFair(available.map(e=>e.employeeId), workCount, lastDay, di);
+      const chosen = available.find(e=>e.employeeId===chosenId) || available[0];
+      lastDay[chosen.employeeId]=di;
       group.forEach(emp=>{
         if(offMap[emp.employeeId] && offMap[emp.employeeId].has(dateStr)){
           empDayStatus[emp.employeeId][dateStr]='OFF';
@@ -9669,6 +9676,8 @@ app.post('/api/system/reset', authMiddleware, roleCheck(['Admin']), async (req,r
 app.post('/api/interviews/clear-all', authMiddleware, roleCheck(['Admin']), (req,res)=>{
   const beforeInterviews = (db.interviews||[]).length;
   const beforeApplicants = db.applicants.filter(a=>a.status==='INTERVIEW').length;
+  // Luu full backup vao audit truoc khi xoa (phuc hoi thu cong qua Audit Log khi can)
+  const backupList = (db.interviews||[]).map(inv=>({ id:inv.id, applicantId:inv.applicantId, applicantName:inv.applicantName, applicantPhone:inv.applicantPhone, interviewDate:inv.interviewDate, timeSlot:inv.timeSlot, meetLink:inv.meetLink, status:inv.status }));
   // Xóa toàn bộ interviews
   db.interviews = [];
   // Reset applicants đang ở trạng thái INTERVIEW về NEW_APPLICANT để không vướng
@@ -9686,7 +9695,7 @@ app.post('/api/interviews/clear-all', authMiddleware, roleCheck(['Admin']), (req
   saveDB();
   io.emit('interviews:update', db.interviews);
   io.emit('applicants:update', db.applicants);
-  audit(req.user.username,'CLEAR_ALL_INTERVIEWS','INTERVIEW',{beforeInterviews, beforeApplicants},{afterInterviews:0, resetApplicants:resetCount}, req.ip);
+  audit(req.user.username,'CLEAR_ALL_INTERVIEWS','INTERVIEW',{beforeInterviews, beforeApplicants, backupList},{afterInterviews:0, resetApplicants:resetCount}, req.ip);
   res.json({success:true, clearedInterviews:beforeInterviews, resetApplicants:resetCount, message:`Đã xóa ${beforeInterviews} lịch phỏng vấn và reset ${resetCount} ứng viên INTERVIEW về NEW_APPLICANT`});
 });
 // ponytail: giữ nguyên settings để không làm gãy webhook/secret; nếu cần reset riêng cấu hình thì thêm scope SETTINGS sau.

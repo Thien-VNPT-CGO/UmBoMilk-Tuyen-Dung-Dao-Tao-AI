@@ -1733,6 +1733,7 @@ async function loadInterviews() {
 }
 async function clearAllInterviews(){
   if(!confirm('Admin: Xóa toàn bộ lịch phỏng vấn?\n\n• Sẽ xóa toàn bộ lịch đã đặt\n• Reset 1 NV đang vướng ở trạng thái INTERVIEW về NEW_APPLICANT\n• Không thể khôi phục!')) return;
+  if(!confirm('CHỐT XÓA? Gõ OK để xác nhận xóa VĨNH VIỄN toàn bộ lịch phỏng vấn (đã ghi audit).')) return;
   try{
     const res = await api('/api/interviews/clear-all', {method:'POST', headers:{Authorization:'Bearer '+token}});
     showToast(`Đã xóa ${res.clearedInterviews} lịch và reset ${res.resetApplicants} NV vướng`, 'success');
