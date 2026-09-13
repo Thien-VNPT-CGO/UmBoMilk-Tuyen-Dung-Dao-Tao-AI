@@ -1397,11 +1397,13 @@ async function loadAttendanceTab(){
 // Schedule
 async function loadSchedule(){
   try{
-    const [schedData, trReqs] = await Promise.all([
+    const [schedData, trReqs, holData] = await Promise.all([
       api('/api/schedules?employeeId='+employee.employeeId).catch(()=>[]),
-      api('/api/training/shift-requests?employeeId='+employee.employeeId).catch(()=>[])
+      api('/api/training/shift-requests?employeeId='+employee.employeeId).catch(()=>[]),
+      api('/api/holidays?from=2026-01-01&to=2026-12-31').catch(()=>({holidays:{}}))
     ]);
     mySchedules = Array.isArray(schedData) ? schedData : [];
+    const holMap = (holData && holData.holidays) || {};
     const myApprovedShiftReqs = (Array.isArray(trReqs) ? trReqs : []).filter(r => r.status === 'APPROVED' && r.type === 'ADD_SHIFT');
     const el=document.getElementById('scheduleList');
     if(mySchedules.length===0) return el.innerHTML='<div class="bg-white rounded-2xl border border-slate-200 p-8 text-center text-sm text-slate-400">Chưa có lịch - liên hệ HR</div>';
@@ -1549,12 +1551,13 @@ async function loadSchedule(){
             }
 
             return `
-            <div class="rounded-2xl border-2 ${borderColor} p-3 sm:p-4 text-center transition-all ${bgColor} ${isToday ? 'ring-4 ring-pink-300 scale-[1.03] z-10 shadow-lg' : ''}">
+            <div class="rounded-2xl border-2 ${borderColor} p-3 sm:p-4 text-center transition-all ${bgColor} ${isToday ? 'ring-4 ring-pink-300 scale-[1.03] z-10 shadow-lg' : ''} ${holMap[d.date] ? 'ring-2 ring-amber-300' : ''}">
               <div class="text-base font-black ${isToday?'text-pink-600':'text-slate-400'} uppercase tracking-widest">${d.dayName}</div>
               <div class="text-2xl font-mono font-black ${isToday?'text-pink-900':'text-slate-800'} leading-none mt-1">${fmtDMYShort(d.date)}</div>
               <div class="text-sm font-bold text-slate-500 mt-1">${fmtDMY(d.date)}</div>
               <div class="mt-3 flex flex-col items-center gap-2">
                 <span class="text-xs sm:text-sm font-black px-3 py-1.5 rounded-full ${statusClass}">${statusText}</span>
+                ${holMap[d.date] ? `<span class="text-[11px] font-black px-2.5 py-1 rounded-full ${holMap[d.date].multiplier>=3?'bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-sm':'bg-amber-100 text-amber-800 border border-amber-300'}" title="${holMap[d.date].name} — lương x${holMap[d.date].multiplier}">🎌 ${holMap[d.date].name} ×${holMap[d.date].multiplier}</span>` : ''}
                 <div class="w-full text-base font-black text-slate-800 leading-tight min-h-[36px] flex flex-col items-center justify-center gap-1">
                   ${(() => {
                     if (d.status !== 'WORKING' && d.status !== 'SUBSTITUTE' && d.status !== 'WORKING_DOUBLE') return '—';
@@ -1616,6 +1619,7 @@ async function loadSchedule(){
               <div class="text-sm">• <b>THAY CA:</b> Ngày thay ca cho nhân viên khác (đổi ca)</div>
               <div class="text-sm">• <b>Tuần này/Tuần tới:</b> Nhãn phân biệt tuần hiện tại và tuần sau</div>
               <div class="text-sm">• Lịch tuần sau AI tạo sau khi HR duyệt nghỉ (T7 15:00) và gửi đến nhân viên qua thông báo</div>
+              <div class="text-sm">• <b>Ngày lễ (nền viền vàng):</b> Lương ×2 (lễ) / ×3 (Mùng 3-5 Tết) — tự động theo lịch VN</div>
               <div class="text-sm">• <b>Đổi ca:</b></div>
               <div class="ml-3 text-sm">+ Xin phép đổi ca &gt; 24 tiếng trước lịch làm: thực hiện theo quy trình đổi ca trong app</div>
               <div class="ml-3 text-sm">+ Xin phép đổi ca &lt; 24 tiếng trước lịch làm: Vui lòng liên hệ trực tiếp HR</div>

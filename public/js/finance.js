@@ -550,7 +550,7 @@ function renderPayrollSummary(rows){
         <td class="p-2.5 text-center font-bold text-slate-800">${r.officialHours || '—'}</td>
         <td class="p-2.5 text-center font-black bg-amber-50 text-amber-900">${r.totalHours}</td>
         <td class="p-2.5 text-right font-medium text-emerald-800">${fmtMoney(r.luongHocViec)}</td>
-        <td class="p-2.5 text-right font-medium text-slate-800">${fmtMoney(r.luongChinhThuc)}${(r.leChiTiet||[]).length?`<div class="text-[10px] font-bold text-amber-600">${r.leChiTiet.map(l=>`${fmtDMY(l.date).slice(0,5)} ${l.name} ×${l.multiplier}`).join('<br>')}</div>`:''}</td>
+        <td class="p-2.5 text-right font-medium text-slate-800">${fmtMoney(r.luongChinhThuc)}${(r.leChiTiet||[]).length?`<div class="text-[10px] font-bold text-amber-600 cursor-pointer hover:text-amber-800 hover:bg-amber-50 rounded px-1 py-0.5 transition-colors" onclick="openHolidayDetail('${r.employeeId}','${(r.name||'').replace(/'/g,"\\'")}',${JSON.stringify(r.leChiTiet).replace(/"/g,'&quot;')},${r.luongLeThem||0})" title="Xem chi tiết thưởng lễ/tết">🎁 ${r.leChiTiet.length} ngày lễ <i class="fa-solid fa-arrow-right text-[8px]"></i></div>`:''}</td>
         <td class="p-2.5 text-right font-bold text-amber-600">${r.luongLeThem ? `+${fmtMoney(r.luongLeThem)}` : '—'}</td>
         <td class="p-2.5 text-right font-bold text-orange-600">${r.hoanDongPhuc ? `+${fmtMoney(r.hoanDongPhuc)}` : '—'}</td>
         <td class="p-2.5 text-right font-bold text-emerald-600">${r.hoanKhamSK ? `+${fmtMoney(r.hoanKhamSK)}` : '—'}</td>
@@ -741,6 +741,42 @@ function filterCurrentTable(){
 
 function closeModal(id){
   document.getElementById(id)?.classList.add('hidden');
+}
+function openHolidayDetail(employeeId, name, leChiTiet, luongLeThem){
+  const body = document.getElementById('holidayLeBody');
+  const title = document.getElementById('holidayLeTitle');
+  if(!body || !title) return;
+  title.innerHTML = `<i class="fa-solid fa-calendar-days text-amber-500"></i> Thưởng Lễ/Tết — ${name} (${employeeId})`;
+  if(!leChiTiet || !leChiTiet.length){
+    body.innerHTML = '<div class="text-center text-slate-400 text-sm py-4">Không có ngày lễ trong tháng</div>';
+  } else {
+    body.innerHTML = `
+      <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs">
+        <div class="font-black text-amber-900 mb-2">Nhân viên chính thức đi làm ngày lễ được thưởng thêm:</div>
+        <ul class="space-y-1 text-amber-800 font-semibold">
+          <li>• Lễ dương lịch / Giỗ Tổ: <strong>x2</strong> (thưởng 1 ngày lương)</li>
+          <li>• Mùng 3-5 Tết Nguyên Đán: <strong>x3</strong> (thưởng 2 ngày lương)</li>
+        </ul>
+      </div>
+      <table class="w-full text-xs border-collapse">
+        <thead class="bg-amber-100 text-amber-900">
+          <tr><th class="p-2 text-left">Ngày</th><th class="p-2 text-left">Tên lễ</th><th class="p-2 text-center">Hệ số</th><th class="p-2 text-right">Thưởng thêm</th></tr>
+        </thead>
+        <tbody class="divide-y divide-amber-50">
+          ${leChiTiet.map(l=>`<tr class="hover:bg-amber-50">
+            <td class="p-2 font-bold text-slate-800">${fmtDMY(l.date)}</td>
+            <td class="p-2 font-bold text-amber-800">${l.name}</td>
+            <td class="p-2 text-center font-black text-amber-600">×${l.multiplier}</td>
+            <td class="p-2 text-right font-black text-emerald-700">+${fmtMoney(l.extra)}đ</td>
+          </tr>`).join('')}
+        </tbody>
+        <tfoot class="bg-amber-50 font-black">
+          <tr><td colspan="3" class="p-2 text-right text-amber-900">TỔNG THƯỞNG LỄ/TẾT</td><td class="p-2 text-right text-emerald-700">+${fmtMoney(luongLeThem)}đ</td></tr>
+        </tfoot>
+      </table>
+    `;
+  }
+  document.getElementById('modalHolidayLe')?.classList.remove('hidden');
 }
 
 // Khởi tạo hệ thống & Socket realtime
