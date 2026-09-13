@@ -151,7 +151,7 @@ const DEFAULT_SETTINGS = {
   off: { openDay: 5, openHour: 12, closeDay: 6, closeHour: 15, maxPerWeek: 2, vipTestMode: false },
   test: { minPerQuestion: 5, totalQuestions: 25, passScore: 8, retakeMin: 5, maxRetest: 3 },
   security: { sessionTimeout: 120, deviceBind: true },
-  mail: { smtpHost: 'smtp.gmail.com', smtpPort: 465, user: '', pass: '', enabled: false, weeklyTo: ['nguyenthanhthien.dev.1602@gmail.com','umbomilk@gmail.com','dothidoandoan063@gmail.com'], weeklyHour: 6, lastWeeklySent: '' },
+  mail: { smtpHost: 'smtp.gmail.com', smtpPort: 465, user: '', pass: '', enabled: false, weeklyTo: ['nguyenthanhthien.dev.1602@gmail.com','umbomilk@gmail.com','dothidoandoan063@gmail.com'], weeklyHour: 23, lastWeeklySent: '', lastAttendanceReset: '' },
   features: { employeeShiftSwap: false, empAttendance: false, empSchedule: false, empSalary: false, empOff: false, empEmergency: false, empAccount: false }
 };
 
@@ -5793,24 +5793,60 @@ app.post('/api/attendance/send-weekly', authMiddleware, roleCheck(['Admin','HR']
     res.json({ ...out, message:`Đã gửi báo cáo tuần ${out.weekStart} → ${out.endStr} tới ${out.to.join(', ')}` });
   }catch(e){ res.status(500).json({error:'Gửi mail thất bại: '+e.message}); }
 });
-// Tự động gửi 8h? Không — gửi 6h sáng Thứ 2 tuần kế tiếp cho tuần vừa xong (giờ VN), mỗi tuần 1 lần
-setInterval(async ()=>{
-  try{
-    const now = getVietnamNow();
-    if(now.getDay()!==1) return;
-    const hour = now.getHours()+now.getMinutes()/60;
-    const weeklyHour = Number(db.settings?.mail?.weeklyHour)||6;
-    if(hour<weeklyHour || hour>=weeklyHour+1) return;
-    if(!db.settings?.mail?.enabled) return;
-    const prevMon = new Date(now); prevMon.setDate(now.getDate()-7);
-    const weekStart = toVietnamDateStr(getMonday(prevMon));
-    if(db.settings.mail.lastWeeklySent===weekStart) return;
-    console.log(`[MAIL TUẦN] Tự động gửi báo cáo tuần ${weekStart}`);
-    const out = await sendWeeklyAttendance(weekStart, 'AUTO_MON_'+weeklyHour+'H');
-    if(out.error) console.error('[MAIL TUẦN] Lỗi:', out.error);
-    else { io.emit('notifications:update', db.notifications); console.log(`[MAIL TUẦN] Đã gửi ${out.records} lượt tới ${out.to.join(', ')}`); }
-  }catch(e){ console.error('[MAIL TUẦN] Lỗi:', e.message); }
-}, 10*60*1000);
+// Tự động gửi 23h00 Chủ nhật hàng tuần (giờ VN) cho tuần T2-CN vừa xong, mỗi tuần 1 lần.
+// Reset Bản ghi điểm danh 23h59 Chủ nhật (chỉ khi tuần đó đã được gửi mail archive) để giảm dung lượng.
+function getMailWeeklyHour(){
+  const v = Number(db.settings?.mail?.weeklyHour);
+  return (v>=0 && v<=23) ? v : 23;
+}
+async function autoSendWeeklyTick(now){
+  if(OUTBOUND_SYNC_DISABLED) return;
+  const d = now || getVietnamNow();
+  if(d.getDay()!==0) return; // Chủ nhật
+  const hour = d.getHours()+d.getMinutes()/60;
+  const weeklyHour = getMailWeeklyHour();
+  if(hour<weeklyHour || hour>=weeklyHour+1) return;
+  if(!db.settings?.mail?.enabled) return;
+  const weekStart = toVietnamDateStr(getMonday(d)); // T2 đầu tuần đang kết thúc
+  if(db.settings.mail.lastWeeklySent===weekStart) return;
+  console.log(`[MAIL TUẦN] Tự động gửi báo cáo tuần ${weekStart} (23h CN)`);
+  const out = await sendWeeklyAttendance(weekStart, 'AUTO_CN_23H');
+  if(out.error) console.error('[MAIL TUẦN] Lỗi:', out.error);
+  else { io.emit('notifications:update', db.notifications); console.log(`[MAIL TUẦN] Đã gửi ${out.records} lượt tới ${out.to.join(', ')}`); }
+}
+// Reset: 23h59 Chủ nhật xóa chấm công + ảnh điểm danh trước tuần mới (date < T2 kế tiếp).
+// Chỉ chạy khi báo cáo mail tuần này đã gửi xong (lastWeeklySent khớp) — không bao giờ xóa dữ liệu chưa archive.
+async function autoResetAttendanceTick(now){
+  if(OUTBOUND_SYNC_DISABLED) return;
+  const d = now || getVietnamNow();
+  if(d.getDay()!==0) return; // Chủ nhật
+  if(d.getHours()!==23 || d.getMinutes()<59) return; // 23:59
+  const todayStr = toVietnamDateStr(d);
+  if(db.settings?.mail?.lastAttendanceReset===todayStr) return;
+  const nextMon = new Date(getMonday(d)); nextMon.setDate(getMonday(d).getDate()+7);
+  const cutoff = toVietnamDateStr(nextMon);
+  const weekStart = toVietnamDateStr(getMonday(d));
+  if(!db.settings?.mail || db.settings.mail.lastWeeklySent!==weekStart){
+    console.log(`[RESET ĐIỂM DANH] Bỏ qua ${todayStr}: báo cáo mail tuần ${weekStart} chưa gửi xong — giữ nguyên dữ liệu`);
+    return;
+  }
+  const beforeAtt = db.attendances.length;
+  const beforeFiles = (db.driveFiles||[]).length;
+  const goneAtt = db.attendances.filter(a=>a.date<cutoff);
+  db.attendances = db.attendances.filter(a=>a.date>=cutoff);
+  db.driveFiles = (db.driveFiles||[]).filter(f=>!((f.type==='CHECK_IN'||f.type==='CHECK_OUT') && f.date && f.date<cutoff));
+  const delAtt = beforeAtt-db.attendances.length;
+  const delFiles = beforeFiles-(db.driveFiles||[]).length;
+  if(!db.settings.mail) db.settings.mail = {};
+  db.settings.mail.lastAttendanceReset = todayStr;
+  audit('AUTO_CN_2359','RESET_ATTENDANCE_WEEK','ATTENDANCE', { cutoff, attendances: beforeAtt, driveFiles: beforeFiles }, { deletedAttendances: delAtt, deletedDriveFiles: delFiles, keptFrom: cutoff }, 'system');
+  saveDB();
+  io.emit('attendances:update', db.attendances);
+  io.emit('drive:update', (db.driveFiles||[]).slice(0,20));
+  console.log(`[RESET ĐIỂM DANH] ${todayStr}: đã xóa ${delAtt} chấm công + ${delFiles} file ảnh trước ${cutoff} (giữ từ ${cutoff})`);
+}
+setInterval(()=>{ autoSendWeeklyTick().catch(e=>console.error('[MAIL TUẦN] Lỗi:', e.message)); }, 10*60*1000);
+setInterval(()=>{ autoResetAttendanceTick().catch(e=>console.error('[RESET ĐIỂM DANH] Lỗi:', e.message)); }, 60*1000);
 
 // ============ SCHEDULES ============
 app.get('/api/schedules', authMiddleware, (req,res)=>{

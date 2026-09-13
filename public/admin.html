@@ -891,7 +891,7 @@ button:active{transform:scale(.97)}
           <div class="bg-white rounded-2xl border border-pink-200 p-4 shadow-sm">
             <div class="flex justify-between items-center border-b border-pink-100 pb-2">
               <div class="font-bold text-sm text-pink-900 flex items-center gap-1.5"><i class="fa-solid fa-envelope text-emerald-600"></i> Mail báo cáo chấm công tuần</div>
-              <span class="text-[10px] bg-emerald-100 text-emerald-700 font-bold px-2 py-0.5 rounded-full">Auto T2 6h</span>
+              <span class="text-[10px] bg-emerald-100 text-emerald-700 font-bold px-2 py-0.5 rounded-full">Auto CN 23h</span>
             </div>
             <div class="mt-3 space-y-3 text-sm">
               <label class="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 cursor-pointer">
@@ -905,7 +905,8 @@ button:active{transform:scale(.97)}
               <div><label class="text-xs font-bold text-pink-700">Tài khoản gửi (Gmail)</label><input id="setMailUser" placeholder="you@gmail.com" class="w-full mt-1 px-3 py-2 rounded-xl border border-pink-200 text-sm"></div>
               <div><label class="text-xs font-bold text-pink-700">Mật khẩu / App-password (đã ẩn)</label><input id="setMailPass" type="password" placeholder="••••••••" class="w-full mt-1 px-3 py-2 rounded-xl border border-pink-200 text-sm"></div>
               <div><label class="text-xs font-bold text-pink-700">Mail nhận (mỗi dòng 1 mail)</label><textarea id="setMailTo" rows="3" placeholder="a@gmail.com" class="w-full mt-1 px-3 py-2 rounded-xl border border-pink-200 text-sm"></textarea></div>
-              <div><label class="text-xs font-bold text-pink-700">Giờ gửi auto Thứ 2 (0-23)</label><input id="setMailHour" type="number" min="0" max="23" class="w-full mt-1 px-3 py-2 rounded-xl border border-pink-200 text-sm"></div>
+              <div><label class="text-xs font-bold text-pink-700">Giờ gửi auto Chủ nhật (0-23)</label><input id="setMailHour" type="number" min="0" max="23" class="w-full mt-1 px-3 py-2 rounded-xl border border-pink-200 text-sm"></div>
+              <div class="text-[11px] text-slate-500">23h00 CN gửi ZIP tuần (T2→CN) • 23h59 CN reset Bản ghi điểm danh (chỉ khi đã gửi mail).</div>
               <div id="mailLastSent" class="text-[11px] text-slate-500"></div>
             </div>
           </div>
