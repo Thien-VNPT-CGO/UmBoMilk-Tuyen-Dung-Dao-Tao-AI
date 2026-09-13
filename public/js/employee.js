@@ -2694,9 +2694,20 @@ async function loadSalaryTab() {
 
     const atts = await api('/api/attendances?employeeId=' + employee.employeeId).catch(() => []);
 
+    // Lịch lễ VN realtime: NV chính thức đi làm ngày lễ ×2, Mùng 3-5 Tết ×3
+    let holMap = {};
+    try{
+      if(isOfficial && Array.isArray(atts) && atts.length){
+        const ds = atts.map(a=>a.date).filter(Boolean).sort();
+        const h = await api(`/api/holidays?from=${ds[0]}&to=${ds[ds.length-1]}`).catch(()=>null);
+        holMap = (h && h.holidays) || {};
+      }
+    }catch(e){}
+
     let totalHours = 0;
     let totalShifts = 0;
     let totalSalary = 0;
+    let holidayBonus = 0;
 
     const shiftRows = (atts || []).map(a => {
       let hours = 5;
@@ -2709,7 +2720,10 @@ async function loadSalaryTab() {
         shiftLabel = 'Ca Tối (18h - 23h)';
       }
 
-      const shiftSalary = hours * hourlyRate;
+      const hol = isOfficial ? holMap[a.date] : null;
+      const mult = hol ? hol.multiplier : 1;
+      const shiftSalary = hours * hourlyRate * mult;
+      if(hol) holidayBonus += hours * hourlyRate * (mult-1);
       totalHours += hours;
       totalShifts += 1;
       totalSalary += shiftSalary;
@@ -2717,9 +2731,9 @@ async function loadSalaryTab() {
       return `
         <tr class="border-b border-slate-100 text-xs">
           <td class="py-3 px-3 font-bold text-slate-800">${fmtDMY(a.date)}</td>
-          <td class="py-3 px-3"><span class="font-bold text-slate-700">${shiftLabel}</span></td>
+          <td class="py-3 px-3"><span class="font-bold text-slate-700">${shiftLabel}</span>${hol?`<div class="text-[10px] font-black text-amber-700 mt-0.5">🎌 ${hol.name} ×${mult}</div>`:''}</td>
           <td class="py-3 px-3 text-center font-bold text-slate-600">${hours}h</td>
-          <td class="py-3 px-3 text-center font-semibold text-slate-500">${hourlyRate.toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'})}đ/h</td>
+          <td class="py-3 px-3 text-center font-semibold text-slate-500">${hourlyRate.toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'})}đ/h${hol?` <span class="text-amber-600 font-black">×${mult}</span>`:''}</td>
           <td class="py-3 px-3 text-right font-black text-emerald-600">${shiftSalary.toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'})}đ</td>
           <td class="py-3 px-3 text-center"><span class="bg-emerald-100 text-emerald-700 text-[10px] font-black px-2 py-0.5 rounded-full">ĐÃ ĐIỂM DANH</span></td>
         </tr>
@@ -2740,7 +2754,7 @@ async function loadSalaryTab() {
               </span>
             </div>
             <p class="text-xs opacity-90 leading-relaxed">
-              Hệ thống tự động chấm công & tính lương chính xác theo quy chuẩn hợp đồng làm việc tại Ụm Bò Milk.
+              Hệ thống tự động chấm công & tính lương chính xác theo quy chuẩn hợp đồng làm việc tại Ụm Bò Milk.${isOfficial?' NV chính thức đi làm ngày lễ ×2, Mùng 3-5 Tết ×3 (tự động theo lịch VN, realtime).':''}
             </p>
           </div>
         </div>
@@ -2750,7 +2764,7 @@ async function loadSalaryTab() {
           <div class="bg-white border border-emerald-100 rounded-2xl p-4 shadow-sm text-center">
             <div class="text-[10px] font-black text-emerald-500 uppercase tracking-wide">Tổng thu nhập</div>
             <div class="font-black text-lg sm:text-base text-emerald-700 mt-1">${totalSalary.toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'})}đ</div>
-            <div class="text-[10px] text-emerald-600 mt-1">AI tính tự động theo ca</div>
+            <div class="text-[10px] text-emerald-600 mt-1">AI tính tự động theo ca${holidayBonus>0?` • gồm +${holidayBonus.toLocaleString('vi-VN')}đ thưởng lễ/Tết`:''}</div>
           </div>
           <div class="bg-white border border-blue-100 rounded-2xl p-4 shadow-sm text-center">
             <div class="text-[10px] font-black text-blue-500 uppercase tracking-wide">Số ca làm</div>

@@ -19,6 +19,7 @@ const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 const JSZip = require('jszip');
 const { pickFair } = require('./services/fairPick');
+const { getHolidayInfo, getHolidaysInRange } = require('./services/vietnamHoliday');
 
 // === ENV & SECURITY CONFIG (Realtime & Automation foundation) ===
 const PORT = process.env.PORT || 3000;
@@ -1192,7 +1193,8 @@ function calculatePayroll(employeeId, month){
   const rate = emp.type==='TRAINING'? db.settings.payroll.trainingRate : db.settings.payroll.officialRate;
   // attendances in month
   const atts = db.attendances.filter(a=>a.employeeId===employeeId && a.date.startsWith(month) && a.status==='COMPLETED');
-  let totalHours=0, totalPenalty=0, breakdown=[];
+  const isOfficialEmp = emp.type==='OFFICIAL' || emp.status==='OFFICIAL';
+  let totalHours=0, totalPenalty=0, holidayBonus=0, breakdown=[];
   atts.forEach(a=>{
     const shiftInfo = db.settings.payroll.shifts[a.shift];
     const hours = shiftInfo? shiftInfo.hours : 5;
@@ -1202,11 +1204,18 @@ function calculatePayroll(employeeId, month){
     if(a.violations && a.violations.includes('EARLY_LEAVE')) penalty+=db.settings.attendance.penaltyLate;
     if(a.violations && a.violations.includes('NO_CHECKOUT')) penalty+=db.settings.attendance.penaltyNoCheckout;
     totalPenalty+=penalty;
-    breakdown.push({date:a.date, shift:a.shift, hours, rate, amount: hours*rate, penalty, net: hours*rate - penalty});
+    // Lễ/Tết: NV chính thức đi làm được ×2 (lễ) / ×3 (Mùng 3-5 Tết) — cộng phần chênh
+    let multiplier = 1, holidayName = null;
+    if(isOfficialEmp){
+      const hol = getHolidayInfo(a.date);
+      if(hol){ multiplier = hol.multiplier; holidayName = hol.name; holidayBonus += Math.round(hours*rate*(multiplier-1)); }
+    }
+    const amount = Math.round(hours*rate*multiplier);
+    breakdown.push({date:a.date, shift:a.shift, hours, rate, multiplier, holidayName, amount, penalty, net: amount - penalty});
   });
-  const gross = totalHours * rate;
+  const gross = breakdown.reduce((s,b)=>s+b.amount,0);
   const net = gross - totalPenalty;
-  return { employeeId, name: emp.name, type: emp.type, rate, totalHours, gross, totalPenalty, net, breakdown, month };
+  return { employeeId, name: emp.name, type: emp.type, rate, totalHours, gross, totalPenalty, net, holidayBonus, breakdown, month };
 }
 // === OFFICIAL MONTHLY ATTENDANCE (T1→Cuối tháng) ===
 function getDaysInMonth(year, month){
@@ -10833,13 +10842,24 @@ app.get('/api/finance/reports/payroll-summary', financeAuthMiddleware, (req,res)
     
     let trainingHours = 0;
     let officialHours = 0;
+    let luongLeThem = 0;
+    const leChiTiet = [];
 
     atts.forEach(a=>{
       const shiftHours = (db.settings.payroll.shifts[a.shift || emp.shift]?.hours) || 5;
       const h = a.actualHours ? Number(a.actualHours) : shiftHours;
       const isDayTraining = isTraining && (!emp.officialStartDate || a.date < emp.officialStartDate);
       if(isDayTraining) trainingHours += h;
-      else officialHours += h;
+      else {
+        officialHours += h;
+        // Lễ/Tết: NV chính thức đi làm ×2 (lễ) / ×3 (Mùng 3-5 Tết) — cộng phần chênh vào thưởng lễ
+        const hol = getHolidayInfo(a.date);
+        if(hol){
+          const extra = Math.round(h * 25500 * (hol.multiplier-1));
+          luongLeThem += extra;
+          leChiTiet.push({ date: a.date, name: hol.name, multiplier: hol.multiplier, extra });
+        }
+      }
     });
 
     const luongHocViec = Math.round(trainingHours * 21000);
@@ -10856,7 +10876,7 @@ app.get('/api/finance/reports/payroll-summary', financeAuthMiddleware, (req,res)
       if(a.violations && a.violations.includes('LATE')) giamTru += 20000;
     });
 
-    const thucLinh = luongHocViec + luongChinhThuc + hoanDongPhuc + hoanKhamSK - giamTru;
+    const thucLinh = luongHocViec + luongChinhThuc + luongLeThem + hoanDongPhuc + hoanKhamSK - giamTru;
 
     return {
       employeeId: emp.employeeId,
@@ -10867,6 +10887,8 @@ app.get('/api/finance/reports/payroll-summary', financeAuthMiddleware, (req,res)
       totalHours: Math.round((trainingHours+officialHours)*10)/10,
       luongHocViec,
       luongChinhThuc,
+      luongLeThem,
+      leChiTiet,
       hoanDongPhuc,
       hoanKhamSK,
       giamTru,
@@ -10875,6 +10897,18 @@ app.get('/api/finance/reports/payroll-summary', financeAuthMiddleware, (req,res)
   });
 
   res.json({ month: m, rows });
+});
+
+// Lịch lễ Việt Nam cho web app (lương ×2 lễ / ×3 Mùng 3-5 Tết, NV chính thức) — realtime
+app.get('/api/holidays', authMiddleware, (req,res)=>{
+  const { from, to, month } = req.query;
+  let f = from, t = to;
+  if(month && /^\d{4}-\d{2}$/.test(month)){ f = month+'-01'; t = month+'-31'; }
+  if(!f || !t){
+    const m = getVietnamTodayStr().slice(0,7);
+    f = m+'-01'; t = m+'-31';
+  }
+  res.json({ from: f, to: t, holidays: getHolidaysInRange(f, t) });
 });
 
 // Finance 4 sheets - backward compatibility

@@ -524,6 +524,7 @@ function renderPayrollSummary(rows){
 
   let totalLuongHV = 0;
   let totalLuongCT = 0;
+  let totalLuongLe = 0;
   let totalHoanDP = 0;
   let totalHoanKSK = 0;
   let totalGiamTru = 0;
@@ -533,6 +534,7 @@ function renderPayrollSummary(rows){
   tbody.innerHTML = filtered.map(r => {
     totalLuongHV += r.luongHocViec || 0;
     totalLuongCT += r.luongChinhThuc || 0;
+    totalLuongLe += r.luongLeThem || 0;
     totalHoanDP += r.hoanDongPhuc || 0;
     totalHoanKSK += r.hoanKhamSK || 0;
     totalGiamTru += r.giamTru || 0;
@@ -548,7 +550,8 @@ function renderPayrollSummary(rows){
         <td class="p-2.5 text-center font-bold text-slate-800">${r.officialHours || '—'}</td>
         <td class="p-2.5 text-center font-black bg-amber-50 text-amber-900">${r.totalHours}</td>
         <td class="p-2.5 text-right font-medium text-emerald-800">${fmtMoney(r.luongHocViec)}</td>
-        <td class="p-2.5 text-right font-medium text-slate-800">${fmtMoney(r.luongChinhThuc)}</td>
+        <td class="p-2.5 text-right font-medium text-slate-800">${fmtMoney(r.luongChinhThuc)}${(r.leChiTiet||[]).length?`<div class="text-[10px] font-bold text-amber-600">${r.leChiTiet.map(l=>`${fmtDMY(l.date).slice(0,5)} ${l.name} ×${l.multiplier}`).join('<br>')}</div>`:''}</td>
+        <td class="p-2.5 text-right font-bold text-amber-600">${r.luongLeThem ? `+${fmtMoney(r.luongLeThem)}` : '—'}</td>
         <td class="p-2.5 text-right font-bold text-orange-600">${r.hoanDongPhuc ? `+${fmtMoney(r.hoanDongPhuc)}` : '—'}</td>
         <td class="p-2.5 text-right font-bold text-emerald-600">${r.hoanKhamSK ? `+${fmtMoney(r.hoanKhamSK)}` : '—'}</td>
         <td class="p-2.5 text-right font-bold text-rose-600">${r.giamTru ? `-${fmtMoney(r.giamTru)}` : '0'}</td>
@@ -558,10 +561,11 @@ function renderPayrollSummary(rows){
   }).join('');
 
   document.getElementById('payrollTfootRow').innerHTML = `
-    <td colspan="5" class="p-2.5 text-center font-black bg-slate-200">TỔNG CỘNG (${filtered.length} NHÂN SỰ)</td>
+    <td colspan="6" class="p-2.5 text-center font-black bg-slate-200">TỔNG CỘNG (${filtered.length} NHÂN SỰ)</td>
     <td class="p-2.5 text-center font-black bg-amber-200">${Math.round(totalGio*10)/10}</td>
     <td class="p-2.5 text-right font-black bg-slate-200">${fmtMoney(totalLuongHV)}</td>
     <td class="p-2.5 text-right font-black bg-slate-200">${fmtMoney(totalLuongCT)}</td>
+    <td class="p-2.5 text-right font-black text-amber-700 bg-slate-200">+${fmtMoney(totalLuongLe)}</td>
     <td class="p-2.5 text-right font-black text-orange-700 bg-slate-200">+${fmtMoney(totalHoanDP)}</td>
     <td class="p-2.5 text-right font-black text-emerald-700 bg-slate-200">+${fmtMoney(totalHoanKSK)}</td>
     <td class="p-2.5 text-right font-black text-rose-700 bg-slate-200">-${fmtMoney(totalGiamTru)}</td>
@@ -714,6 +718,8 @@ function exportPayrollSummaryExcel(){
     'LƯƠNG HỌC VIỆC': r.luongHocViec,
     'GIỜ CHÍNH THỨC (25.5K)': r.officialHours,
     'LƯƠNG CHÍNH THỨC': r.luongChinhThuc,
+    'THƯỞNG LỄ/TẾT (×2, ×3)': r.luongLeThem || 0,
+    'CHI TIẾT LỄ/TẾT': (r.leChiTiet||[]).map(l=>`${l.date} ${l.name} ×${l.multiplier}`).join('; '),
     'TỔNG GIỜ': r.totalHours,
     'CỘNG HOÀN ĐỒNG PHỤC': r.hoanDongPhuc,
     'CỘNG HOÀN KHÁM SK': r.hoanKhamSK,
