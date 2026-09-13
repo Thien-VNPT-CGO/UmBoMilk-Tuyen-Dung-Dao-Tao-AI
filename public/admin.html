@@ -535,16 +535,30 @@ button:active{transform:scale(.97)}
             <span><b class="text-pink-700">HR nhìn ô lịch hôm nay</b> là biết ngay NV có đi làm không — màu ô tự đổi theo <b class="text-emerald-600">chấm công realtime</b> (cùng dữ liệu với cột “Chấm công hôm nay” ở tab Nhân viên). Thử việc chấm trước ca 30 phút, Official tính trễ sau 5 phút.</span>
           </div>
         </div>
-        <div id="scheduleGrid" class="grid gap-3"></div>
-        <!-- Duyệt lịch đăng ký TEST (VIP test / sau 15h00 T7) -->
-        <div id="testWeekApprovalCard" class="bg-white rounded-2xl border-2 border-purple-300 p-4 mt-4 shadow-sm">
+        <!-- Duyệt lịch đăng ký TEST (VIP test / sau 15h00 T7) — nằm ngay dưới Chú thích chấm công -->
+        <div id="testWeekApprovalCard" class="bg-white rounded-2xl border-2 border-purple-300 p-4 mb-3 shadow-sm">
           <div class="font-black text-purple-900 flex items-center gap-2 text-sm"><i class="fa-solid fa-flask text-purple-600"></i> Duyệt lịch đăng ký TEST (NV chính thức)</div>
           <div id="testWeekStatusText" class="text-xs text-slate-600 mt-1">Đang tải trạng thái...</div>
+          <div class="mt-3 flex gap-2 items-center bg-purple-50/60 border border-purple-200 rounded-xl px-3 py-2">
+            <i class="fa-solid fa-key text-purple-500 text-sm"></i>
+            <input id="testWeekKey" placeholder="HR nhập key do Admin cấp (hiệu lực 30 phút)" class="flex-1 px-3 py-2 rounded-xl border border-purple-200 text-xs font-mono uppercase focus:border-purple-400 outline-none bg-white">
+          </div>
+          <div id="testWeekKeyNote" class="mt-2 text-[11px] font-bold rounded-xl px-3 py-2"></div>
           <div class="mt-3 flex gap-2">
             <button id="btnApproveTestWeek" onclick="approveTestWeek()" class="flex-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-black py-3 rounded-xl shadow flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"><i class="fa-solid fa-check-circle"></i> Duyệt lịch đăng ký test</button>
             <button onclick="loadTestWeekStatus()" class="bg-white border border-purple-200 text-purple-700 font-bold px-4 py-3 rounded-xl hover:bg-purple-50"><i class="fa-solid fa-rotate"></i> Tải lại</button>
           </div>
+          <div id="testWeekKeyAdminBox" class="hidden mt-3 bg-amber-50 border border-amber-200 rounded-xl p-3">
+            <div class="font-black text-xs text-amber-900 flex items-center gap-2"><i class="fa-solid fa-key text-amber-600"></i> Cấp key mở khóa tuần cho HR (1 key = 1 lần, hết hạn sau 30 phút)</div>
+            <div class="mt-2 flex gap-2">
+              <button onclick="issueTestWeekKey()" class="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-black px-4 py-2 rounded-xl shadow text-xs"><i class="fa-solid fa-key"></i> Cấp key mới</button>
+              <button onclick="loadUnlockKeys()" class="bg-white border border-amber-200 text-amber-700 font-bold px-3 py-2 rounded-xl text-xs"><i class="fa-solid fa-rotate"></i> Tải lại</button>
+            </div>
+            <div id="unlockKeyResult" class="mt-2 text-xs font-bold"></div>
+            <div id="unlockKeyAdminList" class="mt-2 space-y-1.5 max-h-[30vh] overflow-auto"></div>
+          </div>
         </div>
+        <div id="scheduleGrid" class="grid gap-3"></div>
         <!-- Duyệt lịch tuần sau (Official) -->
         <div id="nextWeekApprovalCard" class="hidden bg-white rounded-2xl border-2 border-amber-300 p-4 mt-4 shadow-sm">
           <div class="font-black text-amber-900 flex items-center gap-2 text-sm"><i class="fa-solid fa-calendar-check text-amber-600"></i> Duyệt lịch tuần sau (Official) - AI tự động</div>

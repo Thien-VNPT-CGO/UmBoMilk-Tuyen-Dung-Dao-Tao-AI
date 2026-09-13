@@ -198,6 +198,7 @@ let db = {
   trainingShiftRequests: [],
   shiftSwapRequests: [],
   swapKeys: [],
+  unlockKeys: [],
   testCourses: [],
   testResults: [],
   settings: DEFAULT_SETTINGS,
@@ -303,6 +304,7 @@ function loadDB() {
       if (!db.trainingShiftRequests) db.trainingShiftRequests = [];
       if (!db.shiftSwapRequests) db.shiftSwapRequests = [];
       if (!db.swapKeys) db.swapKeys = [];
+      if (!db.unlockKeys) db.unlockKeys = [];
       if (!db.penalties) db.penalties = [];
       if (!db.driveFiles) db.driveFiles = [];
       if (!db.payrollSnapshots) db.payrollSnapshots = [];
@@ -350,6 +352,7 @@ function saveDB() {
     if(Array.isArray(clone.driveFiles)) clone.driveFiles = clone.driveFiles.filter(f => !isTestRecord(f));
     if(Array.isArray(clone.shiftSwapRequests)) clone.shiftSwapRequests = clone.shiftSwapRequests.filter(r => !isTestRecord(r));
     if(Array.isArray(clone.swapKeys)) clone.swapKeys = clone.swapKeys.filter(r => !isTestRecord(r));
+    if(Array.isArray(clone.unlockKeys)) clone.unlockKeys = clone.unlockKeys.filter(r => !isTestRecord(r));
     if(Array.isArray(clone.trainingShiftRequests)) clone.trainingShiftRequests = clone.trainingShiftRequests.filter(r => !isTestRecord(r));
     if(Array.isArray(clone.zaloRecords)) clone.zaloRecords = clone.zaloRecords.filter(z => !isTestRecord(z));
     if(clone.settings){
@@ -7493,6 +7496,61 @@ app.post('/api/schedules/approve-next-week', authMiddleware, roleCheck(['Admin',
   res.json({ success:true, weekStart: nextWeekStart, approved: drafts.length, warning, violations, message:`Đã duyệt lịch tuần sau ${nextWeekStart} cho ${drafts.length} NV và gửi đến Web App Nhân viên${warning ? ' - ' + warning : ''}` });
 });
 
+// ============ KEY MỞ KHÓA TUẦN DUYỆT TEST (Admin cấp, HR dùng 1 lần/30 phút) ============
+function genUnlockCode(){
+  const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let c='';
+  for(let i=0;i<6;i++) c+=chars[Math.floor(Math.random()*chars.length)];
+  return 'UNLOCK-'+c;
+}
+function checkTestWeekKey(code){
+  if(!db.unlockKeys) db.unlockKeys = [];
+  const c = String(code||'').trim().toUpperCase();
+  if(!c) return { ok:false, error:'HR vui lòng nhập key do Admin cấp (hiệu lực 30 phút)' };
+  const rec = db.unlockKeys.find(k=>k.code===c && k.purpose==='TEST_WEEK');
+  if(!rec) return { ok:false, error:'Key không đúng' };
+  if(rec.status!=='UNUSED') return { ok:false, error:'Key đã được dùng 1 lần, xin key mới từ Admin' };
+  if(rec.expiresAt && Date.now() > new Date(rec.expiresAt).getTime()){
+    rec.status='EXPIRED'; saveDB();
+    return { ok:false, error:'Key đã hết hạn 30 phút, xin key mới từ Admin' };
+  }
+  return { ok:true, rec };
+}
+function consumeTestWeekKey(rec, usedBy, weekStart){
+  rec.status='USED'; rec.usedAt=getVietnamISOString(); rec.usedBy=usedBy||null;
+  if(weekStart) rec.weekStart=weekStart;
+  rec.version=(rec.version||1)+1;
+}
+function requireTestWeekKey(req){
+  if(req.user && req.user.role==='Admin') return { ok:true, admin:true, rec:null };
+  return checkTestWeekKey(req.body && req.body.code);
+}
+app.post('/api/unlock-keys', authMiddleware, roleCheck(['Admin']), (req,res)=>{
+  if(!db.unlockKeys) db.unlockKeys = [];
+  let code = genUnlockCode();
+  while(db.unlockKeys.some(k=>k.code===code)) code = genUnlockCode();
+  const now = Date.now();
+  const rec = {
+    id: uuidv4(), code, purpose: 'TEST_WEEK', status: 'UNUSED',
+    weekStart: (req.body && req.body.weekStart) || null,
+    createdBy: req.user.username, createdAt: getVietnamISOString(),
+    expiresAt: new Date(now+30*60*1000).toISOString(),
+    usedAt: null, usedBy: null, version: 1
+  };
+  db.unlockKeys.unshift(rec);
+  audit(req.user.username,'ISSUE_UNLOCK_KEY','UNLOCK_KEY',null,rec,req.ip);
+  saveDB();
+  res.json({success:true, key: rec, message:`Đã cấp key ${code} mở khóa tuần duyệt TEST - hiệu lực 30 phút, dùng 1 lần`});
+});
+app.get('/api/unlock-keys', authMiddleware, roleCheck(['Admin']), (req,res)=>{
+  const now = Date.now();
+  const list = [...(db.unlockKeys||[])].slice(0,30).map(k=>({
+    ...k,
+    expired: k.status==='UNUSED' && k.expiresAt && now > new Date(k.expiresAt).getTime(),
+    remainSec: k.expiresAt ? Math.max(0, Math.round((new Date(k.expiresAt).getTime()-now)/1000)) : null
+  }));
+  res.json(list);
+});
 // ============ DUYỆT LỊCH ĐĂNG KÝ TEST (nút Admin) ============
 // Chính sách bật nút:
 // - VIP test OFF đang BẬT -> luôn cho duyệt (để admin test).
@@ -7521,6 +7579,9 @@ app.post('/api/schedules/approve-test-week', authMiddleware, roleCheck(['Admin',
   const nextWeekStart = getNextWeekStartStr();
   const vip = !!db.settings?.off?.vipTestMode;
   if(!vip && isOffWindowOpen()) return res.status(400).json({error:'Đang trong giờ đăng ký OFF (T6 12:00-T7 15:00). Nút duyệt mở sau 15h00 Thứ 7 (hoặc bật VIP test để duyệt test).'});
+  // HR (không phải Admin) phải nhập key do Admin cấp (30 phút, 1 lần)
+  const keyCheck = requireTestWeekKey(req);
+  if(!keyCheck.ok) return res.status(403).json({error:keyCheck.error});
   // 1. Đảm bảo có draft (AI tự sắp lịch nếu chưa có)
   let drafts = db.schedules.filter(s=> s.weekStart===nextWeekStart && s.approvalStatus==='PENDING_APPROVAL');
   let generated = false;
@@ -7561,6 +7622,7 @@ app.post('/api/schedules/approve-test-week', authMiddleware, roleCheck(['Admin',
   if(!db.settings.off) db.settings.off = {};
   if(!Array.isArray(db.settings.off.lockedWeeks)) db.settings.off.lockedWeeks = [];
   if(!db.settings.off.lockedWeeks.includes(nextWeekStart)) db.settings.off.lockedWeeks.push(nextWeekStart);
+  if(keyCheck.rec) consumeTestWeekKey(keyCheck.rec, req.user.username, nextWeekStart);
   audit(req.user.username,'APPROVE_TEST_WEEK_SCHEDULE','SCHEDULE', { weekStart: nextWeekStart, generated }, { approved: drafts.length, locked: true, vip, warning }, req.ip);
   saveDB();
   io.emit('schedules:update', db.schedules);
@@ -7573,11 +7635,15 @@ app.post('/api/schedules/approve-test-week', authMiddleware, roleCheck(['Admin',
 app.post('/api/schedules/unlock-week', authMiddleware, roleCheck(['Admin','HR']), (req,res)=>{
   const weekStart = (req.body && req.body.weekStart) || getNextWeekStartStr();
   if(!/^\d{4}-\d{2}-\d{2}$/.test(weekStart)) return res.status(400).json({error:'weekStart không hợp lệ (YYYY-MM-DD)'});
+  // HR (không phải Admin) phải nhập key do Admin cấp (30 phút, 1 lần) — dùng xong khóa ngay
+  const keyCheck = requireTestWeekKey(req);
+  if(!keyCheck.ok) return res.status(403).json({error:keyCheck.error});
   if(!db.settings.off) db.settings.off = {};
   if(!Array.isArray(db.settings.off.lockedWeeks)) db.settings.off.lockedWeeks = [];
   const before = [...db.settings.off.lockedWeeks];
   db.settings.off.lockedWeeks = db.settings.off.lockedWeeks.filter(w=> w!==weekStart);
   const wasLocked = before.length !== db.settings.off.lockedWeeks.length;
+  if(keyCheck.rec) consumeTestWeekKey(keyCheck.rec, req.user.username, weekStart);
   audit(req.user.username,'UNLOCK_WEEK_SCHEDULE','SCHEDULE', { weekStart, lockedWeeks: before }, { weekStart, lockedWeeks: db.settings.off.lockedWeeks }, req.ip);
   saveDB();
   io.emit('schedules:update', db.schedules);
@@ -9922,7 +9988,7 @@ app.post('/api/system/reset', authMiddleware, roleCheck(['Admin']), async (req,r
     isSystemResetting = true;
     try{
       const keepSettings = db.settings;
-      db.employees=[]; db.applicants=[]; db.interviews=[]; db.attendances=[]; db.schedules=[]; db.offRequests=[];       db.emergencyRequests=[]; db.deviceRequests=[]; db.trainingShiftRequests=[]; db.shiftSwapRequests=[]; db.swapKeys=[]; db.testResults=[]; db.keys=[]; db.zaloRecords=[]; db.notifications=[]; db.syncQueue=[]; db.auditLogs=[];
+      db.employees=[]; db.applicants=[]; db.interviews=[]; db.attendances=[]; db.schedules=[]; db.offRequests=[];       db.emergencyRequests=[]; db.deviceRequests=[]; db.trainingShiftRequests=[]; db.shiftSwapRequests=[]; db.swapKeys=[]; db.unlockKeys=[]; db.testResults=[]; db.keys=[]; db.zaloRecords=[]; db.notifications=[]; db.syncQueue=[]; db.auditLogs=[];
       db.driveFiles=[]; db.payrollSnapshots=[]; db.overtimeRequests=[]; db.leaveRequests=[]; db.payrollPeriods=[]; db.attendanceAdjustments=[]; db.penalties=[]; db.financeKeys=[];
       db.settings = keepSettings || DEFAULT_SETTINGS;
       // RÀNG BUỘC REALTIME: Lưu rỗng ngay lập tức vào ổ cứng và phát socket để web app lập tức sạch 100%

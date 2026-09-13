@@ -4512,23 +4512,68 @@ async function loadTestWeekStatus(){
       txt.textContent = base + ' ' + res.reason;
       txt.className='text-xs text-emerald-700 mt-1 font-bold';
     }
+    try{ refreshTestWeekKeyGate(); }catch(e){}
+    try{ if(typeof currentUser!=='undefined' && currentUser && currentUser.role==='Admin'){ const ab=document.getElementById('testWeekKeyAdminBox'); if(ab) ab.classList.remove('hidden'); loadUnlockKeys(); } }catch(e){}
   }catch(e){ const t=document.getElementById('testWeekStatusText'); if(t) t.textContent='Lỗi: '+(e.message||e); }
 }
+// Key mở khóa tuần duyệt TEST: Admin cấp (30 phút/1 lần), HR nhập để dùng — xong khóa ngay
+function testWeekKeyCode(){ return (document.getElementById('testWeekKey')?.value||'').trim().toUpperCase(); }
+function refreshTestWeekKeyGate(){
+  const note=document.getElementById('testWeekKeyNote');
+  const input=document.getElementById('testWeekKey');
+  const isAdmin=(typeof currentUser!=='undefined' && currentUser && currentUser.role==='Admin');
+  if(input && !input._keyBound){ input._keyBound=true; input.addEventListener('input', ()=>{ try{ refreshTestWeekKeyGate(); }catch(e){} }); }
+  if(!note) return;
+  if(isAdmin){ note.className='mt-2 text-[11px] font-bold rounded-xl px-3 py-2 bg-emerald-50 border border-emerald-200 text-emerald-700'; note.textContent='✅ Bạn là Admin — dùng trực tiếp không cần key. Cấp key cho HR ở khung bên dưới.'; return; }
+  const hasKey=!!testWeekKeyCode();
+  note.className='mt-2 text-[11px] font-bold rounded-xl px-3 py-2 '+(hasKey?'bg-blue-50 border border-blue-200 text-blue-700':'bg-slate-100 border border-slate-200 text-slate-500');
+  note.textContent=hasKey?'🔓 Đã nhập key — bấm Duyệt/Mở khóa để dùng (1 lần duy nhất, xong khóa lại).':'🔒 Chức năng đang khóa — nhập key do Admin cấp (hiệu lực 30 phút) mới bấm được.';
+  const btn=document.getElementById('btnApproveTestWeek');
+  if(btn && !btn.disabled && !hasKey){ btn.disabled=true; btn.dataset.keyLocked='1'; }
+  else if(btn && btn.dataset.keyLocked==='1' && hasKey){ btn.disabled=false; delete btn.dataset.keyLocked; try{ loadTestWeekStatus(); }catch(e){} }
+}
+async function issueTestWeekKey(){
+  if(typeof currentUser!=='undefined' && currentUser && currentUser.role!=='Admin') return showToast('Chỉ tài khoản Admin mới được cấp key','error');
+  try{
+    const res=await api('/api/unlock-keys', {method:'POST', headers:{Authorization:'Bearer '+token}, body:JSON.stringify({})});
+    const out=document.getElementById('unlockKeyResult');
+    if(out) out.innerHTML=`✅ Key mới: <span class="font-mono text-base bg-white border border-amber-300 rounded-lg px-3 py-1">${res.key.code}</span> <span class="text-amber-700">— hiệu lực 30 phút, dùng 1 lần. Gửi cho HR.</span>`;
+    showToast(res.message||'Đã cấp key','success');
+    loadUnlockKeys();
+  }catch(e){ showToast(e.message,'error'); }
+}
+async function loadUnlockKeys(){
+  const el=document.getElementById('unlockKeyAdminList');
+  if(!el) return;
+  try{
+    const list=await api('/api/unlock-keys', {headers:{Authorization:'Bearer '+token}});
+    if(!list.length) return el.innerHTML='<div class="p-3 text-center text-xs text-slate-400">Chưa cấp key nào</div>';
+    el.innerHTML=list.map(k=>{
+      const exp=k.status==='UNUSED' && k.expired;
+      const badge=k.status==='UNUSED'?(exp?'<span class="text-[11px] font-black px-2 py-1 rounded-full bg-red-100 text-red-700">HẾT HẠN</span>':'<span class="text-[11px] font-black px-2 py-1 rounded-full bg-emerald-500 text-white">CÒN '+Math.floor((k.remainSec||0)/60)+'P'+((k.remainSec||0)%60)+'S</span>'):(k.status==='USED'?'<span class="text-[11px] font-black px-2 py-1 rounded-full bg-slate-200 text-slate-500">ĐÃ DÙNG'+(k.usedBy?' • '+k.usedBy:'')+'</span>':'<span class="text-[11px] font-black px-2 py-1 rounded-full bg-slate-200 text-slate-500">'+k.status+'</span>');
+      return `<div class="bg-white border rounded-xl px-3 py-2 flex justify-between items-center gap-2"><div class="min-w-0"><span class="font-mono font-black text-sm">${k.code}</span><div class="text-[11px] text-slate-400">Cấp bởi ${k.createdBy||'—'} • ${fmtDMYTime(k.createdAt)}</div></div>${badge}</div>`;
+    }).join('');
+  }catch(e){ el.innerHTML='<div class="p-3 text-center text-xs text-slate-400">Không tải được</div>'; }
+}
 async function approveTestWeek(){
+  if(typeof currentUser!=='undefined' && currentUser && currentUser.role!=='Admin' && !testWeekKeyCode()){ showToast('Nhập key do Admin cấp trước khi duyệt (hiệu lực 30 phút)','error'); try{ refreshTestWeekKeyGate(); }catch(e){} return; }
   if(!confirm('Duyệt lịch đăng ký TEST: khóa đợt đăng ký OFF tuần sau, AI sắp lịch cho NV chính thức (nếu chưa có) và đồng bộ Sheet?')) return;
   const btn=document.getElementById('btnApproveTestWeek'); if(btn) btn.disabled=true;
   try{
-    const res=await api('/api/schedules/approve-test-week', {method:'POST', headers:{Authorization:'Bearer '+token}});
+    const res=await api('/api/schedules/approve-test-week', {method:'POST', headers:{Authorization:'Bearer '+token}, body:JSON.stringify({code:testWeekKeyCode()})});
     showToast(res.message||'Đã duyệt lịch đăng ký test','success');
+    const ki=document.getElementById('testWeekKey'); if(ki) ki.value='';
     loadTestWeekStatus(); loadNextWeekDrafts(); loadSchedules();
   }catch(e){ showToast(e.message,'error'); const b=document.getElementById('btnApproveTestWeek'); if(b) b.disabled=false; loadTestWeekStatus(); }
 }
 async function unlockWeek(){
   if(!confirm('Mở khóa đợt đăng ký OFF tuần sau? NV sẽ đăng ký OFF tiếp được (TH1/TH2 giữ nguyên).')) return;
+  if(typeof currentUser!=='undefined' && currentUser && currentUser.role!=='Admin' && !testWeekKeyCode()){ showToast('Nhập key do Admin cấp trước khi mở khóa (hiệu lực 30 phút)','error'); try{ refreshTestWeekKeyGate(); }catch(e){} return; }
   const btn=document.getElementById('btnApproveTestWeek'); if(btn) btn.disabled=true;
   try{
-    const res=await api('/api/schedules/unlock-week', {method:'POST', headers:{Authorization:'Bearer '+token}, body:JSON.stringify({})});
+    const res=await api('/api/schedules/unlock-week', {method:'POST', headers:{Authorization:'Bearer '+token}, body:JSON.stringify({code:testWeekKeyCode()})});
     showToast(res.message||'Đã mở khóa tuần','success');
+    const ki=document.getElementById('testWeekKey'); if(ki) ki.value='';
     loadTestWeekStatus(); loadNextWeekDrafts(); loadSchedules();
   }catch(e){ showToast(e.message,'error'); loadTestWeekStatus(); }
 }
