@@ -2586,9 +2586,11 @@ async function loadNotifications(){
     if(window._lastNotifIds){
       const fresh = unreadNow.filter(n=>!window._lastNotifIds.includes(n.id));
       if(fresh.length>0){
-        const f = fresh[0];
-        showToast(`🔔 ${f.title||'Thông báo mới'}`, 'info');
-        speakUmb(`${f.title||''}. ${f.content||f.message||''}`);
+        // Đọc HẾT theo thứ tự tới trước → trước (toast chỉ hiện 1 dòng đầu cho gọn)
+        fresh.sort((a,b)=>{ const ta=new Date(a.createdAt||0).getTime()||0, tb=new Date(b.createdAt||0).getTime()||0; return ta-tb; });
+        const f0 = fresh[0];
+        showToast(`🔔 ${f0.title||'Thông báo mới'}`, 'info');
+        fresh.forEach(f=> speakUmb(`${f.title||''}. ${f.content||f.message||''}`));
       }
     }
     window._lastNotifIds = myNotifs.map(n=>n.id);
@@ -2865,13 +2867,14 @@ function showToast(msg, type='success'){
   document.body.appendChild(t);
   setTimeout(()=>{ t.classList.add('umb-hide'); setTimeout(()=>t.remove(),260); },2600);
 }
-// Am thanh thong bao UmBoMilk (Web Speech API, giọng Adam - chậm, rõ ràng) + nut bat/tat
+// Am thanh thong bao UmBoMilk (Web Speech API, ưu tiên giọng nữ tiếng Việt - chậm, rõ ràng) + nut bat/tat
 if(typeof window._ttsEnabled==='undefined') window._ttsEnabled = localStorage.getItem('umb_tts')!=='off';
 let _adamVoice = null;
 function getAdamVoice(){
   if(_adamVoice) return _adamVoice;
   const voices = speechSynthesis.getVoices();
-  _adamVoice = voices.find(v => v.name.includes('Adam') || v.name.includes('Google UK English Male') || v.name.includes('Microsoft George') || (v.lang==='en-US' && v.name.includes('Male'))) || voices.find(v => v.lang.startsWith('en')) || null;
+  const viFem = voices.find(v => v.lang && v.lang.startsWith('vi') && /hoaimy|female|nữ/i.test(v.name)) || voices.find(v => v.lang==='vi-VN' && /\ban\b/i.test(v.name));
+  _adamVoice = viFem || voices.find(v => v.name.includes('Adam') || v.name.includes('Google UK English Male') || v.name.includes('Microsoft George') || (v.lang==='en-US' && v.name.includes('Male'))) || voices.find(v => v.lang.startsWith('vi')) || voices.find(v => v.lang.startsWith('en')) || null;
   return _adamVoice;
 }
 function speakUmb(text){
@@ -2879,16 +2882,35 @@ function speakUmb(text){
     if(!window._ttsEnabled || !('speechSynthesis' in window)) return;
     const clean=String(text||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim().slice(0,140);
     if(!clean) return;
-    speechSynthesis.cancel();
-    const u=new SpeechSynthesisUtterance('UmBoMilk có thông báo mới. '+clean);
+    const q = window._umbSpeechQ;
+    const last = q[q.length-1];
+    if(last && last.clean===clean) return; // câu trùng liên tiếp thì bỏ
+    if(q.length>50) q.shift(); // chống tràn khi flood
+    q.push({ clean });
+    _umbProcessQ();
+  }catch(e){}
+}
+// Hàng đợi đọc tuần tự: tới trước đọc trước, đọc hết từng câu, không cắt câu cũ, không bỏ qua
+if(!Array.isArray(window._umbSpeechQ)) window._umbSpeechQ = [];
+if(typeof window._umbSpeaking==='undefined') window._umbSpeaking = false;
+function _umbProcessQ(){
+  try{
+    if(window._umbSpeaking) return;
+    if(!('speechSynthesis' in window)) return;
+    const next = window._umbSpeechQ.shift();
+    if(!next) return;
+    window._umbSpeaking = true;
+    const u=new SpeechSynthesisUtterance('UmBoMilk có thông báo mới. '+next.clean);
     const adamVoice = getAdamVoice();
     if(adamVoice) u.voice = adamVoice;
-    u.lang = adamVoice?.lang || 'en-US';
-    u.rate = 0.7;  // Chậm, rõ ràng
-    u.pitch = 1.0;
+    u.lang = (adamVoice && adamVoice.lang && adamVoice.lang.startsWith('vi')) ? adamVoice.lang : (adamVoice?.lang || 'en-US');
+    u.rate = 0.85;  // Chậm rõ: 0.85 (chậm hơn 1.0, không méo tiếng như 0.7)
+    u.pitch = 1.15;  // Cao độ tươi, vui tai (giọng nữ)
     u.volume = 1.0;
+    const done = ()=>{ window._umbSpeaking = false; setTimeout(_umbProcessQ, 250); };
+    u.onend = done; u.onerror = done;
     speechSynthesis.speak(u);
-  }catch(e){}
+  }catch(e){ window._umbSpeaking = false; }
 }
 function playNotificationSound(){
   try{
@@ -2913,7 +2935,7 @@ function toggleUmbTts(btn){
   window._ttsEnabled=!window._ttsEnabled;
   localStorage.setItem('umb_tts', window._ttsEnabled?'on':'off');
   if(btn) btn.textContent=window._ttsEnabled?'🔊':'🔇';
-  if(!window._ttsEnabled){ try{ speechSynthesis.cancel(); }catch(e){} }
+  if(!window._ttsEnabled){ try{ speechSynthesis.cancel(); }catch(e){} try{ window._umbSpeechQ=[]; window._umbSpeaking=false; }catch(e){} }
   else speakUmb('Đã bật âm thanh thông báo');
 }
 function mountTtsFab(){

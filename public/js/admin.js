@@ -5978,9 +5978,10 @@ function getAdamVoice(text){
     // Adam / ElevenLabs / Male EN cho tieng Anh
     const adam = voices.find(v => /adam/i.test(v.name)) || voices.find(v => /Google UK English Male/i.test(v.name)) || voices.find(v => /Microsoft (George|Guy|Christopher)/i.test(v.name)) || voices.find(v => v.lang==='en-US' && /male|daniel|david|george/i.test(v.name));
     if(adam && !_hasVn(text)){ _adamVoice = adam; return adam; }
-    // Tieng Viet: uu tien Google Tieng Viet / Microsoft An / HoaiMy de doc cham ro
+    // Tieng Viet: uu tien GIỌNG NỮ (Google/HoaiMy/An) cho vui tai, rõ chữ
     if(_hasVn(text)){
-      return voices.find(v => v.lang==='vi-VN' && /google/i.test(v.name)) || voices.find(v => v.lang==='vi-VN') || voices.find(v => v.lang.startsWith('vi')) || adam || voices[0];
+      const viFem = voices.find(v => v.lang.startsWith('vi') && /hoaimy|female|nữ/i.test(v.name)) || voices.find(v => v.lang==='vi-VN' && /\ban\b/i.test(v.name));
+      return viFem || voices.find(v => v.lang==='vi-VN' && /google/i.test(v.name)) || voices.find(v => v.lang==='vi-VN') || voices.find(v => v.lang.startsWith('vi')) || adam || voices[0];
     }
     _adamVoice = adam || voices.find(v => v.lang.startsWith('en')) || voices[0] || null;
     return _adamVoice;
@@ -5992,17 +5993,36 @@ function speakUmb(text){
     if(!window._ttsEnabled || !('speechSynthesis' in window)) return;
     const clean=String(text||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim().slice(0,140);
     if(!clean) return;
-    speechSynthesis.cancel();
     const isVn = _hasVn(clean);
-    const u=new SpeechSynthesisUtterance((isVn?'Um Bò Milk có thông báo mới. ':'UmBoMilk new notification. ')+clean);
-    const v = getAdamVoice(clean);
-    if(v){ u.voice = v; u.lang = v.lang || (isVn?'vi-VN':'en-US'); }
-    else u.lang = isVn?'vi-VN':'en-US';
-    u.rate = 0.82;  // Cham, ro rang (0.82 thay 0.7 qua cham gay meo tieng)
-    u.pitch = 0.95;
-    u.volume = 1.0;
-    speechSynthesis.speak(u);
+    const q = window._umbSpeechQ;
+    const last = q[q.length-1];
+    if(last && last.clean===clean) return; // câu trùng liên tiếp thì bỏ (nội dung đã có trong hàng đợi)
+    if(q.length>50) q.shift(); // chống tràn khi flood
+    q.push({ clean, isVn, prefix: isVn?'Um Bò Milk có thông báo mới. ':'UmBoMilk new notification. ' });
+    _umbProcessQ();
   }catch(e){}
+}
+// Hàng đợi đọc tuần tự: tới trước đọc trước, đọc hết từng câu, không cắt câu cũ, không bỏ qua
+if(!Array.isArray(window._umbSpeechQ)) window._umbSpeechQ = [];
+if(typeof window._umbSpeaking==='undefined') window._umbSpeaking = false;
+function _umbProcessQ(){
+  try{
+    if(window._umbSpeaking) return;
+    if(!('speechSynthesis' in window)) return;
+    const next = window._umbSpeechQ.shift();
+    if(!next) return;
+    window._umbSpeaking = true;
+    const u=new SpeechSynthesisUtterance(next.prefix + next.clean);
+    const v = getAdamVoice(next.clean);
+    if(v){ u.voice = v; u.lang = v.lang || (next.isVn?'vi-VN':'en-US'); }
+    else u.lang = next.isVn?'vi-VN':'en-US';
+    u.rate = 0.85;  // Chậm rõ: 0.85 (chậm hơn 1.0, không méo tiếng như <0.8)
+    u.pitch = 1.15;  // Cao độ tươi, vui tai (giọng nữ)
+    u.volume = 1.0;
+    const done = ()=>{ window._umbSpeaking = false; setTimeout(_umbProcessQ, 250); };
+    u.onend = done; u.onerror = done;
+    speechSynthesis.speak(u);
+  }catch(e){ window._umbSpeaking = false; }
 }
 let _umbAudioCtx = null;
 function playNotificationSound(){
@@ -6027,7 +6047,7 @@ document.addEventListener('pointerdown', ()=>{ try{ if(window._ttsEnabled && 'sp
 function toggleUmbTts(){
   window._ttsEnabled=!window._ttsEnabled;
   try{ localStorage.setItem('umb_tts', window._ttsEnabled?'on':'off'); }catch(e){}
-  if(!window._ttsEnabled){ try{ speechSynthesis.cancel(); }catch(e){} }
+  if(!window._ttsEnabled){ try{ speechSynthesis.cancel(); }catch(e){} try{ window._umbSpeechQ=[]; window._umbSpeaking=false; }catch(e){} }
   else speakUmb('Đã bật âm thanh thông báo');
   try{ syncAiAvatarSoundIcon(); }catch(e){}
   return window._ttsEnabled;
@@ -6176,10 +6196,14 @@ function speakNewAdminNotifications(list){
   const fresh = list.filter(n=>n && n.id && !window._umbSeenNotifIds.has(n.id));
   list.forEach(n=>{ if(n&&n.id){ try{ window._umbSeenNotifIds.add(n.id); }catch(e){} } });
   if(!fresh.length) return;
-  fresh.sort((a,b)=>{ const ta=new Date(a.createdAt||0).getTime()||0, tb=new Date(b.createdAt||0).getTime()||0; return tb-ta; });
-  const n = fresh[0];
-  const text = `${n.title||'Thông báo hệ thống'}. ${n.content||n.message||''}`;
-  playAiAvatarNotification(text);
+  // Đọc HẾT từng thông báo theo thứ tự tới trước → trước (cũ nhất trước).
+  // Mục đầu beep + bóng chữ avatar, các mục sau xếp hàng đọc tiếp (không beep dồn).
+  fresh.sort((a,b)=>{ const ta=new Date(a.createdAt||0).getTime()||0, tb=new Date(b.createdAt||0).getTime()||0; return ta-tb; });
+  fresh.forEach((n,idx)=>{
+    const text = `${n.title||'Thông báo hệ thống'}. ${n.content||n.message||''}`;
+    if(idx===0) playAiAvatarNotification(text);
+    else speakUmb(text);
+  });
 }
 function playAiAvatarNotification(msg){
   try{
