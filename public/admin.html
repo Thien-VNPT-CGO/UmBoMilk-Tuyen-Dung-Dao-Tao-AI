@@ -980,6 +980,63 @@ button:active{transform:scale(.97)}
             <div id="settingsSync" class="mt-3 space-y-2 max-h-[240px] overflow-auto scrollbar-thin"></div>
           </div>
         </div>
+        <!-- Danh sach Le/Tet -->
+        <div class="mt-4 grid lg:grid-cols-2 gap-4">
+          <div class="bg-white rounded-2xl border border-amber-200 p-4 shadow-sm">
+            <div class="flex justify-between items-center border-b border-amber-100 pb-2">
+              <div class="font-bold text-sm text-amber-900 flex items-center gap-1.5">
+                <i class="fa-solid fa-calendar-days text-amber-500"></i> Danh sach Le/Tet (Luong x2 / Tet x3)
+              </div>
+              <span class="text-[10px] bg-amber-100 text-amber-700 font-bold px-2 py-0.5 rounded-full">Auto + Custom</span>
+            </div>
+            <div class="mt-3">
+              <div class="flex gap-2 mb-3">
+                <select id="holidayYear" onchange="loadHolidays()" class="px-3 py-2 rounded-xl border border-amber-200 text-sm font-bold"></select>
+              </div>
+              <div id="holidayAutoList" class="space-y-1.5 max-h-[320px] overflow-auto scrollbar-thin"></div>
+              <div class="mt-3 pt-3 border-t border-amber-100">
+                <div class="font-bold text-xs text-amber-800 mb-2"><i class="fa-solid fa-plus-circle text-amber-500"></i> Them ngay le rieng (Custom)</div>
+                <div class="flex gap-2 flex-wrap">
+                  <input id="holDate" type="date" class="px-3 py-2 rounded-xl border border-amber-200 text-sm w-[150px]">
+                  <input id="holName" placeholder="Ten le" class="px-3 py-2 rounded-xl border border-amber-200 text-sm flex-1 min-w-[140px]">
+                  <select id="holMultiplier" class="px-3 py-2 rounded-xl border border-amber-200 text-sm w-[80px]">
+                    <option value="2">x2</option>
+                    <option value="3">x3</option>
+                    <option value="1.5">x1.5</option>
+                  </select>
+                  <button onclick="addHoliday()" class="px-4 py-2 rounded-xl bg-amber-500 text-white text-sm font-bold hover:bg-amber-600"><i class="fa-solid fa-plus"></i></button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="bg-white rounded-2xl border border-amber-200 p-4 shadow-sm">
+            <div class="font-bold text-sm text-amber-900 flex items-center gap-1.5 mb-3">
+              <i class="fa-solid fa-circle-info text-amber-500"></i> Quy tac tinh luong Le/Tet
+            </div>
+            <div class="text-xs text-slate-700 space-y-2">
+              <div class="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                <div class="font-black text-amber-900">Le duong lich (x2)</div>
+                <ul class="mt-1 space-y-1 text-amber-800 font-semibold">
+                  <li>01/01 - Tet Duong lich</li>
+                  <li>30/4 - Giai phong mien Nam</li>
+                  <li>01/05 - Quoc te Lao dong</li>
+                  <li>02/9 - Quoc Khanh</li>
+                </ul>
+              </div>
+              <div class="bg-orange-50 border border-orange-200 rounded-xl p-3">
+                <div class="font-black text-orange-900">Le am lich (x2 / x3)</div>
+                <ul class="mt-1 space-y-1 text-orange-800 font-semibold">
+                  <li>10/3 Am - Gio To Hung Vuong (x2)</li>
+                  <li>Mung 3-5 Tet Nguyen Dan (x3)</li>
+                </ul>
+              </div>
+              <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3">
+                <div class="font-black text-emerald-900">Ngay le rieng (Custom)</div>
+                <p class="mt-1 text-emerald-800 font-semibold">Admin them ngay le rieng (VD: Ngay thanh lap cua hang, Ngay le Ky niem...) voi ty le tu chon (x1.5/x2/x3). Chi ap dung cho NV CHINH THUC di lam ngay do.</p>
+              </div>
+            </div>
+          </div>
+        </div>
       </section>
 
       <!-- Audit standalone -->

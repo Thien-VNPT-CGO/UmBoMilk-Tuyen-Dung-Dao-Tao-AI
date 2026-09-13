@@ -5535,6 +5535,7 @@ async function loadSettings(){
     // users + Render Env
     loadUsers();
     loadRenderEnv();
+    loadHolidays();
     // sync
     const sync = await api('/api/sync-queue', {headers:{Authorization:'Bearer '+token}});
     document.getElementById('settingsSync').innerHTML = sync.slice(0,6).map(ss=>`<div class="flex justify-between bg-slate-50 border rounded-lg px-2 py-1 text-xs"><span>${ss.entity} ${ss.operation}</span><span class="font-bold ${ss.sync_status==='SYNCED'?'text-emerald-600':ss.sync_status==='PENDING'?'text-amber-600':ss.sync_status==='FAILED'?'text-red-600':'text-slate-500'}">${ss.sync_status==='SYNCED'?'ĐÃ ĐỒNG BỘ':ss.sync_status==='PENDING'?'CHỜ':ss.sync_status==='FAILED'?'LỖI':ss.sync_status==='UNCONFIGURED'?'CHƯA CẤU HÌNH':ss.sync_status}</span></div>`).join('');
@@ -5615,6 +5616,61 @@ async function syncRenderEnvRealtime(){
 async function loadGoogleSheetHub(){
   // Hub dùng chung data với Settings, chỉ khác view
   await loadSettings();
+}
+async function loadHolidays(){
+  try{
+    const sel = document.getElementById('holidayYear');
+    if(!sel) return;
+    const curYear = new Date().getFullYear();
+    if(!sel.options.length){
+      for(let y=curYear-1;y<=curYear+2;y++){
+        const o = document.createElement('option');
+        o.value=y; o.textContent=y; if(y===curYear) o.selected=true;
+        sel.appendChild(o);
+      }
+    }
+    const year = sel.value;
+    const data = await api(`/api/admin/holidays?year=${year}`, {headers:{Authorization:'Bearer '+token}});
+    const list = document.getElementById('holidayAutoList');
+    if(!list) return;
+    const holidays = data.holidays || [];
+    list.innerHTML = holidays.map(h=>{
+      const isCustom = h.source==='custom';
+      const badgeColor = h.kind==='TET'?'bg-orange-100 text-orange-700':'bg-amber-100 text-amber-700';
+      return `<div class="flex items-center justify-between bg-${isCustom?'emerald':'amber'}-50 border border-${isCustom?'emerald':'amber'}-200 rounded-xl px-3 py-2 text-xs">
+        <div class="flex items-center gap-2">
+          <span class="font-black text-slate-800">${h.date}</span>
+          <span class="font-bold text-slate-700">${h.name}</span>
+          <span class="text-[10px] font-black px-2 py-0.5 rounded-full ${badgeColor}">x${h.multiplier}</span>
+          ${isCustom?'<span class="text-[10px] bg-emerald-200 text-emerald-800 font-bold px-1.5 py-0.5 rounded-full">CUSTOM</span>':'<span class="text-[10px] bg-slate-200 text-slate-600 font-bold px-1.5 py-0.5 rounded-full">AUTO</span>'}
+        </div>
+        ${isCustom?`<button onclick="removeHoliday('${h.date}')" class="text-rose-500 hover:text-rose-700 font-bold px-2 py-1 rounded-lg hover:bg-rose-50"><i class="fa-solid fa-trash-can"></i></button>`:''}
+      </div>`;
+    }).join('');
+  }catch(e){}
+}
+async function addHoliday(){
+  if(currentUser.role!=='Admin') return showToast('Chỉ Admin được thêm ngày lễ','error');
+  const date = document.getElementById('holDate')?.value;
+  const name = document.getElementById('holName')?.value;
+  const multiplier = document.getElementById('holMultiplier')?.value;
+  if(!date||!name) return showToast('Nhap day du ngay va ten le','error');
+  try{
+    const res = await api('/api/admin/holidays', {method:'POST', body:JSON.stringify({date, name, multiplier:Number(multiplier), kind:'CUSTOM'}), headers:{Authorization:'Bearer '+token}});
+    showToast('Da them ngay le: '+name,'success');
+    document.getElementById('holDate').value='';
+    document.getElementById('holName').value='';
+    loadHolidays();
+  }catch(e){ showToast(e.message,'error'); }
+}
+async function removeHoliday(date){
+  if(currentUser.role!=='Admin') return showToast('Chỉ Admin được xóa ngày lễ','error');
+  if(!confirm('Xoa ngay le custom ngay '+date+'?')) return;
+  try{
+    await api(`/api/admin/holidays/${date}`, {method:'DELETE', headers:{Authorization:'Bearer '+token}});
+    showToast('Da xoa ngay le','success');
+    loadHolidays();
+  }catch(e){ showToast(e.message,'error'); }
 }
 async function saveSettings(){
   if(currentUser.role!=='Admin') return showToast('Chỉ Admin được lưu cài đặt','error');

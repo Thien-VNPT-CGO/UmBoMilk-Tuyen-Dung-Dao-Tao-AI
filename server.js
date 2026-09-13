@@ -19,7 +19,7 @@ const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 const JSZip = require('jszip');
 const { pickFair } = require('./services/fairPick');
-const { getHolidayInfo, getHolidaysInRange } = require('./services/vietnamHoliday');
+const { getHolidayInfo, getHolidaysInRange, getYearHolidays } = require('./services/vietnamHoliday');
 
 // === ENV & SECURITY CONFIG (Realtime & Automation foundation) ===
 const PORT = process.env.PORT || 3000;
@@ -153,7 +153,8 @@ const DEFAULT_SETTINGS = {
   test: { minPerQuestion: 5, totalQuestions: 25, passScore: 8, retakeMin: 5, maxRetest: 3 },
   security: { sessionTimeout: 120, deviceBind: true },
   mail: { smtpHost: 'smtp.gmail.com', smtpPort: 465, user: '', pass: '', enabled: false, weeklyTo: ['nguyenthanhthien.dev.1602@gmail.com','umbomilk@gmail.com','dothidoandoan063@gmail.com'], weeklyHour: 23, lastWeeklySent: '', lastAttendanceReset: '' },
-  features: { employeeShiftSwap: false, empAttendance: false, empSchedule: false, empSalary: false, empOff: false, empEmergency: false, empAccount: false }
+  features: { employeeShiftSwap: false, empAttendance: false, empSchedule: false, empSalary: false, empOff: false, empEmergency: false, empAccount: false },
+  holidays: { custom: [] }
 };
 
 // ============ GOOGLE SHEET AUTO-TABS DEFINITIONS - Realtime 1:1 per HR tab ============
@@ -305,6 +306,8 @@ function loadDB() {
       Object.keys(DEFAULT_SETTINGS.mail).forEach(k=>{ if(db.settings.mail[k]===undefined) db.settings.mail[k]=Array.isArray(DEFAULT_SETTINGS.mail[k])?[...DEFAULT_SETTINGS.mail[k]]:DEFAULT_SETTINGS.mail[k]; });
       if (!db.settings.features) db.settings.features = { ...DEFAULT_SETTINGS.features };
       Object.keys(DEFAULT_SETTINGS.features).forEach(k=>{ if(db.settings.features[k]===undefined) db.settings.features[k]=DEFAULT_SETTINGS.features[k]; });
+      if (!db.settings.holidays) db.settings.holidays = { custom: [] };
+      if (!Array.isArray(db.settings.holidays.custom)) db.settings.holidays.custom = [];
       if (!db.payrollPeriods) db.payrollPeriods = [];
       if (!db.attendanceAdjustments) db.attendanceAdjustments = [];
       if (!db.overtimeRequests) db.overtimeRequests = [];
@@ -1207,7 +1210,7 @@ function calculatePayroll(employeeId, month){
     // Lễ/Tết: NV chính thức đi làm được ×2 (lễ) / ×3 (Mùng 3-5 Tết) — cộng phần chênh
     let multiplier = 1, holidayName = null;
     if(isOfficialEmp){
-      const hol = getHolidayInfo(a.date);
+      const hol = getHolidayInfo(a.date, db.settings.holidays.custom);
       if(hol){ multiplier = hol.multiplier; holidayName = hol.name; holidayBonus += Math.round(hours*rate*(multiplier-1)); }
     }
     const amount = Math.round(hours*rate*multiplier);
@@ -10853,7 +10856,7 @@ app.get('/api/finance/reports/payroll-summary', financeAuthMiddleware, (req,res)
       else {
         officialHours += h;
         // Lễ/Tết: NV chính thức đi làm ×2 (lễ) / ×3 (Mùng 3-5 Tết) — cộng phần chênh vào thưởng lễ
-        const hol = getHolidayInfo(a.date);
+        const hol = getHolidayInfo(a.date, db.settings.holidays.custom);
         if(hol){
           const extra = Math.round(h * 25500 * (hol.multiplier-1));
           luongLeThem += extra;
@@ -10908,7 +10911,38 @@ app.get('/api/holidays', authMiddleware, (req,res)=>{
     const m = getVietnamTodayStr().slice(0,7);
     f = m+'-01'; t = m+'-31';
   }
-  res.json({ from: f, to: t, holidays: getHolidaysInRange(f, t) });
+  res.json({ from: f, to: t, holidays: getHolidaysInRange(f, t, db.settings.holidays.custom) });
+});
+
+// Admin CRUD ngày lễ riêng (custom holidays) — hiển thị trên Settings
+app.get('/api/admin/holidays', authMiddleware, roleCheck(['Admin']), (req,res)=>{
+  const year = Number(req.query.year) || new Date().getFullYear();
+  const all = getYearHolidays(year, db.settings.holidays.custom);
+  res.json({ year, holidays: all, custom: db.settings.holidays.custom });
+});
+app.post('/api/admin/holidays', authMiddleware, roleCheck(['Admin']), (req,res)=>{
+  const { date, name, multiplier, kind } = req.body;
+  if(!date || !name || !multiplier) return res.status(400).json({error:'Thiếu date/name/multiplier'});
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({error:'Sai định dạng date (YYYY-MM-DD)'});
+  if(db.settings.holidays.custom.some(h=>h.date===date)){
+    // Update neu trung ngay
+    const idx = db.settings.holidays.custom.findIndex(h=>h.date===date);
+    db.settings.holidays.custom[idx] = { date, name, multiplier:Number(multiplier), kind:kind||'CUSTOM' };
+  } else {
+    db.settings.holidays.custom.push({ date, name, multiplier:Number(multiplier), kind:kind||'CUSTOM' });
+  }
+  saveDB();
+  audit(req.user.username,'ADD_HOLIDAY','HOLIDAYS', date, {name, multiplier});
+  res.json({ ok:true, custom: db.settings.holidays.custom });
+});
+app.delete('/api/admin/holidays/:date', authMiddleware, roleCheck(['Admin']), (req,res)=>{
+  const { date } = req.params;
+  const idx = db.settings.holidays.custom.findIndex(h=>h.date===date);
+  if(idx<0) return res.status(404).json({error:'Không tìm thấy ngày lễ custom'});
+  db.settings.holidays.custom.splice(idx,1);
+  saveDB();
+  audit(req.user.username,'DELETE_HOLIDAY','HOLIDAYS', date, {});
+  res.json({ ok:true, custom: db.settings.holidays.custom });
 });
 
 // Finance 4 sheets - backward compatibility
