@@ -4482,11 +4482,12 @@ async function loadNextWeekDrafts(){
 }
 async function generateNextWeekDraft(){
   try{
-    showToast('Đang tạo draft tuần sau...','info');
+    umbProgressShow('Đang tạo draft tuần sau','AI sắp lịch T2→CN...');
     const res = await api('/api/schedules/generate-next-week-draft', {method:'POST', headers:{Authorization:'Bearer '+token}});
+    umbProgressHide();
     showToast(res.message||'Đã tạo draft tuần sau','success');
     loadSchedules();
-  }catch(e){ showToast(e.message,'error'); }
+  }catch(e){ umbProgressHide(); showToast(e.message,'error'); }
 }
 async function loadTestWeekStatus(){
   try{
@@ -4565,30 +4566,36 @@ async function approveTestWeek(){
   if(!confirm('Duyệt lịch đăng ký TEST: khóa đợt đăng ký OFF tuần sau, AI sắp lịch cho NV chính thức (nếu chưa có) và đồng bộ Sheet?')) return;
   const btn=document.getElementById('btnApproveTestWeek'); if(btn) btn.disabled=true;
   try{
+    umbProgressShow('Đang duyệt lịch TEST','AI sắp lịch + khóa tuần + đồng bộ Sheet...');
     const res=await api('/api/schedules/approve-test-week', {method:'POST', headers:{Authorization:'Bearer '+token}, body:JSON.stringify({code:testWeekKeyCode()})});
+    umbProgressHide();
     showToast(res.message||'Đã duyệt lịch đăng ký test','success');
     const ki=document.getElementById('testWeekKey'); if(ki) ki.value='';
     loadTestWeekStatus(); loadNextWeekDrafts(); loadSchedules();
-  }catch(e){ showToast(e.message,'error'); const b=document.getElementById('btnApproveTestWeek'); if(b) b.disabled=false; loadTestWeekStatus(); }
+  }catch(e){ umbProgressHide(); showToast(e.message,'error'); const b=document.getElementById('btnApproveTestWeek'); if(b) b.disabled=false; loadTestWeekStatus(); }
 }
 async function unlockWeek(){
   if(!confirm('Mở khóa đợt đăng ký OFF tuần sau? NV sẽ đăng ký OFF tiếp được (TH1/TH2 giữ nguyên).')) return;
   if(typeof currentUser!=='undefined' && currentUser && currentUser.role!=='Admin' && !testWeekKeyCode()){ showToast('Nhập key do Admin cấp trước khi mở khóa (hiệu lực 30 phút)','error'); try{ refreshTestWeekKeyGate(); }catch(e){} return; }
   const btn=document.getElementById('btnApproveTestWeek'); if(btn) btn.disabled=true;
   try{
+    umbProgressShow('Đang mở khóa tuần','Mở đăng ký OFF + đồng bộ...');
     const res=await api('/api/schedules/unlock-week', {method:'POST', headers:{Authorization:'Bearer '+token}, body:JSON.stringify({code:testWeekKeyCode()})});
+    umbProgressHide();
     showToast(res.message||'Đã mở khóa tuần','success');
     const ki=document.getElementById('testWeekKey'); if(ki) ki.value='';
     loadTestWeekStatus(); loadNextWeekDrafts(); loadSchedules();
-  }catch(e){ showToast(e.message,'error'); loadTestWeekStatus(); }
+  }catch(e){ umbProgressHide(); showToast(e.message,'error'); loadTestWeekStatus(); }
 }
 async function approveNextWeek(){
   if(!confirm('Duyệt lịch tuần sau cho tất cả NV chính thức? Lịch sẽ được đẩy sang Web App nhân viên ngay (realtime).')) return;
   try{
+    umbProgressShow('Đang duyệt lịch tuần sau','Đẩy lịch tới web NV + đồng bộ...');
     const res = await api('/api/schedules/approve-next-week', {method:'POST', headers:{Authorization:'Bearer '+token}});
+    umbProgressHide();
     showToast(res.message||'Đã duyệt lịch tuần sau','success');
     loadSchedules();
-  }catch(e){ showToast(e.message,'error'); }
+  }catch(e){ umbProgressHide(); showToast(e.message,'error'); }
 }
 async function deleteNextWeek(){
   let st=null;
@@ -4937,25 +4944,29 @@ async function exportAttendanceDay(){
   const date=document.getElementById('attDate')?.value||'';
   if(!date) return showToast('Chọn ngày cần xuất','error');
   try{
-    showToast('Đang nén ZIP chấm công ngày '+date.split('-').reverse().join('/')+'...','info');
+    umbProgressShow('Đang nén ZIP chấm công','Ngày '+date.split('-').reverse().join('/')+' • gom ảnh + txt từng NV...');
     const res = await fetch(API+'/api/attendance/export-day?date='+date, {headers:{Authorization:'Bearer '+token}});
     if(!res.ok){ const j=await res.json().catch(()=>({})); throw new Error(j.error||('Lỗi '+res.status)); }
+    umbProgressSet(70);
     const blob = await res.blob();
+    umbProgressSet(90);
     const a=document.createElement('a');
     a.href=URL.createObjectURL(blob); a.download=`ChamCong_${date}.zip`;
     document.body.appendChild(a); a.click();
     setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },2000);
+    umbProgressHide();
     showToast('Đã tải ZIP chấm công ngày '+date.split('-').reverse().join('/'),'success');
-  }catch(e){ showToast(e.message,'error'); }
+  }catch(e){ umbProgressHide(); showToast(e.message,'error'); }
 }
 // Gửi báo cáo ZIP tuần này qua mail ngay (Admin/HR)
 async function sendWeeklyNow(){
   if(!confirm('Gửi báo cáo ZIP tuần này (T2 → nay) qua mail ngay?')) return;
   try{
-    showToast('Đang nén và gửi báo cáo tuần...','info');
+    umbProgressShow('Đang gửi báo cáo tuần','Nén ZIP T2→nay + gửi mail...');
     const res=await api('/api/attendance/send-weekly', {method:'POST', headers:{Authorization:'Bearer '+token}, body:JSON.stringify({})});
+    umbProgressHide();
     showToast(res.message||'Đã gửi báo cáo tuần','success');
-  }catch(e){ showToast(e.message,'error'); }
+  }catch(e){ umbProgressHide(); showToast(e.message,'error'); }
 }
 
 // Zalo
@@ -6288,6 +6299,59 @@ function umbSetLoading(on, msg){
     if(!ov){ ov=document.createElement('div'); ov.id='umbLoading'; ov.innerHTML='<div class="text-center"><div class="spin" style="margin:0 auto"></div><div class="text-xs font-bold text-pink-600 mt-2">'+(msg||'Đang tải...')+'</div></div>'; document.body.appendChild(ov); }
     else ov.style.display='flex';
   } else if(ov){ ov.style.display='none'; }
+}
+// Vòng load % hiện đại: bấm nút tác vụ nặng là hiện % chạy để Admin/HR biết tiến độ
+let _umbProgTimer=null, _umbProgPct=0;
+const _UMB_PROG_C = 326.7; // 2π×52
+function _umbProgDraw(){
+  try{
+    const arc=document.getElementById('umbProgArc');
+    const tx=document.getElementById('umbProgPct');
+    const p=Math.max(0,Math.min(100,Math.floor(_umbProgPct)));
+    if(arc) arc.style.strokeDashoffset=(_UMB_PROG_C*(1-p/100)).toFixed(1);
+    if(tx) tx.textContent=p+'%';
+  }catch(e){}
+}
+function umbProgressShow(title, sub){
+  try{
+    let ov=document.getElementById('umbProgress');
+    if(!ov){
+      ov=document.createElement('div');
+      ov.id='umbProgress';
+      ov.innerHTML=`<div style="position:fixed;inset:0;z-index:400;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.72);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)">
+        <div style="text-align:center;background:#fff;border:1px solid #fce7f3;border-radius:24px;padding:28px 36px;box-shadow:0 24px 80px rgba(236,72,153,.25);min-width:280px">
+          <div style="position:relative;width:120px;height:120px;margin:0 auto">
+            <svg width="120" height="120" viewBox="0 0 120 120">
+              <defs><linearGradient id="umbProgGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#ec4899"/><stop offset="100%" stop-color="#f43f5e"/></linearGradient></defs>
+              <circle cx="60" cy="60" r="52" fill="none" stroke="#fce7f3" stroke-width="12"/>
+              <circle id="umbProgArc" cx="60" cy="60" r="52" fill="none" stroke="url(#umbProgGrad)" stroke-width="12" stroke-linecap="round" stroke-dasharray="326.7" stroke-dashoffset="326.7" transform="rotate(-90 60 60)" style="transition:stroke-dashoffset .18s ease;filter:drop-shadow(0 0 6px rgba(236,72,153,.55))"/>
+            </svg>
+            <div id="umbProgPct" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:22px;color:#be185d">0%</div>
+          </div>
+          <div id="umbProgTitle" style="margin-top:12px;font-weight:900;color:#831843;font-size:14px"></div>
+          <div id="umbProgSub" style="margin-top:4px;font-size:11px;color:#64748b;font-weight:600"></div>
+        </div>
+      </div>`;
+      document.body.appendChild(ov);
+    } else ov.style.display='block';
+    const t=document.getElementById('umbProgTitle'); if(t) t.textContent=title||'Đang xử lý...';
+    const s=document.getElementById('umbProgSub'); if(s) s.textContent=sub||'';
+    _umbProgPct=0; _umbProgDraw();
+    if(_umbProgTimer) clearInterval(_umbProgTimer);
+    _umbProgTimer=setInterval(()=>{ // % chạy mượt tới ~90%, xong việc mới nhảy 100%
+      if(_umbProgPct<88){ _umbProgPct+=Math.max(0.5,(88-_umbProgPct)*0.07); _umbProgDraw(); }
+    },120);
+  }catch(e){}
+}
+function umbProgressSet(pct){
+  try{ _umbProgPct=Math.max(0,Math.min(100,Number(pct)||0)); _umbProgDraw(); }catch(e){}
+}
+function umbProgressHide(){
+  try{
+    if(_umbProgTimer){ clearInterval(_umbProgTimer); _umbProgTimer=null; }
+    _umbProgPct=100; _umbProgDraw();
+    setTimeout(()=>{ const ov=document.getElementById('umbProgress'); if(ov) ov.style.display='none'; },450);
+  }catch(e){}
 }
 
 // Init
