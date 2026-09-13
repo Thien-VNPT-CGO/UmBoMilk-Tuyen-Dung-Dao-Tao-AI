@@ -631,7 +631,7 @@ function connectSocket(){
       updatePendingCount();
       updateModeBadge();
       if(ev === 'notifications:update'){
-        try{ playAiAvatarNotification('Có thông báo mới'); }catch(e){ try{ playNotificationSound(); }catch(_){} }
+        try{ speakNewAdminNotifications(data); }catch(e){ try{ playAiAvatarNotification('Có thông báo mới'); }catch(_){ try{ playNotificationSound(); }catch(__){} } }
       }
     });
   });
@@ -709,8 +709,13 @@ function connectSocket(){
     if(active === 'schedule') safeCall(loadSchedules());
     if(active === 'elearning' && data.action === 'quiz_submitted') safeCall(loadElearning());
   });
-  socket.on('admin:notification', () => {
+  socket.on('admin:notification', async () => {
     updatePendingCount();
+    // Không có payload: kéo danh sách rồi đọc mục mới nhất
+    try{
+      const list = await api('/api/notifications');
+      speakNewAdminNotifications(list);
+    }catch(e){}
   });
   // Realtime Render Environment (18 biến) Update
   socket.on('render:env:update', (data) => {
@@ -6162,6 +6167,19 @@ function showAiBubble(text, ms){
     clearTimeout(b._t);
     b._t = setTimeout(()=>b.classList.remove('show'), ms||2800);
   }catch(e){}
+}
+// AI đọc to nội dung thông báo hệ thống mới (chỉ đọc mục chưa thấy, lần đầu im lặng để khỏi đọc lịch sử)
+if(typeof window._umbSeenNotifIds==='undefined') window._umbSeenNotifIds = null;
+function speakNewAdminNotifications(list){
+  if(!Array.isArray(list)){ playAiAvatarNotification('Có thông báo mới'); return; }
+  if(!window._umbSeenNotifIds){ window._umbSeenNotifIds = new Set(list.map(n=>n&&n.id).filter(Boolean)); return; }
+  const fresh = list.filter(n=>n && n.id && !window._umbSeenNotifIds.has(n.id));
+  list.forEach(n=>{ if(n&&n.id){ try{ window._umbSeenNotifIds.add(n.id); }catch(e){} } });
+  if(!fresh.length) return;
+  fresh.sort((a,b)=>{ const ta=new Date(a.createdAt||0).getTime()||0, tb=new Date(b.createdAt||0).getTime()||0; return tb-ta; });
+  const n = fresh[0];
+  const text = `${n.title||'Thông báo hệ thống'}. ${n.content||n.message||''}`;
+  playAiAvatarNotification(text);
 }
 function playAiAvatarNotification(msg){
   try{
