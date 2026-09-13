@@ -630,7 +630,7 @@ function connectSocket(){
     window._settingsSocketBound = false; // socket moi o lan ket noi sau -> dang ky lai
     updateModeBadge();
   });
-  const evs=['employees:update','attendances:update','schedules:update','offRequests:update','emergencyRequests:update','trainingShiftRequests:update','notifications:update','testResults:update','zalo:update','drive:update','overtime:update','leave:update','automation:heartbeat','sync:update'];
+  const evs=['employees:update','attendances:update','schedules:update','offRequests:update','emergencyRequests:update','trainingShiftRequests:update','notifications:update','testResults:update','zalo:update','drive:update','overtime:update','leave:update','automation:heartbeat','sync:update','holidays:update'];
   evs.forEach(ev=> socket.on(ev, async (data)=>{
     if(ev==='automation:heartbeat' && data){
       const hb=document.getElementById('heartbeatInfo');
@@ -641,6 +641,15 @@ function connectSocket(){
     }
     if(ev === 'notifications:update'){
       playNotificationSound();
+    }
+    // Holidays realtime: Admin them/xoa le custom -> refresh tab luong NV
+    if(ev === 'holidays:update' && employee){
+      try{
+        const ds = document.querySelectorAll('#salaryTableBody tr');
+        // Re-render salary tab if visible
+        if(typeof loadSalaryTab === 'function') loadSalaryTab();
+        showToast('🎌 Ngày lễ đã cập nhật — lương thưởng lễ tự động làm mới', 'info');
+      }catch(e){}
     }
     document.getElementById('syncBadge').textContent='CẬP NHẬT TRỰC TIẾP';
     setTimeout(()=>document.getElementById('syncBadge').textContent='ĐÃ ĐỒNG BỘ',1200);

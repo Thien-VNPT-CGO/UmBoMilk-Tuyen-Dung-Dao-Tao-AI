@@ -10933,6 +10933,7 @@ app.post('/api/admin/holidays', authMiddleware, roleCheck(['Admin']), (req,res)=
   }
   saveDB();
   audit(req.user.username,'ADD_HOLIDAY','HOLIDAYS', date, {name, multiplier});
+  io.emit('holidays:update', { custom: db.settings.holidays.custom });
   res.json({ ok:true, custom: db.settings.holidays.custom });
 });
 app.delete('/api/admin/holidays/:date', authMiddleware, roleCheck(['Admin']), (req,res)=>{
@@ -10942,6 +10943,7 @@ app.delete('/api/admin/holidays/:date', authMiddleware, roleCheck(['Admin']), (r
   db.settings.holidays.custom.splice(idx,1);
   saveDB();
   audit(req.user.username,'DELETE_HOLIDAY','HOLIDAYS', date, {});
+  io.emit('holidays:update', { custom: db.settings.holidays.custom });
   res.json({ ok:true, custom: db.settings.holidays.custom });
 });
 

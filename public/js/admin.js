@@ -571,7 +571,7 @@ function connectSocket(){
     safeCall(loadAttendances());
     safeCall(loadRequests());
   });
-  const refreshEvents = ['employees:update','applicants:update','attendances:update','schedules:update','offRequests:update','emergencyRequests:update','deviceRequests:update','trainingShiftRequests:update','shiftSwapRequests:update','shiftSwap:update','zalo:update','audit:new','sync:update','keys:update','notifications:update','testResults:update','settings:update','interviews:update','drive:update','overtime:update','leave:update','payrollPeriods:update','payrollSnapshots:update','financeKeys:update'];
+  const refreshEvents = ['employees:update','applicants:update','attendances:update','schedules:update','offRequests:update','emergencyRequests:update','deviceRequests:update','trainingShiftRequests:update','shiftSwapRequests:update','shiftSwap:update','zalo:update','audit:new','sync:update','keys:update','notifications:update','testResults:update','settings:update','interviews:update','drive:update','overtime:update','leave:update','payrollPeriods:update','payrollSnapshots:update','financeKeys:update','holidays:update'];
   refreshEvents.forEach(ev=>{
     socket.on(ev, (data)=>{
       // debounce refresh current tab
@@ -607,6 +607,11 @@ function connectSocket(){
           if(active==='employees-store' && typeof renderEmployeesStore==='function'){ renderEmployeesStore(); }
         }
       }catch(e){ console.error('realtime ràng buộc error', e); }
+      // Holidays realtime: Admin thêm/xóa custom holiday -> refresh list ngay
+      if(ev==='holidays:update'){
+        if(active==='settings') safeCall(loadHolidays());
+        showToast('🎌 Ngày lễ realtime cập nhật', 'info');
+      }
       // reload relevant data without full fetch if payload provided?
       // For simplicity, refetch current tab (bọc an toàn, không văng Uncaught)
       if(active==='dashboard') safeCall(loadDashboard());
