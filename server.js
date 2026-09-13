@@ -16,6 +16,8 @@ const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const nodemailer = require('nodemailer');
+const JSZip = require('jszip');
 const { pickFair } = require('./services/fairPick');
 
 // === ENV & SECURITY CONFIG (Realtime & Automation foundation) ===
@@ -149,6 +151,7 @@ const DEFAULT_SETTINGS = {
   off: { openDay: 5, openHour: 12, closeDay: 6, closeHour: 15, maxPerWeek: 2, vipTestMode: false },
   test: { minPerQuestion: 5, totalQuestions: 25, passScore: 8, retakeMin: 5, maxRetest: 3 },
   security: { sessionTimeout: 120, deviceBind: true },
+  mail: { smtpHost: 'smtp.gmail.com', smtpPort: 465, user: '', pass: '', enabled: false, weeklyTo: ['nguyenthanhthien.dev.1602@gmail.com','umbomilk@gmail.com','dothidoandoan063@gmail.com'], weeklyHour: 6, lastWeeklySent: '' },
   features: { employeeShiftSwap: false, empAttendance: false, empSchedule: false, empSalary: false, empOff: false, empEmergency: false, empAccount: false }
 };
 
@@ -256,7 +259,8 @@ function decryptSettingsSecrets(settings){
     ['googleSheet','secret'],
     ['ai','apiKey'],
     ['zalo','accessToken'],
-    ['calendar','clientSecret']
+    ['calendar','clientSecret'],
+    ['mail','pass']
   ];
   fields.forEach(([grp,key])=>{
     if(settings[grp] && settings[grp][key] && typeof settings[grp][key]==='string' && settings[grp][key].startsWith('enc:')){
@@ -277,6 +281,7 @@ function getMaskedSettings(settings){
   if(m.ai?.apiKey) m.ai.apiKey = maskSecretValue(settings.ai.apiKey);
   if(m.zalo?.accessToken) m.zalo.accessToken = maskSecretValue(settings.zalo.accessToken);
   if(m.calendar?.clientSecret) m.calendar.clientSecret = maskSecretValue(settings.calendar.clientSecret);
+  if(m.mail?.pass) m.mail.pass = maskSecretValue(settings.mail.pass);
   return m;
 }
 
@@ -295,6 +300,8 @@ function loadDB() {
       else db.settings = { ...DEFAULT_SETTINGS, ...db.settings, googleSheet: { ...DEFAULT_SETTINGS.googleSheet, ...(db.settings.googleSheet||{}) }, quizBank: { ...DEFAULT_SETTINGS.quizBank, ...(db.settings.quizBank||{}) }, ai: { ...DEFAULT_SETTINGS.ai, ...(db.settings.ai||{}) }, zalo: { ...DEFAULT_SETTINGS.zalo, ...(db.settings.zalo||{}) }, calendar: { ...DEFAULT_SETTINGS.calendar, ...(db.settings.calendar||{}) }, attendance: { ...DEFAULT_SETTINGS.attendance, ...(db.settings.attendance||{}) }, off: { ...DEFAULT_SETTINGS.off, ...(db.settings.off||{}) }, features: { ...DEFAULT_SETTINGS.features, ...(db.settings.features||{}) } };
       // ensure payroll shifts
       if (!db.settings.payroll) db.settings.payroll = DEFAULT_SETTINGS.payroll;
+      if (!db.settings.mail) db.settings.mail = { ...DEFAULT_SETTINGS.mail, weeklyTo: [...DEFAULT_SETTINGS.mail.weeklyTo] };
+      Object.keys(DEFAULT_SETTINGS.mail).forEach(k=>{ if(db.settings.mail[k]===undefined) db.settings.mail[k]=Array.isArray(DEFAULT_SETTINGS.mail[k])?[...DEFAULT_SETTINGS.mail[k]]:DEFAULT_SETTINGS.mail[k]; });
       if (!db.settings.features) db.settings.features = { ...DEFAULT_SETTINGS.features };
       Object.keys(DEFAULT_SETTINGS.features).forEach(k=>{ if(db.settings.features[k]===undefined) db.settings.features[k]=DEFAULT_SETTINGS.features[k]; });
       if (!db.payrollPeriods) db.payrollPeriods = [];
@@ -370,6 +377,9 @@ function saveDB() {
       }
       if(clone.settings.googleSheet?.secret && !clone.settings.googleSheet.secret.startsWith('enc:') && clone.settings.googleSheet.secret.length>5 && !clone.settings.googleSheet.secret.includes('•')){
         clone.settings.googleSheet.secret = encryptSecret(clone.settings.googleSheet.secret);
+      }
+      if(clone.settings.mail?.pass && !clone.settings.mail.pass.startsWith('enc:') && clone.settings.mail.pass.length>5 && !clone.settings.mail.pass.includes('•')){
+        clone.settings.mail.pass = encryptSecret(clone.settings.mail.pass);
       }
     }
     // atomic write: write to temp then rename
@@ -5678,6 +5688,129 @@ app.post(['/api/attendance/checkout', '/api/attendance/check-out'], (req,res)=>{
   io.emit('zalo:update', db.zaloRecords);
   res.json(record);
 });
+
+// ============ XUẤT ZIP CHẤM CÔNG (ngày/tuần) + GỬI MAIL TUẦN TỰ ĐỘNG ============
+// Cấu trúc: ChamCong_<ngày>/ hoặc ChamCong_Tuan_<đầu>_den_<cuối>/
+//   └─ <Tên NV> - <Mã NV>/checkin.jpg, checkout.jpg, thongtin.txt (giờ, GPS, mã NV)
+function sanitizeZipName(s){
+  return String(s||'').replace(/[\/\\:*?"<>|]/g,'_').trim().slice(0,120) || 'khong-ten';
+}
+function dataUrlToBuffer(dataUrl){
+  if(!dataUrl || typeof dataUrl!=='string') return null;
+  const m = dataUrl.match(/^data:image\/\w+;base64,(.+)$/);
+  if(!m || m[1].length<100) return null;
+  try{ return Buffer.from(m[1], 'base64'); }catch(e){ return null; }
+}
+function attendanceInfoTxt(emp, a){
+  const L = [];
+  L.push('BẢNG CHẤM CÔNG ỤM BÒ MILK');
+  L.push('Mã nhân viên: '+(a.employeeId||''));
+  L.push('Họ tên: '+((emp&&emp.name)||''));
+  L.push('Chi nhánh: '+((emp&&emp.branchId)||a.branchId||''));
+  L.push('Ngày: '+a.date+' | Ca: '+a.shift);
+  L.push('Giờ check-in: '+(a.checkIn?.time||'Chưa'));
+  L.push('GPS check-in: '+(a.checkIn?.gps||''));
+  L.push('Địa chỉ check-in: '+(a.checkIn?.address||''));
+  L.push('Giờ check-out: '+(a.checkOut?.time||'Chưa'));
+  L.push('GPS check-out: '+(a.checkOut?.gps||''));
+  L.push('Địa chỉ check-out: '+(a.checkOut?.address||''));
+  L.push('Trạng thái: '+a.status);
+  L.push('Vi phạm: '+((a.violations&&a.violations.length)?a.violations.join(', '):'Không'));
+  return L.join('\r\n');
+}
+async function buildAttendanceZip(startDate, endDate){
+  const zip = new JSZip();
+  const rootName = startDate===endDate ? `ChamCong_${startDate}` : `ChamCong_Tuan_${startDate}_den_${endDate}`;
+  const root = zip.folder(rootName);
+  const list = db.attendances.filter(a=>a.date>=startDate && a.date<=endDate && !isTestRecord(a));
+  let files = 0;
+  for(const a of list){
+    const emp = db.employees.find(e=>e.employeeId===a.employeeId);
+    const dir = root.folder(sanitizeZipName(`${(emp&&emp.name)||a.employeeId} - ${a.employeeId}_${a.date}_${a.shift}`));
+    dir.file('thongtin.txt', attendanceInfoTxt(emp, a)); files++;
+    const inBuf = dataUrlToBuffer(a.checkIn?.image);
+    if(inBuf){ dir.file('checkin.jpg', inBuf); files++; }
+    const outBuf = dataUrlToBuffer(a.checkOut?.image);
+    if(outBuf){ dir.file('checkout.jpg', outBuf); files++; }
+  }
+  const buffer = await zip.generateAsync({ type:'nodebuffer', compression:'STORE' });
+  return { buffer, rootName, records: list.length, files };
+}
+// Xuất thủ công theo ngày: Admin/HR tải ZIP về máy
+app.get('/api/attendance/export-day', authMiddleware, roleCheck(['Admin','HR']), async (req,res)=>{
+  const date = (req.query.date||'').toString().trim() || getVietnamTodayStr();
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({error:'Ngày không hợp lệ (YYYY-MM-DD)'});
+  try{
+    const { buffer, rootName, records } = await buildAttendanceZip(date, date);
+    audit(req.user.username,'EXPORT_ATTENDANCE_DAY','ATTENDANCE', { date }, { records }, req.ip);
+    res.setHeader('Content-Type','application/zip');
+    res.setHeader('Content-Disposition',`attachment; filename="${rootName}.zip"`);
+    res.send(buffer);
+  }catch(e){ res.status(500).json({error:'Xuất ZIP thất bại: '+e.message}); }
+});
+function getMailer(){
+  const m = db.settings?.mail;
+  if(!m || !m.enabled) return { error:'Chưa bật gửi mail ở Cài đặt' };
+  if(!m.user) return { error:'Chưa cấu hình tài khoản gửi mail ở Cài đặt' };
+  const pass = (typeof m.pass==='string' && m.pass.startsWith('enc:')) ? decryptSecret(m.pass) : (m.pass||'');
+  if(!pass) return { error:'Chưa cấu hình mật khẩu/app-password gửi mail ở Cài đặt' };
+  const transporter = nodemailer.createTransport({
+    host: m.smtpHost||'smtp.gmail.com', port: Number(m.smtpPort)||465, secure: (Number(m.smtpPort)||465)===465,
+    auth: { user: m.user, pass }
+  });
+  return { transporter };
+}
+// Gửi báo cáo tuần (Mon-Sun) qua mail — dùng tay hoặc tự động
+async function sendWeeklyAttendance(weekStart, triggeredBy){
+  const mon = new Date(weekStart);
+  const end = new Date(mon); end.setDate(mon.getDate()+6);
+  const endStr = toVietnamDateStr(end);
+  const { buffer, rootName, records } = await buildAttendanceZip(weekStart, endStr);
+  const mailer = getMailer();
+  if(mailer.error) return { error: mailer.error };
+  const to = [...new Set([...(db.settings.mail.weeklyTo||[]), 'nguyenthanhthien.dev.1602@gmail.com','umbomilk@gmail.com','dothidoandoan063@gmail.com'].map(s=>String(s||'').trim()).filter(Boolean))];
+  if(!to.length) return { error:'Chưa có địa chỉ nhận báo cáo tuần' };
+  await mailer.transporter.sendMail({
+    from: db.settings.mail.user, to: to.join(', '),
+    subject: `[Ụm Bò Milk] Báo cáo chấm công tuần ${weekStart} → ${endStr} (${records} lượt)`,
+    text: `Báo cáo chấm công tuần ${weekStart} đến ${endStr}: ${records} lượt chấm công.\nFile ZIP đính kèm gồm ảnh check-in/check-out + file thongtin.txt (giờ, tọa độ, mã NV) từng nhân viên.`,
+    attachments: [{ filename: `${rootName}.zip`, content: buffer }]
+  });
+  db.settings.mail.lastWeeklySent = weekStart;
+  audit(triggeredBy||'AUTO_WEEKLY','SEND_WEEKLY_ATTENDANCE','ATTENDANCE', { weekStart, endStr }, { records, to }, 'system');
+  saveDB();
+  return { success:true, weekStart, endStr, records, to };
+}
+// Gửi tay báo cáo tuần
+app.post('/api/attendance/send-weekly', authMiddleware, roleCheck(['Admin','HR']), async (req,res)=>{
+  let weekStart = (req.body && req.body.weekStart)||'';
+  if(!weekStart || !/^\d{4}-\d{2}-\d{2}$/.test(weekStart)){
+    weekStart = toVietnamDateStr(getMonday(getVietnamNow()));
+  }
+  try{
+    const out = await sendWeeklyAttendance(weekStart, req.user.username);
+    if(out.error) return res.status(400).json({error: out.error});
+    res.json({ ...out, message:`Đã gửi báo cáo tuần ${out.weekStart} → ${out.endStr} tới ${out.to.join(', ')}` });
+  }catch(e){ res.status(500).json({error:'Gửi mail thất bại: '+e.message}); }
+});
+// Tự động gửi 8h? Không — gửi 6h sáng Thứ 2 tuần kế tiếp cho tuần vừa xong (giờ VN), mỗi tuần 1 lần
+setInterval(async ()=>{
+  try{
+    const now = getVietnamNow();
+    if(now.getDay()!==1) return;
+    const hour = now.getHours()+now.getMinutes()/60;
+    const weeklyHour = Number(db.settings?.mail?.weeklyHour)||6;
+    if(hour<weeklyHour || hour>=weeklyHour+1) return;
+    if(!db.settings?.mail?.enabled) return;
+    const prevMon = new Date(now); prevMon.setDate(now.getDate()-7);
+    const weekStart = toVietnamDateStr(getMonday(prevMon));
+    if(db.settings.mail.lastWeeklySent===weekStart) return;
+    console.log(`[MAIL TUẦN] Tự động gửi báo cáo tuần ${weekStart}`);
+    const out = await sendWeeklyAttendance(weekStart, 'AUTO_MON_'+weeklyHour+'H');
+    if(out.error) console.error('[MAIL TUẦN] Lỗi:', out.error);
+    else { io.emit('notifications:update', db.notifications); console.log(`[MAIL TUẦN] Đã gửi ${out.records} lượt tới ${out.to.join(', ')}`); }
+  }catch(e){ console.error('[MAIL TUẦN] Lỗi:', e.message); }
+}, 10*60*1000);
 
 // ============ SCHEDULES ============
 app.get('/api/schedules', authMiddleware, (req,res)=>{

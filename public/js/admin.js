@@ -4901,9 +4901,17 @@ function renderAttendancesList(){
           <div class="bg-orange-50 border border-orange-200 rounded-xl p-2"><div class="font-black text-orange-700">CHECK-OUT</div><div>${a.checkOut?.time||'— Chưa'}</div><div class="text-[11px] text-slate-500 truncate">${a.checkOut?.gps||''}</div><div class="text-[11px] truncate">${a.checkOut?.drivePath||''}</div></div>
         </div>
         <div class="flex flex-wrap gap-1">${(a.violations||[]).map(v=>`<span class="text-[11px] font-bold bg-red-100 text-red-700 px-2 py-0.5 rounded-full">${v}</span>`).join('')||'<span class="text-[11px] bg-pink-100 text-pink-700 px-2 py-0.5 rounded-full">Không vi phạm</span>'}</div>
-        ${a.checkIn?.image?`<img src="${a.checkIn.image}" onclick="openPhotoViewer(this.src)" title="Bấm để xem toàn bộ ảnh" class="w-full h-24 object-cover rounded-xl border cursor-zoom-in hover:opacity-90">`:''}
-        ${a.checkOut?.image?`<img src="${a.checkOut.image}" onclick="openPhotoViewer(this.src)" title="Bấm để xem toàn bộ ảnh check-out" class="w-full h-24 object-cover rounded-xl border cursor-zoom-in hover:opacity-90">`:''}
-        ${a.checkIn?.driveUrl||a.checkOut?.driveUrl?`<a href="${a.checkOut?.driveUrl||a.checkIn.driveUrl}" target="_blank" class="text-[11px] font-bold text-blue-600 hover:underline">Xem ảnh trên Drive</a>`:''}
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <div class="text-[11px] font-black text-emerald-700 mb-1">📷 ẢNH VÀO CA</div>
+            ${a.checkIn?.image?`<img src="${a.checkIn.image}" onclick="openPhotoViewer(this.src)" title="Bấm để xem toàn bộ ảnh check-in" class="w-full h-24 object-cover rounded-xl border cursor-zoom-in hover:opacity-90">`:`<div class="w-full h-24 rounded-xl border border-dashed border-slate-300 bg-slate-50 flex items-center justify-center text-[11px] text-slate-400 font-bold">Chưa có ảnh vào ca</div>`}
+          </div>
+          <div>
+            <div class="text-[11px] font-black text-orange-700 mb-1">📷 ẢNH RA CA</div>
+            ${a.checkOut?.image?`<img src="${a.checkOut.image}" onclick="openPhotoViewer(this.src)" title="Bấm để xem toàn bộ ảnh check-out" class="w-full h-24 object-cover rounded-xl border cursor-zoom-in hover:opacity-90">`:`<div class="w-full h-24 rounded-xl border border-dashed border-slate-300 bg-slate-50 flex items-center justify-center text-[11px] text-slate-400 font-bold">Chưa có ảnh ra ca</div>`}
+          </div>
+        </div>
+        <div class="flex flex-wrap gap-3">${a.checkIn?.driveUrl?`<a href="${a.checkIn.driveUrl}" target="_blank" class="text-[11px] font-bold text-blue-600 hover:underline">Drive ảnh vào ca</a>`:''}${a.checkOut?.driveUrl?`<a href="${a.checkOut.driveUrl}" target="_blank" class="text-[11px] font-bold text-blue-600 hover:underline">Drive ảnh ra ca</a>`:''}${(a.checkIn?.driveUrl||a.checkOut?.driveUrl)?`<a href="${a.checkOut?.driveUrl||a.checkIn.driveUrl}" target="_blank" class="text-[11px] font-bold text-blue-600 hover:underline">Xem ảnh trên Drive</a>`:''}</div>
       </div>
     </div>
   `}).join('');
@@ -4924,6 +4932,31 @@ function closePhotoViewer(){
   document.removeEventListener('keydown', closePhotoViewerEsc);
 }
 function closePhotoViewerEsc(e){ if(e.key==='Escape') closePhotoViewer(); }
+// Xuất ZIP chấm công theo ngày (Admin/HR tải về máy)
+async function exportAttendanceDay(){
+  const date=document.getElementById('attDate')?.value||'';
+  if(!date) return showToast('Chọn ngày cần xuất','error');
+  try{
+    showToast('Đang nén ZIP chấm công ngày '+date.split('-').reverse().join('/')+'...','info');
+    const res = await fetch(API+'/api/attendance/export-day?date='+date, {headers:{Authorization:'Bearer '+token}});
+    if(!res.ok){ const j=await res.json().catch(()=>({})); throw new Error(j.error||('Lỗi '+res.status)); }
+    const blob = await res.blob();
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob); a.download=`ChamCong_${date}.zip`;
+    document.body.appendChild(a); a.click();
+    setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },2000);
+    showToast('Đã tải ZIP chấm công ngày '+date.split('-').reverse().join('/'),'success');
+  }catch(e){ showToast(e.message,'error'); }
+}
+// Gửi báo cáo ZIP tuần này qua mail ngay (Admin/HR)
+async function sendWeeklyNow(){
+  if(!confirm('Gửi báo cáo ZIP tuần này (T2 → nay) qua mail ngay?')) return;
+  try{
+    showToast('Đang nén và gửi báo cáo tuần...','info');
+    const res=await api('/api/attendance/send-weekly', {method:'POST', headers:{Authorization:'Bearer '+token}, body:JSON.stringify({})});
+    showToast(res.message||'Đã gửi báo cáo tuần','success');
+  }catch(e){ showToast(e.message,'error'); }
+}
 
 // Zalo
 async function loadZalo(){
@@ -5405,6 +5438,15 @@ async function loadSettings(){
     if (document.getElementById('setFeatEmergency')) document.getElementById('setFeatEmergency').checked = !!s.features?.empEmergency;
     if (document.getElementById('setFeatAccount')) document.getElementById('setFeatAccount').checked = !!s.features?.empAccount;
     if (document.getElementById('setTestMin')) document.getElementById('setTestMin').value = s.test?.minPerQuestion || 5;
+    if (document.getElementById('setMailEnabled')) document.getElementById('setMailEnabled').checked = !!s.mail?.enabled;
+    if (document.getElementById('setMailHost')) document.getElementById('setMailHost').value = s.mail?.smtpHost || 'smtp.gmail.com';
+    if (document.getElementById('setMailPort')) document.getElementById('setMailPort').value = s.mail?.smtpPort ?? 465;
+    if (document.getElementById('setMailUser')) document.getElementById('setMailUser').value = s.mail?.user || '';
+    if (document.getElementById('setMailPass')) document.getElementById('setMailPass').value = m.mail?.pass || '••••••••';
+    if (document.getElementById('setMailTo')) document.getElementById('setMailTo').value = (s.mail?.weeklyTo||[]).join('\n');
+    if (document.getElementById('setMailHour')) document.getElementById('setMailHour').value = s.mail?.weeklyHour ?? 6;
+    const _mls = document.getElementById('mailLastSent');
+    if (_mls) _mls.textContent = s.mail?.lastWeeklySent ? ('Đã gửi tuần bắt đầu ' + s.mail.lastWeeklySent) : 'Chưa gửi tuần nào';
     // ENV lock - khóa khi dùng Render ENV (server.js:386)
     const envLocked = data.envLocked || {};
     const lockMap = {
@@ -5567,6 +5609,7 @@ async function saveSettings(){
     off:{maxPerWeek:parseInt(document.getElementById('setOffMax').value)},
     features:{employeeShiftSwap:!!document.getElementById('setShiftSwap')?.checked, empAttendance:!!document.getElementById('setFeatAttendance')?.checked, empSchedule:!!document.getElementById('setFeatSchedule')?.checked, empSalary:!!document.getElementById('setFeatSalary')?.checked, empOff:!!document.getElementById('setFeatOff')?.checked, empEmergency:!!document.getElementById('setFeatEmergency')?.checked, empAccount:!!document.getElementById('setFeatAccount')?.checked},
     test:{minPerQuestion:parseInt(document.getElementById('setTestMin').value)},
+    mail:{enabled:!!document.getElementById('setMailEnabled')?.checked, smtpHost:document.getElementById('setMailHost')?.value||'smtp.gmail.com', smtpPort:parseInt(document.getElementById('setMailPort')?.value)||465, user:document.getElementById('setMailUser')?.value||'', pass:document.getElementById('setMailPass')?.value||'', weeklyTo:(document.getElementById('setMailTo')?.value||'').split('\n').map(s=>s.trim()).filter(Boolean), weeklyHour:Math.min(23,Math.max(0,parseInt(document.getElementById('setMailHour')?.value)??6))},
   };
   try{
     const res = await api('/api/settings', {method:'PUT', body:JSON.stringify({settings:payload}), headers:{Authorization:'Bearer '+token}});
