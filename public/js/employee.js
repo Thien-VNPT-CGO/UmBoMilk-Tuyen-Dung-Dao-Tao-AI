@@ -1409,8 +1409,9 @@ async function loadSchedule(){
       // Fix: hiển thị lịch tuần sau ngay khi NV đã đăng ký OFF 2 ngày (realtime), không chờ HR duyệt draft
       displaySchedules = mySchedules.filter(s=>{
         if(s.weekStart===nextMon){
-          // Chỉ ẩn tuần sau nếu chưa đăng ký OFF; nếu đã có OFF phê duyệt thì hiển thị luôn kể cả draft PENDING (để NV thấy OFF ngay)
-          if(!hasOffForNextWeek) return false;
+          // Hiện tuần sau khi NV đã đăng ký OFF (kể cả draft PENDING) HOẶC lịch đã được Admin/HR duyệt — không ẩn lịch đã duyệt chỉ vì thiếu phiếu OFF
+          const approved = s.approvalStatus==='APPROVED';
+          if(!hasOffForNextWeek && !approved) return false;
         }
         // Chỉ hiện tuần hiện tại (0) và tuần sau (1): ẩn tuần cũ (<0) lẫn tuần xa (>1) để lịch không lặp/thừa thẻ
         const weekDate = new Date(s.weekStart);
