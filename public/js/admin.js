@@ -4958,9 +4958,25 @@ async function exportAttendanceDay(){
     showToast('Đã tải ZIP chấm công ngày '+date.split('-').reverse().join('/'),'success');
   }catch(e){ umbProgressHide(); showToast(e.message,'error'); }
 }
+// Kiểm tra cấu hình mail: verify SMTP + gửi 1 thư thử (Admin/HR)
+async function testMailNow(){
+  const out=document.getElementById('mailTestResult');
+  try{
+    if(out){ out.className='text-[11px] font-bold text-slate-500'; out.textContent='Đang kiểm tra SMTP...'; }
+    umbProgressShow('Đang kiểm tra mail','Nối SMTP + gửi thư thử...');
+    const to=(document.getElementById('setMailUser')?.value||'').trim();
+    const res=await api('/api/attendance/test-mail', {method:'POST', headers:{Authorization:'Bearer '+token}, body:JSON.stringify({to})});
+    umbProgressHide();
+    if(out){ out.className='text-[11px] font-bold text-emerald-700'; out.textContent='✅ '+(res.message||'OK'); }
+    showToast(res.message||'Mail OK','success');
+  }catch(e){
+    umbProgressHide();
+    if(out){ out.className='text-[11px] font-bold text-red-600'; out.textContent='⛔ '+e.message; }
+    showToast(e.message,'error');
+  }
+}
 // Gửi báo cáo ZIP tuần này qua mail ngay (Admin/HR)
-async function sendWeeklyNow(){
-  if(!confirm('Gửi báo cáo ZIP tuần này (T2 → nay) qua mail ngay?')) return;
+async function sendWeeklyNow(){  if(!confirm('Gửi báo cáo ZIP tuần này (T2 → nay) qua mail ngay?')) return;
   try{
     umbProgressShow('Đang gửi báo cáo tuần','Nén ZIP T2→nay + gửi mail...');
     const res=await api('/api/attendance/send-weekly', {method:'POST', headers:{Authorization:'Bearer '+token}, body:JSON.stringify({})});

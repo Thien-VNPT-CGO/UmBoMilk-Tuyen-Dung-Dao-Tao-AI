@@ -5760,6 +5760,35 @@ function getMailer(){
   });
   return { transporter };
 }
+function mailErrorHint(e){
+  const msg = (e && (e.response || e.message)) || '';
+  const code = (e && (e.code||'')) || '';
+  if(/535|username and password not accepted|invalid login|EAUTH/i.test(msg+' '+code))
+    return 'Gmail từ chối đăng nhập: dùng App Password (bật Xác minh 2 bước → tạo app password), không dùng mật khẩu thường. ';
+  if(/ECONNECTION|ETIMEDOUT|ENOTFOUND|ESOCKET|connect/i.test(code) || /connect|timed out|getaddrinfo/i.test(msg))
+    return 'Không nối được máy chủ SMTP: kiểm tra host/port/mạng. ';
+  return '';
+}
+// Kiểm tra cấu hình mail: verify SMTP + gửi 1 mail thử (Admin/HR)
+app.post('/api/attendance/test-mail', authMiddleware, roleCheck(['Admin','HR']), async (req,res)=>{
+  try{
+    const mailer = getMailer();
+    if(mailer.error) return res.status(400).json({error: mailer.error});
+    const to = ((req.body && req.body.to) || db.settings.mail.user || '').toString().trim();
+    if(!to) return res.status(400).json({error:'Thiếu địa chỉ mail nhận thử'});
+    await mailer.transporter.verify();
+    await mailer.transporter.sendMail({
+      from: db.settings.mail.user, to,
+      subject: '[Ụm Bò Milk] Thư thử cấu hình mail báo cáo tuần',
+      text: 'Cấu hình mail OK. Hệ thống sẽ tự gửi ZIP chấm công tuần lúc 23h00 Chủ nhật.'
+    });
+    audit(req.user.username,'TEST_MAIL','SETTINGS', null, { to }, req.ip);
+    res.json({ success:true, message:`Đã gửi thư thử tới ${to} - kiểm tra hộp thư (cả Spam)` });
+  }catch(e){
+    console.error('[MAIL TEST] Lỗi:', e.code||'', e.response||e.message);
+    res.status(500).json({error:'Gửi thư thử thất bại: '+mailErrorHint(e)+(e.response||e.message)});
+  }
+});
 // Gửi báo cáo tuần (Mon-Sun) qua mail — dùng tay hoặc tự động
 async function sendWeeklyAttendance(weekStart, triggeredBy){
   const mon = new Date(weekStart);
@@ -5791,7 +5820,10 @@ app.post('/api/attendance/send-weekly', authMiddleware, roleCheck(['Admin','HR']
     const out = await sendWeeklyAttendance(weekStart, req.user.username);
     if(out.error) return res.status(400).json({error: out.error});
     res.json({ ...out, message:`Đã gửi báo cáo tuần ${out.weekStart} → ${out.endStr} tới ${out.to.join(', ')}` });
-  }catch(e){ res.status(500).json({error:'Gửi mail thất bại: '+e.message}); }
+  }catch(e){
+    console.error('[MAIL TUẦN] Lỗi:', e.code||'', e.response||e.message);
+    res.status(500).json({error:'Gửi mail thất bại: '+mailErrorHint(e)+(e.response||e.message)});
+  }
 });
 // Tự động gửi 23h00 Chủ nhật hàng tuần (giờ VN) cho tuần T2-CN vừa xong, mỗi tuần 1 lần.
 // Reset Bản ghi điểm danh 23h59 Chủ nhật (chỉ khi tuần đó đã được gửi mail archive) để giảm dung lượng.

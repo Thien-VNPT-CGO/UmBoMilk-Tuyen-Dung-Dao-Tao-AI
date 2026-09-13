@@ -907,6 +907,10 @@ button:active{transform:scale(.97)}
               <div><label class="text-xs font-bold text-pink-700">Mail nhận (mỗi dòng 1 mail)</label><textarea id="setMailTo" rows="3" placeholder="a@gmail.com" class="w-full mt-1 px-3 py-2 rounded-xl border border-pink-200 text-sm"></textarea></div>
               <div><label class="text-xs font-bold text-pink-700">Giờ gửi auto Chủ nhật (0-23)</label><input id="setMailHour" type="number" min="0" max="23" class="w-full mt-1 px-3 py-2 rounded-xl border border-pink-200 text-sm"></div>
               <div class="text-[11px] text-slate-500">23h00 CN gửi ZIP tuần (T2→CN) • 23h59 CN reset Bản ghi điểm danh (chỉ khi đã gửi mail).</div>
+              <div class="flex gap-2">
+                <button onclick="testMailNow()" class="flex-1 bg-white border border-blue-300 text-blue-700 font-bold py-2 rounded-xl text-xs hover:bg-blue-50"><i class="fa-solid fa-plug-circle-check"></i> Kiểm tra gửi mail</button>
+              </div>
+              <div id="mailTestResult" class="text-[11px] font-bold"></div>
               <div id="mailLastSent" class="text-[11px] text-slate-500"></div>
             </div>
           </div>
