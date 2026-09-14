@@ -620,6 +620,7 @@ function connectSocket(){
       if(active==='employees-store') safeCall(loadEmployees());
       if(active==='schedule') safeCall(loadSchedules());
       if(active==='requests') safeCall(loadRequests());
+      if(active==='shiftSwap') safeCall(loadShiftSwapAdmin());
       if(active==='attendance') safeCall(loadAttendances());
       if(active==='zalo') safeCall(loadZalo());
       if(active==='elearning') safeCall(loadElearning());
@@ -4760,9 +4761,11 @@ function renderShiftSwapRequestsAdmin(){
           ? 'bg-purple-100 text-purple-700 border-purple-300' 
           : r.status && r.status.includes('APPROVED') 
             ? 'bg-emerald-100 text-emerald-700 border-emerald-300' 
-            : r.status === 'EXPIRED' 
-              ? 'bg-slate-100 text-slate-500 border-slate-200' 
-              : 'bg-rose-100 text-rose-700 border-rose-300';
+            : r.status === 'REVOKED'
+              ? 'bg-slate-200 text-slate-600 border-slate-300'
+              : r.status === 'EXPIRED' 
+                ? 'bg-slate-100 text-slate-500 border-slate-200' 
+                : 'bg-rose-100 text-rose-700 border-rose-300';
 
     const urgentBadge = r.isHrCreated ? '<span class="bg-red-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded">HR &lt;24h</span>' : '';
 
@@ -4807,6 +4810,13 @@ function renderShiftSwapRequestsAdmin(){
             </button>
           </div>
         ` : ''}
+        ${(r.status === 'APPROVED' || r.status === 'AUTO_APPROVED') ? `
+          <div class="mt-3 pt-2 border-t border-slate-200 flex gap-2">
+            <button onclick="handleShiftSwapAdmin('${r.id}', 'revoke')" class="flex-1 bg-amber-500 hover:bg-amber-600 text-white font-bold py-1.5 rounded-lg shadow-sm flex items-center justify-center gap-1">
+              <i class="fa-solid fa-rotate-left"></i> Thu hồi (hoàn lịch)
+            </button>
+          </div>
+        ` : ''}
       </div>
     `;
   }).join('');
@@ -4814,11 +4824,12 @@ function renderShiftSwapRequestsAdmin(){
 
 async function handleShiftSwapAdmin(id, action){
   try {
+    if(action === 'revoke' && !confirm('Thu hồi phiếu đổi ca này? Lịch 2 NV sẽ hoàn về như trước khi duyệt.')) return;
     const res = await api('/api/shift-swap/' + id + '/' + action, {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + token }
     });
-    showToast(action === 'approve' ? 'Đã duyệt đổi ca chính thức thành công!' : 'Đã từ chối yêu cầu đổi ca', 'success');
+    showToast(res.message || (action === 'approve' ? 'Đã duyệt đổi ca chính thức thành công!' : action === 'revoke' ? 'Đã thu hồi phiếu — lịch đã hoàn về' : 'Đã từ chối yêu cầu đổi ca'), 'success');
     loadRequests();
     if (typeof loadShiftSwapAdmin === 'function') loadShiftSwapAdmin();
   } catch(e) {
@@ -5947,6 +5958,11 @@ async function loadShiftSwapAdmin(){
             <button onclick="handleShiftSwapAdmin('${r.id}','reject')" class="px-3 py-1 bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 rounded-lg text-xs font-bold flex items-center gap-1"><i class="fa-solid fa-xmark"></i> Từ chối</button>
           </div>
         ` : ''}
+        ${(r.status === 'APPROVED' || r.status === 'AUTO_APPROVED') ? `
+          <div class="mt-2 flex gap-2 pt-2 border-t border-slate-100">
+            <button onclick="handleShiftSwapAdmin('${r.id}','revoke')" class="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold shadow-sm flex items-center gap-1"><i class="fa-solid fa-rotate-left"></i> Thu hồi (hoàn lịch)</button>
+          </div>
+        ` : ''}
       </div>`;
     }).join('');
   }catch(e){ console.error('loadShiftSwapAdmin',e); }
@@ -6021,11 +6037,15 @@ async function loadOffWorkAdmin(){
           <button onclick="handleOffWorkAdmin('${r.id}','approve')" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold">Duyệt (lật 2 ngày)</button>
           <button onclick="handleOffWorkAdmin('${r.id}','reject')" class="px-3 py-1 bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 rounded-lg text-xs font-bold">Từ chối</button>
         </div>`:''}
+        ${r.status==='APPROVED'?`<div class="mt-2 flex gap-2 pt-2 border-t border-slate-100">
+          <button onclick="handleOffWorkAdmin('${r.id}','revoke')" class="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold shadow-sm">Thu hồi (hoàn lịch)</button>
+        </div>`:''}
       </div>`).join('');
   }catch(e){ el.innerHTML='<div class="p-8 text-center text-sm text-slate-400">Không tải được</div>'; }
 }
 async function handleOffWorkAdmin(id, action){
   try{
+    if(action==='revoke' && !confirm('Thu hồi phiếu OFF ↔ ca làm này? 2 ngày lịch sẽ lật về như trước khi duyệt.')) return;
     const res=await api('/api/off-work-swap/'+id+'/'+action, {method:'POST', headers:{Authorization:'Bearer '+token}});
     showToast(res.message||'Đã xử lý','success');
     loadOffWorkAdmin();

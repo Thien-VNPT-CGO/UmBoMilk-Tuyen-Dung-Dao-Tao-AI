@@ -7069,6 +7069,7 @@ app.post('/api/shift-swap/:id/respond', (req,res)=>{
       [requester, target].forEach((e, idx)=>{
         if(!e) return;
         let sched = ensureSwapWeek(e.employeeId, r.date, idx===0?requesterShift:targetShift);
+        captureSwapSnapshot(r, e.employeeId, r.date); // de thu hoi hoan ve sau nay
         {
           const day = sched.days.find(d=>d.date===r.date);
           if(day){
@@ -7293,12 +7294,51 @@ function flipOffWorkDay(employeeId, dateStr, toOff, toShift){
   sched.updated_at=getVietnamISOString();
   return { sched, day };
 }
+// Snapshot 1 ngay lich truoc khi approve doi ca (de thu hoi hoan ve chinh xac)
+function captureSwapSnapshot(r, employeeId, dateStr){
+  if(!r.beforeSchedule) r.beforeSchedule = [];
+  if(r.beforeSchedule.some(b=>b.employeeId===employeeId && b.day && b.day.date===dateStr)) return;
+  const s = db.schedules.find(x=>x.employeeId===employeeId && (x.days||[]).some(d=>d.date===dateStr));
+  const d = s ? s.days.find(x=>x.date===dateStr) : null;
+  r.beforeSchedule.push({ employeeId, day: d ? JSON.parse(JSON.stringify(d)) : null });
+}
+// Hoan 1 ngay lich ve snapshot (xoa sach key thua do swap them vao)
+function restoreSwapSnapshotDay(employeeId, snapDay){
+  if(!snapDay || !snapDay.date) return null;
+  const sched = db.schedules.find(s=>s.employeeId===employeeId && (s.days||[]).some(d=>d.date===snapDay.date));
+  if(!sched) return null;
+  const day = sched.days.find(d=>d.date===snapDay.date);
+  if(!day) return null;
+  Object.keys(day).forEach(k=>delete day[k]);
+  Object.assign(day, JSON.parse(JSON.stringify(snapDay)));
+  sched.version=(sched.version||1)+1;
+  sched.updated_at=getVietnamISOString();
+  return sched;
+}
+// Don ngay lich ve trang thai truoc swap (dung khi phieu cu chua co snapshot)
+function cleanSwapDay(day, restoredShift, restoredStatus){
+  const hadSecond = !!day.secondShift;
+  delete day.substituteFor; delete day.secondShift; delete day.doubleShiftGiven; delete day.doubleShiftInfo;
+  delete day.autoOff; delete day.autoOffReason;
+  const sh = (restoredShift && restoredShift!=='OFF') ? restoredShift : null;
+  if(sh){
+    day.shift = sh; day.status = restoredStatus || 'WORKING';
+    if(hadSecond){ day.shifts=[sh]; delete day.shift2; delete day.shift3; }
+    else if(Array.isArray(day.shifts)){ if(!day.shifts.includes(sh)) day.shifts=[sh, ...day.shifts.filter(Boolean)]; }
+    else day.shifts=[sh];
+  } else {
+    day.shift = 'OFF'; day.status = 'OFF'; day.shifts = [];
+    delete day.shift2; delete day.shift3;
+  }
+}
 app.post('/api/off-work-swap/:id/approve', authMiddleware, roleCheck(['Admin','HR','Manager']), (req,res)=>{
   const r = (db.shiftSwapRequests||[]).find(x=>x.id===req.params.id && x.type==='OFF_WORK_SWAP');
   if(!r) return res.status(404).json({error:'Không tìm thấy yêu cầu đổi OFF <-> ca làm'});
   if(r.status==='APPROVED' || r.status==='REJECTED') return res.status(400).json({error:'Yêu cầu đã xử lý'});
   const emp = db.employees.find(e=>e.employeeId===r.requesterId);
   if(emp && emp.branchId && req.user.role==='Manager' && !req.user.branchScope.includes(emp.branchId)) return res.status(403).json({error:'Manager chỉ xử lý CN được phân quyền'});
+  captureSwapSnapshot(r, r.requesterId, r.offDate); // de thu hoi hoan ve sau nay
+  captureSwapSnapshot(r, r.requesterId, r.workDate); // de thu hoi hoan ve sau nay
   const f1 = flipOffWorkDay(r.requesterId, r.offDate, false, emp?emp.shift:null);
   const f2 = flipOffWorkDay(r.requesterId, r.workDate, true);
   if(!f1 || !f2) return res.status(404).json({error:'Không tìm thấy lịch của 1 trong 2 ngày (có thể đã bị xóa tuần)'});
@@ -7328,6 +7368,45 @@ app.post('/api/off-work-swap/:id/reject', authMiddleware, roleCheck(['Admin','HR
   db.notifications.push({ id: uuidv4(), to: r.requesterId, type:'OFF_WORK_SWAP_REJECTED', title:`Đổi OFF <-> ca làm bị từ chối`, content:`Yêu cầu đổi ${r.offDate} <-> ${r.workDate} đã bị ${req.user.username} từ chối.`, createdAt: getVietnamISOString(), read:false });
   io.emit('notifications:update', db.notifications);
   res.json({success:true, request:r, message:'Đã từ chối yêu cầu đổi OFF <-> ca làm'});
+});
+// Admin/HR thu hồi phiếu đổi OFF <-> ca làm: lich hoan ve nhu truoc khi duyet
+app.post('/api/off-work-swap/:id/revoke', authMiddleware, roleCheck(['Admin','HR','Manager']), (req,res)=>{
+  const r = (db.shiftSwapRequests||[]).find(x=>x.id===req.params.id && x.type==='OFF_WORK_SWAP');
+  if(!r) return res.status(404).json({error:'Không tìm thấy yêu cầu đổi OFF <-> ca làm'});
+  if(r.status==='REVOKED' || r.status==='REJECTED') return res.status(400).json({error:'Phiếu đã kết thúc, không thể thu hồi'});
+  const emp = db.employees.find(e=>e.employeeId===r.requesterId);
+  if(emp && emp.branchId && req.user.role==='Manager' && !(req.user.branchScope||[]).includes(emp.branchId)) return res.status(403).json({error:'Manager chỉ xử lý CN được phân quyền'});
+  let flipped = 0;
+  if(r.status==='APPROVED'){
+    const before = Array.isArray(r.beforeSchedule) ? r.beforeSchedule : [];
+    const bOff = before.find(b=>b.employeeId===r.requesterId && b.day && b.day.date===r.offDate);
+    const bWork = before.find(b=>b.employeeId===r.requesterId && b.day && b.day.date===r.workDate);
+    if(bOff && bWork){
+      const s1 = restoreSwapSnapshotDay(r.requesterId, bOff.day);
+      const s2 = restoreSwapSnapshotDay(r.requesterId, bWork.day);
+      if(s1) addSyncQueue('SCHEDULE','UPDATE',s1,req.user.username,'WEB_HR');
+      if(s2 && (!s1 || s2.id!==s1.id)) addSyncQueue('SCHEDULE','UPDATE',s2,req.user.username,'WEB_HR');
+      flipped = (s1?1:0) + (s2?1:0);
+    } else {
+      // Lat nguoc phep duyet: offDate ve OFF, workDate ve ngay lam
+      const f1 = flipOffWorkDay(r.requesterId, r.offDate, true);
+      const f2 = flipOffWorkDay(r.requesterId, r.workDate, false, emp?emp.shift:null);
+      if(!f1 || !f2) return res.status(404).json({error:'Không tìm thấy lịch của 1 trong 2 ngày (có thể đã bị xóa tuần)'});
+      addSyncQueue('SCHEDULE','UPDATE',f1.sched,req.user.username,'WEB_HR');
+      if(f2.sched!==f1.sched) addSyncQueue('SCHEDULE','UPDATE',f2.sched,req.user.username,'WEB_HR');
+      flipped = 2;
+    }
+  }
+  r.status='REVOKED'; r.revokedBy=req.user.username; r.revokedAt=getVietnamISOString(); r.version=(r.version||1)+1;
+  audit(req.user.username,'REVOKE_OFF_WORK_SWAP','SHIFT_SWAP',{offDate:r.offDate, workDate:r.workDate},{revoked:true, flipped},req.ip);
+  addSyncQueue('SHIFT_SWAP','UPDATE',r,req.user.username,'WEB_HR');
+  saveDB();
+  io.emit('shiftSwap:update', db.shiftSwapRequests);
+  io.emit('shiftSwapRequests:update', db.shiftSwapRequests);
+  io.emit('schedules:update', db.schedules);
+  db.notifications.push({ id: uuidv4(), to: r.requesterId, type:'OFF_WORK_SWAP_REVOKED', title:`Đổi OFF <-> ca làm bị thu hồi`, content:`Phiếu đổi ${r.offDate} <-> ${r.workDate} đã bị ${req.user.username} thu hồi.${flipped?` Lịch đã hoàn về: ${r.offDate} OFF, ${r.workDate} ngày làm.`:''}`, createdAt: getVietnamISOString(), read:false });
+  io.emit('notifications:update', db.notifications);
+  res.json({success:true, request:r, revertedDays:flipped, message: flipped?`Đã thu hồi: ${r.offDate} về OFF, ${r.workDate} về ngày làm`:'Đã thu hồi phiếu đang chờ'});
 });
 // ============ KEY KÍCH HOẠT ĐỔI OFF <-> CA LÀM (1 key = 1 lần, theo mã NV) ============
 // Chỉ duy nhất tài khoản Admin được cấp key
@@ -7407,6 +7486,8 @@ app.post('/api/shift-swap/:id/approve', authMiddleware, roleCheck(['Admin','HR',
   const targetId = r.acceptedBy || r.targetEmployeeId;
   const target = targetId ? db.employees.find(e=>e.employeeId===targetId) : null;
 
+  if(requester) captureSwapSnapshot(r, requester.employeeId, r.date); // de thu hoi hoan ve sau nay
+  if(target) captureSwapSnapshot(r, target.employeeId, r.date); // de thu hoi hoan ve sau nay
   if(requester){
     let sched = db.schedules.find(s=>s.employeeId===requester.employeeId && s.days.some(d=>d.date===r.date));
     if(sched){
@@ -7483,6 +7564,56 @@ app.post('/api/shift-swap/:id/reject', authMiddleware, roleCheck(['Admin','HR','
   res.json({success:true, request:r, message:'HR đã từ chối yêu cầu đổi ca'});
 });
 
+// Admin/HR thu hồi phiếu đổi ca chính thức: lich 2 NV hoan ve nhu truoc khi duyet
+app.post('/api/shift-swap/:id/revoke', authMiddleware, roleCheck(['Admin','HR','Manager']), (req,res)=>{
+  const r = db.shiftSwapRequests.find(x=>x.id===req.params.id && x.type!=='OFF_WORK_SWAP');
+  if(!r) return res.status(404).json({error:'Không tìm thấy yêu cầu đổi ca'});
+  if(r.status==='REVOKED' || r.status==='REJECTED' || r.status==='EXPIRED') return res.status(400).json({error:'Phiếu đã kết thúc, không thể thu hồi'});
+  const requester = db.employees.find(e=>e.employeeId===r.requesterId);
+  if(requester && requester.branchId && req.user.role==='Manager' && !(req.user.branchScope||[]).includes(requester.branchId)) return res.status(403).json({error:'Manager chỉ xử lý CN được phân quyền'});
+  const touchedIds = new Set();
+  let reverted = 0;
+  const touch = (s)=>{ if(s) touchedIds.add(s.id); };
+  if(r.status==='APPROVED' || r.status==='AUTO_APPROVED'){
+    if(Array.isArray(r.beforeSchedule) && r.beforeSchedule.length){
+      // Hoan ve snapshot chup luc duyet (chinh xac tuyet doi)
+      for(const b of r.beforeSchedule){
+        const s = restoreSwapSnapshotDay(b.employeeId, b.day);
+        if(s){ touch(s); reverted++; }
+      }
+    } else {
+      // Phieu cu chua co snapshot: dung ve ca goc (best-effort)
+      const s1 = db.schedules.find(s=>s.employeeId===r.requesterId && (s.days||[]).some(d=>d.date===r.date));
+      if(s1){
+        const d1 = s1.days.find(d=>d.date===r.date);
+        if(d1){ cleanSwapDay(d1, r.fromShift, 'WORKING'); s1.version=(s1.version||1)+1; s1.updated_at=getVietnamISOString(); touch(s1); reverted++; }
+      }
+      const targetId = r.acceptedBy || r.targetEmployeeId;
+      const tgt = targetId ? db.employees.find(e=>e.employeeId===targetId) : null;
+      if(tgt){
+        const s2 = db.schedules.find(s=>s.employeeId===tgt.employeeId && (s.days||[]).some(d=>d.date===r.date));
+        if(s2){
+          const d2 = s2.days.find(d=>d.date===r.date);
+          if(d2){ cleanSwapDay(d2, tgt.shift, 'WORKING'); s2.version=(s2.version||1)+1; s2.updated_at=getVietnamISOString(); touch(s2); reverted++; }
+        }
+      }
+    }
+  }
+  r.status='REVOKED'; r.revokedBy=req.user.username; r.revokedAt=getVietnamISOString(); r.version=(r.version||1)+1;
+  audit(req.user.username,'REVOKE_SHIFT_SWAP','SHIFT_SWAP',{requestId:r.id, date:r.date},{revoked:true, revertedDays:reverted},req.ip);
+  addSyncQueue('SHIFT_SWAP','UPDATE',r,req.user.username,'WEB_HR');
+  for(const s of db.schedules.filter(x=>touchedIds.has(x.id))) addSyncQueue('SCHEDULE','UPDATE',s,req.user.username,'WEB_HR');
+  saveDB();
+  io.emit('shiftSwap:update', db.shiftSwapRequests);
+  io.emit('shiftSwapRequests:update', db.shiftSwapRequests);
+  io.emit('schedules:update', db.schedules);
+  const targetId = r.acceptedBy || r.targetEmployeeId;
+  db.notifications.push({ id: uuidv4(), to: r.requesterId, type:'SHIFT_SWAP_REVOKED', title:`Đổi ca ${r.date} bị thu hồi`, content:`Phiếu đổi ${r.fromShift}→${r.toShift} ngày ${r.date} đã bị ${req.user.username} thu hồi.${reverted?` Lịch đã hoàn về như trước khi duyệt.`:''}`, createdAt: getVietnamISOString(), read:false });
+  if(targetId) db.notifications.push({ id: uuidv4(), to: targetId, type:'SHIFT_SWAP_REVOKED', title:`Đổi ca ${r.date} bị thu hồi`, content:`Phiếu đổi ca với ${r.requesterName} ngày ${r.date} đã bị ${req.user.username} thu hồi. Lịch đã hoàn về.`, createdAt: getVietnamISOString(), read:false });
+  io.emit('notifications:update', db.notifications);
+  res.json({success:true, request:r, revertedDays:reverted, message: reverted?`Đã thu hồi phiếu — lịch đã hoàn về như trước khi duyệt (${reverted} ngày)`:'Đã thu hồi phiếu đang chờ'});
+});
+
 // Poller 24h cho TH2
 function checkShiftSwap24h(){
   const now=Date.now();
@@ -7495,6 +7626,8 @@ function checkShiftSwap24h(){
         // Cập nhật lịch như TH1
         const requester = db.employees.find(e=>e.employeeId===r.requesterId);
         const accepter = db.employees.find(e=>e.employeeId===r.acceptedBy);
+        if(requester) captureSwapSnapshot(r, requester.employeeId, r.date); // de thu hoi hoan ve sau nay
+        if(accepter) captureSwapSnapshot(r, accepter.employeeId, r.date); // de thu hoi hoan ve sau nay
         if(requester && accepter){
           // Swap shifts
           [requester, accepter].forEach((e, idx)=>{
