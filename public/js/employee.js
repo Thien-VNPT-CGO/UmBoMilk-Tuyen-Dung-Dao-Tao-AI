@@ -996,10 +996,9 @@ function isOffWindowOpen(){
 // Attendance
 let streamCheckin=null, streamCheckout=null;
 let capturedCheckin=null, capturedCheckout=null;
-let _camFacing='environment', _camZoom=1;
-async function startCamera(type, facing, zoom){
+let _camFacing='environment';
+async function startCamera(type, facing){
   const useFacing = facing || _camFacing;
-  const useZoom = zoom || _camZoom;
   _camFacing = useFacing;
   try{
     let stream = null;
@@ -1008,54 +1007,22 @@ async function startCamera(type, facing, zoom){
     }catch(e){
       stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:useFacing}, audio:false});
     }
-    // Ap dung zoom 0.5x (ultra-wide) neu device ho tro
-    if(useZoom !== 1){
-      const track = stream.getVideoTracks()[0];
-      if(track){
-        try{
-          const caps = track.getCapabilities?.();
-          if(caps && caps.zoom){
-            const minZoom = caps.zoom.min || 1;
-            const maxZoom = caps.zoom.max || 1;
-            const targetZoom = Math.max(minZoom, Math.min(maxZoom, useZoom));
-            await track.applyConstraints({advanced:[{zoom: targetZoom}]});
-          }
-        }catch(e){}
-      }
-    }
     if(type==='checkin'){ streamCheckin=stream; const v=document.getElementById('videoCheckin'); v.srcObject=stream; v.classList.remove('hidden'); document.getElementById('videoPlaceholder').classList.add('hidden'); document.getElementById('previewCheckin').classList.add('hidden'); }
     else { streamCheckout=stream; const v=document.getElementById('videoCheckout'); v.srcObject=stream; v.classList.remove('hidden'); document.getElementById('videoPlaceholder2')?.classList.add('hidden'); document.getElementById('previewCheckout').classList.add('hidden'); }
-    _updateCameraUI(type);
   }catch(e){
     try{
       const fallback = await navigator.mediaDevices.getUserMedia({video:{facingMode:useFacing==='environment'?'user':'environment'}, audio:false});
       _camFacing = useFacing==='environment'?'user':'environment';
       if(type==='checkin'){ streamCheckin=fallback; const v=document.getElementById('videoCheckin'); v.srcObject=fallback; v.classList.remove('hidden'); document.getElementById('videoPlaceholder').classList.add('hidden'); document.getElementById('previewCheckin').classList.add('hidden'); showToast('Camera '+(_camFacing==='user'?'trước':'sau')+' không khả dụng - đang dùng camera còn lại', 'info'); }
       else { streamCheckout=fallback; const v=document.getElementById('videoCheckout'); v.srcObject=fallback; v.classList.remove('hidden'); document.getElementById('videoPlaceholder2')?.classList.add('hidden'); document.getElementById('previewCheckout').classList.add('hidden'); showToast('Camera '+(_camFacing==='user'?'trước':'sau')+' không khả dụng - đang dùng camera còn lại', 'info'); }
-      _updateCameraUI(type);
     }catch(e2){ alert('Không thể mở camera: '+e2.message+' - Vui lòng cấp quyền camera'); }
-  }
-}
-function _updateCameraUI(type){
-  const flipBtn = document.getElementById(type==='checkin'?'flipCamCheckin':'flipCamCheckout');
-  const zoomBtn = document.getElementById(type==='checkin'?'zoomCamCheckin':'zoomCamCheckout');
-  if(flipBtn) flipBtn.innerHTML = _camFacing==='environment'?'<i class="fa-solid fa-camera-rotate"></i>':'<i class="fa-solid fa-camera-rotate"></i>';
-  if(zoomBtn){
-    zoomBtn.innerHTML = _camZoom!==1?`<i class="fa-solid fa-expand"></i> ${_camZoom}x`:'<i class="fa-solid fa-expand"></i> 0.5x';
-    zoomBtn.className = _camZoom!==1?'flex items-center justify-center w-9 h-9 rounded-xl bg-amber-500 text-white text-sm font-black shadow-sm transition-all':'flex items-center justify-center w-9 h-9 rounded-xl bg-white/90 text-slate-700 text-sm font-black border border-white/40 hover:bg-white transition-all';
   }
 }
 async function flipCamera(type){
   const stream = type==='checkin'?streamCheckin:streamCheckout;
   if(stream) stream.getTracks().forEach(t=>t.stop());
   _camFacing = _camFacing==='environment'?'user':'environment';
-  await startCamera(type, _camFacing, _camZoom);
-}
-async function toggleZoom(type){
-  const stream = type==='checkin'?streamCheckin:streamCheckout;
-  if(stream) stream.getTracks().forEach(t=>t.stop());
-  _camZoom = _camZoom===1? 0.5 : 1;
-  await startCamera(type, _camFacing, _camZoom);
+  await startCamera(type, _camFacing);
 }
 function capture(type){
   const video = document.getElementById(type==='checkin'?'videoCheckin':'videoCheckout');
@@ -1063,11 +1030,15 @@ function capture(type){
   const preview = document.getElementById(type==='checkin'?'previewCheckin':'previewCheckout');
   if(!video.srcObject) return alert('Chưa bật camera');
   canvas.width=video.videoWidth; canvas.height=video.videoHeight;
-  canvas.getContext('2d').drawImage(video,0,0);
+  const ctx = canvas.getContext('2d');
+  if(_camFacing==='user'){
+    ctx.translate(canvas.width,0);
+    ctx.scale(-1,1);
+  }
+  ctx.drawImage(video,0,0);
   const data = canvas.toDataURL('image/jpeg',0.7);
   if(type==='checkin') capturedCheckin=data; else capturedCheckout=data;
   preview.src=data; preview.classList.remove('hidden'); video.classList.add('hidden');
-  // stop stream
   const stream = type==='checkin'?streamCheckin:streamCheckout;
   if(stream) stream.getTracks().forEach(t=>t.stop());
 }
