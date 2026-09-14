@@ -50,4 +50,16 @@ describe('Mac dinh hien thi web NV Chinh thuc', () => {
     }
     assert.ok(css.includes('.hrms-workspace thead'), 'shared.css thieu style data table Admin');
   });
+
+  it('6. Employee co HRMS shell va shared components', () => {
+    const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'employee.html'), 'utf8');
+    const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'css', 'shared.css'), 'utf8');
+    for (const className of ['hrms-topbar', 'hrms-sidebar', 'hrms-workspace']) {
+      assert.ok(html.includes(className), 'employee.html thieu ' + className);
+      assert.ok(css.includes('.' + className), 'shared.css thieu ' + className);
+    }
+    for (const comp of ['.card', '.stat-pill', '.cam-wrap', '.section-title', '.title-icon', '#mobileNav']) {
+      assert.ok(css.includes(comp), 'shared.css thieu component Employee ' + comp);
+    }
+  });
 });
