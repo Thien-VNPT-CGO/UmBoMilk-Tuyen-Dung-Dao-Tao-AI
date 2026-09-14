@@ -10947,7 +10947,46 @@ app.delete('/api/admin/holidays/:date', authMiddleware, roleCheck(['Admin']), (r
   res.json({ ok:true, custom: db.settings.holidays.custom });
 });
 
-// Finance 4 sheets - backward compatibility
+// === ADMIN BACKUP LIST & RESTORE SCHEDULES ===
+app.get('/api/admin/db/backups', authMiddleware, roleCheck(['Admin']), (req,res)=>{
+  try{
+    const dir = path.dirname(DATA_FILE);
+    const files = fs.readdirSync(dir).filter(f=>f.startsWith('db_backup')||f.startsWith('db_before'));
+    const list = files.map(f=>{
+      const stat = fs.statSync(path.join(dir,f));
+      return { name:f, size:stat.size, modified:stat.mtime.toISOString() };
+    }).sort((a,b)=> new Date(b.modified)-new Date(a.modified));
+    res.json({ backups:list });
+  }catch(e){ res.status(500).json({error:e.message}); }
+});
+app.get('/api/admin/db/backups/:name', authMiddleware, roleCheck(['Admin']), (req,res)=>{
+  try{
+    const dir = path.dirname(DATA_FILE);
+    const file = req.params.name;
+    if(!file.startsWith('db_backup')&&!file.startsWith('db_before')) return res.status(400).json({error:'Invalid file'});
+    const filePath = path.join(dir, file);
+    if(!fs.existsSync(filePath)) return res.status(404).json({error:'Backup not found'});
+    const data = JSON.parse(fs.readFileSync(filePath,'utf8'));
+    res.json({ schedules: data.schedules||[], employeeCount: (data.employees||[]).length, scheduleCount: (data.schedules||[]).length });
+  }catch(e){ res.status(500).json({error:e.message}); }
+});
+app.post('/api/admin/db/restore-schedules', authMiddleware, roleCheck(['Admin']), (req,res)=>{
+  try{
+    const { backupName } = req.body;
+    if(!backupName) return res.status(400).json({error:'Thiếu backupName'});
+    const dir = path.dirname(DATA_FILE);
+    if(!backupName.startsWith('db_backup')&&!backupName.startsWith('db_before')) return res.status(400).json({error:'Invalid file'});
+    const filePath = path.join(dir, backupName);
+    if(!fs.existsSync(filePath)) return res.status(404).json({error:'Backup not found'});
+    const backupData = JSON.parse(fs.readFileSync(filePath,'utf8'));
+    if(!backupData.schedules) return res.status(400).json({error:'Backup không có schedules'});
+    const beforeCount = (db.schedules||[]).length;
+    db.schedules = backupData.schedules;
+    saveDB();
+    audit(req.user.username,'RESTORE_SCHEDULES','DB',{backupName, beforeCount, afterCount:db.schedules.length},{});
+    res.json({ ok:true, restored:db.schedules.length, backupName });
+  }catch(e){ res.status(500).json({error:e.message}); }
+});
 app.get('/api/finance/sheets/master-data', financeAuthMiddleware, async (req,res)=>{
   const rows = db.employees.filter(e=> e.status!=='ARCHIVED').map(e=> ({
     bhCode: e.employeeId, hoTen: e.name, branchGoc: e.branchId, status: e.status, ngayLenChinhThuc: e.officialStartDate || e.startDate || '', donGia: e.status==='OFFICIAL'?25500:21000
