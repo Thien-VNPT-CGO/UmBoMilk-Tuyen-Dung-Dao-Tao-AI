@@ -502,9 +502,13 @@ button:active{transform:scale(.97)}
           <button onclick="switchScheduleCategory('OFFICE')" id="schedTab-OFFICE" class="flex-1 min-w-[140px] flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold transition bg-white border border-pink-200 text-pink-700 hover:bg-pink-50"><i class="fa-solid fa-building"></i> Văn phòng <span id="countOffice" class="bg-pink-100 text-pink-700 px-2 py-0.5 rounded-full text-[11px]">0</span></button>
           <button onclick="switchScheduleCategory('SALE')" id="schedTab-SALE" class="flex-1 min-w-[140px] flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold transition bg-white border border-pink-200 text-pink-700 hover:bg-pink-50"><i class="fa-solid fa-bullhorn"></i> Sale <span id="countSale" class="bg-pink-100 text-pink-700 px-2 py-0.5 rounded-full text-[11px]">0</span></button>
         </div>
-        <div class="flex items-center gap-2 mb-3">
+        <div class="flex flex-wrap items-center gap-2 mb-3">
           <span class="text-xs font-bold text-pink-700 bg-pink-50 border border-pink-200 px-3 py-1 rounded-full" id="scheduleCategoryLabel">Lịch Nhân viên Thử việc • T2→CN</span>
           <span class="text-xs font-bold bg-white border border-pink-200 px-3 py-1 rounded-full text-pink-600" id="scheduleCategoryCount">0 lịch</span>
+          <label class="flex items-center gap-1.5 text-xs font-medium text-slate-700 cursor-pointer bg-white border border-pink-200 px-3 py-1 rounded-full hover:bg-pink-50" title="Ẩn nhân viên không có ca làm hôm nay trong tuần đang xem">
+            <input type="checkbox" id="scheduleShowTodayOnly" onchange="renderSchedules()" class="w-4 h-4 accent-pink-500">
+            Chỉ NV có ca hôm nay
+          </label>
           <button onclick="coordinateWeek()" class="text-xs font-black bg-gradient-to-r from-amber-500 to-orange-500 text-white px-3 py-1 rounded-full hover:from-amber-600 hover:to-orange-600 shadow-2xs" title="AI cân lịch tuần đang xem: cùng CN + cùng ngày + cùng ca chỉ giữ 1 NV WORKING (FCFS, giữ ≥12 ngày/tháng)"><i class="fa-solid fa-scale-balanced"></i> AI cân lịch</button>
           <button onclick="renderSchedules()" class="ml-auto text-xs font-bold bg-white border border-pink-200 text-pink-700 px-3 py-1 rounded-full hover:bg-pink-50"><i class="fa-solid fa-rotate"></i> Tải lại</button>
         </div>

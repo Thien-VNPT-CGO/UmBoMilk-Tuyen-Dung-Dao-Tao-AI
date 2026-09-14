@@ -4104,6 +4104,30 @@ function renderSchedules(){
     });
   }
   if(countEl) countEl.textContent = filtered.length + ' lịch • ' + currentScheduleCategory;
+  // Filter: Chỉ hiển thị NV có ca làm hôm nay (trong tuần đang xem)
+  const showTodayOnly = document.getElementById('scheduleShowTodayOnly')?.checked;
+  if (showTodayOnly) {
+    const todayStr = getVietnamTodayStr();
+    const weekVal = document.getElementById('scheduleWeek')?.value || '';
+    const targetWeekStart = weekVal ? getMondayStr(weekVal) : getMondayStr(getVietnamTodayStr());
+    const targetWeekEnd = (() => {
+      const d = new Date(targetWeekStart + 'T00:00:00');
+      d.setDate(d.getDate() + 6);
+      return d.toLocaleDateString('en-CA', {timeZone: 'Asia/Ho_Chi_Minh'});
+    })();
+    // Only filter if today is within the selected week
+    if (todayStr >= targetWeekStart && todayStr <= targetWeekEnd) {
+      filtered = filtered.filter(s => {
+        const emp = employees.find(e => e.employeeId === s.employeeId);
+        if (!emp) return false;
+        // Check if this employee has a WORKING shift for today in the selected week
+        const scheduleForWeek = s.weekStart === targetWeekStart ? s : null;
+        if (!scheduleForWeek) return false;
+        const day = (scheduleForWeek.days || []).find(d => d.date === todayStr);
+        return day && (day.status === 'WORKING' || day.status === 'SUBSTITUTE');
+      });
+    }
+  }
   if(filtered.length===0){
     const emptyMsg = {
       TRAINING: 'Chưa có lịch Thử việc - nhân viên đang trong 7 ngày đào tạo',
