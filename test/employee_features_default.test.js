@@ -1,0 +1,35 @@
+const { describe, it } = require('node:test');
+const assert = require('node:assert');
+const fs = require('fs');
+const path = require('path');
+
+// Rang buoc mac dinh tab web NV Chinh thuc:
+// Hien: Diem danh, Lich, Luong AI, OFF CA LAM. An: Doi ca, Nghi OFF, Tai khoan.
+describe('Mac dinh hien thi web NV Chinh thuc', () => {
+  it('1. DEFAULT_SETTINGS.features dung nhu anh duyet', () => {
+    const src = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+    const m = src.match(/features:\s*\{[^}]*\}/);
+    assert.ok(m, 'khong tim thay DEFAULT features');
+    const f = m[0];
+    assert.ok(f.includes('employeeShiftSwap: false'), 'Doi ca mac dinh tat');
+    assert.ok(f.includes('empAttendance: true'), 'Diem danh mac dinh bat');
+    assert.ok(f.includes('empSchedule: true'), 'Lich mac dinh bat');
+    assert.ok(f.includes('empSalary: true'), 'Luong AI mac dinh bat');
+    assert.ok(f.includes('empOff: false'), 'Nghi OFF mac dinh tat');
+    assert.ok(f.includes('empEmergency: true'), 'OFF CA LAM mac dinh bat');
+    assert.ok(f.includes('empAccount: false'), 'Tai khoan mac dinh tat');
+  });
+
+  it('2. Subtitle Cài đặt mo ta dung mac dinh', () => {
+    const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'admin.html'), 'utf8');
+    assert.ok(html.includes('Điểm danh, Lịch, Lương AI, OFF CA LÀM'), 'subtitle phai liet ke dung 4 tab mac dinh');
+    assert.ok(!html.includes('(mặc định chỉ Trang chủ)'), 'khong con subtitle cu sai');
+  });
+
+  it('3. Web NV an tab theo dung co (static guard)', () => {
+    const js = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'employee.js'), 'utf8');
+    for (const k of ['empAttendance', 'empSchedule', 'empSalary', 'empOff', 'empEmergency', 'empAccount']) {
+      assert.ok(js.includes('F.' + k), 'employee.js phai doc co ' + k);
+    }
+  });
+});
