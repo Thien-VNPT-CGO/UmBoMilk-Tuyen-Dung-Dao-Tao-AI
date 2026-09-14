@@ -216,7 +216,7 @@ setInterval(()=>{
 
 function getDefaultTabsForRole(role) {
   if (role === 'Admin') return NAV.map(n => n.id);
-  if (role === 'HR') return ['dashboard', 'applicants', 'interviews', 'employees-store', 'schedule', 'shiftSwap', 'requests'];
+  if (role === 'HR') return ['dashboard', 'applicants', 'interviews', 'employees-store', 'schedule', 'shiftSwap', 'requests', 'attendance', 'elearning'];
   if (role === 'Manager') return ['dashboard', 'employees-store', 'schedule', 'shiftSwap', 'requests', 'attendance'];
   if (role === 'Umbomilk') return ['dashboard', 'applicants', 'employees-store', 'attendance'];
   return ['dashboard', 'applicants', 'employees-store'];

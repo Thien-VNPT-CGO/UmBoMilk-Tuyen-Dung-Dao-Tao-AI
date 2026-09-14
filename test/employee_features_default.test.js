@@ -32,4 +32,12 @@ describe('Mac dinh hien thi web NV Chinh thuc', () => {
       assert.ok(js.includes('F.' + k), 'employee.js phai doc co ' + k);
     }
   });
+
+  it('4. Quyen HR mac dinh co Ban ghi diem danh (attendance) va Dao tao (elearning)', () => {
+    const adminJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'admin.js'), 'utf8');
+    assert.ok(adminJs.includes("if (role === 'HR') return ['dashboard', 'applicants', 'interviews', 'employees-store', 'schedule', 'shiftSwap', 'requests', 'attendance', 'elearning'];"), 'admin.js khong co tabs mac dinh dung cho HR');
+
+    const serverJs = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+    assert.ok(serverJs.includes("'attendance', 'elearning'"), 'server.js missing HR default tabs');
+  });
 });

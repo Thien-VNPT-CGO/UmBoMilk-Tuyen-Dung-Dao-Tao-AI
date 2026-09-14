@@ -9256,7 +9256,14 @@ app.post('/api/users', authMiddleware, roleCheck(['Admin']), (req,res)=>{
   if(db.users.find(u=>u.username===username)) return res.status(409).json({error:'Tên đăng nhập đã tồn tại'});
   const hashed = bcrypt.hashSync(password,10);
   const defaultTabs = ['dashboard','applicants','interviews','employees-store','keys','attendance','schedule','test-management','requests','zalo-records','audit-logs','settings'];
-  const user = { id: uuidv4(), username, password:hashed, role, branchScope: branchScope||[], displayName: displayName||username, allowedTabs: allowedTabs || (role==='Admin'? defaultTabs : ['dashboard','applicants','employees-store']) };
+  const getDefaultTabs = (r) => {
+    if(r==='Admin') return defaultTabs;
+    if(r==='HR') return ['dashboard', 'applicants', 'interviews', 'employees-store', 'schedule', 'shiftSwap', 'requests', 'attendance', 'elearning'];
+    if(r==='Manager') return ['dashboard', 'employees-store', 'schedule', 'shiftSwap', 'requests', 'attendance'];
+    if(r==='Umbomilk') return ['dashboard', 'applicants', 'employees-store', 'attendance'];
+    return ['dashboard','applicants','employees-store'];
+  };
+  const user = { id: uuidv4(), username, password:hashed, role, branchScope: branchScope||[], displayName: displayName||username, allowedTabs: allowedTabs || getDefaultTabs(role) };
   db.users.push(user);
   audit(req.user.username,'CREATE_USER','USER',null,{username, role}, req.ip);
   saveDB();
