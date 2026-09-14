@@ -576,22 +576,6 @@ console.log(`[CONFIG] Finance: ${db.settings.finance?.webhookUrl ? db.settings.f
     }
   }catch(e){ console.error('cleanupOldSyncQueue error', e.message); }
 })();
-// ONE-SHOT BOOT: khoi phuc lich tuan 2026-09-14 tu anh backup Sheet (seed la chan ly).
-// Ly do: DB/Sheet tung bi auto-gen cu + pull 60s ghi sai; chay 1 lan duy nhat (co flag),
-// truoc pull Sheet 12s. Bo qua khi test/CI.
-if(!OUTBOUND_SYNC_DISABLED && !db.settings.week0914Restored){
-  setTimeout(()=>{
-    try{
-      if(db.settings.week0914Restored) return;
-      const r = applyWeek20260914Seed('SYSTEM_BOOT');
-      if(r.ok){
-        db.settings.week0914Restored = true;
-        saveDB();
-        console.log(`[ONE-SHOT] Da khoi phuc lich tuan ${r.week}: ${r.written} sheet + ${r.locked} lock OFF (total ${r.total})`);
-      } else console.error('[ONE-SHOT] Khong khoi phuc duoc lich:', r.error);
-    }catch(e){ console.error('[ONE-SHOT] Khoi phuc lich tuan 2026-09-14 loi:', e.message); }
-  }, 3000);
-}
 // RÀNG BUỘC: mã NV + key bất biến theo nhân viên đó luôn qua mọi lần cập nhật tính năng/redeploy.
 console.log(`[DB ỔN ĐỊNH] Giữ nguyên ${db.employees.length} NV + ${db.keys.length} key (mã NV/key không đổi khi cập nhật code)`);
 // Tự hồi phục từ Sheet 17iXM khi boot rỗng (VD: Render chưa gắn disk persistent).
