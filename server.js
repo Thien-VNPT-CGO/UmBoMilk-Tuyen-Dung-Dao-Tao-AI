@@ -5951,69 +5951,78 @@ app.get('/api/schedules', authMiddleware, (req,res)=>{
     }
   });
   // FIX: OFFICIAL chưa có lịch → tạo lịch tuần hiện tại (T2-CN) với ràng buộc AI: cùng CN cùng ca không trùng ngày
+  // respectful OFF registrations: đọc db.offRequests đã APPROVED
   const currentMonday = getMonday(getVietnamNow());
   const cy = currentMonday.getFullYear(); const cm = String(currentMonday.getMonth()+1).padStart(2,'0'); const cd = String(currentMonday.getDate()).padStart(2,'0');
   const currentWeekStart = `${cy}-${cm}-${cd}`;
+  const currentWeekDates = [];
+  for(let i=0;i<7;i++){ const d=new Date(currentMonday); d.setDate(currentMonday.getDate()+i); const yy=d.getFullYear(); const mm=String(d.getMonth()+1).padStart(2,'0'); const dd=String(d.getDate()).padStart(2,'0'); currentWeekDates.push(`${yy}-${mm}-${dd}`); }
+  const offMapWeek = {};
+  (db.offRequests||[]).filter(r=>r.status==='APPROVED').forEach(r=>{
+    (r.dates||[]).forEach(date=>{
+      if(currentWeekDates.includes(date)){
+        if(!offMapWeek[r.employeeId]) offMapWeek[r.employeeId]=new Set();
+        offMapWeek[r.employeeId].add(date);
+      }
+    });
+  });
   const officialsNeedingWeek = db.employees.filter(e => !isTestRecord(e) && !e.isTest && (e.status === 'OFFICIAL' || e.type === 'OFFICIAL') && !db.schedules.some(s => s.employeeId === e.employeeId && s.weekStart === currentWeekStart));
   if(officialsNeedingWeek.length>0){
-    // Group cùng CN cùng ca để không trùng
     const groupMapWeek = {};
     officialsNeedingWeek.forEach(emp=>{ const k=`${emp.branchId}_${emp.shift}`; if(!groupMapWeek[k]) groupMapWeek[k]=[]; groupMapWeek[k].push(emp); });
-    // Track ngày đã gán WORKING cho nhóm cùng CN cùng ca
-    const weekDayStatus = {}; // dateStr -> Set of groupKey đã có WORKING
-    // Đầu tiên xử lý nhóm >1 (cùng CN cùng ca) round-robin 7 ngày
+    const weekDayStatus = {};
     for(const key in groupMapWeek){
       const group = groupMapWeek[key];
       if(group.length>1){
         const workCount={}; group.forEach(e=> workCount[e.employeeId]=0);
         const lastDay={}; group.forEach(e=> lastDay[e.employeeId]=-1);
         for(let i=0;i<7;i++){
-          const cur = new Date(currentMonday); cur.setDate(currentMonday.getDate()+i);
-          const yy = cur.getFullYear(); const mm = String(cur.getMonth()+1).padStart(2,'0'); const dd = String(cur.getDate()).padStart(2,'0');
-          const dateStr = `${yy}-${mm}-${dd}`;
-          // Chon NV it ngay nhat; hoa thi nguoi lau nhat chua lam (dam bao 2 nguoi chia 3/4)
-          const chosenId = pickFair(group.map(e=>e.employeeId), workCount, lastDay, i);
-          const chosen = group.find(e=>e.employeeId===chosenId) || group[0];
+          const dateStr = currentWeekDates[i];
+          // Loai bo NV da dang ky OFF ngay nay
+          const available = group.filter(emp=> !(offMapWeek[emp.employeeId] && offMapWeek[emp.employeeId].has(dateStr)));
+          // NV dang ky OFF -> danh dau OFF truoc
+          group.forEach(emp=>{
+            if(offMapWeek[emp.employeeId] && offMapWeek[emp.employeeId].has(dateStr)){
+              if(!emp._weekDays) emp._weekDays=[];
+              if(!emp._weekDays.find(d=>d.date===dateStr)) emp._weekDays.push({ date: dateStr, status:'OFF' });
+            }
+          });
+          if(available.length===0) continue;
+          const chosenId = pickFair(available.map(e=>e.employeeId), workCount, lastDay, i);
+          const chosen = available.find(e=>e.employeeId===chosenId) || available[0];
           lastDay[chosen.employeeId]=i;
           if(!weekDayStatus[dateStr]) weekDayStatus[dateStr]=new Set();
           weekDayStatus[dateStr].add(key);
-          // Tạm lưu để tạo days sau
           if(!chosen._weekDays) chosen._weekDays=[];
-          chosen._weekDays.push({ date: dateStr, status:'WORKING' });
+          if(!chosen._weekDays.find(d=>d.date===dateStr)) chosen._weekDays.push({ date: dateStr, status:'WORKING' });
           workCount[chosen.employeeId]++;
-          // Các NV còn lại trong nhóm OFF ngày này
-          group.forEach(emp=>{
+          available.forEach(emp=>{
             if(emp.employeeId!==chosen.employeeId){
               if(!emp._weekDays) emp._weekDays=[];
-              // Chỉ thêm nếu chưa có entry cho ngày này
               if(!emp._weekDays.find(d=>d.date===dateStr)) emp._weekDays.push({ date: dateStr, status:'OFF' });
             }
           });
         }
       }
     }
-    // Xử lý nhóm size 1 (cùng CN khác ca hoặc khác CN) - 6 ngày làm, nghỉ CN
     officialsNeedingWeek.forEach(emp=>{
       const k=`${emp.branchId}_${emp.shift}`;
       if(groupMapWeek[k].length===1){
         for(let i=0;i<7;i++){
-          const cur = new Date(currentMonday); cur.setDate(currentMonday.getDate()+i);
-          const yy = cur.getFullYear(); const mm = String(cur.getMonth()+1).padStart(2,'0'); const dd = String(cur.getDate()).padStart(2,'0');
-          const dateStr = `${yy}-${mm}-${dd}`;
-          const dayOfWeek = cur.getDay();
-          const status = (dayOfWeek===0) ? 'OFF' : 'WORKING'; // Nghỉ CN
+          const dateStr = currentWeekDates[i];
+          const dayOfWeek = new Date(currentMonday.getTime()+i*86400000).getDay();
+          let status = (dayOfWeek===0) ? 'OFF' : 'WORKING';
+          // Respect OFF registration
+          if(offMapWeek[emp.employeeId] && offMapWeek[emp.employeeId].has(dateStr)) status = 'OFF';
           if(!emp._weekDays) emp._weekDays=[];
           if(!emp._weekDays.find(d=>d.date===dateStr)) emp._weekDays.push({ date: dateStr, status });
         }
       }
     });
-    // Tạo weekly schedules từ _weekDays
     officialsNeedingWeek.forEach(emp=>{
       const days=[];
       for(let i=0;i<7;i++){
-        const cur = new Date(currentMonday); cur.setDate(currentMonday.getDate()+i);
-        const yy = cur.getFullYear(); const mm = String(cur.getMonth()+1).padStart(2,'0'); const dd = String(cur.getDate()).padStart(2,'0');
-        const dateStr = `${yy}-${mm}-${dd}`;
+        const dateStr = currentWeekDates[i];
         const found = emp._weekDays ? emp._weekDays.find(d=>d.date===dateStr) : null;
         const status = found ? found.status : 'WORKING';
         days.push({ date: dateStr, dayName: ['T2','T3','T4','T5','T6','T7','CN'][i], shift: emp.shift, status, substituteFor: null });

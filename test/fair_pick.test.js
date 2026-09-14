@@ -47,8 +47,7 @@ describe('Chia ca cong bang 3/4 (pickFair)', () => {
   it('4. Server dung pickFair o ca 2 diem can lich', () => {
     const src = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
     assert.ok(src.includes("require('./services/fairPick')"), 'thieu require fairPick');
-    assert.ok(src.includes('pickFair(group.map'), 'chua dung o auto-create');
-    assert.ok(src.includes('pickFair(available.map'), 'chua dung o draft tuan sau');
+    assert.ok(src.includes('pickFair(available.map'), 'chua dung o auto-create + draft tuan sau');
   });
 
   it('5. Xoa lich PV: confirm 2 lop + audit luu full backup', () => {
