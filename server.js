@@ -10996,6 +10996,48 @@ app.post('/api/admin/db/restore-schedules', authMiddleware, roleCheck(['Admin'])
     res.json({ ok:true, restored:db.schedules.length, backupName });
   }catch(e){ res.status(500).json({error:e.message}); }
 });
+// === ONE-TIME: restore lich tuan 2026-09-14 tu anh backup Sheet (scripts/seed-week-2026-09-14.json). Admin only, idempotent. ===
+app.post('/api/admin/db/restore-week-2026-09-14', authMiddleware, roleCheck(['Admin']), (req,res)=>{
+  try{
+    const seedPath = path.join(__dirname, 'scripts', 'seed-week-2026-09-14.json');
+    if(!fs.existsSync(seedPath)) return res.status(404).json({error:'Seed file not found'});
+    const seed = JSON.parse(fs.readFileSync(seedPath,'utf8'));
+    const WEEK = seed.weekStart;
+    const DATES = ['2026-09-14','2026-09-15','2026-09-16','2026-09-17','2026-09-18','2026-09-19','2026-09-20'];
+    const DAYNAMES = ['T2','T3','T4','T5','T6','T7','CN'];
+    const buildDays = (shift, workSet, extra)=>{
+      return DATES.map((date,i)=>{
+        const isWork = workSet.has(date);
+        const shift2 = (extra && extra[date]) || null;
+        return { date, dayName:DAYNAMES[i], shift, shift2, shift3:null,
+          shifts: isWork ? (shift2?[shift,shift2]:[shift]) : [shift],
+          status: isWork?'WORKING':'OFF', substituteFor:null };
+      });
+    };
+    let written=0, locked=0;
+    for(const [empId,cfg] of Object.entries(seed.schedules)){
+      db.schedules = db.schedules.filter(s=>!(s.weekStart===WEEK && s.employeeId===empId));
+      db.schedules.push({ id:uuidv4(), employeeId:empId, weekStart:WEEK,
+        days:buildDays(cfg.shift, new Set(cfg.work), cfg.extra),
+        version:1, updated_at:getVietnamISOString(), updated_by:'SHEET_RESTORE', approvalStatus:'APPROVED' });
+      written++;
+    }
+    const lockOff = [...(seed.offAllWeek||[]), ...(seed.duplicateLockOff||[])];
+    for(const empId of lockOff){
+      const emp = db.employees.find(e=>e.employeeId===empId);
+      if(!emp) continue;
+      db.schedules = db.schedules.filter(s=>!(s.weekStart===WEEK && s.employeeId===empId));
+      db.schedules.push({ id:uuidv4(), employeeId:empId, weekStart:WEEK,
+        days:buildDays(emp.shift, new Set(), null),
+        version:1, updated_at:getVietnamISOString(), updated_by:'SHEET_RESTORE_DUP_OFF', approvalStatus:'APPROVED' });
+      locked++;
+    }
+    saveDB();
+    audit(req.user.username,'RESTORE_WEEK_2026_09_14','DB',{written, locked},{});
+    res.json({ ok:true, week:WEEK, written, locked,
+      total:db.schedules.filter(s=>s.weekStart===WEEK).length });
+  }catch(e){ res.status(500).json({error:e.message}); }
+});
 app.get('/api/finance/sheets/master-data', financeAuthMiddleware, async (req,res)=>{
   const rows = db.employees.filter(e=> e.status!=='ARCHIVED').map(e=> ({
     bhCode: e.employeeId, hoTen: e.name, branchGoc: e.branchId, status: e.status, ngayLenChinhThuc: e.officialStartDate || e.startDate || '', donGia: e.status==='OFFICIAL'?25500:21000
