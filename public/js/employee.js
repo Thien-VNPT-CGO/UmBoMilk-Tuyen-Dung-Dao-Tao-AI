@@ -1031,6 +1031,7 @@ function capture(type){
   if(!video.srcObject) return alert('Chưa bật camera');
   canvas.width=video.videoWidth; canvas.height=video.videoHeight;
   const ctx = canvas.getContext('2d');
+  if(_camFacing==='user'){ ctx.translate(canvas.width,0); ctx.scale(-1,1); }
   ctx.drawImage(video,0,0);
   const data = canvas.toDataURL('image/jpeg',0.7);
   if(type==='checkin') capturedCheckin=data; else capturedCheckout=data;
