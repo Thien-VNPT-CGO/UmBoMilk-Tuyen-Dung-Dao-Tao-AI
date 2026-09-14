@@ -62,4 +62,15 @@ describe('Mac dinh hien thi web NV Chinh thuc', () => {
       assert.ok(css.includes(comp), 'shared.css thieu component Employee ' + comp);
     }
   });
+
+  it('7. Finance co HRMS shell', () => {
+    const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'finance.html'), 'utf8');
+    const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'css', 'shared.css'), 'utf8');
+    for (const className of ['hrms-topbar', 'hrms-workspace']) {
+      assert.ok(html.includes(className), 'finance.html thieu ' + className);
+      assert.ok(css.includes('.' + className), 'shared.css thieu ' + className);
+    }
+    assert.ok(css.includes('.finance-topbar'), 'shared.css thieu style finance-topbar');
+    assert.ok(css.includes('.finance-workspace'), 'shared.css thieu style finance-workspace');
+  });
 });

@@ -342,3 +342,14 @@ input, textarea, select {
   border-radius: 0.875rem !important;
 }
 button { min-height: 2.75rem; }
+
+/* Finance HRMS shell — clean professional layout */
+.hrms-topbar.finance-topbar {
+  background: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+}
+
+.hrms-workspace.finance-workspace {
+  background: #f8fafc !important;
+}
