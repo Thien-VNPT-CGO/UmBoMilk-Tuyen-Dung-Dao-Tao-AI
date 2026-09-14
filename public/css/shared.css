@@ -73,3 +73,98 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 .animate-fade-up { animation: fadeUp 0.2s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+
+/* Admin HRMS shell */
+.hrms-topbar {
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 1px 0 rgba(148, 163, 184, 0.12), 0 4px 18px rgba(15, 23, 42, 0.04);
+}
+
+.hrms-sidebar {
+  border-color: #e2e8f0;
+  background: #fff;
+  box-shadow: 1px 0 0 rgba(148, 163, 184, 0.08);
+}
+
+.hrms-workspace {
+  background: #f8fafc !important;
+}
+
+.hrms-workspace > .tab-section {
+  width: 100%;
+  max-width: 1600px;
+  margin-inline: auto;
+  animation: fadeUp 0.18s ease-out;
+}
+
+.hrms-workspace .tab-section > .flex:first-child h2 {
+  color: #0f172a;
+  letter-spacing: -0.02em;
+}
+
+.hrms-workspace table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.hrms-workspace thead {
+  background: #f8fafc !important;
+  color: #475569 !important;
+  box-shadow: none !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+}
+
+.hrms-workspace thead th {
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+  font-size: 0.6875rem;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.hrms-workspace tbody tr {
+  transition: background-color 0.15s ease;
+}
+
+.hrms-workspace tbody tr:hover {
+  background: #fdf2f8;
+}
+
+.hrms-workspace tbody td {
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.hrms-workspace input,
+.hrms-workspace select,
+.hrms-workspace textarea,
+.hrms-workspace button {
+  min-height: 36px;
+}
+
+.hrms-sidebar .nav-group {
+  color: #94a3b8;
+  letter-spacing: 0.08em;
+}
+
+.hrms-sidebar .nav-item:not(.nav-active) {
+  color: #475569;
+}
+
+.hrms-sidebar .nav-item:not(.nav-active):hover {
+  background: #f8fafc;
+  color: #be185d;
+  transform: none;
+}
+
+@media (max-width: 1023px) {
+  .hrms-workspace { padding-bottom: calc(5rem + env(safe-area-inset-bottom)); }
+  .hrms-workspace table { min-width: 680px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-up,
+  .hrms-workspace > .tab-section { animation: none; }
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
+}

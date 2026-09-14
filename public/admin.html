@@ -80,7 +80,7 @@ button:active{transform:scale(.97)}
 <!-- App layout -->
 <div id="app" class="hidden">
   <!-- Topbar -->
-  <header class="h-[56px] bg-white border-b border-pink-200 flex items-center justify-between px-3 lg:px-4 sticky top-0 z-40 shadow-sm gap-2">
+  <header class="hrms-topbar h-[56px] bg-white border-b border-pink-200 flex items-center justify-between px-3 lg:px-4 sticky top-0 z-40 shadow-sm gap-2">
     <div class="flex items-center gap-3">
       <button onclick="toggleSidebar()" class="lg:hidden w-9 h-9 rounded-xl bg-pink-100 text-pink-600 flex items-center justify-center"><i class="fa-solid fa-bars"></i></button>
       <img src="/images/logo.png" alt="Ụm Bò Milk" class="w-9 h-9 rounded-xl object-contain bg-white p-1 shadow">
@@ -196,13 +196,13 @@ button:active{transform:scale(.97)}
   <div class="flex flex-1 overflow-hidden">
     <!-- Sidebar - Drawer for phone -->
     <div id="sidebarOverlay" class="fixed inset-0 bg-black/40 backdrop-blur-sm z-20 hidden lg:hidden" onclick="toggleSidebar()"></div>
-    <aside id="sidebar" class="w-[300px] max-w-[85vw] bg-white border-r border-pink-200 flex-shrink-0 hidden lg:flex lg:flex-col fixed lg:sticky top-[64px] left-0 z-30 shadow-2xl lg:shadow-none h-full lg:h-full overflow-y-auto overflow-x-hidden scrollbar-thin p-3 space-y-1 pt-4 lg:pt-3" style="max-height:calc(100vh - 64px - 72px)">
+    <aside id="sidebar" class="hrms-sidebar w-[300px] max-w-[85vw] bg-white border-r border-pink-200 flex-shrink-0 hidden lg:flex lg:flex-col fixed lg:sticky top-[64px] left-0 z-30 shadow-2xl lg:shadow-none h-full lg:h-full overflow-y-auto overflow-x-hidden scrollbar-thin p-3 space-y-1 pt-4 lg:pt-3" style="max-height:calc(100vh - 64px - 72px)">
       <div class="space-y-1" id="navMenu"></div>
 <div class="mt-4 p-3 bg-gradient-to-br from-pink-50 to-rose-50 border border-pink-200 rounded-2xl">
     </aside>
 
     <!-- Main - cố định, cuộn riêng, phân trang khi nhiều dữ liệu -->
-    <main class="flex-1 min-w-0 overflow-y-auto overflow-x-hidden scrollbar-thin p-4 lg:p-6 pb-20 lg:pb-6 bg-[#faf5f8]" style="max-height:calc(100vh - 64px - 72px)">
+    <main class="hrms-workspace flex-1 min-w-0 overflow-y-auto overflow-x-hidden scrollbar-thin p-4 lg:p-6 pb-20 lg:pb-6 bg-[#faf5f8]" style="max-height:calc(100vh - 64px - 72px)">
       <!-- Dashboard -->
       <section id="tab-dashboard" class="tab-section">
         <div class="flex flex-wrap items-center justify-between gap-3 mb-4">

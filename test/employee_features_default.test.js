@@ -40,4 +40,14 @@ describe('Mac dinh hien thi web NV Chinh thuc', () => {
     const serverJs = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
     assert.ok(serverJs.includes("'attendance', 'elearning'"), 'server.js missing HR default tabs');
   });
+
+  it('5. Admin co HRMS shell va shared data table styles', () => {
+    const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'admin.html'), 'utf8');
+    const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'css', 'shared.css'), 'utf8');
+    for (const className of ['hrms-topbar', 'hrms-sidebar', 'hrms-workspace']) {
+      assert.ok(html.includes(className), 'admin.html thieu ' + className);
+      assert.ok(css.includes('.' + className), 'shared.css thieu ' + className);
+    }
+    assert.ok(css.includes('.hrms-workspace thead'), 'shared.css thieu style data table Admin');
+  });
 });
