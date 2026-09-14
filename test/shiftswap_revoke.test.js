@@ -217,6 +217,10 @@ describe('Admin/HR thu hoi phieu doi ca (hoan lich)', () => {
     const emp = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'employee.js'), 'utf8');
     assert.ok(emp.includes('shiftSwap:update'), 'NV phai nghe shiftSwap:update');
     assert.ok(emp.includes('tab-shiftSwap'), 'NV phai refresh tab-shiftSwap');
+    assert.ok(admin.includes('restoreWeek0914'), 'thieu ham restoreWeek0914');
+    assert.ok(admin.includes('/api/admin/db/restore-week-2026-09-14'), 'thieu goi API restore tuan');
+    const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'admin.html'), 'utf8');
+    assert.ok(html.includes('restoreWeek0914()'), 'thieu nut Khoi phuc lich tuan 14-20/09');
   });
 
   it('6. Du lieu test khong ro ri vao db.json', async () => {
