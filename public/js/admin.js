@@ -6159,6 +6159,8 @@ async function runImageBackupOCR(){
     if(!r || r.error){
       const msg = !r ? 'OCR thất bại' : (r.error === 'NO_DATES' ? 'Không tìm thấy 7 ngày trong ảnh' : (r.error === 'NO_SHIFT_ROWS' ? 'Không tìm thấy hàng Sáng/Trưa/Chiều' : 'OCR thất bại: ' + r.error));
       if(status) status.textContent = '❌ ' + msg;
+      const out2 = document.getElementById('imgBackupResult');
+      if(out2 && r && r.debug) out2.innerHTML = '<div class="text-[11px] text-slate-500 bg-white border border-slate-200 rounded-xl p-2">OCR đọc được: ' + String(r.debug).slice(0, 600) + '</div>';
       return showToast(msg, 'error');
     }
     if(weekStart && weekStart !== r.weekStart) showToast('Ảnh ghi tuần ' + r.weekStart + ' — dùng tuần theo ảnh', 'info');

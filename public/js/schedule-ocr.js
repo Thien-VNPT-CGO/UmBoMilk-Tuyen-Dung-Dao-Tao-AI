@@ -81,9 +81,9 @@
       if(c[0] !== '5') return;
       var text = (c[11] || '').trim();
       var conf = parseFloat(c[10]);
-      if(!text || !(conf >= 30)) return;
+      if(!text || !(conf >= 10)) return;
       var x0 = +c[6], y0 = +c[7], w = +c[8], h = +c[9];
-      words.push({ text: text, x0: x0, y0: y0, x1: x0 + w, y1: y0 + h, bk: c[1] + '/' + c[2] + '/' + c[3] + '/' + c[4] });
+      words.push({ text: text, conf: conf, x0: x0, y0: y0, x1: x0 + w, y1: y0 + h, bk: c[1] + '/' + c[2] + '/' + c[3] + '/' + c[4] });
     });
     return words;
   }
@@ -94,9 +94,13 @@
   }
   function mapGrid(words, roster, opts){
     opts = opts || {};
+    function debugSample(){
+      return words.slice(0, 60).map(function(w){ return w.text + '(' + Math.round(w.conf || 0) + ')'; }).join(' | ');
+    }
     var dates = [];
     var dateSeen = {};
     words.forEach(function(w){
+      if(!(w.conf >= 15)) return;
       var iso = isoFromDMY(w.text);
       if(iso && !dateSeen[iso]){
         dateSeen[iso] = true;
@@ -104,24 +108,45 @@
       }
     });
     dates.sort(function(a, b){ return a.x - b.x; });
-    if(!dates.length) return { error: 'NO_DATES' };
+    if(!dates.length) return { error: 'NO_DATES', debug: 'words=' + words.length + ' :: ' + debugSample() };
     var minDateX = Math.min.apply(null, dates.map(function(d){ return d.x; }));
     var gaps = [];
     for(var i = 1; i < dates.length; i++) gaps.push(dates[i].x - dates[i - 1].x);
     var colTol = (gaps.length ? Math.min.apply(null, gaps) : 240) * 0.6;
-    var rows = [];
+    var labelWords = [];
     words.forEach(function(w){
+      if(!(w.conf >= 15)) return;
       var n = norm(w.text).split(' ')[0];
-      if(SHIFT_ROWS[n] && w.x0 < minDateX && !rows.some(function(r){ return r.shift === SHIFT_ROWS[n]; })){
-        rows.push({ shift: SHIFT_ROWS[n], y: (w.y0 + w.y1) / 2 });
-      }
+      if(SHIFT_ROWS[n]) labelWords.push({ shift: SHIFT_ROWS[n], x0: w.x0, y: (w.y0 + w.y1) / 2 });
     });
+    var rows = [];
+    labelWords.filter(function(l){ return l.x0 < minDateX; }).forEach(function(l){
+      if(!rows.some(function(r){ return r.shift === l.shift; })) rows.push({ shift: l.shift, y: l.y });
+    });
+    if(!rows.length && labelWords.length){
+      var clusters = [];
+      labelWords.slice().sort(function(a, b){ return a.x0 - b.x0; }).forEach(function(l){
+        var last = clusters[clusters.length - 1];
+        if(last && Math.abs(l.x0 - last.x0) <= 60) last.items.push(l);
+        else clusters.push({ x0: l.x0, items: [l] });
+      });
+      clusters.sort(function(a, b){
+        var da = new Set(a.items.map(function(x){ return x.shift; })).size;
+        var db2 = new Set(b.items.map(function(x){ return x.shift; })).size;
+        if(db2 !== da) return db2 - da;
+        return a.x0 - b.x0;
+      });
+      (clusters[0] ? clusters[0].items : []).forEach(function(l){
+        if(!rows.some(function(r){ return r.shift === l.shift; })) rows.push({ shift: l.shift, y: l.y });
+      });
+    }
     rows.sort(function(a, b){ return a.y - b.y; });
-    if(!rows.length) return { error: 'NO_SHIFT_ROWS' };
+    if(!rows.length) return { error: 'NO_SHIFT_ROWS', debug: 'words=' + words.length + ' labels=' + labelWords.length + ' :: ' + debugSample() };
     var rowGaps = [];
     for(var j = 1; j < rows.length; j++) rowGaps.push(rows[j].y - rows[j - 1].y);
     var rowTol = Math.max(60, (rowGaps.length ? Math.min.apply(null, rowGaps) : 160) * 0.5);
     var actionable = words.filter(function(w){
+      if(!(w.conf >= 30)) return false;
       if(isoFromDMY(w.text)) return false;
       var n = norm(w.text);
       if(SHIFT_ROWS[n.split(' ')[0]]) return false;
