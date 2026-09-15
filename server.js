@@ -7738,9 +7738,10 @@ async function generateNextWeekDraft(triggerBy='SYSTEM'){
   const nextMon = getNextMonday();
   const officials = db.employees.filter(e=> e.status==='OFFICIAL' || e.type==='OFFICIAL');
   if(officials.length===0) return { error:'Không có NV chính thức' };
-  // Kiểm tra đã có draft tuần sau chưa
+  // Kiểm tra đã có draft tuần sau chưa (backfill NV thiếu draft, tránh trùng)
   const existingDrafts = db.schedules.filter(s=> s.weekStart===nextWeekStart && s.approvalStatus==='PENDING_APPROVAL');
-  if(existingDrafts.length>0) return { alreadyExists:true, weekStart: nextWeekStart, count: existingDrafts.length };
+  const hasWeekSchedule = (empId)=> db.schedules.some(s=> s.employeeId===empId && s.weekStart===nextWeekStart);
+  if(existingDrafts.length>0 && officials.every(e=> hasWeekSchedule(e.employeeId))) return { alreadyExists:true, weekStart: nextWeekStart, count: existingDrafts.length };
 
   // Lấy OFF đã duyệt cho tuần sau
   const nextWeekDates = []; for(let i=0;i<7;i++){ const cur=new Date(nextMon); cur.setDate(nextMon.getDate()+i); const y=cur.getFullYear(); const m=String(cur.getMonth()+1).padStart(2,'0'); const d=String(cur.getDate()).padStart(2,'0'); nextWeekDates.push(`${y}-${m}-${d}`); }
@@ -7830,8 +7831,11 @@ async function generateNextWeekDraft(triggerBy='SYSTEM'){
     if(projected <12) violations.push({ employeeId: emp.employeeId, name: emp.name, projected, need: 12-projected });
   });
 
-  // Tạo schedules draft PENDING_APPROVAL
+  // Tạo schedules draft PENDING_APPROVAL (bỏ qua NV đã có lịch tuần sau)
+  let createdCount = 0;
   for(const emp of officials){
+    if(hasWeekSchedule(emp.employeeId)) continue;
+    createdCount++;
     const days=[];
     for(let i=0;i<7;i++){
       const cur=new Date(nextMon); cur.setDate(nextMon.getDate()+i);
@@ -7844,9 +7848,9 @@ async function generateNextWeekDraft(triggerBy='SYSTEM'){
   }
   saveDB();
   io.emit('schedules:update', db.schedules);
-  io.emit('schedules:draftReady', { weekStart: nextWeekStart, count: officials.length });
-  audit(triggerBy,'GENERATE_DRAFT_NEXT_WEEK','SCHEDULE', { weekStart: nextWeekStart }, { officials: officials.length, violations }, 'SYSTEM');
-  return { success:true, weekStart: nextWeekStart, count: officials.length, violations, nextWeekDates };
+  io.emit('schedules:draftReady', { weekStart: nextWeekStart, count: createdCount });
+  audit(triggerBy,'GENERATE_DRAFT_NEXT_WEEK','SCHEDULE', { weekStart: nextWeekStart }, { officials: createdCount, violations }, 'SYSTEM');
+  return { success:true, weekStart: nextWeekStart, count: createdCount, backfilled: existingDrafts.length>0, violations, nextWeekDates };
 }
 
 // API: HR/Admin xem draft tuần sau + OFF đăng ký + AI validate
@@ -9046,13 +9050,19 @@ app.post('/api/quiz/open', async (req,res)=>{
     }
     const emp = db.employees.find(e=>e.employeeId===employeeId);
     if(!emp) return res.status(404).json({error:'Không tìm thấy nhân viên'});
-    if(emp.type!=='TRAINING' && !['TRAINING','WAITING_TEST','RETEST'].includes(emp.status)) return res.status(403).json({error:'Chỉ nhân viên Training mới được mở TEST đầu ra'});
+    const _isOfficialQuizEmp = emp.type==='OFFICIAL' || emp.status==='OFFICIAL';
+    if(!_isOfficialQuizEmp && emp.type!=='TRAINING' && !['TRAINING','WAITING_TEST','RETEST'].includes(emp.status)) return res.status(403).json({error:'Chỉ nhân viên Training mới được mở TEST đầu ra'});
 
     // RÀNG BUỘC THI LẠI: NV đã nộp bài và trượt (RETEST) thì chờ HR mở đề mới — không tự mở lại.
     // (Bài thi cũ đã bị hệ thống tự động xoá sau khi nộp.) Bỏ qua khi HR mở (có openedBy) hoặc đang test.
     const _hasFreshQuiz = emp.testSchedule && emp.testSchedule.type==='ONLINE_QUIZ' && emp.testSchedule.status==='IN_PROGRESS' && Array.isArray(emp.testSchedule.questionIds) && emp.testSchedule.questionIds.length>0;
     const _isTestReq = req.headers['x-is-test']==='true' || (req.body && req.body.isTest===true);
-    if(emp.status==='RETEST' && !_hasFreshQuiz && !(req.body && req.body.openedBy) && !_isTestReq){
+    if(_isOfficialQuizEmp){
+      if(!_hasFreshQuiz && !(req.body && req.body.openedBy) && !_isTestReq){
+        return res.status(403).json({error:'Bài thi định kỳ do HR mở — vui lòng chờ HR gửi đề thi đến app của bạn.'});
+      }
+    }
+    else if(emp.status==='RETEST' && !_hasFreshQuiz && !(req.body && req.body.openedBy) && !_isTestReq){
       return res.status(403).json({error:'Bài thi trước đã nộp và cần thi lại — vui lòng chờ HR mở đề thi mới và gửi đến.'});
     }
 
@@ -9069,7 +9079,7 @@ app.post('/api/quiz/open', async (req,res)=>{
       emp.status === 'RETEST'
     );
 
-    if(!isAllowedBypass && emp.startDate){
+    if(!_isOfficialQuizEmp && !isAllowedBypass && emp.startDate){
       const t0 = new Date(emp.startDate+'T00:00:00+07:00').getTime();
       if(!isNaN(t0)){
         const diffDays = Math.floor((Date.now()-t0)/86400000);
@@ -9109,7 +9119,7 @@ app.post('/api/quiz/open', async (req,res)=>{
       force: true,
       isForceUnlocked: true
     };
-    emp.status='WAITING_TEST';
+    if(!_isOfficialQuizEmp) emp.status='WAITING_TEST';
     emp.updated_at=getVietnamISOString();
     if(openedBy && !db.notifications.some(n=>n.to===employeeId && n.type==='QUIZ_EXAM' && n.expiresAt===emp.testSchedule.expiresAt)) db.notifications.unshift({ id:uuidv4(), to:employeeId, type:'QUIZ_EXAM', title:'Bài thi chính thức đã sẵn sàng', content:'HR đã tạo đề thi 25 câu. Bài thi có hiệu lực trong 24 giờ.', createdAt:getVietnamISOString(), expiresAt:emp.testSchedule.expiresAt, read:false });
     audit(openedBy||'HR','OPEN_QUIZ','TEST',{employeeId},{total:targetCount, courseId: bank.id}, req.ip);
@@ -9159,11 +9169,24 @@ app.post('/api/courses/:id/submit', (req,res)=>{
   const testRes = { id: uuidv4(), employeeId, employeeName: emp.name, employeePhone: emp.phone, courseId: course.id, score: rounded, correct, total: 25, answers, timeSpent: timeSpent||null, result, createdAt: getVietnamISOString(), version:1 };
   db.testResults.unshift(testRes);
   const before = {...emp};
+  const _isOfficialQuizEmp = emp.type==='OFFICIAL' || emp.status==='OFFICIAL';
   emp.testScore = rounded;
   emp.testResult = result;
   emp.testScoredAt = getVietnamISOString(); // mốc TEST có điểm -> Thư mời tính hẹn ký HĐ +5 ngày
   if(sess && sess.type==='ONLINE_QUIZ') sess.status='SUBMITTED';
-  if(result==='FAILED'){
+  if(_isOfficialQuizEmp){
+    if(result==='FAILED'){
+      db.notifications.unshift({ id: uuidv4(), to: employeeId, type:'TEST_LOAI', title:'Kết quả TEST định kỳ: LOẠI', content:`Bạn đạt ${rounded}đ (< 5đ) — xếp loại LOẠI. HR sẽ đánh giá và gửi lịch thi lại cho bạn.`, createdAt: getVietnamISOString(), read:false });
+    } else if(result==='CHUA_DU_DK'){
+      db.notifications.unshift({ id: uuidv4(), to: employeeId, type:'TEST_RETAKE', title:'Kết quả TEST định kỳ: Thi lại', content:`Bạn đạt ${rounded}đ (5–dưới 8đ) — chưa ĐẠT. HR sẽ gửi lịch thi lại cho bạn.`, createdAt: getVietnamISOString(), read:false });
+    } else {
+      db.notifications.unshift({ id: uuidv4(), to: employeeId, type:'TEST_PASS', title:'Kết quả TEST định kỳ: ĐẠT', content:`Chúc mừng ${emp.name}! Bạn đạt ${rounded}đ (≥ 8đ) — hoàn thành xuất sắc bài kiểm tra định kỳ Ụm Bò Milk.`, createdAt: getVietnamISOString(), read:false });
+      const zr = { id: uuidv4(), sent_at: getVietnamISOString(), receiver: emp.phone, type:'TEST_PASS', content:`Chúc mừng ${emp.name} (${emp.employeeId}) TEST định kỳ ĐẠT ${rounded}đ!`, status:'SENT', error:'' };
+      db.zaloRecords.unshift(zr);
+      io.emit('zalo:update', db.zaloRecords);
+    }
+  }
+  else if(result==='FAILED'){
     emp.status='FAILED_TEST';
     db.notifications.unshift({ id: uuidv4(), to: employeeId, type:'TEST_LOAI', title:'Kết quả TEST: LOẠI', content:`Bạn đạt ${rounded}đ (< 5đ). Hệ thống sẽ tự động đăng xuất tài khoản sau 15 phút.`, createdAt: getVietnamISOString(), read:false });
     setTimeout(()=>{
@@ -9212,7 +9235,7 @@ app.post('/api/courses/:id/submit', (req,res)=>{
     employeeId,
     employeeName: emp.name,
     branchId: emp.branchId,
-    title: `Bài TEST Đào tạo: ${emp.name} (${result === 'DAT' ? 'ĐẠT' : result === 'CHUA_DU_DK' ? 'THI LẠI' : 'LOẠI'})`,
+    title: `${_isOfficialQuizEmp ? 'Bài TEST định kỳ' : 'Bài TEST Đào tạo'}: ${emp.name} (${result === 'DAT' ? 'ĐẠT' : result === 'CHUA_DU_DK' ? 'THI LẠI' : 'LOẠI'})`,
     message: `${emp.name} (${employeeId}) vừa nộp bài test: ${rounded}/10 điểm (${correct}/25 câu). Kết quả: ${result === 'DAT' ? 'ĐẠT (Chờ duyệt chính thức) ✅' : result === 'CHUA_DU_DK' ? 'Thi lại ⚠️' : 'LOẠI ❌'}.`,
     type: result === 'DAT' ? 'success' : result === 'CHUA_DU_DK' ? 'warning' : 'error',
     data: { score: rounded, correct, total: 25, result }

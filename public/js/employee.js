@@ -198,13 +198,15 @@ function updateModeBadge(){
 const TRAINING_HIDDEN_TABS = ['emergency', 'shiftSwap'];
 
 // E-learning chỉ mở cho NV Training khi HR bấm chọn "Thi Trực Tuyến Trên Web App" (Option 1).
-// Khi lên Nhân viên Chính thức (OFFICIAL) thì E-learning tạm thời ẩn đi.
+// NV Chính thức (OFFICIAL) chỉ thấy tab khi HR đã mở đề thi định kỳ còn hiệu lực.
 function isElearningUnlocked(){
   if(!employee) return false;
   const isOfficial = employee.status === 'OFFICIAL' || employee.type === 'OFFICIAL';
-  
-  // Khi lên Nhân viên Chính thức (OFFICIAL): E-learning tạm thời ẩn đi
-  if(isOfficial) return false;
+
+  if(isOfficial){
+    const ts = employee.testSchedule;
+    return !!(ts && ts.type === 'ONLINE_QUIZ' && ts.status === 'IN_PROGRESS');
+  }
 
   // Khi còn là Nhân viên Training: Chỉ mở khi HR bấm Option 1 ("ONLINE_APP") hoặc WAITING_TEST / RETEST
   if(employee.testSchedule && employee.testSchedule.type === 'ONLINE_APP') return true;
@@ -2519,6 +2521,7 @@ async function loadElearning(){
     const results = await api('/api/test-results?employeeId='+employee.employeeId);
     const isEligible = employee.status==='TRAINING' || employee.status==='WAITING_TEST' || employee.status==='RETEST' || employee.type==='TRAINING';
     const canTake = isEligible || employee.status==='OFFICIAL'; // allow all for demo
+    const isOfficialExam = employee.status==='OFFICIAL' || employee.type==='OFFICIAL';
     const lastResult = results[0];
     const examExpiresAt = employee.testSchedule?.type==='ONLINE_QUIZ' && employee.testSchedule?.status==='IN_PROGRESS' ? employee.testSchedule.expiresAt : null;
     const el=document.getElementById('elearningContent');
@@ -2527,7 +2530,7 @@ async function loadElearning(){
       <div class="bg-white rounded-2xl border border-purple-200 p-4">
         <div class="flex justify-between items-start">
           <div><div class="font-black text-purple-900">Khóa học E-learning</div><div class="text-xs text-slate-600">Dành cho nhân viên Training đủ điều kiện (7 ngày Training mặc định)</div></div>
-          <span class="text-xs font-bold ${isEligible?'bg-pink-100 text-pink-700':'bg-slate-100 text-slate-500'} px-3 py-1 rounded-full">${isEligible?'Đủ điều kiện':'Chưa đủ ĐK (demo vẫn cho thi)'}</span>
+          <span class="text-xs font-bold ${isEligible?'bg-pink-100 text-pink-700':'bg-slate-100 text-slate-500'} px-3 py-1 rounded-full">${isEligible?'Đủ điều kiện':(examExpiresAt?'Bài thi đang mở':'Chưa đủ ĐK (demo vẫn cho thi)')}</span>
         </div>
         <div class="mt-4 space-y-3">
           ${testCourses.map(c=>`
@@ -2538,7 +2541,9 @@ async function loadElearning(){
                 <span class="text-xs font-bold bg-purple-100 text-purple-700 px-2 py-1 rounded-full">${Math.min(c.totalQuestions || 25, 25)} câu trắc nghiệm</span>
                 <span class="text-xs font-bold bg-pink-100 text-pink-700 px-2 py-1 rounded-full">Tổng 8 phút • Hết giờ tự động nộp</span>
               </div>
-              <button onclick="startTest('${c.id}')" class="w-full mt-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-black py-2.5 rounded-xl">Bắt đầu làm TEST</button>
+              ${(isOfficialExam && !examExpiresAt)
+                ? `<button disabled class="w-full mt-3 bg-slate-200 text-slate-500 font-black py-2.5 rounded-xl cursor-not-allowed">Chờ HR mở đề thi định kỳ</button>`
+                : `<button onclick="startTest('${c.id}')" class="w-full mt-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-black py-2.5 rounded-xl">Bắt đầu làm TEST</button>`}
               ${lastResult?`<div class="mt-3 bg-slate-50 border rounded-xl p-2 text-xs"><div class="font-bold">Kết quả gần nhất: ${lastResult.score}đ • ${lastResult.result} • ${fmtDMYTime(lastResult.createdAt)}</div><div class="text-[11px] text-slate-500">${lastResult.correct}/${lastResult.total} đúng • ${lastResult.timeSpent}s</div></div>`:''}
             </div>
           `).join('')}
@@ -2658,13 +2663,18 @@ async function submitTest(auto){
     const res = await api('/api/courses/'+currentTest.id+'/submit', {method:'POST', body:JSON.stringify({employeeId:employee.employeeId, answers:testAnswers, timeSpent, questionIds:currentTest.questionIds})});
     closeTest();
     const r=res.testResult;
+    const _updEmp = res.employee || {};
+    const _isOfficialResult = _updEmp.status==='OFFICIAL' || _updEmp.type==='OFFICIAL';
     if(r.result==='DAT'){
       showFireworks();
-      showToast(`🎆 Chúc mừng ${employee.name}! ĐẠT ${r.score}đ — hoàn thành tốt, chờ HR duyệt thành Nhân viên chính thức Ụm Bò Milk`,'success');
-      alert(`🎆 CHÚC MỪNG! Bạn đạt ${r.score}đ (≥ 8đ) — ĐẠT!\nĐúng ${r.correct}/25 câu.\nBạn đã hoàn thành tốt, chờ HR duyệt trở thành Nhân viên chính thức Ụm Bò Milk.`);
+      showToast(_isOfficialResult?`🎆 Chúc mừng ${employee.name}! ĐẠT ${r.score}đ — hoàn thành xuất sắc bài kiểm tra định kỳ`:`🎆 Chúc mừng ${employee.name}! ĐẠT ${r.score}đ — hoàn thành tốt, chờ HR duyệt thành Nhân viên chính thức Ụm Bò Milk`,'success');
+      alert(_isOfficialResult?`🎆 CHÚC MỪNG! Bạn đạt ${r.score}đ (≥ 8đ) — ĐẠT!\nĐúng ${r.correct}/25 câu.\nBạn đã hoàn thành xuất sắc bài kiểm tra định kỳ Ụm Bò Milk.`:`🎆 CHÚC MỪNG! Bạn đạt ${r.score}đ (≥ 8đ) — ĐẠT!\nĐúng ${r.correct}/25 câu.\nBạn đã hoàn thành tốt, chờ HR duyệt trở thành Nhân viên chính thức Ụm Bò Milk.`);
     } else if(r.result==='CHUA_DU_DK'){
       showToast(`Bạn đạt ${r.score}đ (5–dưới 8đ) — Chưa ĐẠT. Thông báo thi lại lần sau, HR sẽ gửi lịch thi lại.`,'error');
       alert(`Bạn đạt ${r.score}đ — Chưa ĐẠT.\nĐúng ${r.correct}/25 câu.\nThông báo thi lại lần sau, HR sẽ gửi lịch thi lại cho bạn.`);
+    } else if(_isOfficialResult){
+      showToast(`Bạn đạt ${r.score}đ (< 5đ) — LOẠI. HR sẽ đánh giá và gửi lịch thi lại cho bạn.`,'error');
+      alert(`Bạn đạt ${r.score}đ — LOẠI.\nĐúng ${r.correct}/25 câu.\nHR sẽ đánh giá và gửi lịch thi lại cho bạn.`);
     } else {
       showToast(`Bạn đạt ${r.score}đ (< 5đ) — LOẠI. Hệ thống đã gửi thông báo và sẽ tự động đăng xuất sau 15 phút.`,'error');
       alert(`Bạn đạt ${r.score}đ — LOẠI.\nĐúng ${r.correct}/25 câu.\nHệ thống đã gửi thông báo đến app của bạn, sau 15 phút tài khoản sẽ tự động đăng xuất.`);

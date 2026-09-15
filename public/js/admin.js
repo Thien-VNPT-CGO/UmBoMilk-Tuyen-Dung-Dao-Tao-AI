@@ -3158,7 +3158,19 @@ function renderEmployeesStore(){
                 const diffMins = (schedTime && !isNaN(schedTime)) ? (schedTime - now) / 60000 : null;
 
                 let btns = '';
-                if(currentEmpStoreTab==='OFFICIAL') return ''; // Ẩn toàn bộ nút TEST với Chính thức
+                if(currentEmpStoreTab==='OFFICIAL'){
+                  const q = e.testSchedule || {};
+                  const qActive = q.type==='ONLINE_QUIZ' && q.status==='IN_PROGRESS' && Array.isArray(q.questionIds) && q.questionIds.length===25;
+                  if(qActive){
+                    let expTxt = '';
+                    try{ expTxt = q.expiresAt ? fmtDMYTime(q.expiresAt) : ''; }catch(_){}
+                    btns += `<span class="text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200 px-3 py-1.5 rounded-xl" title="Đề thi định kỳ đang mở • Hết hạn ${expTxt}">Đang thi • 25 câu</span>`;
+                  } else {
+                    const needRetake = (typeof e.testScore==='number' && e.testScore<8);
+                    btns += `<button onclick="openTestOptionModal('${e.employeeId}')" class="text-xs font-bold ${needRetake?'bg-pink-500 hover:bg-pink-600':'bg-purple-600 hover:bg-purple-700'} text-white px-3 py-1.5 rounded-xl shadow-xs transition">${needRetake?'Thi lại':'Mở đề 25 câu'}</button>`;
+                  }
+                  return btns;
+                }
 
                 const isAdmin = currentUser && (currentUser.role === 'Admin' || currentUser.username === 'admin');
 
@@ -3294,7 +3306,7 @@ function openTestOptionModal(employeeId) {
 
       <div class="grid md:grid-cols-2 gap-3">
         <!-- Tùy chọn 1: Web App Online -->
-        <div onclick="confirmOption1OnlineTest('${employeeId}')" class="border-2 border-purple-200 hover:border-purple-600 bg-purple-50/40 hover:bg-purple-50 rounded-2xl p-4 cursor-pointer transition shadow-sm hover:shadow-md flex flex-col justify-between group">
+        <div id="quizOptOnlineApp" onclick="confirmOption1OnlineTest('${employeeId}')" class="border-2 border-purple-200 hover:border-purple-600 bg-purple-50/40 hover:bg-purple-50 rounded-2xl p-4 cursor-pointer transition shadow-sm hover:shadow-md flex flex-col justify-between group">
           <div>
             <div class="w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center font-black text-lg mb-2 group-hover:scale-110 transition">
               <i class="fa-solid fa-mobile-screen-button"></i>
@@ -3311,7 +3323,7 @@ function openTestOptionModal(employeeId) {
         </div>
 
         <!-- Tùy chọn 2: Google Meet Interview -->
-        <div onclick="openOption2ScheduleModal('${employeeId}')" class="border-2 border-indigo-200 hover:border-indigo-600 bg-indigo-50/40 hover:bg-indigo-50 rounded-2xl p-4 cursor-pointer transition shadow-sm hover:shadow-md flex flex-col justify-between group">
+        <div id="quizOptMeet" onclick="openOption2ScheduleModal('${employeeId}')" class="border-2 border-indigo-200 hover:border-indigo-600 bg-indigo-50/40 hover:bg-indigo-50 rounded-2xl p-4 cursor-pointer transition shadow-sm hover:shadow-md flex flex-col justify-between group">
           <div>
             <div class="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black text-lg mb-2 group-hover:scale-110 transition">
               <i class="fa-solid fa-video"></i>
@@ -3328,7 +3340,7 @@ function openTestOptionModal(employeeId) {
         </div>
       </div>
 
-      <div class="bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-300 rounded-2xl p-4">
+      <div id="quizOptRandom25" class="bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-300 rounded-2xl p-4">
         <div class="font-black text-sm text-amber-900 flex items-center gap-2"><i class="fa-solid fa-list-check text-amber-600"></i> 3. Mở TEST trắc nghiệm trực tuyến (25 câu random)</div>
         <div class="text-xs text-slate-600 mt-1">Random 25 câu từ ngân hàng đề • Mỗi câu 5 giây • Thang 10đ • <b>≥8 ĐẠT</b> • <b>5–&lt;8 thi lại</b> • <b>&lt;5 LOẠI</b> (logout sau 15p). NV làm bài trên web app Training.</div>
         <label class="mt-2 flex items-center gap-2 text-xs font-bold text-amber-700"><input type="checkbox" id="quizForceOpen" class="rounded accent-amber-500"> Mở ép (NV chưa đủ 7 ngày training)</label>
@@ -3340,6 +3352,15 @@ function openTestOptionModal(employeeId) {
       </div>
     </div>
   `);
+  try{
+    const _qe = (typeof employees!=='undefined'?employees:[]).find(x=>x.employeeId===employeeId);
+    if(_qe && (_qe.type==='OFFICIAL'||_qe.status==='OFFICIAL')){
+      document.getElementById('quizOptOnlineApp')?.classList.add('hidden');
+      document.getElementById('quizOptMeet')?.classList.add('hidden');
+      const _fq = document.getElementById('quizForceOpen');
+      if(_fq && _fq.closest('label')) _fq.closest('label').classList.add('hidden');
+    }
+  }catch(_){}
 }
 
 async function confirmOption1OnlineTest(employeeId) {
@@ -5443,11 +5464,13 @@ async function saveQuizBankConfig(){
 }
 async function openOnlineQuiz(employeeId){
   const force=document.getElementById('quizForceOpen')?.checked;
-  if(!confirm(`Mở TEST trắc nghiệm đầu ra cho NV ${employeeId}?\n\n• Random 25 câu từ ngân hàng, mỗi câu 5 giây, thang 10đ\n• NV làm bài trên web app Training\n• ≥8 ĐẠT • 5–<8 thi lại • <5 LOẠI (logout sau 15p)`)) return;
+  const _qe = (typeof employees!=='undefined'?employees:[]).find(x=>x.employeeId===employeeId);
+  const _isOff = !!(_qe && (_qe.type==='OFFICIAL'||_qe.status==='OFFICIAL'));
+  if(!confirm(_isOff?`Mở TEST định kỳ cho NV chính thức ${employeeId}?\n\n• Random 25 câu từ ngân hàng, mỗi câu 5 giây, thang 10đ, hiệu lực 24 giờ\n• NV làm bài trên web app Nhân viên (tab Đào tạo)\n• ≥8 ĐẠT 🎆 • 5–<8 thi lại • <5 LOẠI`:`Mở TEST trắc nghiệm đầu ra cho NV ${employeeId}?\n\n• Random 25 câu từ ngân hàng, mỗi câu 5 giây, thang 10đ\n• NV làm bài trên web app Training\n• ≥8 ĐẠT • 5–<8 thi lại • <5 LOẠI (logout sau 15p)`)) return;
   try{
     const res=await api('/api/quiz/open',{method:'POST', body:JSON.stringify({employeeId, force:!!force, openedBy:(currentUser&&(currentUser.displayName||currentUser.username))||'HR'})});
     closeModal();
-    showToast(`Đã mở đề 25 câu cho ${res.employee.name} (${res.employee.employeeId}) — NV vào app Training làm bài`,'success');
+    showToast(`Đã mở đề 25 câu cho ${res.employee.name} (${res.employee.employeeId}) — NV vào app làm bài`,'success');
     loadEmployees(); loadElearning();
   }catch(e){ showToast(e.message,'error'); }
 }
