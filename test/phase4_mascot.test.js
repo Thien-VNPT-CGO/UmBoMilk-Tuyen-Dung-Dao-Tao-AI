@@ -31,6 +31,18 @@ describe('Phase 4: Mascot Bò Sữa & Voice Jingle Suite', () => {
     assert.strictEqual(content.includes('speechSynthesis'), true);
   });
 
+  it('4c. Bo sua doc tho/truyen luc ranh + ton trong tat tieng', () => {
+    const mascotPath = path.join(__dirname, '..', 'public', 'js', 'mascot.js');
+    const content = fs.readFileSync(mascotPath, 'utf8');
+    assert.strictEqual(content.includes('IDLE_LINES'), true);
+    assert.strictEqual(content.includes('thanh trùng'), true);
+    assert.strictEqual(content.includes('Louis Pasteur'), true);
+    assert.strictEqual(content.includes('nextIdleLine'), true);
+    assert.strictEqual(content.includes('window._ttsEnabled === false'), true);
+    const adminJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'admin.js'), 'utf8');
+    assert.ok(adminJs.includes('if(!_umbAiAvatar){ try{ speakUmb(msg); }catch(e){} return; }'), 'admin phai doc TB dau tien khi avatar da go');
+  });
+
   it('4b. Employee co the keo-tha bo sua (drag, nho vi tri)', () => {
     const mascotPath = path.join(__dirname, '..', 'public', 'js', 'mascot.js');
     const content = fs.readFileSync(mascotPath, 'utf8');

@@ -312,8 +312,30 @@
     showBubble(text, 6000);
   }
 
+  var IDLE_LINES = [
+    'Sữa trắng thơm trong nắng mai, bò sữa gặm cỏ miệt mài đồng xanh. Ụm một ngụm mát lành, cả ngày năng lượng long lanh nụ cười.',
+    'Chuông bò leng keng sớm trưa, sữa tươi thanh trùng về cửa mỗi ngày. HR ơi vất vả lắm thay, bò sữa chúc bạn hăng say yêu nghề.',
+    'Đồng cỏ xanh mướt chân trời, giọt sữa ngọt lịm từ nơi yên bình. Chúc cả nhà luôn xinh, bán đắt khách mến, cửa hàng đông vui.',
+    'Bạn có biết? Sữa thanh trùng là sữa tươi được đun nóng rồi làm lạnh nhanh để diệt vi khuẩn có hại mà vẫn giữ nguyên vị béo và dinh dưỡng.',
+    'Phương pháp thanh trùng do nhà khoa học Louis Pasteur phát minh từ thế kỷ mười chín, đến nay vẫn là chuẩn vàng cho sữa tươi an toàn.',
+    'Sữa thanh trùng Ụm Bò Milk luôn được giữ lạnh dưới bốn độ C từ trang trại đến cửa hàng để mỗi chai đến tay bạn đều tươi ngon nhất.',
+    'HR ơi, bạn đã uống nước chưa? Bò sữa nhắc bạn đứng dậy vươn vai một phút rồi làm tiếp nhé.',
+    'Chào bạn! Bò Sữa Ụm Bò luôn ở đây. Có thông báo mới mình sẽ đọc ngay cho bạn nghe.',
+    'Sắp hết ca rồi, cùng kiểm tra lại chấm công và lịch ngày mai nhé. Bò sữa chúc bạn về nhà bình an.',
+    'HR vất vả cả ngày duyệt phiếu, bò sữa thương lắm. Nghỉ tay chút đi rồi mình cùng cố gắng tiếp nhé.'
+  ];
+
+  function nextIdleLine(){
+    var idx = 0;
+    try{ idx = parseInt(localStorage.getItem('mascot_idle_idx') || '0', 10) || 0; }catch(_){}
+    var line = IDLE_LINES[idx % IDLE_LINES.length];
+    try{ localStorage.setItem('mascot_idle_idx', String((idx + 1) % IDLE_LINES.length)); }catch(_){}
+    return line;
+  }
+
   function speakText(text){
     resetIdleTimer();
+    if(window._ttsEnabled === false) return;
     if(!text) return;
     var clean = String(text).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 180);
     if(!clean) return;
@@ -379,16 +401,16 @@
   }
 
   function singJingle(){
+    if(window._ttsEnabled === false){ resetIdleTimer(); return; }
     setAvatarAnim('umbMascotSing 1s ease-in-out infinite');
-    showBubble('🎵 Bò Sữa hát tặng bạn một khúc nhạc vui! Ụm Bò Milk tươi ngon mỗi ngày!', 12000);
+    showBubble('🎵 Bò Sữa hát tặng bạn một khúc nhạc vui!', 12000);
     playJingleMelody(function(){
       setAvatarAnim('none');
-      resetIdleTimer();
+      speakText(nextIdleLine());
     });
   }
 
   window.speakUmb = function(text){
-    window._ttsEnabled = true;
     speakText(text);
   };
 

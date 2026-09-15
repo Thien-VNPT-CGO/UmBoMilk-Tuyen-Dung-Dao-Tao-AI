@@ -6445,7 +6445,7 @@ function speakNewAdminNotifications(list){
 function playAiAvatarNotification(msg){
   try{
     if(!_umbAiAvatar) createAiAvatar();
-    if(!_umbAiAvatar) return;
+    if(!_umbAiAvatar){ try{ speakUmb(msg); }catch(e){} return; }
     // AI phat am thanh thay loa: beep + TTS Adam
     playNotificationSound();
     if(msg) speakUmb(msg);
