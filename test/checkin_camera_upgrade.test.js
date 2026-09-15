@@ -38,8 +38,10 @@ describe('Phase 3 check-in/out camera upgrade', () => {
   });
   it('unmirror front capture', () => {
     const src = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'employee.js'), 'utf8');
-    assert.ok(src.includes('translate(canvas.width'));
-    assert.ok(src.includes('scale(-1,1)'));
+    assert.ok(!src.includes('scale(-1,1)'), 'anh luu khong duoc lat canvas');
+    assert.ok(!src.includes('translate(canvas.width'), 'anh luu khong duoc lat canvas');
+    assert.ok(src.includes('mirrorPreview'), 'preview phai co ham mirror rieng');
+    assert.ok(src.includes('scaleX(-1)'), 'preview cam truoc mirror CSS dung chuan selfie');
   });
   it('retake gate/static guard', () => {
     const src = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'employee.js'), 'utf8');

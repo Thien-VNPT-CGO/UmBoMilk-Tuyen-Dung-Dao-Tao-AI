@@ -1058,16 +1058,22 @@ async function startCamera(type, facing){
     }catch(e){
       stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:useFacing}, audio:false});
     }
-    if(type==='checkin'){ streamCheckin=stream; const v=document.getElementById('videoCheckin'); v.srcObject=stream; v.classList.remove('hidden'); document.getElementById('videoPlaceholder').classList.add('hidden'); document.getElementById('previewCheckin').classList.add('hidden'); }
-    else { streamCheckout=stream; const v=document.getElementById('videoCheckout'); v.srcObject=stream; v.classList.remove('hidden'); document.getElementById('videoPlaceholder2')?.classList.add('hidden'); document.getElementById('previewCheckout').classList.add('hidden'); }
+    if(type==='checkin'){ streamCheckin=stream; const v=document.getElementById('videoCheckin'); v.srcObject=stream; v.classList.remove('hidden'); document.getElementById('videoPlaceholder').classList.add('hidden'); document.getElementById('previewCheckin').classList.add('hidden'); mirrorPreview(type); }
+    else { streamCheckout=stream; const v=document.getElementById('videoCheckout'); v.srcObject=stream; v.classList.remove('hidden'); document.getElementById('videoPlaceholder2')?.classList.add('hidden'); document.getElementById('previewCheckout').classList.add('hidden'); mirrorPreview(type); }
   }catch(e){
     try{
       const fallback = await navigator.mediaDevices.getUserMedia({video:{facingMode:useFacing==='environment'?'user':'environment'}, audio:false});
       _camFacing = useFacing==='environment'?'user':'environment';
-      if(type==='checkin'){ streamCheckin=fallback; const v=document.getElementById('videoCheckin'); v.srcObject=fallback; v.classList.remove('hidden'); document.getElementById('videoPlaceholder').classList.add('hidden'); document.getElementById('previewCheckin').classList.add('hidden'); showToast('Camera '+(_camFacing==='user'?'trước':'sau')+' không khả dụng - đang dùng camera còn lại', 'info'); }
-      else { streamCheckout=fallback; const v=document.getElementById('videoCheckout'); v.srcObject=fallback; v.classList.remove('hidden'); document.getElementById('videoPlaceholder2')?.classList.add('hidden'); document.getElementById('previewCheckout').classList.add('hidden'); showToast('Camera '+(_camFacing==='user'?'trước':'sau')+' không khả dụng - đang dùng camera còn lại', 'info'); }
+      if(type==='checkin'){ streamCheckin=fallback; const v=document.getElementById('videoCheckin'); v.srcObject=fallback; v.classList.remove('hidden'); document.getElementById('videoPlaceholder').classList.add('hidden'); document.getElementById('previewCheckin').classList.add('hidden'); mirrorPreview(type); showToast('Camera '+(_camFacing==='user'?'trước':'sau')+' không khả dụng - đang dùng camera còn lại', 'info'); }
+      else { streamCheckout=fallback; const v=document.getElementById('videoCheckout'); v.srcObject=fallback; v.classList.remove('hidden'); document.getElementById('videoPlaceholder2')?.classList.add('hidden'); document.getElementById('previewCheckout').classList.add('hidden'); mirrorPreview(type); showToast('Camera '+(_camFacing==='user'?'trước':'sau')+' không khả dụng - đang dùng camera còn lại', 'info'); }
     }catch(e2){ alert('Không thể mở camera: '+e2.message+' - Vui lòng cấp quyền camera'); }
   }
+}
+function mirrorPreview(type){
+  try{
+    const v=document.getElementById(type==='checkin'?'videoCheckin':'videoCheckout');
+    if(v) v.style.transform = _camFacing==='user' ? 'scaleX(-1)' : '';
+  }catch(e){}
 }
 async function flipCamera(type){
   const stream = type==='checkin'?streamCheckin:streamCheckout;
@@ -1082,7 +1088,6 @@ function capture(type){
   if(!video.srcObject) return alert('Chưa bật camera');
   canvas.width=video.videoWidth; canvas.height=video.videoHeight;
   const ctx = canvas.getContext('2d');
-  if(_camFacing==='user'){ ctx.translate(canvas.width,0); ctx.scale(-1,1); }
   ctx.drawImage(video,0,0);
   const data = canvas.toDataURL('image/jpeg',0.7);
   const uniform=document.getElementById('uniform'+(type==='checkin'?'Checkin':'Checkout'));
