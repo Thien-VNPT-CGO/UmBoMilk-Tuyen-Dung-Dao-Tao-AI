@@ -320,47 +320,46 @@ button:active{transform:scale(.97)}
           <div style="position:absolute;top:-50px;right:-50px;width:200px;height:200px;background:radial-gradient(circle,rgba(236,72,153,.13) 0%,transparent 70%);border-radius:50%;pointer-events:none;"></div>
           <div style="position:absolute;bottom:-30px;left:-20px;width:130px;height:130px;background:radial-gradient(circle,rgba(244,63,94,.08) 0%,transparent 70%);border-radius:50%;pointer-events:none;"></div>
 
-          <!-- Top section: Avatar + Info + Clock -->
-          <div class="flex items-center gap-4 p-5 pb-4 relative">
-
-            <!-- Avatar -->
-            <div style="position:relative;flex-shrink:0;">
-              <div id="homeAvatar" style="width:72px;height:72px;border-radius:22px;background:linear-gradient(135deg,#ec4899,#f43f5e);color:white;display:flex;align-items:center;justify-content:center;font-size:2rem;font-weight:900;box-shadow:0 8px 24px rgba(236,72,153,.4);border:3px solid white;">?</div>
-              <!-- Online dot -->
-              <div style="position:absolute;bottom:2px;right:2px;width:14px;height:14px;background:#22c55e;border-radius:50%;border:2.5px solid white;box-shadow:0 1px 4px rgba(0,0,0,.2);"></div>
-            </div>
-
-            <!-- Name + Info -->
-            <div class="flex-1 min-w-0">
-              <!-- Row 1: Name + Type badge -->
-              <div class="flex items-center gap-2 flex-wrap">
-                <div id="homeName" class="font-black text-[17px] text-pink-900 leading-tight">—</div>
-                <span id="homeType" class="text-[10px] font-black px-2 py-0.5 rounded-full" style="background:linear-gradient(135deg,#f59e0b,#f97316);color:white;box-shadow:0 2px 6px rgba(245,158,11,.3);">—</span>
+          <!-- Top section: Avatar + Name + Badges -->
+          <div class="p-5 pb-4 relative">
+            <div class="flex items-center gap-3.5">
+              <!-- Avatar -->
+              <div style="position:relative;flex-shrink:0;">
+                <div id="homeAvatar" style="width:64px;height:64px;border-radius:20px;background:linear-gradient(135deg,#ec4899,#f43f5e);color:white;display:flex;align-items:center;justify-content:center;font-size:1.75rem;font-weight:900;box-shadow:0 8px 24px rgba(236,72,153,.4);border:3px solid white;">?</div>
+                <!-- Online dot -->
+                <div style="position:absolute;bottom:2px;right:2px;width:14px;height:14px;background:#22c55e;border-radius:50%;border:2.5px solid white;box-shadow:0 1px 4px rgba(0,0,0,.2);"></div>
               </div>
-              <!-- Row 2: Employee ID -->
-              <div id="homeId" class="font-mono text-[11px] text-slate-400 mt-0.5 truncate">—</div>
-              <!-- Row 3: Branch + Shift as icon pills -->
-              <div class="flex flex-wrap gap-1.5 mt-2">
-                <div class="flex items-center gap-1 bg-white/80 border border-pink-100 rounded-xl px-2 py-1" style="backdrop-filter:blur(4px)">
-                  <i class="fa-solid fa-location-dot text-pink-400 text-[10px]"></i>
-                  <span id="homeBranch" class="text-[11px] font-bold text-pink-700 truncate max-w-[130px]">—</span>
-                </div>
-                <div class="flex items-center gap-1 bg-white/80 border border-rose-100 rounded-xl px-2 py-1" style="backdrop-filter:blur(4px)">
-                  <i class="fa-solid fa-clock text-rose-400 text-[10px]"></i>
-                  <span id="homeShift" class="text-[11px] font-bold text-rose-600">—</span>
+              <!-- Name + Badges -->
+              <div class="flex-1 min-w-0">
+                <div id="homeName" class="font-black text-xl text-pink-900 leading-tight truncate">—</div>
+                <div class="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                  <span id="homeType" class="text-[11px] font-black px-2.5 py-1 rounded-full" style="background:linear-gradient(135deg,#f59e0b,#f97316);color:white;box-shadow:0 2px 6px rgba(245,158,11,.3);">—</span>
+                  <span id="homeStatus" class="text-[11px] font-black px-2.5 py-1 rounded-full">—</span>
                 </div>
               </div>
-              <!-- Row 4: Status badge -->
-              <div id="homeStatus" class="mt-1.5 inline-flex text-[10px] font-black px-2.5 py-1 rounded-full">—</div>
             </div>
-
-            <!-- Date + Clock pill -->
-            <div class="flex-shrink-0 text-right">
-              <div class="inline-flex flex-col items-end gap-0.5 bg-white/70 border border-pink-100 rounded-2xl px-3 py-2" style="backdrop-filter:blur(8px)">
+            <!-- Info grid: branch full row + ID/shift -->
+            <div class="grid grid-cols-2 gap-2 mt-3.5">
+              <div class="col-span-2 flex items-center gap-2 bg-white/80 border border-pink-100 rounded-2xl px-3 py-2" style="backdrop-filter:blur(4px)">
+                <i class="fa-solid fa-location-dot text-pink-500 text-xs flex-shrink-0"></i>
+                <span id="homeBranch" class="text-xs font-bold text-pink-700 truncate">—</span>
+              </div>
+              <div class="flex items-center gap-2 bg-white/80 border border-slate-100 rounded-2xl px-3 py-2 min-w-0">
+                <i class="fa-solid fa-id-card text-slate-400 text-xs flex-shrink-0"></i>
+                <span id="homeId" class="font-mono text-[11px] text-slate-500 truncate">—</span>
+              </div>
+              <div class="flex items-center gap-2 bg-white/80 border border-rose-100 rounded-2xl px-3 py-2 min-w-0">
+                <i class="fa-solid fa-clock text-rose-400 text-xs flex-shrink-0"></i>
+                <span id="homeShift" class="text-xs font-bold text-rose-600 truncate">—</span>
+              </div>
+            </div>
+            <!-- Date + Clock strip -->
+            <div class="mt-2.5 flex items-center justify-between gap-2 bg-white/70 border border-pink-100 rounded-2xl px-4 py-2.5" style="backdrop-filter:blur(8px)">
+              <div class="min-w-0">
                 <div class="text-[9px] font-black text-pink-400 uppercase tracking-widest">Hôm nay</div>
-                <div id="homeDate" class="font-black text-pink-900 text-xs leading-tight">—</div>
-                <div id="homeClock" class="font-mono text-lg font-black text-pink-500 leading-none mt-0.5">—</div>
+                <div id="homeDate" class="font-black text-pink-900 text-sm leading-tight truncate">—</div>
               </div>
+              <div id="homeClock" class="font-mono text-2xl font-black text-pink-500 leading-none tabular-nums flex-shrink-0">—</div>
             </div>
           </div>
 
