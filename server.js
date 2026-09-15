@@ -222,7 +222,8 @@ let db = {
   cashflowFundAccounts: [],
   cashflowExpenses: [],
   cashflowRecurringBills: [],
-  cashflowTransactions: []
+  cashflowTransactions: [],
+  scheduleBackups: []
 };
 
 // === SYSTEM RESET LOCK (Ngăn chặn background sync ghi đè/hồi sinh dữ liệu khi đang reset) ===
@@ -330,6 +331,7 @@ function loadDB() {
       if (!db.cashflowExpenses) db.cashflowExpenses = [];
       if (!db.cashflowRecurringBills) db.cashflowRecurringBills = [];
       if (!db.cashflowTransactions) db.cashflowTransactions = [];
+      if (!db.scheduleBackups) db.scheduleBackups = [];
       if (!db.overtimeRequests) db.overtimeRequests = [];
       if (!db.leaveRequests) db.leaveRequests = [];
       // Tự động chuẩn hóa branchPreference và shiftPreference nếu chưa có
@@ -376,6 +378,7 @@ function saveDB() {
     if(Array.isArray(clone.unlockKeys)) clone.unlockKeys = clone.unlockKeys.filter(r => !isTestRecord(r));
     if(Array.isArray(clone.trainingShiftRequests)) clone.trainingShiftRequests = clone.trainingShiftRequests.filter(r => !isTestRecord(r));
     if(Array.isArray(clone.shiftAssistanceAllowances)) clone.shiftAssistanceAllowances = clone.shiftAssistanceAllowances.filter(r => !isTestRecord(r));
+    if(Array.isArray(clone.scheduleBackups)) clone.scheduleBackups = clone.scheduleBackups.filter(r => !isTestRecord(r));
     if(Array.isArray(clone.zaloRecords)) clone.zaloRecords = clone.zaloRecords.filter(z => !isTestRecord(z));
     if(clone.settings){
       if(clone.settings.googleSheet?.privateKey && !clone.settings.googleSheet.privateKey.startsWith('enc:') && clone.settings.googleSheet.privateKey.length>20 && !clone.settings.googleSheet.privateKey.includes('•')){
@@ -11322,6 +11325,107 @@ app.post('/api/admin/db/restore-week-2026-09-14', authMiddleware, roleCheck(['Ad
     if(!r.ok) return res.status(404).json({error:r.error});
     audit(req.user.username,'RESTORE_WEEK_2026_09_14','DB',{written:r.written, locked:r.locked},{});
     res.json(r);
+  }catch(e){ res.status(500).json({error:e.message}); }
+});
+const BACKUP_SHIFTS = ['CA_SANG','CA_CHIEU','CA_TOI'];
+const BACKUP_DAYNAMES = ['T2','T3','T4','T5','T6','T7','CN'];
+function backupWeekDates(weekStart){
+  const p = String(weekStart).split('-').map(Number);
+  const d0 = new Date(p[0], p[1] - 1, p[2]);
+  const out = [];
+  for(let i = 0; i < 7; i++){
+    const d = new Date(d0); d.setDate(d0.getDate() + i);
+    out.push(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'));
+  }
+  return out;
+}
+app.post('/api/admin/schedule-backups', authMiddleware, roleCheck(['Admin']), (req,res)=>{
+  if(!db.scheduleBackups) db.scheduleBackups = [];
+  const { branchId, weekStart, entries, imageBase64, source } = req.body || {};
+  if(!branchId || typeof branchId !== 'string') return res.status(400).json({error:'Thiếu branchId'});
+  if(!db.branches.some(b=>b.id === branchId)) return res.status(400).json({error:'Chi nhánh không hợp lệ'});
+  if(!weekStart || !/^\d{4}-\d{2}-\d{2}$/.test(weekStart)) return res.status(400).json({error:'weekStart phải là Thứ 2 (YYYY-MM-DD)'});
+  try{
+    const wp = weekStart.split('-').map(Number);
+    const wd = new Date(wp[0], wp[1] - 1, wp[2]);
+    if(isNaN(wd.getTime()) || ((wd.getDay() + 6) % 7) !== 0) return res.status(400).json({error:'weekStart phải là ngày Thứ 2'});
+  }catch(e){ return res.status(400).json({error:'weekStart không hợp lệ'}); }
+  if(!Array.isArray(entries) || !entries.length || entries.length > 500) return res.status(400).json({error:'entries 1-500 dòng'});
+  const weekSet = new Set(backupWeekDates(weekStart));
+  const clean = [];
+  for(const en of entries){
+    if(!en || !en.employeeId || !en.date || !en.shift) return res.status(400).json({error:'Entry thiếu employeeId/date/shift'});
+    if(!db.employees.some(e=>e.employeeId === en.employeeId)) return res.status(400).json({error:'NV không tồn tại: ' + en.employeeId});
+    if(!weekSet.has(en.date)) return res.status(400).json({error:'Ngày ngoài tuần backup: ' + en.date});
+    if(!BACKUP_SHIFTS.includes(en.shift)) return res.status(400).json({error:'Ca không hợp lệ: ' + en.shift});
+    clean.push({ employeeId: en.employeeId, date: en.date, shift: en.shift, confidence: typeof en.confidence === 'number' ? en.confidence : null });
+  }
+  if(imageBase64 !== undefined && imageBase64 !== null){
+    if(typeof imageBase64 !== 'string' || !imageBase64.startsWith('data:image/')) return res.status(400).json({error:'Ảnh phải là data:image'});
+    if(imageBase64.length > 4000000) return res.status(400).json({error:'Ảnh quá lớn (tối đa ~4MB)'});
+  }
+  const rec = { id: uuidv4(), branchId, weekStart, entries: clean, imageBase64: imageBase64 || null, source: source === 'MANUAL' ? 'MANUAL' : 'OCR_AUTO', createdBy: req.user.username, createdAt: getVietnamISOString(), version: 1,
+    isTest: (req.headers['x-is-test'] === 'true' || (req.body && req.body.isTest === true)) || undefined };
+  db.scheduleBackups.unshift(rec);
+  audit(req.user.username, 'CREATE_SCHEDULE_BACKUP', 'SCHEDULE_BACKUP', null, { id: rec.id, branchId, weekStart, entries: clean.length }, req.ip);
+  saveDB();
+  res.json({ success: true, backup: { ...rec, imageBase64: rec.imageBase64 ? true : undefined } });
+});
+app.get('/api/admin/schedule-backups', authMiddleware, roleCheck(['Admin']), (req,res)=>{
+  const list = (db.scheduleBackups || []).map(b=>({ id: b.id, branchId: b.branchId, weekStart: b.weekStart, entryCount: (b.entries || []).length, unmatchedCount: (b.unmatched || []).length, avgConfidence: b.avgConfidence ?? null, source: b.source, hasImage: !!b.imageBase64, createdBy: b.createdBy, createdAt: b.createdAt }));
+  res.json(list);
+});
+app.get('/api/admin/schedule-backups/:id', authMiddleware, roleCheck(['Admin']), (req,res)=>{
+  const b = (db.scheduleBackups || []).find(x=>x.id === req.params.id);
+  if(!b) return res.status(404).json({error:'Không tìm thấy backup'});
+  res.json(b);
+});
+app.delete('/api/admin/schedule-backups/:id', authMiddleware, roleCheck(['Admin']), (req,res)=>{
+  const b = (db.scheduleBackups || []).find(x=>x.id === req.params.id);
+  if(!b) return res.status(404).json({error:'Không tìm thấy backup'});
+  db.scheduleBackups = db.scheduleBackups.filter(x=>x.id !== req.params.id);
+  audit(req.user.username, 'DELETE_SCHEDULE_BACKUP', 'SCHEDULE_BACKUP', { id: b.id, branchId: b.branchId, weekStart: b.weekStart }, {}, req.ip);
+  saveDB();
+  res.json({ success: true });
+});
+function applyScheduleBackupRestore(backup, actor){
+  const WEEK = backup.weekStart;
+  const DATES = backupWeekDates(WEEK);
+  const byEmp = {};
+  (backup.entries || []).forEach(en=>{
+    if(!byEmp[en.employeeId]) byEmp[en.employeeId] = {};
+    if(!byEmp[en.employeeId][en.date]) byEmp[en.employeeId][en.date] = [];
+    if(!byEmp[en.employeeId][en.date].includes(en.shift)) byEmp[en.employeeId][en.date].push(en.shift);
+  });
+  let written = 0;
+  for(const empId of Object.keys(byEmp)){
+    const emp = db.employees.find(e=>e.employeeId === empId);
+    if(!emp) continue;
+    const days = DATES.map((date, i)=>{
+      const shifts = byEmp[empId][date] || [];
+      const isWork = shifts.length > 0;
+      const primary = isWork ? shifts[0] : (emp.shift || 'CA_SANG');
+      return { date, dayName: BACKUP_DAYNAMES[i], shift: primary, shift2: shifts[1] || null, shift3: null, shifts: isWork ? shifts : [primary], status: isWork ? 'WORKING' : 'OFF', substituteFor: null };
+    });
+    db.schedules = db.schedules.filter(s=>!(s.weekStart === WEEK && s.employeeId === empId));
+    const sched = { id: uuidv4(), employeeId: empId, weekStart: WEEK, days, version: 999, updated_at: getVietnamISOString(), updated_by: actor, approvalStatus: 'APPROVED',
+      isTest: backup.isTest || undefined };
+    db.schedules.push(sched);
+    try{ addSyncQueue('SCHEDULE', 'UPDATE', sched, actor, 'IMAGE_BACKUP_RESTORE'); }catch(e){}
+    written++;
+  }
+  saveDB();
+  try{ io.emit('schedules:update', db.schedules); }catch(e){}
+  return { ok: true, week: WEEK, branchId: backup.branchId, written, total: db.schedules.filter(s=>s.weekStart === WEEK).length };
+}
+app.post('/api/admin/schedule-backups/:id/restore', authMiddleware, roleCheck(['Admin']), (req,res)=>{
+  try{
+    const b = (db.scheduleBackups || []).find(x=>x.id === req.params.id);
+    if(!b) return res.status(404).json({error:'Không tìm thấy backup'});
+    if(!Array.isArray(b.entries) || !b.entries.length) return res.status(400).json({error:'Backup rỗng'});
+    const r = applyScheduleBackupRestore(b, req.user.username);
+    audit(req.user.username, 'RESTORE_SCHEDULE_BACKUP', 'SCHEDULE_BACKUP', { id: b.id, branchId: b.branchId, weekStart: b.weekStart }, { written: r.written }, req.ip);
+    res.json({ success: true, ...r });
   }catch(e){ res.status(500).json({error:e.message}); }
 });
 app.get('/api/finance/sheets/master-data', financeAuthMiddleware, async (req,res)=>{

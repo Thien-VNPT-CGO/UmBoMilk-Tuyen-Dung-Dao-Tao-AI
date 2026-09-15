@@ -352,7 +352,7 @@ function switchTab(id){
   if(id==='interviews') safeCall(loadInterviews());
   if(id==='employees-store') safeCall(loadEmployees());
   if(id==='beta-workshop') renderBeta();
-  if(id==='schedule') safeCall(loadSchedules());
+  if(id==='schedule'){ safeCall(loadSchedules()); safeCall(loadScheduleBackups()); }
   if(id==='shiftSwap') safeCall(loadShiftSwapAdmin());
   if(id==='requests') safeCall(loadRequests());
   if(id==='attendance') safeCall(loadAttendances());
@@ -6135,6 +6135,108 @@ async function restoreWeek0914(){
     if(out) out.textContent='❌ '+(e.message||'Thất bại');
     showToast(e.message||'Khôi phục thất bại','error');
   }
+}
+let _imgBackupDataUrl = null;
+let _imgBackupParsed = null;
+async function downscaleBackupImage(file){
+  const dataUrl = await new Promise((res, rej)=>{ const fr = new FileReader(); fr.onload = ()=>res(fr.result); fr.onerror = rej; fr.readAsDataURL(file); });
+  const img = await new Promise((res, rej)=>{ const im = new Image(); im.onload = ()=>res(im); im.onerror = rej; im.src = dataUrl; });
+  const maxDim = 1600;
+  const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+  if(scale >= 1 && dataUrl.length < 2500000) return dataUrl;
+  const cv = document.createElement('canvas');
+  cv.width = Math.round(img.width * scale); cv.height = Math.round(img.height * scale);
+  cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+  return cv.toDataURL('image/jpeg', 0.82);
+}
+async function runImageBackupOCR(){
+  const status = document.getElementById('imgBackupStatus');
+  const out = document.getElementById('imgBackupResult');
+  try{
+    let branchId = document.getElementById('imgBackupBranch')?.value || '';
+    let weekStart = document.getElementById('imgBackupWeek')?.value || '';
+    const file = document.getElementById('imgBackupFile')?.files?.[0];
+    if(!branchId) return showToast('Chọn chi nhánh', 'error');
+    if(!file) return showToast('Chọn ảnh lịch cần trích xuất', 'error');
+    if(status) status.textContent = '⏳ Đang đọc ảnh...';
+    if(out) out.innerHTML = '';
+    _imgBackupDataUrl = await downscaleBackupImage(file);
+    const pv = document.getElementById('imgBackupPreview');
+    if(pv){ pv.src = _imgBackupDataUrl; pv.classList.remove('hidden'); }
+    if(status) status.textContent = '⏳ Đang tải OCR tiếng Việt (lần đầu cần mạng)...';
+    let roster = (typeof employees !== 'undefined' ? employees : []).filter(e=>e && e.employeeId && e.name).map(e=>({ employeeId: e.employeeId, name: e.name, branchId: e.branchId }));
+    if(!roster.length){
+      try{ roster = (await api('/api/employees', { headers: { Authorization: 'Bearer ' + token } })).filter(e=>e && e.employeeId && e.name).map(e=>({ employeeId: e.employeeId, name: e.name, branchId: e.branchId })); }catch(e){}
+    }
+    if(!roster.length) return showToast('Chưa tải được danh sách NV để đối chiếu tên', 'error');
+    const r = await window.ScheduleOCR.extractFromImage(_imgBackupDataUrl, roster, { branchId }, (m)=>{
+      if(status && m && m.status) status.textContent = '⏳ OCR: ' + m.status + (m.progress != null ? ' ' + Math.round(m.progress * 100) + '%' : '');
+    });
+    if(!r || r.error){
+      const msg = !r ? 'OCR thất bại' : (r.error === 'NO_DATES' ? 'Không tìm thấy 7 ngày trong ảnh' : (r.error === 'NO_SHIFT_ROWS' ? 'Không tìm thấy hàng Sáng/Trưa/Chiều' : 'OCR thất bại: ' + r.error));
+      if(status) status.textContent = '❌ ' + msg;
+      return showToast(msg, 'error');
+    }
+    if(weekStart && weekStart !== r.weekStart) showToast('Ảnh ghi tuần ' + r.weekStart + ' — dùng tuần theo ảnh', 'info');
+    weekStart = r.weekStart;
+    if(r.imageBranch && r.imageBranch.branchId && r.imageBranch.branchId !== branchId){
+      branchId = r.imageBranch.branchId;
+      document.getElementById('imgBackupBranch').value = branchId;
+      showToast('OCR nhận diện chi nhánh ảnh: CN' + r.imageBranch.label, 'info');
+    }
+    document.getElementById('imgBackupWeek').value = weekStart;
+    _imgBackupParsed = { branchId, weekStart, entries: r.entries, unmatched: r.unmatched, avgConfidence: r.avgConfidence };
+    const rows = r.entries.slice(0, 60).map(e=>`<tr class="border-t border-violet-100"><td class="px-2 py-1 font-bold">${e.name}</td><td class="px-2 py-1 font-mono">${e.date}</td><td class="px-2 py-1">${e.shift}</td><td class="px-2 py-1 text-right">${Math.round(e.confidence * 100)}%</td></tr>`).join('');
+    if(out) out.innerHTML = `<div class="text-xs font-black text-violet-900 mb-1">✅ Trích được ${r.entries.length} ca • khớp TB ${Math.round(r.avgConfidence * 100)}% • không khớp ${r.unmatched.length} • bỏ qua ${r.skipped}</div>`
+      + (r.unmatched.length ? `<div class="text-xs text-amber-700 mb-1">Không khớp: ${r.unmatched.slice(0, 10).map(u=>u.text + ' (' + u.date + ')').join(' • ')}</div>` : '')
+      + `<table class="w-full text-xs bg-white rounded-xl overflow-hidden"><thead><tr class="bg-violet-100 text-violet-900"><th class="px-2 py-1 text-left">NV</th><th class="px-2 py-1 text-left">Ngày</th><th class="px-2 py-1 text-left">Ca</th><th class="px-2 py-1 text-right">Khớp</th></tr></thead><tbody>${rows}</tbody></table>`
+      + (r.entries.length > 60 ? `<div class="text-[11px] text-slate-500 mt-1">Hiển thị 60/${r.entries.length} dòng đầu</div>` : '');
+    if(status) status.textContent = `✅ Xong: ${r.entries.length} ca tuần ${weekStart} (${branchId}). Bấm Lưu backup.`;
+    showToast(`OCR xong: ${r.entries.length} ca`, 'success');
+  }catch(e){
+    if(status) status.textContent = '❌ ' + (e.message || 'OCR thất bại');
+    showToast(e.message || 'OCR thất bại', 'error');
+  }
+}
+async function saveImageBackup(){
+  try{
+    if(!_imgBackupParsed || !_imgBackupParsed.entries.length) return showToast('Chạy trích xuất OCR trước', 'error');
+    const res = await api('/api/admin/schedule-backups', { method: 'POST', headers: { Authorization: 'Bearer ' + token }, body: JSON.stringify({ branchId: _imgBackupParsed.branchId, weekStart: _imgBackupParsed.weekStart, entries: _imgBackupParsed.entries.map(e=>({ employeeId: e.employeeId, date: e.date, shift: e.shift, confidence: e.confidence })), imageBase64: _imgBackupDataUrl, source: 'OCR_AUTO' }) });
+    showToast(`Đã lưu backup ${_imgBackupParsed.branchId} tuần ${_imgBackupParsed.weekStart}`, 'success');
+    _imgBackupParsed = null;
+    loadScheduleBackups();
+  }catch(e){ showToast(e.message || 'Lưu backup thất bại', 'error'); }
+}
+async function loadScheduleBackups(){
+  const box = document.getElementById('scheduleBackupList');
+  if(!box) return;
+  try{
+    const list = await api('/api/admin/schedule-backups', { headers: { Authorization: 'Bearer ' + token } });
+    if(!Array.isArray(list) || !list.length){ box.innerHTML = '<div class="text-xs text-slate-400 text-center py-3">Chưa có backup ảnh nào</div>'; return; }
+    box.innerHTML = list.map(b=>`<div class="bg-white border border-violet-200 rounded-xl p-3 flex flex-wrap items-center gap-2">
+      <div class="flex-1 min-w-[180px]"><div class="font-black text-sm text-violet-900">${b.branchId} • tuần ${b.weekStart}</div>
+      <div class="text-[11px] text-slate-500">${b.entryCount} ca • khớp TB ${b.avgConfidence != null ? Math.round(b.avgConfidence * 100) + '%' : '—'} • ${b.source === 'MANUAL' ? 'nhập tay' : 'OCR tự động'} • ${b.createdBy || ''} • ${b.createdAt ? b.createdAt.slice(0, 16).replace('T', ' ') : ''}</div></div>
+      <button onclick="restoreScheduleBackup('${b.id}')" class="text-xs font-black bg-gradient-to-r from-indigo-500 to-violet-600 text-white px-3 py-2 rounded-xl">Khôi phục</button>
+      <button onclick="deleteScheduleBackup('${b.id}')" class="text-xs font-bold bg-white border border-rose-200 text-rose-600 px-3 py-2 rounded-xl">Xóa</button>
+    </div>`).join('');
+  }catch(e){ box.innerHTML = '<div class="text-xs text-red-500 text-center py-3">' + (e.message || 'Lỗi tải') + '</div>'; }
+}
+async function restoreScheduleBackup(id){
+  if(!confirm('Khôi phục lịch theo backup này? Lịch hiện tại của các NV trong backup (đúng tuần/chi nhánh) sẽ bị ghi đè.')) return;
+  try{
+    const res = await api('/api/admin/schedule-backups/' + id + '/restore', { method: 'POST', headers: { Authorization: 'Bearer ' + token } });
+    showToast(`Đã khôi phục ${res.written || 0} lịch tuần ${res.week || ''}`, 'success');
+    try{ if(typeof loadSchedules === 'function') loadSchedules(); }catch(e){}
+    loadScheduleBackups();
+  }catch(e){ showToast(e.message || 'Khôi phục thất bại', 'error'); }
+}
+async function deleteScheduleBackup(id){
+  if(!confirm('Xóa backup này?')) return;
+  try{
+    await api('/api/admin/schedule-backups/' + id, { method: 'DELETE', headers: { Authorization: 'Bearer ' + token } });
+    showToast('Đã xóa backup', 'success');
+    loadScheduleBackups();
+  }catch(e){ showToast(e.message || 'Xóa thất bại', 'error'); }
 }
 async function manualFlipSchedule(){
   const employeeId=document.getElementById('flipEmployee')?.value;

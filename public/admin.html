@@ -618,6 +618,26 @@ button:active{transform:scale(.97)}
           <button onclick="restoreWeek0914()" class="mt-3 w-full bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 text-white font-black py-3 rounded-xl shadow flex items-center justify-center gap-2"><i class="fa-solid fa-clock-rotate-left"></i> Khôi phục lịch tuần 14–20/09</button>
           <div id="restoreWeekResult" class="mt-2 text-xs font-bold text-indigo-800"></div>
         </div>
+        <div class="bg-violet-50 border border-violet-200 rounded-2xl p-4 mt-4">
+          <div class="font-black text-sm text-violet-900 flex items-center gap-2"><i class="fa-solid fa-camera text-violet-600"></i> Backup lịch bằng ảnh (OCR tự động)</div>
+          <div class="text-xs text-violet-700 mt-1">Admin thêm ảnh lịch tuần của từng chi nhánh. Hệ thống OCR tự động đọc tên NV + ca làm, lưu thành backup và khôi phục 1-click khi mất/sai dữ liệu.</div>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
+            <div><label class="text-xs font-bold text-slate-700">Chi nhánh (OCR tự nhận diện, được sửa)</label><select id="imgBackupBranch" class="w-full mt-1 px-3 py-2 rounded-xl border border-violet-200 text-sm bg-white"><option value="CN4">CN111 - 111 Tôn Đản</option><option value="CN3">CN120 - 120 Hoàng Diệu 2</option><option value="CN1">CN130 - 130 Vạn Kiếp</option><option value="CN2">CN261 - 261 Tô Hiến Thành</option></select></div>
+            <div><label class="text-xs font-bold text-slate-700">Tuần (Thứ 2)</label><input id="imgBackupWeek" type="date" value="2026-09-14" class="w-full mt-1 px-3 py-2 rounded-xl border border-violet-200 text-sm"></div>
+            <div><label class="text-xs font-bold text-slate-700">Ảnh lịch</label><input id="imgBackupFile" type="file" accept="image/*" class="w-full mt-1 px-3 py-2 rounded-xl border border-violet-200 text-sm bg-white"></div>
+          </div>
+          <img id="imgBackupPreview" class="hidden mt-3 max-h-64 rounded-xl border border-violet-200">
+          <div class="flex flex-wrap gap-2 mt-3">
+            <button onclick="runImageBackupOCR()" class="flex-1 min-w-[200px] bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white font-black py-3 rounded-xl shadow flex items-center justify-center gap-2"><i class="fa-solid fa-wand-magic-sparkles"></i> Trích xuất OCR tự động</button>
+            <button onclick="saveImageBackup()" class="flex-1 min-w-[200px] bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-black py-3 rounded-xl shadow flex items-center justify-center gap-2"><i class="fa-solid fa-floppy-disk"></i> Lưu backup</button>
+          </div>
+          <div id="imgBackupStatus" class="mt-2 text-xs font-bold text-violet-800"></div>
+          <div id="imgBackupResult" class="mt-2 max-h-[40vh] overflow-auto"></div>
+          <div class="mt-3">
+            <div class="flex justify-between items-center mb-2"><span class="font-bold text-xs text-violet-900">Backup đã lưu</span><button onclick="loadScheduleBackups()" class="text-xs font-bold bg-white border border-violet-200 text-violet-700 px-3 py-1.5 rounded-xl hover:bg-violet-100"><i class="fa-solid fa-rotate"></i> Tải lại</button></div>
+            <div id="scheduleBackupList" class="space-y-2 max-h-[40vh] overflow-auto"></div>
+          </div>
+        </div>
         <div class="bg-amber-50 border border-amber-200 rounded-2xl p-4 mt-4">
           <div class="font-black text-sm text-amber-900 flex items-center gap-2"><i class="fa-solid fa-key text-amber-600"></i> Cấp key đổi OFF ↔ ca làm (chỉ Admin • 1 key = 1 lần theo mã NV)</div>
           <div id="swapKeyAdminBox">
@@ -1090,6 +1110,7 @@ button:active{transform:scale(.97)}
   </div>
 </div>
 
+<script src="/js/schedule-ocr.js"></script>
 <script src="/js/admin.js"></script>
 <script src="/js/mascot.js"></script>
 
