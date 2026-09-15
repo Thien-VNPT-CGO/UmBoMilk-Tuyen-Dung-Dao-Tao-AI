@@ -11274,59 +11274,6 @@ app.post('/api/admin/db/restore-schedules', authMiddleware, roleCheck(['Admin'])
     res.json({ ok:true, restored:db.schedules.length, backupName });
   }catch(e){ res.status(500).json({error:e.message}); }
 });
-// === Restore lich tuan 2026-09-14 tu anh backup Sheet (scripts/seed-week-2026-09-14.json). ===
-// Dung chung cho endpoint admin + one-shot boot. Idempotent.
-// version=999: shield chong AUTO_PULL ghi de tu Sheet cu (pull skip khi local version > sheet version).
-// addSyncQueue: day lich dung len Sheet de chua ca kho Sheet.
-function applyWeek20260914Seed(actor){
-  const seedPath = path.join(__dirname, 'scripts', 'seed-week-2026-09-14.json');
-  if(!fs.existsSync(seedPath)) return { ok:false, error:'Seed file not found' };
-  const seed = JSON.parse(fs.readFileSync(seedPath,'utf8'));
-  const WEEK = seed.weekStart;
-  const DATES = ['2026-09-14','2026-09-15','2026-09-16','2026-09-17','2026-09-18','2026-09-19','2026-09-20'];
-  const DAYNAMES = ['T2','T3','T4','T5','T6','T7','CN'];
-  const SHIELD_VER = 999;
-  const buildDays = (shift, workSet, extra)=>{
-    return DATES.map((date,i)=>{
-      const isWork = workSet.has(date);
-      const shift2 = (extra && extra[date]) || null;
-      return { date, dayName:DAYNAMES[i], shift, shift2, shift3:null,
-        shifts: isWork ? (shift2?[shift,shift2]:[shift]) : [shift],
-        status: isWork?'WORKING':'OFF', substituteFor:null };
-    });
-  };
-  let written=0, locked=0;
-  const pushSched = (empId, days, by)=>{
-    const sched = { id:uuidv4(), employeeId:empId, weekStart:WEEK, days,
-      version:SHIELD_VER, updated_at:getVietnamISOString(), updated_by:by, approvalStatus:'APPROVED' };
-    db.schedules.push(sched);
-    try{ addSyncQueue('SCHEDULE','UPDATE',sched,actor,'SHEET_RESTORE'); }catch(e){}
-    return sched;
-  };
-  for(const [empId,cfg] of Object.entries(seed.schedules)){
-    db.schedules = db.schedules.filter(s=>!(s.weekStart===WEEK && s.employeeId===empId));
-    pushSched(empId, buildDays(cfg.shift, new Set(cfg.work), cfg.extra), 'SHEET_RESTORE');
-    written++;
-  }
-  const lockOff = [...(seed.offAllWeek||[]), ...(seed.duplicateLockOff||[])];
-  for(const empId of lockOff){
-    const emp = db.employees.find(e=>e.employeeId===empId);
-    if(!emp) continue;
-    db.schedules = db.schedules.filter(s=>!(s.weekStart===WEEK && s.employeeId===empId));
-    pushSched(empId, buildDays(emp.shift, new Set(), null), 'SHEET_RESTORE_DUP_OFF');
-    locked++;
-  }
-  saveDB();
-  return { ok:true, week:WEEK, written, locked, total:db.schedules.filter(s=>s.weekStart===WEEK).length };
-}
-app.post('/api/admin/db/restore-week-2026-09-14', authMiddleware, roleCheck(['Admin']), (req,res)=>{
-  try{
-    const r = applyWeek20260914Seed(req.user.username);
-    if(!r.ok) return res.status(404).json({error:r.error});
-    audit(req.user.username,'RESTORE_WEEK_2026_09_14','DB',{written:r.written, locked:r.locked},{});
-    res.json(r);
-  }catch(e){ res.status(500).json({error:e.message}); }
-});
 const BACKUP_SHIFTS = ['CA_SANG','CA_CHIEU','CA_TOI'];
 const BACKUP_DAYNAMES = ['T2','T3','T4','T5','T6','T7','CN'];
 function backupWeekDates(weekStart){

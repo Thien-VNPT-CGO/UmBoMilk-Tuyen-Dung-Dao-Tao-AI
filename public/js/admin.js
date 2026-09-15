@@ -6120,22 +6120,6 @@ async function handleOffWorkAdmin(id, action){
     try{ if(typeof loadRequests==='function') loadRequests(); }catch(e){}
   }catch(e){ showToast(e.message,'error'); }
 }
-async function restoreWeek0914(){
-  if(!confirm('Khôi phục lịch tuần 14–20/09/2026 theo ảnh backup? Lịch hiện tại của tuần này sẽ bị ghi đè (24 NV đúng + khóa OFF).')) return;
-  const out=document.getElementById('restoreWeekResult');
-  try{
-    if(out) out.textContent='⏳ Đang khôi phục...';
-    const res=await api('/api/admin/db/restore-week-2026-09-14', {method:'POST', headers:{Authorization:'Bearer '+token}});
-    const msg=`✅ Đã khôi phục: ${res.written||0} lịch đúng + ${res.locked||0} khóa OFF (tổng ${res.total||0}). Mở tab Lịch làm việc kiểm tra.`;
-    if(out) out.textContent=msg;
-    showToast(msg,'success');
-    try{ if(typeof loadSchedules==='function') loadSchedules(); }catch(e){}
-    try{ if(typeof loadShiftSwapAdmin==='function') loadShiftSwapAdmin(); }catch(e){}
-  }catch(e){
-    if(out) out.textContent='❌ '+(e.message||'Thất bại');
-    showToast(e.message||'Khôi phục thất bại','error');
-  }
-}
 let _imgBackupDataUrl = null;
 let _imgBackupParsed = null;
 async function downscaleBackupImage(file){
