@@ -575,51 +575,24 @@ button:active{transform:scale(.97)}
         </div>
       </section>
 
-      <!-- ĐỔI CA (Chính thức) - TH1/TH2 24h -->
+      <!-- QUẢN LÝ ĐỔI CA (Chính thức) -->
       <section id="tab-shiftSwap" class="tab-section hidden">
-        <div class="section-title"><div class="title-icon" style="background:linear-gradient(135deg,#06b6d4,#3b82f6)"><i class="fa-solid fa-people-arrows"></i></div>Đổi ca làm việc</div>
-        <div class="card">
-          <div class="text-xs font-bold bg-blue-50 border border-blue-200 rounded-xl p-3 text-blue-700 mb-4">
-            <div class="font-black flex items-center gap-2"><i class="fa-solid fa-robot text-blue-600"></i> Đổi ca 24h - AI tự duyệt</div>
+        <div class="section-title"><div class="title-icon" style="background:linear-gradient(135deg,#06b6d4,#3b82f6)"><i class="fa-solid fa-people-arrows"></i></div>Quản lý Đổi Ca</div>
+        <div id="shiftSwapPendingNote"></div>
+        <div class="card" id="swapCreateCard">
+          <div class="font-black text-sm text-pink-900 mb-3">Tạo yêu cầu mới</div>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2" id="swapTypeGroup">
+            <label class="flex items-center gap-2 border border-pink-200 rounded-xl px-3 py-2.5 text-xs font-bold cursor-pointer has-[:checked]:bg-pink-500 has-[:checked]:text-white has-[:checked]:border-pink-500"><input type="radio" name="swapType" value="self" class="accent-pink-600" checked onchange="renderSwapForm()"> Tự đổi OFF ↔ Ca làm</label>
+            <label class="flex items-center gap-2 border border-pink-200 rounded-xl px-3 py-2.5 text-xs font-bold cursor-pointer has-[:checked]:bg-pink-500 has-[:checked]:text-white has-[:checked]:border-pink-500"><input type="radio" name="swapType" value="peer" class="accent-pink-600" onchange="renderSwapForm()"> Tráo đổi với đồng nghiệp</label>
+            <label class="flex items-center gap-2 border border-pink-200 rounded-xl px-3 py-2.5 text-xs font-bold cursor-pointer has-[:checked]:bg-pink-500 has-[:checked]:text-white has-[:checked]:border-pink-500"><input type="radio" name="swapType" value="cover" class="accent-pink-600" onchange="renderSwapForm()"> Nhờ làm thay / Nhường ca</label>
           </div>
-          <div class="space-y-3">
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div><label class="text-xs font-bold text-slate-700">Ngày muốn đổi</label><input id="swapDate" type="date" class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm focus:border-pink-400 outline-none"></div>
-              <div><label class="text-xs font-bold text-slate-700">Ca hiện tại của bạn</label><select id="swapFromShift" class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm focus:border-pink-400 outline-none bg-white"><option value="CA_SANG">CA_SANG - Ca Sáng (07:00-12:00)</option><option value="CA_CHIEU">CA_CHIEU - Ca Chiều (12:00-18:00)</option><option value="CA_TOI">CA_TOI - Ca Tối (18:00-23:00)</option></select></div>
-            </div>
-            <div>
-              <label class="text-xs font-bold text-slate-700">Tìm người thay thế</label>
-              <select id="swapTarget" class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm focus:border-pink-400 outline-none">
-                <option value="">-- Không chọn (gửi toàn bộ chi nhánh) --</option>
-              </select>
-            </div>
-            <div><label class="text-xs font-bold text-slate-700">Lý do <span class="text-red-500">*</span> (bắt buộc)</label><textarea id="swapReason" rows="2" placeholder="Nhập lý do đổi ca (bắt buộc)..." required class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm outline-none focus:border-pink-400"></textarea></div>
-            <button onclick="submitShiftSwap()" class="w-full text-white font-black py-3.5 rounded-2xl shadow text-sm" style="background:linear-gradient(135deg,#06b6d4,#3b82f6)"><i class="fa-solid fa-paper-plane mr-2"></i>Gửi yêu cầu đổi ca</button>
-            <div id="swapGateNote" class="hidden text-xs font-bold bg-amber-50 border border-amber-200 rounded-xl p-3 text-amber-700">Đổi ca 24h đang tạm khóa bởi HR — form này sẽ báo lỗi khi gửi. Bạn vẫn dùng được <b>Đổi OFF ↔ Ca làm</b> bên dưới (chờ Admin duyệt).</div>
-          </div>
+          <div id="swapTypeGuide" class="mt-3 text-xs font-medium bg-blue-50 border border-blue-200 rounded-xl p-3 text-blue-800"></div>
+          <div id="swapDynamicForm" class="mt-3"></div>
         </div>
         <div class="grid lg:grid-cols-2 gap-3 mt-3">
           <div class="card"><div class="font-black text-sm text-pink-900 mb-3">Yêu cầu của bạn</div><div id="myShiftSwapList" class="space-y-2"></div></div>
           <div class="card"><div class="font-black text-sm text-pink-900 mb-3">Lời mời đổi ca (bạn được mời)</div><div id="shiftSwapInviteList" class="space-y-2"></div></div>
         </div>
-        <div class="card mt-3">
-          <div class="font-black text-sm text-pink-900 flex items-center gap-2"><i class="fa-solid fa-key text-emerald-600"></i> Đổi OFF ↔ Ca làm (cần key kích hoạt)</div>
-          <div class="text-xs text-slate-500 mt-1">Key do Admin cấp theo mã NV, dùng 1 lần duy nhất. Đổi xong khóa lại, chỉ còn lịch sử.</div>
-          <div id="offWorkKeyBox" class="mt-3 flex gap-2">
-            <input id="offWorkKey" placeholder="Nhập key: SWAP-XXXXXX" class="flex-1 px-4 py-3 rounded-xl border border-emerald-200 text-sm font-mono uppercase focus:border-emerald-400 outline-none">
-            <button onclick="activateOffWorkKey()" class="bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-black px-5 rounded-xl text-sm shadow">Kích hoạt</button>
-          </div>
-          <div id="offWorkForm" class="hidden">
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
-              <div><label class="text-xs font-bold text-slate-700">Ngày OFF của bạn</label><input id="offWorkOffDate" type="date" class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm focus:border-pink-400 outline-none"></div>
-              <div><label class="text-xs font-bold text-slate-700">Ngày làm muốn đổi</label><input id="offWorkWorkDate" type="date" class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm focus:border-pink-400 outline-none"></div>
-            </div>
-            <div class="mt-3"><label class="text-xs font-bold text-slate-700">Lý do <span class="text-red-500">*</span></label><textarea id="offWorkReason" rows="2" placeholder="Nhập lý do đổi OFF ↔ ca làm..." class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm outline-none focus:border-pink-400"></textarea></div>
-            <button onclick="submitOffWorkSwap()" class="w-full mt-3 text-white font-black py-3.5 rounded-2xl shadow text-sm" style="background:linear-gradient(135deg,#10b981,#059669)"><i class="fa-solid fa-paper-plane mr-2"></i>Gửi yêu cầu đổi OFF ↔ ca làm</button>
-          </div>
-          <div id="offWorkLockedNote" class="mt-3 text-xs font-bold bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-500">🔒 Form đang khóa — nhập key Admin cấp để mở 1 lần đổi.</div>
-        </div>
-        <div class="card mt-3"><div class="font-black text-sm text-pink-900 mb-3">Yêu cầu OFF ↔ ca làm của bạn</div><div id="myOffWorkList" class="space-y-2"></div></div>
       </section>
 
       <!-- E-LEARNING -->

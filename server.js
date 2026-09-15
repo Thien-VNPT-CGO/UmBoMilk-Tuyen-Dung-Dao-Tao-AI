@@ -876,8 +876,8 @@ function notifyAdminAndHR({ action, employeeId, employeeName, branchId, title, m
     data: data || {}
   };
   if(!db.notifications) db.notifications = [];
+  if(db.notifications.length >= 500) db.notifications = db.notifications.slice(0, 499);
   db.notifications.unshift(notif);
-  if(db.notifications.length > 500) db.notifications = db.notifications.slice(0, 500);
 
   // Phát 3 kênh realtime để đảm bảo mọi client Admin/HR đều nhận ngay lập tức:
   io.emit('employee:action', notif);
@@ -6919,7 +6919,7 @@ app.post(['/api/training/shift-change/:id/reject', '/api/training/shift-requests
   addSyncQueue('TRAINING_SHIFT','UPDATE', r, req.user.username, 'WEB_HR');
   // Thông báo NV
   const notif={ id: uuidv4(), to: r.employeeId, type:'TRAINING_SHIFT_REJECTED', title:`Đổi ca ${r.date} bị từ chối`, content:`Yêu cầu đổi ${r.fromShift}->${r.toShift} ngày ${r.date} bị từ chối. Lý do: ${r.reasonReject}`, createdAt: getVietnamISOString(), read:false };
-  db.notifications.push(notif);
+  db.notifications.unshift(notif);
   io.emit('notifications:update', db.notifications);
   notifyAdminAndHR({
     action: 'training_shift_rejected',
@@ -7017,7 +7017,7 @@ app.post('/api/shift-swap', optionalEmployeeAuth, (req,res)=>{
   // Gửi thông báo
   if(isDirect){
     const notif = { id: uuidv4(), to: targetEmployeeId, type:'SHIFT_SWAP_INVITE', title:`${emp.name} mời đổi ca ${date}`, content:`${emp.name} (${requesterId}) muốn đổi ${curShift}→${finalToShift} ngày ${fmtDMY(date)}. Lý do: ${reason||'—'}. Vui lòng chấp nhận/từ chối.`, createdAt: now.toISOString(), read:false, requestId: reqId };
-    db.notifications.push(notif);
+    db.notifications.unshift(notif);
     const zr = { id: uuidv4(), sent_at: now.toISOString(), receiver: targetEmp.phone, type:'SHIFT_SWAP_INVITE', content:`[ĐỔI CA] ${emp.name} mời bạn đổi ${curShift}→${finalToShift} ngày ${date}. Chấp nhận?`, status:'SENT', error:'' };
     db.zaloRecords.unshift(zr);
   } else {
@@ -7025,19 +7025,9 @@ app.post('/api/shift-swap', optionalEmployeeAuth, (req,res)=>{
     const branchEmps = db.employees.filter(e=>e.branchId===emp.branchId && e.employeeId!==requesterId && e.status==='OFFICIAL');
     branchEmps.forEach(e=>{
       const notif = { id: uuidv4(), to: e.employeeId, type:'SHIFT_SWAP_BROADCAST', title:`Cần người đổi ca ${date} - ${emp.branchId}`, content:`${emp.name} cần đổi ${curShift}→${finalToShift} ngày ${date}. Ai rảnh hãy chấp nhận. Hết hạn 24h.`, createdAt: now.toISOString(), read:false, requestId: reqId };
-      db.notifications.push(notif);
+      db.notifications.unshift(notif);
     });
   }
-  notifyAdminAndHR({
-    action: 'shift_swap_request',
-    employeeId: requesterId,
-    employeeName: emp.name,
-    branchId: emp.branchId,
-    title: `NV Chính thức ${emp.name} xin đổi ca`,
-    message: `${emp.name} (${requesterId}) xin đổi ca ngày ${fmtDMY(date)} (${curShift} -> ${finalToShift}). ${targetEmp ? 'Đổi trực tiếp với: ' + targetEmp.name : 'Gửi toàn chi nhánh'}. Lý do: ${reason}`,
-    type: 'info',
-    data: { requestId: reqId, date, fromShift: curShift, toShift: finalToShift }
-  });
   io.emit('notifications:update', db.notifications);
   io.emit('zalo:update', db.zaloRecords);
   res.json({success:true, request:newReq, message: isDirect ? 'Đã gửi tới NV được chọn (TH1) - chờ họ chấp nhận' : 'Đã gửi tới toàn chi nhánh (TH2) - chờ 24h AI tự duyệt nếu có người nhận'});
@@ -7055,6 +7045,64 @@ app.get('/api/shift-swap', authMiddleware, (req,res)=>{
   if(status) list = list.filter(r=> r.status===status);
   res.json(list);
 });
+function applyAcceptedSwapSchedules(r, actor){
+  const requester = db.employees.find(e=>e.employeeId===r.requesterId);
+  const targetId = r.acceptedBy || r.targetEmployeeId;
+  const target = targetId ? db.employees.find(e=>e.employeeId===targetId) : null;
+  const requesterShift = requester?.shift || r.fromShift;
+  const targetShift = target?.shift || r.toShift;
+  const isDoubleShift = r.doubleShift === true || (requesterShift !== targetShift);
+  function ensureSwapWeek(employeeIdSW, dateStr, empShift){
+    const ws = toVietnamDateStr(getMonday(new Date(dateStr)));
+    let sc = db.schedules.find(s=>s.employeeId===employeeIdSW && s.weekStart===ws);
+    if(!sc){
+      const dayNames=['T2','T3','T4','T5','T6','T7','CN'];
+      const wDate = getMonday(new Date(dateStr));
+      const days=[];
+      for(let i=0;i<7;i++){ const cur=new Date(wDate); cur.setDate(wDate.getDate()+i); const ds=toVietnamDateStr(cur); days.push({date:ds, dayName:dayNames[i], shift: empShift||'CA_SANG', status:'WORKING', substituteFor:null}); }
+      sc={ id: uuidv4(), employeeId: employeeIdSW, weekStart: ws, days, version:1, updated_at: getVietnamISOString()};
+      db.schedules.push(sc);
+      addSyncQueue('SCHEDULE','CREATE',sc,actor,'WEB_HR');
+    }
+    return sc;
+  }
+  [[requester, 0], [target, 1]].forEach(([e, idx])=>{
+    if(!e) return;
+    const sched = ensureSwapWeek(e.employeeId, r.date, idx===0?requesterShift:targetShift);
+    captureSwapSnapshot(r, e.employeeId, r.date);
+    const day = sched.days.find(d=>d.date===r.date);
+    if(day){
+      if(idx===0){
+        if(isDoubleShift){
+          day.status = 'OFF';
+          day.shift = requesterShift;
+          day.substituteFor = r.targetEmployeeId;
+          day.doubleShiftGiven = true;
+        } else {
+          day.shift = r.toShift;
+          day.status = 'WORKING';
+          day.substituteFor = r.targetEmployeeId;
+        }
+      } else {
+        if(isDoubleShift){
+          day.status = 'WORKING_DOUBLE';
+          day.shift = targetShift;
+          day.secondShift = requesterShift;
+          day.shifts = [...new Set([targetShift, requesterShift].filter(Boolean))];
+          day.substituteFor = r.requesterId;
+          day.doubleShiftInfo = { originalEmployeeId: r.requesterId, originalEmployeeName: r.requesterName, originalShift: requesterShift, acceptedAt: getVietnamISOString() };
+        } else {
+          day.status = 'WORKING';
+          day.shift = r.fromShift;
+          day.substituteFor = r.requesterId;
+        }
+      }
+    }
+    sched.version = (sched.version||1)+1;
+    addSyncQueue('SCHEDULE','UPDATE',sched,actor,'WEB_HR');
+  });
+  return { isDoubleShift, targetId };
+}
 app.post('/api/shift-swap/:id/respond', optionalEmployeeAuth, (req,res)=>{
   const { employeeId, action } = req.body; // ACCEPT / REJECT
   const r = db.shiftSwapRequests.find(x=>x.id===req.params.id);
@@ -7072,21 +7120,18 @@ app.post('/api/shift-swap/:id/respond', optionalEmployeeAuth, (req,res)=>{
   if(r.status==='PENDING_BROADCAST' && !isBroadcast && !isTarget) return res.status(403).json({error:'Chỉ NV cùng chi nhánh mới được nhận TH2'});
   if(action==='REJECT'){
     if(r.status==='PENDING_TARGET'){
-      // TH1 từ chối -> chuyển sang TH2 (broadcast)
-      r.status='PENDING_BROADCAST';
-      r.rejectedBy=employeeId; r.rejectedAt=getVietnamISOString();
-      // Gửi broadcast tới toàn chi nhánh
-      const branchEmps = db.employees.filter(e=>e.branchId===r.branchId && e.employeeId!==r.requesterId && e.status==='OFFICIAL' && e.employeeId!==employeeId);
-      branchEmps.forEach(e=>{
-        const notif = { id: uuidv4(), to: e.employeeId, type:'SHIFT_SWAP_BROADCAST', title:`Cần người đổi ca ${r.date} (TH1 từ chối)`, content:`${r.requesterName} cần đổi ${r.fromShift}→${r.toShift} ngày ${r.date} - TH1 bị từ chối, chuyển TH2 toàn chi nhánh.`, createdAt: getVietnamISOString(), read:false, requestId: r.id };
-        db.notifications.push(notif);
-      });
+      r.status='CANCELLED';
+      r.rejectedBy=employeeId; r.rejectedAt=getVietnamISOString(); r.version=(r.version||1)+1;
       audit(employeeId,'REJECT_SHIFT_SWAP_TH1','SHIFT_SWAP',null,r, req.ip);
       addSyncQueue('SHIFT_SWAP','UPDATE',r, employeeId, 'WEB_EMPLOYEE');
       saveDB();
+      const notifCancel = { id: uuidv4(), to: r.requesterId, type:'SHIFT_SWAP_CANCELLED', title:`${emp.name} đã từ chối đổi ca ${r.date}`, content:`${emp.name} không đồng ý đổi ca ngày ${r.date}. Phiếu đã hủy - bạn có thể tạo yêu cầu mới.`, createdAt: getVietnamISOString(), read:false, requestId: r.id };
+      db.notifications.unshift(notifCancel);
+      saveDB();
       io.emit('shiftSwap:update', db.shiftSwapRequests);
+      io.emit('shiftSwapRequests:update', db.shiftSwapRequests);
       io.emit('notifications:update', db.notifications);
-      return res.json({success:true, request:r, next:'TH2_BROADCAST'});
+      return res.json({success:true, request:r, next:'CANCELLED'});
     } else {
       // TH2 reject thì chỉ ghi nhận, không chuyển
       // Nếu là broadcast mà 1 người từ chối thì không ảnh hưởng, vẫn chờ người khác
@@ -7105,83 +7150,22 @@ app.post('/api/shift-swap/:id/respond', optionalEmployeeAuth, (req,res)=>{
       const targetShift = target?.shift || r.toShift;
       const isDoubleShift = r.doubleShift === true || (requesterShift !== targetShift);
       
-      r.status='APPROVED'; r.acceptedBy=employeeId; r.acceptedAt=getVietnamISOString(); r.approvedAt=getVietnamISOString();
+      r.status='PENDING_HR'; r.acceptedBy=employeeId; r.acceptedAt=getVietnamISOString();
       r.doubleShift = isDoubleShift;
-      addShiftAssistanceAllowance(r, employeeId);
-      function ensureSwapWeek(employeeIdSW, dateStr, empShift){
-        const ws = toVietnamDateStr(getMonday(new Date(dateStr)));
-        let sc = db.schedules.find(s=>s.employeeId===employeeIdSW && s.weekStart===ws);
-        if(!sc){
-          const dayNames=['T2','T3','T4','T5','T6','T7','CN'];
-          const wDate = getMonday(new Date(dateStr));
-          const days=[];
-          for(let i=0;i<7;i++){ const cur=new Date(wDate); cur.setDate(wDate.getDate()+i); const ds=toVietnamDateStr(cur); days.push({date:ds, dayName:dayNames[i], shift: empShift||'CA_SANG', status:'WORKING', substituteFor:null}); }
-          sc={ id: uuidv4(), employeeId: employeeIdSW, weekStart: ws, days, version:1, updated_at: getVietnamISOString()};
-          db.schedules.push(sc);
-          addSyncQueue('SCHEDULE','CREATE',sc,employeeId,'WEB_EMPLOYEE');
-        }
-        return sc;
-      }
-      // Đổi lịch 2 NV (dam bao co lich ca khi chua co — VD 19/09/2026)
-      [requester, target].forEach((e, idx)=>{
-        if(!e) return;
-        let sched = ensureSwapWeek(e.employeeId, r.date, idx===0?requesterShift:targetShift);
-        captureSwapSnapshot(r, e.employeeId, r.date); // de thu hoi hoan ve sau nay
-        {
-          const day = sched.days.find(d=>d.date===r.date);
-          if(day){
-            if(idx===0){
-              // Requester A: OFF ca lam viec (neu khac ca) + luu nguoi thay B
-              if(isDoubleShift){
-                day.status = 'OFF';
-                day.shift = requesterShift;
-                day.substituteFor = r.targetEmployeeId;
-                day.doubleShiftGiven = true;
-              } else {
-                day.shift = r.toShift;
-                day.status = 'WORKING';
-                day.substituteFor = r.targetEmployeeId;
-              }
-            } else {
-              // Target B: giu ca goc + them ca cua A => 2 ca (VD B chieu + A sang)
-              if(isDoubleShift){
-                day.status = 'WORKING_DOUBLE';
-                day.shift = targetShift; // Target's original shift
-                day.secondShift = requesterShift; // Requester's shift
-                day.shifts = [...new Set([targetShift, requesterShift].filter(Boolean))];
-                day.substituteFor = r.requesterId;
-                day.doubleShiftInfo = {
-                  originalEmployeeId: r.requesterId,
-                  originalEmployeeName: r.requesterName,
-                  originalShift: requesterShift,
-                  acceptedAt: getVietnamISOString()
-                };
-              } else {
-                day.status = 'WORKING';
-                day.shift = r.fromShift;
-                day.substituteFor = r.requesterId;
-              }
-            }
-            sched.version = (sched.version||1)+1;
-            addSyncQueue('SCHEDULE','UPDATE',sched,employeeId,'WEB_EMPLOYEE');
-          }
-        }
-      });
       saveDB();
       io.emit('shiftSwap:update', db.shiftSwapRequests);
       io.emit('shiftSwapRequests:update', db.shiftSwapRequests);
-      io.emit('schedules:update', db.schedules);
       const doubleShiftText = isDoubleShift ? ` (LÀM 2 CA: ${getShiftVi(targetShift)} + ${getShiftVi(requesterShift)})` : '';
-      const notif1 = { id: uuidv4(), to: r.requesterId, type:'SHIFT_SWAP_APPROVED', title:`Đổi ca ${r.date} đã duyệt (TH1)`, content:`${emp.name} đã chấp nhận đổi ${r.fromShift}→${r.toShift} ngày ${r.date}${doubleShiftText}. Lịch đã cập nhật.`, createdAt: getVietnamISOString(), read:false };
-      const notif2 = { id: uuidv4(), to: r.targetEmployeeId, type:'SHIFT_SWAP_APPROVED', title:`Đổi ca ${r.date} đã duyệt`, content:`Bạn đã chấp nhận đổi ca với ${r.requesterName} ngày ${r.date}${doubleShiftText}. Lịch đã cập nhật.`, createdAt: getVietnamISOString(), read:false };
-      db.notifications.push(notif1, notif2);
+      const doubleShiftWarn = isDoubleShift ? ` Cảnh báo: ${target ? target.name : r.targetEmployeeName} sẽ làm 2 ca trong ngày.` : '';
+      const notif1 = { id: uuidv4(), to: r.requesterId, type:'SHIFT_SWAP_ACCEPTED', title:`${emp.name} đã đồng ý đổi ca ${r.date}`, content:`${emp.name} đã đồng ý đổi ca ngày ${r.date}${doubleShiftText}. Phiếu đang chờ HR/Admin duyệt.`, createdAt: getVietnamISOString(), read:false };
+      db.notifications.unshift(notif1);
       notifyAdminAndHR({
         action: 'shift_swap_accepted',
         employeeId: emp.employeeId,
         employeeName: emp.name,
         branchId: emp.branchId,
-        title: `Đổi ca TH1: ${emp.name} chấp nhận đổi ca`,
-        message: `${emp.name} đã chấp nhận đổi ca với ${r.requesterName} ngày ${fmtDMY(r.date)}${doubleShiftText}. AI đã tự động cập nhật lịch làm việc 2 nhân viên.`,
+        title: `Đổi ca chờ duyệt: ${r.requesterName} <-> ${target ? target.name : (r.targetEmployeeName || '')}`,
+        message: `${emp.name} đã đồng ý đổi ca với ${r.requesterName} ngày ${fmtDMY(r.date)}${doubleShiftText}.${doubleShiftWarn} Vui lòng duyệt/từ chối.`,
         type: 'success',
         data: { requestId: r.id, requesterId: r.requesterId, targetEmployeeId: r.targetEmployeeId, doubleShift: isDoubleShift }
       });
@@ -7189,7 +7173,7 @@ app.post('/api/shift-swap/:id/respond', optionalEmployeeAuth, (req,res)=>{
       audit(employeeId,'ACCEPT_SHIFT_SWAP_TH1','SHIFT_SWAP',null,r, req.ip);
       addSyncQueue('SHIFT_SWAP','UPDATE',r, employeeId, 'WEB_EMPLOYEE');
       saveDB();
-      return res.json({success:true, request:r, message: isDoubleShift ? 'TH1 chấp nhận - LÀM 2 CA: AI đã cập nhật lịch 2 NV' : 'TH1 chấp nhận - AI đã cập nhật lịch 2 NV'});
+      return res.json({success:true, request:r, message: 'Đồng nghiệp đã đồng ý - phiếu đang chờ HR/Admin duyệt'});
     } else if(r.status==='PENDING_BROADCAST'){
       // TH2: ghi nhận người chấp nhận đầu tiên, nhưng chưa duyệt ngay - đợi 24h
       if(r.acceptedBy) return res.status(409).json({error:'Đã có người chấp nhận trước, đang chờ AI duyệt sau 24h', acceptedBy: r.acceptedBy});
@@ -7202,7 +7186,7 @@ app.post('/api/shift-swap/:id/respond', optionalEmployeeAuth, (req,res)=>{
       io.emit('shiftSwap:update', db.shiftSwapRequests);
       io.emit('shiftSwapRequests:update', db.shiftSwapRequests);
       const notif = { id: uuidv4(), to: r.requesterId, type:'SHIFT_SWAP_TH2_ACCEPTED', title:`Có người nhận đổi ca ${r.date} (TH2)`, content:`${emp.name} đã nhận đổi ca ${r.fromShift}→${r.toShift} ngày ${r.date}. AI sẽ tự duyệt sau 24h kể từ lúc gửi yêu cầu (${fmtDMY?fmtDMY(r.date):r.date}).`, createdAt: getVietnamISOString(), read:false };
-      db.notifications.push(notif);
+      db.notifications.unshift(notif);
       notifyAdminAndHR({
         action: 'shift_swap_th2_accepted',
         employeeId: emp.employeeId,
@@ -7260,7 +7244,7 @@ app.post('/api/shift-swap/hr-broadcast', authMiddleware, roleCheck(['Admin','HR'
   const branchEmps = db.employees.filter(e=>e.branchId===emp.branchId && e.employeeId!==requesterId && e.status==='OFFICIAL');
   branchEmps.forEach(e=>{
     const notif = { id: uuidv4(), to: e.employeeId, type:'SHIFT_SWAP_HR_URGENT', title:`[HR] Cần đổi ca gấp ${date} - ${emp.branchId}`, content:`[HR - KHẨN <24h] ${emp.name} (${requesterId}) cần hoán đổi ca ${curShift}→${finalToShift} ngày ${date}. Lý do: ${reason}. Đây là yêu cầu do HR gửi thay (NV liên hệ trực tiếp HR). Vui lòng hỗ trợ!`, createdAt: now.toISOString(), read:false, requestId: reqId };
-    db.notifications.push(notif);
+    db.notifications.unshift(notif);
     const zr = { id: uuidv4(), sent_at: now.toISOString(), receiver: e.phone, type:'SHIFT_SWAP_HR_URGENT', content:`[HR KHẨN] ${emp.name} cần đổi ${curShift}→${finalToShift} ${date} (<24h). HR nhờ bạn hỗ trợ.`, status:'SENT', error:'' };
     db.zaloRecords.unshift(zr);
   });
@@ -7281,12 +7265,6 @@ app.post('/api/off-work-swap', optionalEmployeeAuth, (req,res)=>{
   if(emp.type!=='OFFICIAL' && emp.status!=='OFFICIAL') return res.status(403).json({error:'Chỉ nhân viên Chính thức mới được đổi OFF <-> ca làm'});
   const pendingReq=pendingShiftRequest(requesterId);
   if(pendingReq) return res.status(409).json({error:'Bạn đang có một yêu cầu ca làm chờ xử lý', request:pendingReq});
-  const code = String(swapCode||'').trim().toUpperCase();
-  if(!code) return res.status(400).json({error:'Vui lòng nhập key kích hoạt do Admin cấp'});
-  if(!db.swapKeys) db.swapKeys = [];
-  const keyRec = db.swapKeys.find(k=>k.code===code && k.employeeId===requesterId);
-  if(!keyRec) return res.status(403).json({error:'Key không đúng mã nhân viên của bạn'});
-  if(keyRec.status!=='UNUSED') return res.status(403).json({error:'Key đã được dùng 1 lần, vui lòng xin key mới từ Admin'});
   if(!offDate || !workDate) return res.status(400).json({error:'Thiếu ngày OFF và ngày làm (offDate, workDate)'});
   if(offDate===workDate) return res.status(400).json({error:'Hai ngày phải khác nhau'});
   if(!reason || !String(reason).trim()) return res.status(400).json({error:'Lý do là bắt buộc - vui lòng nhập lý do đổi'});
@@ -7310,9 +7288,6 @@ app.post('/api/off-work-swap', optionalEmployeeAuth, (req,res)=>{
     isTest: (emp.isTest || isTestRecord(emp) || req.headers['x-is-test']==='true' || (req.body && req.body.isTest===true)) || undefined
   };
   db.shiftSwapRequests.unshift(newReq);
-  // Key 1 lần: gửi thành công là khóa ngay
-  keyRec.status='USED'; keyRec.usedAt=getVietnamISOString(); keyRec.requestId=newReq.id;
-  keyRec.version=(keyRec.version||1)+1;
   audit(requesterId,'CREATE_OFF_WORK_SWAP','SHIFT_SWAP',null,newReq, req.ip);
   addSyncQueue('SHIFT_SWAP','CREATE',newReq, requesterId, 'WEB_EMPLOYEE');
   saveDB();
@@ -7539,8 +7514,9 @@ app.post('/api/schedules/manual-flip', authMiddleware, roleCheck(['Admin','HR','
 app.post('/api/shift-swap/:id/approve', authMiddleware, roleCheck(['Admin','HR','Manager']), (req,res)=>{
   const r = db.shiftSwapRequests.find(x=>x.id===req.params.id);
   if(!r) return res.status(404).json({error:'Không tìm thấy yêu cầu'});
-  if(r.status==='APPROVED' || r.status==='REJECTED' || r.status==='AUTO_APPROVED') return res.status(400).json({error:'Yêu cầu đã xử lý'});
+  if(r.status==='APPROVED' || r.status==='REJECTED' || r.status==='AUTO_APPROVED' || r.status==='CANCELLED') return res.status(400).json({error:'Yêu cầu đã xử lý'});
 
+  const wasPendingHR = (r.status==='PENDING_HR');
   r.status='APPROVED';
   r.approvedBy=req.user.username;
   r.approvedAt=getVietnamISOString();
@@ -7550,20 +7526,25 @@ app.post('/api/shift-swap/:id/approve', authMiddleware, roleCheck(['Admin','HR',
   const targetId = r.acceptedBy || r.targetEmployeeId;
   const target = targetId ? db.employees.find(e=>e.employeeId===targetId) : null;
 
-  if(requester) captureSwapSnapshot(r, requester.employeeId, r.date); // de thu hoi hoan ve sau nay
-  if(target) captureSwapSnapshot(r, target.employeeId, r.date); // de thu hoi hoan ve sau nay
-  if(requester){
-    let sched = db.schedules.find(s=>s.employeeId===requester.employeeId && s.days.some(d=>d.date===r.date));
-    if(sched){
-      const day = sched.days.find(d=>d.date===r.date);
-      if(day){ day.shift = r.toShift; day.status='WORKING'; day.substituteFor = targetId||null; sched.version=(sched.version||1)+1; addSyncQueue('SCHEDULE','UPDATE',sched,req.user.username,'WEB_HR'); }
+  if(wasPendingHR){
+    applyAcceptedSwapSchedules(r, req.user.username);
+    if(r.acceptedBy) addShiftAssistanceAllowance(r, r.acceptedBy);
+  } else {
+    if(requester) captureSwapSnapshot(r, requester.employeeId, r.date); // de thu hoi hoan ve sau nay
+    if(target) captureSwapSnapshot(r, target.employeeId, r.date); // de thu hoi hoan ve sau nay
+    if(requester){
+      let sched = db.schedules.find(s=>s.employeeId===requester.employeeId && s.days.some(d=>d.date===r.date));
+      if(sched){
+        const day = sched.days.find(d=>d.date===r.date);
+        if(day){ day.shift = r.toShift; day.status='WORKING'; day.substituteFor = targetId||null; sched.version=(sched.version||1)+1; addSyncQueue('SCHEDULE','UPDATE',sched,req.user.username,'WEB_HR'); }
+      }
     }
-  }
-  if(target){
-    let sched = db.schedules.find(s=>s.employeeId===target.employeeId && s.days.some(d=>d.date===r.date));
-    if(sched){
-      const day = sched.days.find(d=>d.date===r.date);
-      if(day){ day.shift = r.fromShift; day.status='WORKING'; day.substituteFor = r.requesterId; sched.version=(sched.version||1)+1; addSyncQueue('SCHEDULE','UPDATE',sched,req.user.username,'WEB_HR'); }
+    if(target){
+      let sched = db.schedules.find(s=>s.employeeId===target.employeeId && s.days.some(d=>d.date===r.date));
+      if(sched){
+        const day = sched.days.find(d=>d.date===r.date);
+        if(day){ day.shift = r.fromShift; day.status='WORKING'; day.substituteFor = r.requesterId; sched.version=(sched.version||1)+1; addSyncQueue('SCHEDULE','UPDATE',sched,req.user.username,'WEB_HR'); }
+      }
     }
   }
 
@@ -7576,10 +7557,10 @@ app.post('/api/shift-swap/:id/approve', authMiddleware, roleCheck(['Admin','HR',
   io.emit('schedules:update', db.schedules);
 
   const notif1 = { id: uuidv4(), to: r.requesterId, type:'SHIFT_SWAP_APPROVED', title:`Đổi ca ${r.date} đã được HR duyệt`, content:`Yêu cầu đổi ${r.fromShift}→${r.toShift} ngày ${r.date} đã được ${req.user.username} phê duyệt. Lịch đã cập nhật.`, createdAt: getVietnamISOString(), read:false };
-  db.notifications.push(notif1);
+  db.notifications.unshift(notif1);
   if(targetId){
     const notif2 = { id: uuidv4(), to: targetId, type:'SHIFT_SWAP_APPROVED', title:`Đổi ca ${r.date} đã được HR duyệt`, content:`Đổi ca với ${r.requesterName} ngày ${r.date} đã được ${req.user.username} phê duyệt. Lịch đã cập nhật.`, createdAt: getVietnamISOString(), read:false };
-    db.notifications.push(notif2);
+    db.notifications.unshift(notif2);
   }
   notifyAdminAndHR({
     action: 'shift_swap_approved',
@@ -7599,7 +7580,7 @@ app.post('/api/shift-swap/:id/approve', authMiddleware, roleCheck(['Admin','HR',
 app.post('/api/shift-swap/:id/reject', authMiddleware, roleCheck(['Admin','HR','Manager']), (req,res)=>{
   const r = db.shiftSwapRequests.find(x=>x.id===req.params.id);
   if(!r) return res.status(404).json({error:'Không tìm thấy yêu cầu'});
-  if(r.status==='APPROVED' || r.status==='REJECTED' || r.status==='AUTO_APPROVED') return res.status(400).json({error:'Yêu cầu đã xử lý'});
+  if(r.status==='APPROVED' || r.status==='REJECTED' || r.status==='AUTO_APPROVED' || r.status==='CANCELLED') return res.status(400).json({error:'Yêu cầu đã xử lý'});
 
   r.status='REJECTED';
   r.rejectedBy=req.user.username;
@@ -7614,7 +7595,7 @@ app.post('/api/shift-swap/:id/reject', authMiddleware, roleCheck(['Admin','HR','
   io.emit('shiftSwapRequests:update', db.shiftSwapRequests);
 
   const notif = { id: uuidv4(), to: r.requesterId, type:'SHIFT_SWAP_REJECTED', title:`Đổi ca ${r.date} bị HR từ chối`, content:`Yêu cầu đổi ca ngày ${r.date} bị ${req.user.username} từ chối. Lý do: ${r.reasonReject||'Không có'}`, createdAt: getVietnamISOString(), read:false };
-  db.notifications.push(notif);
+  db.notifications.unshift(notif);
   notifyAdminAndHR({
     action: 'shift_swap_rejected',
     employeeId: r.requesterId,
@@ -7629,11 +7610,35 @@ app.post('/api/shift-swap/:id/reject', authMiddleware, roleCheck(['Admin','HR','
   res.json({success:true, request:r, message:'HR đã từ chối yêu cầu đổi ca'});
 });
 
+app.post('/api/shift-swap/:id/cancel', optionalEmployeeAuth, (req,res)=>{
+  const employeeId = req.body.employeeId || req.user?.employeeId;
+  const r = db.shiftSwapRequests.find(x=>x.id===req.params.id);
+  if(!r) return res.status(404).json({error:'Không tìm thấy yêu cầu'});
+  if(!employeeId || r.requesterId!==employeeId) return res.status(403).json({error:'Chỉ người tạo mới được hủy phiếu này'});
+  if(req.user?.employeeId && req.user.employeeId!==employeeId) return res.status(403).json({error:'Không được hủy thay nhân viên khác'});
+  const cancellable = ['PENDING_TARGET','PENDING_BROADCAST','PENDING_BROADCAST_ACCEPTED','PENDING','PENDING_HR'];
+  if(!cancellable.includes(r.status)) return res.status(400).json({error:'Chỉ hủy được phiếu đang chờ xử lý'});
+  r.status='CANCELLED';
+  r.cancelledBy=employeeId; r.cancelledAt=getVietnamISOString(); r.version=(r.version||1)+1;
+  audit(employeeId,'CANCEL_SHIFT_SWAP','SHIFT_SWAP',null,r, req.ip);
+  addSyncQueue('SHIFT_SWAP','UPDATE',r, employeeId, 'WEB_EMPLOYEE');
+  saveDB();
+  const otherId = r.acceptedBy || r.targetEmployeeId;
+  if(otherId && otherId!==employeeId){
+    const notif = { id: uuidv4(), to: otherId, type:'SHIFT_SWAP_CANCELLED', title:`${r.requesterName} đã hủy yêu cầu đổi ca ${r.date||r.offDate||''}`, content:`Phiếu đổi ca đã bị người tạo hủy.`, createdAt: getVietnamISOString(), read:false, requestId: r.id };
+    db.notifications.unshift(notif);
+    saveDB();
+  }
+  io.emit('shiftSwap:update', db.shiftSwapRequests);
+  io.emit('shiftSwapRequests:update', db.shiftSwapRequests);
+  io.emit('notifications:update', db.notifications);
+  res.json({success:true, request:r, message:'Đã hủy phiếu - bạn có thể tạo yêu cầu mới'});
+});
 // Admin/HR thu hồi phiếu đổi ca chính thức: lich 2 NV hoan ve nhu truoc khi duyet
 app.post('/api/shift-swap/:id/revoke', authMiddleware, roleCheck(['Admin','HR','Manager']), (req,res)=>{
   const r = db.shiftSwapRequests.find(x=>x.id===req.params.id && x.type!=='OFF_WORK_SWAP');
   if(!r) return res.status(404).json({error:'Không tìm thấy yêu cầu đổi ca'});
-  if(r.status==='REVOKED' || r.status==='REJECTED' || r.status==='EXPIRED') return res.status(400).json({error:'Phiếu đã kết thúc, không thể thu hồi'});
+  if(r.status==='REVOKED' || r.status==='REJECTED' || r.status==='EXPIRED' || r.status==='CANCELLED') return res.status(400).json({error:'Phiếu đã kết thúc, không thể thu hồi'});
   const requester = db.employees.find(e=>e.employeeId===r.requesterId);
   if(requester && requester.branchId && req.user.role==='Manager' && !(req.user.branchScope||[]).includes(requester.branchId)) return res.status(403).json({error:'Manager chỉ xử lý CN được phân quyền'});
   const touchedIds = new Set();
@@ -7904,7 +7909,7 @@ app.post('/api/schedules/approve-next-week', authMiddleware, roleCheck(['Admin',
     d.version = (d.version||1)+1;
     // Tạo notification cho NV
     const notif = { id: uuidv4(), to: d.employeeId, type:'SCHEDULE_APPROVED', title: `Lịch tuần sau ${nextWeekStart} đã được duyệt`, content: `Lịch làm việc tuần ${nextWeekStart} của bạn đã được HR duyệt. Vui lòng kiểm tra Web App Nhân viên.`, createdAt: getVietnamISOString(), read:false };
-    db.notifications.push(notif);
+    db.notifications.unshift(notif);
     // Zalo record
     const emp = db.employees.find(e=> e.employeeId===d.employeeId);
     if(emp){
@@ -8038,7 +8043,7 @@ app.post('/api/schedules/approve-test-week', authMiddleware, roleCheck(['Admin',
     d.approvedAt = getVietnamISOString();
     d.version = (d.version||1)+1;
     const notif = { id: uuidv4(), to: d.employeeId, type:'SCHEDULE_APPROVED', title: `Lịch tuần sau ${nextWeekStart} đã được duyệt`, content: `Lịch làm việc tuần ${nextWeekStart} của bạn đã được ${req.user.username} duyệt${vip?' (chế độ test)':''}. Vui lòng kiểm tra Web App Nhân viên.`, createdAt: getVietnamISOString(), read:false };
-    db.notifications.push(notif);
+    db.notifications.unshift(notif);
     const emp = db.employees.find(e=> e.employeeId===d.employeeId);
     if(emp){
       const zr = { id: uuidv4(), sent_at: getVietnamISOString(), receiver: emp.phone, type:'SCHEDULE_APPROVED', content: `[ỤM BÒ MILK] Lịch tuần ${nextWeekStart} của ${emp.name} đã duyệt: ${d.days.filter(day=> day.status==='WORKING').map(day=> day.dayName).join(', ')}`, status:'SENT', error:'' };

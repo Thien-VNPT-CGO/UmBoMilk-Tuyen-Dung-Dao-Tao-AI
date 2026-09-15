@@ -74,7 +74,7 @@ describe('Admin/HR thu hoi phieu doi ca (hoan lich)', () => {
     } catch (_) {}
   });
 
-  it('1. TH1 doi ca truc tiep + thu hoi: lich 2 NV hoan ve (snapshot)', async () => {
+  it('1. TH1 doi ca truc tiep + duyet + thu hoi: lich 2 NV hoan ve (snapshot)', async () => {
     const empA = await makeOfficial(adminToken, 'A', 'CN2', 'CA_SANG');
     const empB = await makeOfficial(adminToken, 'B', 'CN2', 'CA_CHIEU');
     const date = daysAhead(30);
@@ -84,13 +84,17 @@ describe('Admin/HR thu hoi phieu doi ca (hoan lich)', () => {
     });
     assert.equal(c.status, 200, JSON.stringify(c.body));
     const reqId = c.body.request.id;
-    // B chap nhan -> APPROVED + lich 2 NV doi
+    // B chap nhan -> PENDING_HR, chua doi lich
     const acc = await api(`/api/shift-swap/${reqId}/respond`, {
       method: 'POST', body: JSON.stringify({ employeeId: empB, action: 'ACCEPT' })
     });
     assert.equal(acc.status, 200, JSON.stringify(acc.body));
-    assert.equal(acc.body.request.status, 'APPROVED');
-    assert.ok(Array.isArray(acc.body.request.beforeSchedule) && acc.body.request.beforeSchedule.length === 2, 'phai co snapshot 2 ngay: ' + JSON.stringify(acc.body.request.beforeSchedule));
+    assert.equal(acc.body.request.status, 'PENDING_HR');
+    // HR duyet -> APPROVED + lich 2 NV doi + snapshot
+    const ap = await api(`/api/shift-swap/${reqId}/approve`, { method: 'POST' }, adminToken);
+    assert.equal(ap.status, 200, JSON.stringify(ap.body));
+    assert.equal(ap.body.request.status, 'APPROVED');
+    assert.ok(Array.isArray(ap.body.request.beforeSchedule) && ap.body.request.beforeSchedule.length === 2, 'phai co snapshot 2 ngay: ' + JSON.stringify(ap.body.request.beforeSchedule));
     let dayA = await getDay(adminToken, empA, date);
     let dayB = await getDay(adminToken, empB, date);
     assert.equal(dayA.status, 'OFF', 'A phai OFF');
@@ -162,11 +166,9 @@ describe('Admin/HR thu hoi phieu doi ca (hoan lich)', () => {
     });
     const sc = await api('/api/schedules', { method: 'POST', body: JSON.stringify({ employeeId: empD, weekStart, days }) }, adminToken);
     assert.equal(sc.status, 200, JSON.stringify(sc.body));
-    const k = await api('/api/swap-keys', { method: 'POST', body: JSON.stringify({ employeeId: empD }) }, adminToken);
-    assert.equal(k.status, 200, JSON.stringify(k.body));
     const c = await api('/api/off-work-swap', {
       method: 'POST',
-      body: JSON.stringify({ requesterId: empD, offDate, workDate, reason: 'Revoke test off-work', swapCode: k.body.key.code })
+      body: JSON.stringify({ requesterId: empD, offDate, workDate, reason: 'Revoke test off-work' })
     });
     assert.equal(c.status, 200, JSON.stringify(c.body));
     const reqId = c.body.request.id;

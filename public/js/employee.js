@@ -103,11 +103,13 @@ function getStatusVi(s){
     WORKING:'Đang làm',
     OFF:'Nghỉ',
     PENDING:'Chờ duyệt',
-    PENDING_TARGET:'Chờ người được mời',
-    PENDING_BROADCAST:'Chờ phổ biến',
-    PENDING_BROADCAST_ACCEPTED:'Đã có người nhận',
+    PENDING_TARGET:'Chờ đồng nghiệp xác nhận',
+    PENDING_BROADCAST:'Chờ đồng nghiệp xác nhận',
+    PENDING_BROADCAST_ACCEPTED:'Chờ duyệt',
+    PENDING_HR:'Chờ duyệt',
     APPROVED:'Đã duyệt',
     REJECTED:'Từ chối',
+    CANCELLED:'Đã hủy',
     EXPIRED:'Hết hạn',
     FAILED:'Thất bại',
     SYNCED:'Đã đồng bộ',
@@ -2305,58 +2307,75 @@ async function respondEmergency(requestId, action){
     loadEmergency();
   }catch(e){ showToast(e.message,'error'); }
 }
-// Đổi ca (Official) - 24h AI tự duyệt
+// Quản lý Đổi Ca (Official) - 1 tab: tu doi / trao doi / nhuong ca
 let shiftSwapRequests=[];
+let swapFormType='self';
+const SWAP_GUIDES={
+  self:'💡 Tự đổi lịch cá nhân: chuyển 1 ngày làm thành OFF và bù bằng 1 ngày OFF khác (hoặc ngược lại). Chỉ áp dụng lịch của chính bạn. Gửi thẳng đến Admin/HR duyệt.',
+  peer:'💡 Tráo đổi với đồng nghiệp cùng chi nhánh: đổi ca↔ca (cùng/khác ca) hoặc OFF↔ca. Đồng nghiệp phải bấm Đồng ý trước, sau đó Admin/HR mới duyệt.',
+  cover:'💡 Nhờ làm thay / nhường ca: bạn nghỉ 1 ca, đồng nghiệp làm thay (làm 2 ca/ngày nếu đã có ca). Ngày của bạn thành OFF sau khi duyệt.'
+};
+function swapTypeName(r){
+  if(!r) return 'Đổi ca';
+  if(r.type==='OFF_WORK_SWAP') return 'Tự đổi OFF ↔ Ca làm';
+  if(r.doubleShift) return 'Nhờ làm thay / Nhường ca';
+  return 'Tráo đổi với đồng nghiệp';
+}
 function hasPendingShiftSwap(list){
   return Array.isArray(list) && list.some(r=> String(r.status||'').includes('PENDING'));
 }
+function myPendingSwap(){
+  return (Array.isArray(shiftSwapRequests)?shiftSwapRequests:[]).find(r=>r.requesterId===employee.employeeId && String(r.status||'').includes('PENDING'));
+}
 function applyShiftSwapLocks(){
-  const locked = hasPendingShiftSwap(shiftSwapRequests);
-  ['swapForm','offWorkForm','shiftSwapForm','hrAssistForm'].forEach(id=>{
-    const el=document.getElementById(id);
-    if(el){
-      el.querySelectorAll('button, input, select, textarea').forEach(n=>{
-        if(n.id==='offWorkKey') return;
-        if(locked) n.setAttribute('disabled','disabled'); else n.removeAttribute('disabled');
-      });
-      el.classList.toggle('opacity-50', locked);
-      el.classList.toggle('pointer-events-none', locked);
-    }
-  });
+  const locked = !!myPendingSwap();
+  const card=document.getElementById('swapCreateCard');
+  if(card){
+    card.querySelectorAll('button, input, select, textarea').forEach(n=>{
+      if(locked) n.setAttribute('disabled','disabled'); else n.removeAttribute('disabled');
+    });
+    card.classList.toggle('opacity-50', locked);
+    card.classList.toggle('pointer-events-none', locked);
+  }
   const gate=document.getElementById('shiftSwapPendingNote');
   if(gate) gate.classList.toggle('hidden', !locked);
 }
+function swapStatusColor(s){
+  if(s==='PENDING_TARGET'||s==='PENDING_BROADCAST') return 'bg-amber-500 text-white';
+  if(s==='PENDING_HR'||s==='PENDING_BROADCAST_ACCEPTED'||s==='PENDING') return 'bg-blue-500 text-white';
+  if(s==='APPROVED') return 'bg-emerald-500 text-white';
+  if(s==='REJECTED') return 'bg-red-100 text-red-700';
+  if(s==='CANCELLED') return 'bg-slate-200 text-slate-600';
+  return 'bg-slate-100 text-slate-600';
+}
+function swapTitle(r){
+  if(r.type==='OFF_WORK_SWAP') return `OFF ${fmtDMY(r.offDate)} ↔ Làm ${fmtDMY(r.workDate)}`;
+  return `${fmtDMY(r.date)} • ${getShiftVi(normalizeShift(r.fromShift))} → ${getShiftVi(normalizeShift(r.toShift))}`;
+}
 async function loadShiftSwap(){
   try{
-    try{ const gn=document.getElementById('swapGateNote'); if(gn) gn.classList.toggle('hidden', !!window._shiftSwapEnabled); }catch(e){}
-    try{ let c=''; try{ c=localStorage.getItem(swapKeyStorage())||''; }catch(e){} setOffWorkLock(!c); }catch(e){}
     const branchEmps = await api('/api/employees?branch='+employee.branchId).catch(()=>[]);
     const emps = Array.isArray(branchEmps) ? branchEmps : (branchEmps.data||[]);
-    const opts = emps.filter(e=>e.employeeId!==employee.employeeId && e.status==='OFFICIAL').map(e=>`<option value="${e.employeeId}">${e.name} - ${e.employeeId} - ${getShiftVi(normalizeShift(e.shift))}</option>`).join('');
-    const sel=document.getElementById('swapTarget');
-    if(sel){
-      const cur = sel.value;
-      sel.innerHTML = `<option value="">-- Không chọn (gửi toàn bộ chi nhánh) --</option>` + opts;
-      if(cur) sel.value=cur;
-    }
-    const fromEl=document.getElementById('swapFromShift');
-    if(fromEl) fromEl.value=employee.shift;
-    // Load requests
+    window._swapBranchEmps = emps;
     shiftSwapRequests = await api('/api/shift-swap?employeeId='+employee.employeeId).catch(()=>[]);
     const allRequests = await api('/api/shift-swap?branch='+employee.branchId).catch(()=>[]);
-    const mine = shiftSwapRequests;
+    const mine = Array.isArray(shiftSwapRequests)?shiftSwapRequests:[];
+    const pending = myPendingSwap();
+    const bar=document.getElementById('shiftSwapPendingNote');
+    if(bar){
+      bar.innerHTML = pending ? `<div class="text-xs font-bold bg-amber-50 border border-amber-300 rounded-xl p-3 text-amber-800 mb-3">⚠️ Bạn đang có 1 yêu cầu <b>${swapTypeName(pending)}</b> ở trạng thái <b>${getStatusVi(pending.status)}</b>. Theo quy định, bạn không thể tạo thêm yêu cầu mới cho đến khi phiếu này hoàn tất (được duyệt, bị từ chối hoặc tự hủy).</div>` : '';
+    }
     document.getElementById('myShiftSwapList').innerHTML = mine.map(r=>{
-      const statusColor = r.status==='PENDING_TARGET' ? 'bg-amber-500 text-white' : r.status==='PENDING_BROADCAST' ? 'bg-blue-500 text-white' : r.status==='APPROVED' ? 'bg-emerald-500 text-white' : r.status==='REJECTED' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600';
-      const thText = r.targetEmployeeId ? `Gửi tới ${r.targetEmployeeName||r.targetEmployeeId}` : 'Gửi toàn chi nhánh';
-      return `<div class="border rounded-xl p-3 ${r.status.includes('PENDING')?'bg-amber-50 border-amber-200':'bg-white'}">
-        <div class="flex justify-between items-start"><span class="font-bold text-sm">${fmtDMY(r.date)} • ${getShiftVi(normalizeShift(r.fromShift))} → ${getShiftVi(normalizeShift(r.toShift))}</span><span class="text-[11px] font-black px-2 py-1 rounded-full ${statusColor}">${getStatusVi(r.status)}</span></div>
-        <div class="text-xs text-slate-600 mt-1">${thText} • ${getBranchDisplay(r.branchId)}</div>
+      const targetTxt = r.type==='OFF_WORK_SWAP' ? 'Gửi thẳng Admin/HR' : (r.targetEmployeeId ? `Với ${r.targetEmployeeName||r.targetEmployeeId}` : 'Gửi toàn chi nhánh');
+      const canCancel = String(r.status||'').includes('PENDING');
+      return `<div class="border rounded-xl p-3 ${String(r.status).includes('PENDING')?'bg-amber-50 border-amber-200':'bg-white'}">
+        <div class="flex justify-between items-start gap-2"><span class="font-bold text-sm">${swapTypeName(r)}<br>${swapTitle(r)}</span><span class="text-[11px] font-black px-2 py-1 rounded-full whitespace-nowrap ${swapStatusColor(r.status)}">${getStatusVi(r.status)}</span></div>
+        <div class="text-xs text-slate-600 mt-1">${targetTxt} • ${getBranchDisplay(r.branchId)}</div>
         <div class="text-xs text-slate-500 mt-1">Lý do: ${r.reason||'—'}</div>
-        <div class="text-[11px] text-slate-400 mt-1">Tạo: ${fmtDMYTime(r.createdAt)} • Hết hạn: ${fmtDMYTime(r.expiresAt)}</div>
-        ${r.status==='PENDING_TARGET' || r.status==='PENDING_BROADCAST' ? '<div class="text-[11px] text-amber-700 mt-1">AI sẽ tự duyệt sau 24h nếu có người chấp nhận hoặc ngay khi người được mời chấp nhận</div>' : ''}
+        <div class="text-[11px] text-slate-400 mt-1">Tạo: ${fmtDMYTime(r.createdAt)}${r.expiresAt?' • Hết hạn: '+fmtDMYTime(r.expiresAt):''}</div>
+        ${canCancel?`<button onclick="cancelShiftSwap('${r.id}')" class="mt-2 w-full bg-white border border-rose-300 text-rose-600 text-xs font-bold py-1.5 rounded-lg">Hủy yêu cầu</button>`:''}
       </div>`;
     }).join('') || '<div class="text-xs text-slate-400 text-center py-2">Chưa có yêu cầu đổi ca</div>';
-    // Invites: where you are target or broadcast and not requester
     const invites = allRequests.filter(r=> r.status==='PENDING_TARGET' && r.targetEmployeeId===employee.employeeId);
     const broadcastInvites = allRequests.filter(r=> r.status==='PENDING_BROADCAST' && r.branchId===employee.branchId && r.requesterId!==employee.employeeId && !r.acceptedBy);
     const allInvites = [...invites, ...broadcastInvites].slice(0,5);
@@ -2367,54 +2386,126 @@ async function loadShiftSwap(){
       return `<div class="border ${isDirect?'border-blue-200 bg-blue-50':'border-emerald-200 bg-emerald-50'} rounded-xl p-3">
         <div class="font-bold text-sm">${r.requesterName} muốn đổi ca <span class="text-[11px] bg-slate-900 text-white px-2 py-0.5 rounded-full">${isDirect?'Gửi riêng bạn':'Toàn chi nhánh'}</span></div>
         <div class="text-xs text-slate-600">Ngày ${fmtDMY(r.date)} • ${getShiftVi(normalizeShift(r.fromShift))} → ${getShiftVi(normalizeShift(r.toShift))} • ${getBranchDisplay(r.branchId)} • Lý do: ${r.reason||'—'}</div>
-        <div class="text-[11px] text-slate-500 mt-1">Hết hạn: ${fmtDMYTime(r.expiresAt)}</div>
+        <div class="text-[11px] text-slate-500 mt-1">Chấp nhận = chuyển sang chờ HR/Admin duyệt • Từ chối = phiếu bị hủy</div>
         ${doubleShiftInfo}
         <div class="mt-2 flex gap-2"><button onclick="respondShiftSwap('${r.id}','ACCEPT')" class="flex-1 bg-emerald-600 text-white text-xs font-bold py-1.5 rounded-lg">✅ Chấp nhận${isDifferentShift?' (2 ca)':''}</button><button onclick="respondShiftSwap('${r.id}','REJECT')" class="flex-1 bg-white border text-xs font-bold py-1.5 rounded-lg">Từ chối</button></div>
       </div>`;
     }).join('') || '<div class="text-xs text-slate-400 text-center py-2">Không có lời mời đổi ca</div>';
-    try{ loadOffWorkSwap(); }catch(e){}
+    renderSwapForm();
     applyShiftSwapLocks();
   }catch(e){ console.error('loadShiftSwap',e); }
+}
+function peerTargetOptions(selected){
+  const emps = Array.isArray(window._swapBranchEmps)?window._swapBranchEmps:[];
+  const opts = emps.filter(e=>e.employeeId!==employee.employeeId && e.status==='OFFICIAL').map(e=>`<option value="${e.employeeId}">${e.name} - ${getShiftVi(normalizeShift(e.shift))}</option>`).join('');
+  return `<option value="">-- Không chọn (gửi toàn bộ chi nhánh) --</option>` + opts;
+}
+function shiftOptions(selected){
+  return ['CA_SANG','CA_CHIEU','CA_TOI'].map(s=>`<option value="${s}"${s===selected?' selected':''}>${s==='CA_SANG'?'Ca Sáng (07:00-12:00)':s==='CA_CHIEU'?'Ca Chiều (12:00-18:00)':'Ca Tối (18:00-23:00)'}</option>`).join('');
+}
+function renderSwapForm(){
+  const checked = document.querySelector('input[name="swapType"]:checked');
+  swapFormType = checked ? checked.value : 'self';
+  const g = document.getElementById('swapTypeGuide');
+  if(g) g.textContent = SWAP_GUIDES[swapFormType] || '';
+  const box = document.getElementById('swapDynamicForm');
+  if(!box) return;
+  if(swapFormType==='self'){
+    box.innerHTML = `<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div><label class="text-xs font-bold text-slate-700">Ngày gốc (ca làm hoặc OFF muốn đổi)</label><input id="selfA" type="date" class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm outline-none"></div>
+        <div><label class="text-xs font-bold text-slate-700">Ngày đổi bù (OFF hoặc ca làm tương ứng)</label><input id="selfB" type="date" class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm outline-none"></div>
+      </div>
+      <div class="mt-3"><label class="text-xs font-bold text-slate-700">Lý do <span class="text-red-500">*</span></label><textarea id="selfReason" rows="2" placeholder="VD: bận việc gia đình, đi khám bệnh..." class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm outline-none"></textarea></div>
+      <button onclick="submitShiftSwap()" class="w-full mt-3 text-white font-black py-3.5 rounded-2xl shadow text-sm" style="background:linear-gradient(135deg,#10b981,#059669)"><i class="fa-solid fa-paper-plane mr-2"></i>Gửi thẳng Admin/HR duyệt</button>`;
+  } else if(swapFormType==='peer'){
+    box.innerHTML = `<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div><label class="text-xs font-bold text-slate-700">Ngày của bạn</label><input id="peerDate" type="date" class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm outline-none"></div>
+        <div><label class="text-xs font-bold text-slate-700">Ca / OFF của bạn muốn tráo</label><select id="peerMyShift" class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm bg-white">${shiftOptions(employee.shift)}<option value="OFF">Ngày OFF</option></select></div>
+      </div>
+      <div class="mt-3"><label class="text-xs font-bold text-slate-700">Đồng nghiệp (cùng chi nhánh)</label><select id="peerTarget" class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm bg-white">${peerTargetOptions()}</select></div>
+      <div class="mt-3"><label class="text-xs font-bold text-slate-700">Ca / OFF của đồng nghiệp muốn tráo</label><select id="peerToShift" class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm bg-white">${shiftOptions()}<option value="OFF">Ngày OFF</option></select></div>
+      <div class="mt-3"><label class="text-xs font-bold text-slate-700">Lý do <span class="text-red-500">*</span></label><textarea id="peerReason" rows="2" placeholder="Nhập lý do..." class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm outline-none"></textarea></div>
+      <button onclick="submitShiftSwap()" class="w-full mt-3 text-white font-black py-3.5 rounded-2xl shadow text-sm" style="background:linear-gradient(135deg,#06b6d4,#3b82f6)"><i class="fa-solid fa-paper-plane mr-2"></i>Gửi đồng nghiệp xác nhận</button>`;
+  } else {
+    box.innerHTML = `<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div><label class="text-xs font-bold text-slate-700">Ngày của ca muốn nhường</label><input id="coverDate" type="date" class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm outline-none"></div>
+        <div><label class="text-xs font-bold text-slate-700">Ca bạn muốn nhường</label><select id="coverShift" class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm bg-white">${shiftOptions(employee.shift)}</select></div>
+      </div>
+      <div class="mt-3"><label class="text-xs font-bold text-slate-700">Đồng nghiệp nhờ làm thay (cùng chi nhánh)</label><select id="coverTarget" class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm bg-white">${peerTargetOptions()}</select></div>
+      <div class="mt-3"><label class="text-xs font-bold text-slate-700">Lý do <span class="text-red-500">*</span></label><textarea id="coverReason" rows="2" placeholder="Nhập lý do..." class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm outline-none"></textarea></div>
+      <button onclick="submitShiftSwap()" class="w-full mt-3 text-white font-black py-3.5 rounded-2xl shadow text-sm" style="background:linear-gradient(135deg,#f59e0b,#f97316)"><i class="fa-solid fa-paper-plane mr-2"></i>Gửi đồng nghiệp xác nhận</button>`;
+  }
 }
 let shiftSwapSending=false;
 async function submitShiftSwap(){
   if(shiftSwapSending) return showToast('Đang gửi, vui lòng đợi...','info');
-  const date=document.getElementById('swapDate')?.value;
-  const fromShift=document.getElementById('swapFromShift')?.value || employee.shift;
-  const targetId=document.getElementById('swapTarget')?.value || '';
-  const reason=document.getElementById('swapReason')?.value.trim()||'';
-  if(!date) return showToast('Chọn ngày muốn đổi','error');
-  if(!reason) return showToast('Vui lòng nhập lý do (bắt buộc)','error');
-  shiftSwapSending=true;
-  // Tìm toShift: nếu TH1 thì lấy ca của target, nếu TH2 thì mặc định đổi sang ca khác
-  let toShift = employee.shift;
-  let doubleShift = false;
-  if(targetId){
-    try{
-      const emps=await api('/api/employees');
-      const target=emps.find(e=>e.employeeId===targetId);
-      if(target){
-        toShift=target.shift;
-        // Nếu ca khác nhau thì bật chế độ double shift (người nhận làm 2 ca)
-        if(toShift !== fromShift){
-          doubleShift = true;
-        }
-      }
-    }catch(e){}
-    if(toShift===fromShift){
-      // Nếu trùng thì tự đổi sang ca khác
-      toShift = fromShift==='CA_SANG' ? 'CA_CHIEU' : fromShift==='CA_CHIEU' ? 'CA_TOI' : 'CA_SANG';
-    }
-  } else {
-    // TH2: không chọn người, thì mặc định đổi sang ca khác
-    toShift = fromShift==='CA_SANG' ? 'CA_CHIEU' : fromShift==='CA_CHIEU' ? 'CA_TOI' : 'CA_SANG';
-  }
+  if(myPendingSwap()) return showToast('Bạn đang có 1 phiếu chờ xử lý - chờ hoàn tất mới tạo phiếu mới','error');
   try{
-    const res=await api('/api/shift-swap', {method:'POST', body:JSON.stringify({requesterId:employee.employeeId, date, fromShift, toShift, targetEmployeeId: targetId||null, reason, doubleShift})});
-    showToast(res.message||'Đã gửi yêu cầu đổi ca','success');
+    shiftSwapSending=true;
+    if(swapFormType==='self') return await submitSelfSwap();
+    if(swapFormType==='cover') return await submitCoverSwap();
+    return await submitPeerSwap();
+  }finally{ shiftSwapSending=false; }
+}
+async function submitSelfSwap(){
+  const a=document.getElementById('selfA')?.value;
+  const b=document.getElementById('selfB')?.value;
+  const reason=document.getElementById('selfReason')?.value.trim()||'';
+  if(!a || !b) return showToast('Chọn đủ ngày gốc và ngày đổi bù','error');
+  if(a===b) return showToast('Hai ngày phải khác nhau','error');
+  if(!reason) return showToast('Vui lòng nhập lý do (bắt buộc)','error');
+  try{
+    const dayA = await getMyDay(a);
+    const dayB = await getMyDay(b);
+    let offDate = a, workDate = b;
+    if(dayA && dayA.status!=='OFF' && dayB && dayB.status==='OFF'){ offDate = b; workDate = a; }
+    const res=await api('/api/off-work-swap', {method:'POST', body:JSON.stringify({requesterId:employee.employeeId, offDate, workDate, reason})});
+    showToast(res.message||'Đã gửi thẳng Admin/HR duyệt','success');
     loadShiftSwap();
   }catch(e){ showToast(e.message,'error'); }
-  finally{ shiftSwapSending=false; }
+}
+async function getMyDay(dateStr){
+  try{
+    const list = await api('/api/schedules?employeeId='+employee.employeeId).catch(()=>[]);
+    const days = (Array.isArray(list)?list:[]).flatMap(s=>s.days||[]);
+    return days.find(d=>d.date===dateStr) || null;
+  }catch(e){ return null; }
+}
+async function submitPeerSwap(){
+  const date=document.getElementById('peerDate')?.value;
+  const fromShift=document.getElementById('peerMyShift')?.value || employee.shift;
+  const targetId=document.getElementById('peerTarget')?.value || '';
+  const toShift=document.getElementById('peerToShift')?.value || employee.shift;
+  const reason=document.getElementById('peerReason')?.value.trim()||'';
+  if(!date) return showToast('Chọn ngày của bạn','error');
+  if(!reason) return showToast('Vui lòng nhập lý do (bắt buộc)','error');
+  try{
+    const res=await api('/api/shift-swap', {method:'POST', body:JSON.stringify({requesterId:employee.employeeId, date, fromShift, toShift, targetEmployeeId: targetId||null, reason, doubleShift: fromShift!==toShift})});
+    showToast(res.message||'Đã gửi đồng nghiệp xác nhận','success');
+    loadShiftSwap();
+  }catch(e){ showToast(e.message,'error'); }
+}
+async function submitCoverSwap(){
+  const date=document.getElementById('coverDate')?.value;
+  const fromShift=document.getElementById('coverShift')?.value || employee.shift;
+  const targetId=document.getElementById('coverTarget')?.value || '';
+  const reason=document.getElementById('coverReason')?.value.trim()||'';
+  if(!date) return showToast('Chọn ngày của ca muốn nhường','error');
+  if(!targetId) return showToast('Chọn đồng nghiệp nhờ làm thay','error');
+  if(!reason) return showToast('Vui lòng nhập lý do (bắt buộc)','error');
+  try{
+    const res=await api('/api/shift-swap', {method:'POST', body:JSON.stringify({requesterId:employee.employeeId, date, fromShift, toShift: fromShift, targetEmployeeId: targetId, reason, doubleShift: true})});
+    showToast(res.message||'Đã gửi đồng nghiệp xác nhận','success');
+    loadShiftSwap();
+  }catch(e){ showToast(e.message,'error'); }
+}
+async function cancelShiftSwap(requestId){
+  if(!confirm('Hủy yêu cầu này? Bạn sẽ tạo được yêu cầu mới ngay.')) return;
+  try{
+    await api('/api/shift-swap/'+requestId+'/cancel', {method:'POST', body:JSON.stringify({employeeId:employee.employeeId})});
+    showToast('Đã hủy yêu cầu - bạn có thể tạo yêu cầu mới','success');
+    loadShiftSwap();
+  }catch(e){ showToast(e.message,'error'); }
 }
 async function respondShiftSwap(requestId, action){
   try{
@@ -2429,65 +2520,11 @@ async function respondShiftSwap(requestId, action){
       }
     }
     await api('/api/shift-swap/'+requestId+'/respond', {method:'POST', body:JSON.stringify({employeeId:employee.employeeId, action, doubleShift})});
-    const msg = doubleShift ? 'Đã chấp nhận đổi ca - bạn sẽ làm 2 ca (ca của bạn + ca người nhờ)' : (action==='ACCEPT'?'Đã chấp nhận đổi ca':'Đã từ chối');
+    const msg = action==='ACCEPT' ? 'Đã chấp nhận - phiếu chuyển sang chờ HR/Admin duyệt' : 'Đã từ chối - phiếu đổi ca đã hủy';
     showToast(msg,'success');
     loadShiftSwap();
   }catch(e){ showToast(e.message,'error'); }
 }
-// Đổi OFF <-> ca làm: mở bằng key 1 lần do Admin cấp, gửi xong khóa ngay
-function swapKeyStorage(){ return 'swapKey_'+((employee&&employee.employeeId)||'me'); }
-function setOffWorkLock(locked){
-  const form=document.getElementById('offWorkForm');
-  const box=document.getElementById('offWorkKeyBox');
-  const note=document.getElementById('offWorkLockedNote');
-  if(form) form.classList.toggle('hidden', locked);
-  if(box) box.classList.toggle('hidden', !locked);
-  if(note) note.classList.toggle('hidden', !locked);
-}
-async function activateOffWorkKey(){
-  const code=(document.getElementById('offWorkKey')?.value||'').trim().toUpperCase();
-  if(!code) return showToast('Nhập key Admin cấp','error');
-  try{
-    await api('/api/swap-keys/activate', {method:'POST', body:JSON.stringify({employeeId:employee.employeeId, code})});
-    try{ localStorage.setItem(swapKeyStorage(), code); }catch(e){}
-    setOffWorkLock(false);
-    showToast('Key hợp lệ - form đã mở cho 1 lần đổi','success');
-  }catch(e){ showToast(e.message,'error'); }
-}
-async function submitOffWorkSwap(){
-  const code=(function(){ try{ return localStorage.getItem(swapKeyStorage())||''; }catch(e){ return ''; } })();
-  if(!code){ setOffWorkLock(true); return showToast('Form đang khóa - nhập key Admin cấp để mở','error'); }
-  const offDate=document.getElementById('offWorkOffDate')?.value;
-  const workDate=document.getElementById('offWorkWorkDate')?.value;
-  const reason=document.getElementById('offWorkReason')?.value.trim()||'';
-  if(!offDate || !workDate) return showToast('Chọn đủ ngày OFF và ngày làm','error');
-  if(!reason) return showToast('Vui lòng nhập lý do (bắt buộc)','error');
-  try{
-    const res=await api('/api/off-work-swap', {method:'POST', body:JSON.stringify({requesterId:employee.employeeId, offDate, workDate, reason, swapCode:code})});
-    try{ localStorage.removeItem(swapKeyStorage()); }catch(e){}
-    const ki=document.getElementById('offWorkKey'); if(ki) ki.value='';
-    setOffWorkLock(true);
-    showToast((res.message||'Đã gửi yêu cầu đổi OFF ↔ ca làm')+' - key đã dùng, form đã khóa','success');
-    loadShiftSwap();
-  }catch(e){
-    if(/key/i.test(e.message||'')){ try{ localStorage.removeItem(swapKeyStorage()); }catch(_){} setOffWorkLock(true); }
-    showToast(e.message,'error');
-  }
-}
-async function loadOffWorkSwap(){
-  const el=document.getElementById('myOffWorkList');
-  if(!el) return;
-  try{
-    const list=await api('/api/shift-swap?employeeId='+employee.employeeId).catch(()=>[]);
-    const mine=(Array.isArray(list)?list:[]).filter(r=>r.type==='OFF_WORK_SWAP');
-    el.innerHTML=mine.map(r=>`
-      <div class="border rounded-xl p-3 ${r.status==='PENDING'?'bg-emerald-50 border-emerald-200':'bg-white'}">
-        <div class="flex justify-between items-start"><span class="font-bold text-sm">OFF ${fmtDMY(r.offDate)} ↔ Làm ${fmtDMY(r.workDate)}</span><span class="text-[11px] font-black px-2 py-1 rounded-full ${r.status==='PENDING'?'bg-emerald-500 text-white':r.status==='APPROVED'?'bg-slate-900 text-white':'bg-red-100 text-red-700'}">${getStatusVi(r.status)}</span></div>
-        <div class="text-xs text-slate-500 mt-1">Lý do: ${r.reason||'—'}</div>
-      </div>`).join('')||'<div class="text-xs text-slate-400 text-center py-2">Chưa có yêu cầu OFF ↔ ca làm</div>';
-  }catch(e){ el.innerHTML='<div class="text-xs text-slate-400 text-center py-2">Không tải được</div>'; }
-}
-
 // Device
 async function loadDevice(){
   // key info - bảo vệ null access khi element chưa tồn tại trong DOM
