@@ -31,6 +31,14 @@ describe('Phase 4: Mascot Bò Sữa & Voice Jingle Suite', () => {
     assert.strictEqual(content.includes('speechSynthesis'), true);
   });
 
+  it('4b. Employee co the keo-tha bo sua (drag, nho vi tri)', () => {
+    const mascotPath = path.join(__dirname, '..', 'public', 'js', 'mascot.js');
+    const content = fs.readFileSync(mascotPath, 'utf8');
+    assert.strictEqual(content.includes('mascot_pos'), true);
+    assert.strictEqual(content.includes('pointerdown'), true);
+    assert.strictEqual(content.includes('setPointerCapture'), true);
+  });
+
   it('4. admin.html and employee.html include mascot.js script tag', () => {
     const adminHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'admin.html'), 'utf8');
     const empHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'employee.html'), 'utf8');
