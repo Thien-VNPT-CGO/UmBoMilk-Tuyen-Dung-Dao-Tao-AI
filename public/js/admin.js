@@ -6092,27 +6092,32 @@ async function loadOffWorkAdmin(){
   try{
     const list=await api('/api/off-work-swap', {headers:{Authorization:'Bearer '+token}});
     if(!list.length) return el.innerHTML='<div class="p-8 text-center text-sm text-slate-400">Chưa có yêu cầu OFF ↔ ca làm nào</div>';
-    el.innerHTML=list.map(r=>`
+    el.innerHTML=list.map(r=>{
+      const desc = (r.date && r.toType)
+        ? (r.toType === 'OFF' ? `Đổi ngày ${fmtDMY(r.date)} sang Nghỉ (OFF)` : `Đổi ngày ${fmtDMY(r.date)} sang Ca làm (${r.workShift || 'CA'})`)
+        : `OFF ${fmtDMY(r.offDate)} ↔ Làm ${fmtDMY(r.workDate)}`;
+      return `
       <div class="p-3 border-b border-emerald-50 last:border-0">
         <div class="flex justify-between items-start gap-3">
           <div class="min-w-0 flex-1">
             <div class="font-bold text-sm">${r.requesterName} <span class="font-mono text-xs text-slate-500">${r.requesterId}</span> <span class="text-[11px] font-black px-2 py-0.5 rounded-full border ${r.status==='PENDING'?'bg-emerald-100 text-emerald-700 border-emerald-200':r.status==='APPROVED'?'bg-slate-900 text-white':'bg-red-100 text-red-700'}">${r.status}</span></div>
-            <div class="text-xs text-slate-600 mt-1">${r.branchId} • OFF ${fmtDMY(r.offDate)} ↔ Làm ${fmtDMY(r.workDate)} • Lý do: ${r.reason||'—'}</div>
+            <div class="text-xs text-slate-600 mt-1">${r.branchId} • ${desc} • Lý do: ${r.reason||'—'}</div>
           </div>
         </div>
         ${r.status==='PENDING'?`<div class="mt-2 flex gap-2 pt-2 border-t border-slate-100">
-          <button onclick="handleOffWorkAdmin('${r.id}','approve')" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold">Duyệt (lật 2 ngày)</button>
+          <button onclick="handleOffWorkAdmin('${r.id}','approve')" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold">Duyệt</button>
           <button onclick="handleOffWorkAdmin('${r.id}','reject')" class="px-3 py-1 bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 rounded-lg text-xs font-bold">Từ chối</button>
         </div>`:''}
         ${r.status==='APPROVED'?`<div class="mt-2 flex gap-2 pt-2 border-t border-slate-100">
           <button onclick="handleOffWorkAdmin('${r.id}','revoke')" class="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold shadow-sm">Thu hồi (hoàn lịch)</button>
         </div>`:''}
-      </div>`).join('');
+      </div>`;
+    }).join('');
   }catch(e){ el.innerHTML='<div class="p-8 text-center text-sm text-slate-400">Không tải được</div>'; }
 }
 async function handleOffWorkAdmin(id, action){
   try{
-    if(action==='revoke' && !confirm('Thu hồi phiếu OFF ↔ ca làm này? 2 ngày lịch sẽ lật về như trước khi duyệt.')) return;
+    if(action==='revoke' && !confirm('Thu hồi phiếu OFF ↔ ca làm này? Lịch sẽ lật về như trước khi duyệt.')) return;
     const res=await api('/api/off-work-swap/'+id+'/'+action, {method:'POST', headers:{Authorization:'Bearer '+token}});
     showToast(res.message||'Đã xử lý','success');
     loadOffWorkAdmin();

@@ -2115,12 +2115,14 @@ async function loadOff(){
         </div>
       `;
       const offDatesEl=document.getElementById('offDates');
+      const prevChecked = new Set([...document.querySelectorAll('.offCheck:checked')].map(c=>c.value));
       offDatesEl.innerHTML = dates.map(d=>{
         // Giờ VN mặc định: parse YYYY-MM-DD theo parts, không phụ thuộc múi giờ máy
         const dp = String(d).split('T')[0].split('-').map(Number);
         const dayIdx = (dp.length===3 && !isNaN(dp[0])) ? new Date(dp[0], dp[1]-1, dp[2]).getDay() : new Date(d).getDay();
         const dayName=['CN','T2','T3','T4','T5','T6','T7'][dayIdx];
-        return `<label class="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-2 cursor-pointer hover:bg-sky-50"><input type="checkbox" value="${d}" class="offCheck rounded"> <span class="text-xs font-bold">${dayName} ${fmtDMY(d)}</span></label>`;
+        const isChk = prevChecked.has(d) ? ' checked' : '';
+        return `<label class="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-2 cursor-pointer hover:bg-sky-50"><input type="checkbox" value="${d}" class="offCheck rounded"${isChk}> <span class="text-xs font-bold">${dayName} ${fmtDMY(d)}</span></label>`;
       }).join('');
     }
 
@@ -2391,53 +2393,182 @@ async function loadShiftSwap(){
         <div class="mt-2 flex gap-2"><button onclick="respondShiftSwap('${r.id}','ACCEPT')" class="flex-1 bg-emerald-600 text-white text-xs font-bold py-1.5 rounded-lg">✅ Chấp nhận${isDifferentShift?' (2 ca)':''}</button><button onclick="respondShiftSwap('${r.id}','REJECT')" class="flex-1 bg-white border text-xs font-bold py-1.5 rounded-lg">Từ chối</button></div>
       </div>`;
     }).join('') || '<div class="text-xs text-slate-400 text-center py-2">Không có lời mời đổi ca</div>';
-    renderSwapForm();
+    const savedDraft=loadSwapDraft();
+    if(savedDraft.swapType){ const savedRadio=document.querySelector('input[name="swapType"][value="'+savedDraft.swapType+'"]'); if(savedRadio) savedRadio.checked=true; }
+    // Chỉ render lại form nếu box rỗng hoặc chưa có trường input/select/textarea nào
+    const box = document.getElementById('swapDynamicForm');
+    if(box && (!box.firstElementChild || !box.querySelector('input,select,textarea'))){
+      renderSwapForm();
+    }
     applyShiftSwapLocks();
   }catch(e){ console.error('loadShiftSwap',e); }
 }
 function peerTargetOptions(selected){
   const emps = Array.isArray(window._swapBranchEmps)?window._swapBranchEmps:[];
-  const opts = emps.filter(e=>e.employeeId!==employee.employeeId && e.status==='OFFICIAL').map(e=>`<option value="${e.employeeId}">${e.name} - ${getShiftVi(normalizeShift(e.shift))}</option>`).join('');
-  return `<option value="">-- Không chọn (gửi toàn bộ chi nhánh) --</option>` + opts;
+  const opts = emps.filter(e=>e.employeeId!==employee.employeeId && e.status==='OFFICIAL').map(e=>`<option value="${e.employeeId}"${e.employeeId===selected?' selected':''}>${e.name} (${getShiftVi(normalizeShift(e.shift))})</option>`).join('');
+  return `<option value="">-- Chọn đồng nghiệp (cùng chi nhánh) --</option>` + opts;
 }
 function shiftOptions(selected){
-  return ['CA_SANG','CA_CHIEU','CA_TOI'].map(s=>`<option value="${s}"${s===selected?' selected':''}>${s==='CA_SANG'?'Ca Sáng (07:00-12:00)':s==='CA_CHIEU'?'Ca Chiều (12:00-18:00)':'Ca Tối (18:00-23:00)'}</option>`).join('');
+  return [
+    { value: 'CA_SANG', label: 'CA_SANG (7:00 - 12:00)' },
+    { value: 'CA_CHIEU', label: 'CA_CHIEU (12:00 - 18:00)' },
+    { value: 'CA_TOI', label: 'CA_TOI (18:00 - 23:00)' }
+  ].map(s=>`<option value="${s.value}"${s.value===selected?' selected':''}>${s.label}</option>`).join('');
 }
-function renderSwapForm(){
+function shiftAndOffOptions(selected){
+  return [
+    { value: 'CA_SANG', label: 'CA_SANG (7:00 - 12:00)' },
+    { value: 'CA_CHIEU', label: 'CA_CHIEU (12:00 - 18:00)' },
+    { value: 'CA_TOI', label: 'CA_TOI (18:00 - 23:00)' },
+    { value: 'OFF', label: 'Ngày OFF' }
+  ].map(s=>`<option value="${s.value}"${s.value===selected?' selected':''}>${s.label}</option>`).join('');
+}
+function swapDraftKey(){ return 'shiftSwapDraft_'+((employee&&employee.employeeId)||'me'); }
+function snapshotSwapForm(){
+  const snap = {};
+  ['selfDate','selfShift','selfReason','peerDate','peerMyShift','peerTargetDate','peerTarget','peerToShift','peerReason','coverDate','coverShift','coverTarget','coverReason'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el) snap[id] = el.value;
+  });
+  const r = document.querySelector('input[name="selfTo"]:checked');
+  if(r) snap.selfTo = r.value;
+  snap.swapType = swapFormType;
+  return snap;
+}
+function saveSwapDraft(){
+  try{
+    const prev = loadSwapDraft();
+    const snap = snapshotSwapForm();
+    localStorage.setItem(swapDraftKey(), JSON.stringify({ ...prev, ...snap }));
+  }catch(e){}
+}
+function loadSwapDraft(){
+  try{ return JSON.parse(localStorage.getItem(swapDraftKey())||'{}'); }catch(e){ return {}; }
+}
+function clearSwapDraft(){
+  try{ localStorage.removeItem(swapDraftKey()); }catch(e){}
+}
+function restoreSwapForm(snap){
+  if(!snap) return;
+  Object.keys(snap).forEach(k=>{
+    if(k==='swapType') return;
+    if(k==='selfTo'){
+      const r = document.querySelector(`input[name="selfTo"][value="${snap[k]}"]`);
+      if(r) r.checked = true;
+    } else {
+      const el = document.getElementById(k);
+      if(el) el.value = snap[k];
+    }
+  });
+  if(swapFormType==='self') toggleSelfShift();
+}
+function toggleSelfShift(){
+  const r = document.querySelector('input[name="selfTo"]:checked');
+  const val = r ? r.value : 'OFF';
+  const wrap = document.getElementById('selfShiftWrap');
+  if(wrap){
+    if(val === 'WORKING') wrap.classList.remove('hidden');
+    else wrap.classList.add('hidden');
+  }
+}
+function renderSwapForm(forceReset=false){
+  const current = snapshotSwapForm();
+  if(Object.keys(current).length>1 && !forceReset) saveSwapDraft();
+  const saved = forceReset ? {} : loadSwapDraft();
   const checked = document.querySelector('input[name="swapType"]:checked');
-  swapFormType = checked ? checked.value : 'self';
+  swapFormType = checked ? checked.value : (saved.swapType || 'self');
+  if(saved.swapType && !checked){ const radio=document.querySelector('input[name="swapType"][value="'+saved.swapType+'"]'); if(radio) radio.checked=true; }
   const g = document.getElementById('swapTypeGuide');
   if(g) g.textContent = SWAP_GUIDES[swapFormType] || '';
   const box = document.getElementById('swapDynamicForm');
   if(!box) return;
   if(swapFormType==='self'){
-    box.innerHTML = `<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div><label class="text-xs font-bold text-slate-700">Ngày gốc (ca làm hoặc OFF muốn đổi)</label><input id="selfA" type="date" class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm outline-none"></div>
-        <div><label class="text-xs font-bold text-slate-700">Ngày đổi bù (OFF hoặc ca làm tương ứng)</label><input id="selfB" type="date" class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm outline-none"></div>
-      </div>
-      <div class="mt-3"><label class="text-xs font-bold text-slate-700">Lý do <span class="text-red-500">*</span></label><textarea id="selfReason" rows="2" placeholder="VD: bận việc gia đình, đi khám bệnh..." class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm outline-none"></textarea></div>
-      <button onclick="submitShiftSwap()" class="w-full mt-3 text-white font-black py-3.5 rounded-2xl shadow text-sm" style="background:linear-gradient(135deg,#10b981,#059669)"><i class="fa-solid fa-paper-plane mr-2"></i>Gửi thẳng Admin/HR duyệt</button>`;
+    box.innerHTML = `<div class="space-y-3">
+        <div>
+          <label class="text-xs font-bold text-slate-700">1. Ngày cần đổi <span class="text-red-500">*</span></label>
+          <input id="selfDate" type="date" class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm outline-none focus:border-pink-500 focus:ring-2 focus:ring-pink-100">
+        </div>
+        <div>
+          <label class="text-xs font-bold text-slate-700">2. Đổi sang (Nghỉ hoặc ca làm) chọn 1 trong 2 <span class="text-red-500">*</span></label>
+          <div class="flex gap-4 mt-2">
+            <label class="inline-flex items-center text-xs font-bold text-slate-700 cursor-pointer bg-pink-50/60 border border-pink-200 px-3 py-2 rounded-xl"><input type="radio" name="selfTo" value="OFF" checked onchange="toggleSelfShift(); saveSwapDraft();" class="mr-2 accent-pink-600"> Nghỉ (OFF)</label>
+            <label class="inline-flex items-center text-xs font-bold text-slate-700 cursor-pointer bg-pink-50/60 border border-pink-200 px-3 py-2 rounded-xl"><input type="radio" name="selfTo" value="WORKING" onchange="toggleSelfShift(); saveSwapDraft();" class="mr-2 accent-pink-600"> Ca làm</label>
+          </div>
+        </div>
+        <div id="selfShiftWrap" class="hidden">
+          <label class="text-xs font-bold text-slate-700">3. Ca khi thành ngày làm <span class="text-red-500">*</span></label>
+          <select id="selfShift" class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm bg-white focus:border-pink-500 outline-none">${shiftOptions(employee.shift || 'CA_SANG')}</select>
+        </div>
+        <div>
+          <label class="text-xs font-bold text-slate-700">4. Lý do <span class="text-red-500">* (ràng buộc mặc định phải ghi)</span></label>
+          <textarea id="selfReason" rows="2" placeholder="Nhập lý do đổi ca/nghỉ..." class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm outline-none focus:border-pink-500 focus:ring-2 focus:ring-pink-100"></textarea>
+        </div>
+        <button type="button" onclick="submitShiftSwap(event)" class="w-full mt-2 text-white font-black py-3.5 rounded-2xl shadow text-sm transition active:scale-95" style="background:linear-gradient(135deg,#10b981,#059669)"><i class="fa-solid fa-paper-plane mr-2"></i>Gửi thẳng Admin/HR duyệt</button>
+      </div>`;
   } else if(swapFormType==='peer'){
-    box.innerHTML = `<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div><label class="text-xs font-bold text-slate-700">Ngày của bạn</label><input id="peerDate" type="date" class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm outline-none"></div>
-        <div><label class="text-xs font-bold text-slate-700">Ca / OFF của bạn muốn tráo</label><select id="peerMyShift" class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm bg-white">${shiftOptions(employee.shift)}<option value="OFF">Ngày OFF</option></select></div>
-      </div>
-      <div class="mt-3"><label class="text-xs font-bold text-slate-700">Đồng nghiệp (cùng chi nhánh)</label><select id="peerTarget" class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm bg-white">${peerTargetOptions()}</select></div>
-      <div class="mt-3"><label class="text-xs font-bold text-slate-700">Ca / OFF của đồng nghiệp muốn tráo</label><select id="peerToShift" class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm bg-white">${shiftOptions()}<option value="OFF">Ngày OFF</option></select></div>
-      <div class="mt-3"><label class="text-xs font-bold text-slate-700">Lý do <span class="text-red-500">*</span></label><textarea id="peerReason" rows="2" placeholder="Nhập lý do..." class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm outline-none"></textarea></div>
-      <button onclick="submitShiftSwap()" class="w-full mt-3 text-white font-black py-3.5 rounded-2xl shadow text-sm" style="background:linear-gradient(135deg,#06b6d4,#3b82f6)"><i class="fa-solid fa-paper-plane mr-2"></i>Gửi đồng nghiệp xác nhận</button>`;
+    box.innerHTML = `<div class="space-y-3">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs font-bold text-slate-700">1. Ngày của bạn <span class="text-red-500">*</span></label>
+            <input id="peerDate" type="date" class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm outline-none focus:border-pink-500">
+          </div>
+          <div>
+            <label class="text-xs font-bold text-slate-700">2. Ca / OFF của bạn muốn tráo <span class="text-red-500">*</span></label>
+            <select id="peerMyShift" class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm bg-white focus:border-pink-500">${shiftAndOffOptions(employee.shift)}</select>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs font-bold text-slate-700">3. Ngày của đồng nghiệp <span class="text-red-500">*</span></label>
+            <input id="peerTargetDate" type="date" class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm outline-none focus:border-pink-500">
+          </div>
+          <div>
+            <label class="text-xs font-bold text-slate-700">5. Ca / OFF của đồng nghiệp muốn tráo <span class="text-red-500">*</span></label>
+            <select id="peerToShift" class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm bg-white focus:border-pink-500">${shiftAndOffOptions()}</select>
+          </div>
+        </div>
+        <div>
+          <label class="text-xs font-bold text-slate-700">4. Đồng nghiệp (cùng chi nhánh) <span class="text-red-500">*</span></label>
+          <select id="peerTarget" class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm bg-white focus:border-pink-500">${peerTargetOptions()}</select>
+        </div>
+        <div>
+          <label class="text-xs font-bold text-slate-700">6. Lý do <span class="text-red-500">* (ràng buộc dữ liệu)</span></label>
+          <textarea id="peerReason" rows="2" placeholder="Nhập lý do tráo đổi..." class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm outline-none focus:border-pink-500 focus:ring-2 focus:ring-pink-100"></textarea>
+        </div>
+        <button type="button" onclick="submitShiftSwap(event)" class="w-full mt-2 text-white font-black py-3.5 rounded-2xl shadow text-sm transition active:scale-95" style="background:linear-gradient(135deg,#06b6d4,#3b82f6)"><i class="fa-solid fa-paper-plane mr-2"></i>Gửi đồng nghiệp xác nhận</button>
+      </div>`;
   } else {
-    box.innerHTML = `<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div><label class="text-xs font-bold text-slate-700">Ngày của ca muốn nhường</label><input id="coverDate" type="date" class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm outline-none"></div>
-        <div><label class="text-xs font-bold text-slate-700">Ca bạn muốn nhường</label><select id="coverShift" class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm bg-white">${shiftOptions(employee.shift)}</select></div>
-      </div>
-      <div class="mt-3"><label class="text-xs font-bold text-slate-700">Đồng nghiệp nhờ làm thay (cùng chi nhánh)</label><select id="coverTarget" class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm bg-white">${peerTargetOptions()}</select></div>
-      <div class="mt-3"><label class="text-xs font-bold text-slate-700">Lý do <span class="text-red-500">*</span></label><textarea id="coverReason" rows="2" placeholder="Nhập lý do..." class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm outline-none"></textarea></div>
-      <button onclick="submitShiftSwap()" class="w-full mt-3 text-white font-black py-3.5 rounded-2xl shadow text-sm" style="background:linear-gradient(135deg,#f59e0b,#f97316)"><i class="fa-solid fa-paper-plane mr-2"></i>Gửi đồng nghiệp xác nhận</button>`;
+    box.innerHTML = `<div class="space-y-3">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs font-bold text-slate-700">1. Ngày của ca muốn nhường <span class="text-red-500">*</span></label>
+            <input id="coverDate" type="date" class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm outline-none focus:border-pink-500">
+          </div>
+          <div>
+            <label class="text-xs font-bold text-slate-700">2. Ca bạn muốn nhường (mặc định ca hiện tại, không được tuỳ chỉnh)</label>
+            <select id="coverShift" disabled class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm bg-slate-100 text-slate-600 cursor-not-allowed">${shiftOptions(employee.shift)}</select>
+          </div>
+        </div>
+        <div>
+          <label class="text-xs font-bold text-slate-700">3. Đồng nghiệp nhờ làm thay (cùng chi nhánh) <span class="text-red-500">*</span></label>
+          <select id="coverTarget" class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm bg-white focus:border-pink-500">${peerTargetOptions()}</select>
+        </div>
+        <div>
+          <label class="text-xs font-bold text-slate-700">4. Lý do <span class="text-red-500">* (ràng buộc dữ liệu)</span></label>
+          <textarea id="coverReason" rows="2" placeholder="Nhập lý do nhờ làm thay..." class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm outline-none focus:border-pink-500 focus:ring-2 focus:ring-pink-100"></textarea>
+        </div>
+        <button type="button" onclick="submitShiftSwap(event)" class="w-full mt-2 text-white font-black py-3.5 rounded-2xl shadow text-sm transition active:scale-95" style="background:linear-gradient(135deg,#f59e0b,#f97316)"><i class="fa-solid fa-paper-plane mr-2"></i>Gửi đồng nghiệp xác nhận</button>
+      </div>`;
   }
+  restoreSwapForm(saved.swapType===swapFormType ? saved : current);
+  box.querySelectorAll('input,select,textarea').forEach(n=>{
+    n.addEventListener('change', saveSwapDraft);
+    n.addEventListener('input', saveSwapDraft);
+  });
 }
 let shiftSwapSending=false;
-async function submitShiftSwap(){
+async function submitShiftSwap(e){
+  if(e) try{ e.preventDefault(); }catch(_){}
   if(shiftSwapSending) return showToast('Đang gửi, vui lòng đợi...','info');
   if(myPendingSwap()) return showToast('Bạn đang có 1 phiếu chờ xử lý - chờ hoàn tất mới tạo phiếu mới','error');
   try{
@@ -2448,19 +2579,28 @@ async function submitShiftSwap(){
   }finally{ shiftSwapSending=false; }
 }
 async function submitSelfSwap(){
-  const a=document.getElementById('selfA')?.value;
-  const b=document.getElementById('selfB')?.value;
+  const selfDate=document.getElementById('selfDate')?.value;
+  const selfToRadio=document.querySelector('input[name="selfTo"]:checked');
+  const selfTo=selfToRadio ? selfToRadio.value : 'OFF';
+  const selfShift=document.getElementById('selfShift')?.value || employee.shift || 'CA_SANG';
   const reason=document.getElementById('selfReason')?.value.trim()||'';
-  if(!a || !b) return showToast('Chọn đủ ngày gốc và ngày đổi bù','error');
-  if(a===b) return showToast('Hai ngày phải khác nhau','error');
-  if(!reason) return showToast('Vui lòng nhập lý do (bắt buộc)','error');
+  if(!selfDate) return showToast('Vui lòng chọn ngày cần đổi','error');
+  if(selfTo==='WORKING' && !selfShift) return showToast('Vui lòng chọn ca khi thành ngày làm','error');
+  if(!reason) return showToast('Lý do là bắt buộc - vui lòng nhập lý do đổi','error');
   try{
-    const dayA = await getMyDay(a);
-    const dayB = await getMyDay(b);
-    let offDate = a, workDate = b;
-    if(dayA && dayA.status!=='OFF' && dayB && dayB.status==='OFF'){ offDate = b; workDate = a; }
-    const res=await api('/api/off-work-swap', {method:'POST', body:JSON.stringify({requesterId:employee.employeeId, offDate, workDate, reason})});
+    const res=await api('/api/off-work-swap', {
+      method:'POST',
+      body:JSON.stringify({
+        requesterId:employee.employeeId,
+        date: selfDate,
+        toType: selfTo,
+        workShift: (selfTo==='WORKING'?selfShift:null),
+        reason
+      })
+    });
+    clearSwapDraft();
     showToast(res.message||'Đã gửi thẳng Admin/HR duyệt','success');
+    renderSwapForm(true);
     loadShiftSwap();
   }catch(e){ showToast(e.message,'error'); }
 }
@@ -2472,30 +2612,60 @@ async function getMyDay(dateStr){
   }catch(e){ return null; }
 }
 async function submitPeerSwap(){
-  const date=document.getElementById('peerDate')?.value;
-  const fromShift=document.getElementById('peerMyShift')?.value || employee.shift;
-  const targetId=document.getElementById('peerTarget')?.value || '';
-  const toShift=document.getElementById('peerToShift')?.value || employee.shift;
+  const peerDate=document.getElementById('peerDate')?.value;
+  const peerMyShift=document.getElementById('peerMyShift')?.value || employee.shift;
+  const peerTargetDate=document.getElementById('peerTargetDate')?.value;
+  const peerTarget=document.getElementById('peerTarget')?.value || '';
+  const peerToShift=document.getElementById('peerToShift')?.value || employee.shift;
   const reason=document.getElementById('peerReason')?.value.trim()||'';
-  if(!date) return showToast('Chọn ngày của bạn','error');
-  if(!reason) return showToast('Vui lòng nhập lý do (bắt buộc)','error');
+  if(!peerDate) return showToast('Vui lòng chọn ngày của bạn','error');
+  if(!peerTargetDate) return showToast('Vui lòng chọn ngày của đồng nghiệp','error');
+  if(!peerTarget) return showToast('Vui lòng chọn đồng nghiệp cùng chi nhánh','error');
+  if(!reason) return showToast('Lý do là bắt buộc - vui lòng nhập lý do tráo ca','error');
   try{
-    const res=await api('/api/shift-swap', {method:'POST', body:JSON.stringify({requesterId:employee.employeeId, date, fromShift, toShift, targetEmployeeId: targetId||null, reason, doubleShift: fromShift!==toShift})});
+    const res=await api('/api/shift-swap', {
+      method:'POST',
+      body:JSON.stringify({
+        requesterId:employee.employeeId,
+        date:peerDate,
+        fromShift:peerMyShift,
+        toShift:peerToShift,
+        targetEmployeeId:peerTarget,
+        targetDate:peerTargetDate,
+        reason,
+        doubleShift: peerMyShift!==peerToShift
+      })
+    });
+    clearSwapDraft();
     showToast(res.message||'Đã gửi đồng nghiệp xác nhận','success');
+    renderSwapForm(true);
     loadShiftSwap();
   }catch(e){ showToast(e.message,'error'); }
 }
 async function submitCoverSwap(){
-  const date=document.getElementById('coverDate')?.value;
-  const fromShift=document.getElementById('coverShift')?.value || employee.shift;
-  const targetId=document.getElementById('coverTarget')?.value || '';
+  const coverDate=document.getElementById('coverDate')?.value;
+  const coverShift=employee.shift || 'CA_SANG';
+  const coverTarget=document.getElementById('coverTarget')?.value || '';
   const reason=document.getElementById('coverReason')?.value.trim()||'';
-  if(!date) return showToast('Chọn ngày của ca muốn nhường','error');
-  if(!targetId) return showToast('Chọn đồng nghiệp nhờ làm thay','error');
-  if(!reason) return showToast('Vui lòng nhập lý do (bắt buộc)','error');
+  if(!coverDate) return showToast('Vui lòng chọn ngày của ca muốn nhường','error');
+  if(!coverTarget) return showToast('Vui lòng chọn đồng nghiệp nhờ làm thay (cùng chi nhánh)','error');
+  if(!reason) return showToast('Lý do là bắt buộc - vui lòng nhập lý do nhờ làm thay','error');
   try{
-    const res=await api('/api/shift-swap', {method:'POST', body:JSON.stringify({requesterId:employee.employeeId, date, fromShift, toShift: fromShift, targetEmployeeId: targetId, reason, doubleShift: true})});
+    const res=await api('/api/shift-swap', {
+      method:'POST',
+      body:JSON.stringify({
+        requesterId:employee.employeeId,
+        date:coverDate,
+        fromShift:coverShift,
+        toShift:coverShift,
+        targetEmployeeId:coverTarget,
+        reason,
+        doubleShift:true
+      })
+    });
+    clearSwapDraft();
     showToast(res.message||'Đã gửi đồng nghiệp xác nhận','success');
+    renderSwapForm(true);
     loadShiftSwap();
   }catch(e){ showToast(e.message,'error'); }
 }
