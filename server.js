@@ -217,7 +217,12 @@ let db = {
   leaveRequests: [],
   driveFiles: [],
   payrollSnapshots: [],
-  financeKeys: []
+  financeKeys: [],
+  cashflowKeys: [],
+  cashflowFundAccounts: [],
+  cashflowExpenses: [],
+  cashflowRecurringBills: [],
+  cashflowTransactions: []
 };
 
 // === SYSTEM RESET LOCK (Ngăn chặn background sync ghi đè/hồi sinh dữ liệu khi đang reset) ===
@@ -320,6 +325,11 @@ function loadDB() {
       if (!db.driveFiles) db.driveFiles = [];
       if (!db.payrollSnapshots) db.payrollSnapshots = [];
       if (!db.financeKeys) db.financeKeys = [];
+      if (!db.cashflowKeys) db.cashflowKeys = [];
+      if (!db.cashflowFundAccounts) db.cashflowFundAccounts = [];
+      if (!db.cashflowExpenses) db.cashflowExpenses = [];
+      if (!db.cashflowRecurringBills) db.cashflowRecurringBills = [];
+      if (!db.cashflowTransactions) db.cashflowTransactions = [];
       if (!db.overtimeRequests) db.overtimeRequests = [];
       if (!db.leaveRequests) db.leaveRequests = [];
       // Tự động chuẩn hóa branchPreference và shiftPreference nếu chưa có
@@ -365,6 +375,7 @@ function saveDB() {
     if(Array.isArray(clone.swapKeys)) clone.swapKeys = clone.swapKeys.filter(r => !isTestRecord(r));
     if(Array.isArray(clone.unlockKeys)) clone.unlockKeys = clone.unlockKeys.filter(r => !isTestRecord(r));
     if(Array.isArray(clone.trainingShiftRequests)) clone.trainingShiftRequests = clone.trainingShiftRequests.filter(r => !isTestRecord(r));
+    if(Array.isArray(clone.shiftAssistanceAllowances)) clone.shiftAssistanceAllowances = clone.shiftAssistanceAllowances.filter(r => !isTestRecord(r));
     if(Array.isArray(clone.zaloRecords)) clone.zaloRecords = clone.zaloRecords.filter(z => !isTestRecord(z));
     if(clone.settings){
       if(clone.settings.googleSheet?.privateKey && !clone.settings.googleSheet.privateKey.startsWith('enc:') && clone.settings.googleSheet.privateKey.length>20 && !clone.settings.googleSheet.privateKey.includes('•')){
@@ -1216,9 +1227,13 @@ function calculatePayroll(employeeId, month){
     const amount = Math.round(hours*rate*multiplier);
     breakdown.push({date:a.date, shift:a.shift, hours, rate, multiplier, holidayName, amount, penalty, net: amount - penalty});
   });
+  const assistance = (db.shiftAssistanceAllowances||[]).filter(a=>a.employeeId===employeeId && a.date.startsWith(month) && a.status==='APPROVED');
+  const allowanceAmount=assistance.reduce((s,a)=>s+Number(a.amount||0),0);
+  const allowanceCount=assistance.length;
   const gross = breakdown.reduce((s,b)=>s+b.amount,0);
-  const net = gross - totalPenalty;
-  return { employeeId, name: emp.name, type: emp.type, rate, totalHours, gross, totalPenalty, net, holidayBonus, breakdown, month };
+  const grossWithAllowance=gross+allowanceAmount;
+  const net = grossWithAllowance - totalPenalty;
+  return { employeeId, name: emp.name, type: emp.type, rate, totalHours, gross: grossWithAllowance, totalPenalty, net, holidayBonus, allowanceAmount, allowanceCount, allowances: assistance, breakdown, month };
 }
 // === OFFICIAL MONTHLY ATTENDANCE (T1→Cuối tháng) ===
 function getDaysInMonth(year, month){
@@ -6915,7 +6930,34 @@ app.post(['/api/training/shift-change/:id/reject', '/api/training/shift-requests
 // TH1: NV A chọn người thay thế cụ thể -> gửi đến đúng NV đó, nếu chấp nhận -> AI cập nhật lịch 2 NV ngay, nếu từ chối -> chuyển TH2
 // TH2: Không tìm được người -> gửi toàn chi nhánh, nếu có người chấp nhận -> AI tự duyệt sau 24h
 if(!db.shiftSwapRequests) db.shiftSwapRequests=[];
-app.post('/api/shift-swap', (req,res)=>{
+if(!db.shiftAssistanceAllowances) db.shiftAssistanceAllowances=[];
+const pendingShiftRequest = employeeId => (db.shiftSwapRequests||[]).find(r=>r.requesterId===employeeId && String(r.status).includes('PENDING'));
+const scheduleDay = (employeeId, date) => {
+  const schedule = db.schedules.find(s=>s.employeeId===employeeId && (s.days||[]).some(d=>d.date===date));
+  return schedule && schedule.days.find(d=>d.date===date);
+};
+function addShiftAssistanceAllowance(request, employeeId){
+  if(!request.isHrCreated || !employeeId) return null;
+  let allowance = db.shiftAssistanceAllowances.find(a=>a.requestId===request.id && a.employeeId===employeeId);
+  if(!allowance){
+    allowance={id:uuidv4(), requestId:request.id, employeeId, date:request.date, branchId:request.branchId, amount:30000, status:'APPROVED', createdAt:getVietnamISOString(), isTest:request.isTest||undefined};
+    db.shiftAssistanceAllowances.push(allowance);
+  }
+  return allowance;
+}
+// Admin: list all shift assistance allowances
+app.get('/api/admin/shift-assistances', authMiddleware, (req,res)=> res.json(db.shiftAssistanceAllowances||[]));
+function optionalEmployeeAuth(req,res,next){
+  const token=req.headers.authorization?.replace('Bearer ','');
+  if(!token) return next();
+  try{
+    req.user=jwt.verify(token,JWT_SECRET);
+    const bodyId=req.body.requesterId||req.body.employeeId;
+    if(req.user.employeeId && bodyId && req.user.employeeId!==bodyId) return res.status(403).json({error:'Không được thao tác thay nhân viên khác'});
+    next();
+  }catch(e){ return res.status(401).json({error:'Token không hợp lệ - vui lòng đăng nhập lại',code:'Invalid token'}); }
+}
+app.post('/api/shift-swap', optionalEmployeeAuth, (req,res)=>{
   // HR kiểm soát: chức năng đổi ca NV chỉ mở khi HR bật (Cài đặt)
   if(!(db.settings && db.settings.features && db.settings.features.employeeShiftSwap)){
     return res.status(403).json({error:'Chức năng đổi ca đang tạm khóa - vui lòng liên hệ HR mở.'});
@@ -6937,9 +6979,12 @@ app.post('/api/shift-swap', (req,res)=>{
   const finalToShift = toShift || (curShift==='CA_SANG'?'CA_CHIEU': curShift==='CA_CHIEU'?'CA_TOI':'CA_SANG');
   const targetEmp = targetEmployeeId ? db.employees.find(e=>e.employeeId===targetEmployeeId) : null;
   if(targetEmployeeId && !targetEmp) return res.status(404).json({error:'Không tìm thấy nhân viên thay thế'});
-  // Kiểm tra trùng request pending cùng ngày
-  const existing = db.shiftSwapRequests.find(r=>r.requesterId===requesterId && r.date===date && r.status.includes('PENDING'));
-  if(existing) return res.status(409).json({error:'Đã có yêu cầu đổi ca đang chờ cho ngày này', request: existing});
+  if(targetEmp && targetEmp.branchId!==emp.branchId) return res.status(403).json({error:'Chỉ nhân viên cùng chi nhánh mới được đổi ca'});
+  const requesterDay=scheduleDay(requesterId,date);
+  if(requesterDay && !['WORKING','WORKING_DOUBLE','SUBSTITUTE'].includes(requesterDay.status)) return res.status(400).json({error:'Ngày yêu cầu không phải ngày làm việc'});
+  if(targetEmp){ const td=scheduleDay(targetEmployeeId,date); if(td && !['WORKING','WORKING_DOUBLE','SUBSTITUTE','OFF'].includes(td.status)) return res.status(400).json({error:'Nhân viên thay thế không có lịch thực tế ngày này'}); }
+  const existing = pendingShiftRequest(requesterId);
+  if(existing) return res.status(409).json({error:'Bạn đang có một yêu cầu ca làm chờ xử lý', request: existing});
   const now = getVietnamNow();
   const expiresAt = new Date(now.getTime() + 24*60*60*1000).toISOString();
   const reqId = uuidv4();
@@ -7002,12 +7047,15 @@ app.get('/api/shift-swap', authMiddleware, (req,res)=>{
   if(status) list = list.filter(r=> r.status===status);
   res.json(list);
 });
-app.post('/api/shift-swap/:id/respond', (req,res)=>{
+app.post('/api/shift-swap/:id/respond', optionalEmployeeAuth, (req,res)=>{
   const { employeeId, action } = req.body; // ACCEPT / REJECT
   const r = db.shiftSwapRequests.find(x=>x.id===req.params.id);
   if(!r) return res.status(404).json({error:'Không tìm thấy yêu cầu'});
   const emp = db.employees.find(e=>e.employeeId===employeeId);
   if(!emp) return res.status(404).json({error:'Nhân viên không tồn tại'});
+  if(req.user?.employeeId && req.user.employeeId!==employeeId) return res.status(403).json({error:'Không được phản hồi thay nhân viên khác'});
+  if(emp.branchId!==r.branchId) return res.status(403).json({error:'Chỉ nhân viên cùng chi nhánh mới được hỗ trợ'});
+  const responderDay=scheduleDay(employeeId,r.date);
   if(r.status==='APPROVED' || r.status==='REJECTED' || r.status==='AUTO_APPROVED') return res.status(400).json({error:'Yêu cầu đã xử lý'});
   // Kiểm tra quyền: TH1 chỉ target mới được respond, TH2 thì bất kỳ NV cùng chi nhánh
   const isTarget = r.targetEmployeeId===employeeId;
@@ -7051,6 +7099,7 @@ app.post('/api/shift-swap/:id/respond', (req,res)=>{
       
       r.status='APPROVED'; r.acceptedBy=employeeId; r.acceptedAt=getVietnamISOString(); r.approvedAt=getVietnamISOString();
       r.doubleShift = isDoubleShift;
+      addShiftAssistanceAllowance(r, employeeId);
       function ensureSwapWeek(employeeIdSW, dateStr, empShift){
         const ws = toVietnamDateStr(getMonday(new Date(dateStr)));
         let sc = db.schedules.find(s=>s.employeeId===employeeIdSW && s.weekStart===ws);
@@ -7137,7 +7186,8 @@ app.post('/api/shift-swap/:id/respond', (req,res)=>{
       // TH2: ghi nhận người chấp nhận đầu tiên, nhưng chưa duyệt ngay - đợi 24h
       if(r.acceptedBy) return res.status(409).json({error:'Đã có người chấp nhận trước, đang chờ AI duyệt sau 24h', acceptedBy: r.acceptedBy});
       r.acceptedBy=employeeId; r.acceptedAt=getVietnamISOString();
-      r.status='PENDING_BROADCAST_ACCEPTED'; // chờ 24h
+      r.status='PENDING_BROADCAST_ACCEPTED';
+      if(r.isHrCreated) addShiftAssistanceAllowance(r, employeeId);
       audit(employeeId,'ACCEPT_SHIFT_SWAP_TH2','SHIFT_SWAP',null,r, req.ip);
       addSyncQueue('SHIFT_SWAP','UPDATE',r, employeeId, 'WEB_EMPLOYEE');
       saveDB();
@@ -7169,6 +7219,9 @@ app.post('/api/shift-swap/hr-broadcast', authMiddleware, roleCheck(['Admin','HR'
   if(emp.branchId && req.user.role==='Manager' && !req.user.branchScope.includes(emp.branchId)) return res.status(403).json({error:'Manager chỉ xử lý CN được phân quyền'});
   if(!date) return res.status(400).json({error:'Thiếu ngày'});
   if(!reason || !String(reason).trim()) return res.status(400).json({error:'Lý do bắt buộc'});
+  if(pendingShiftRequest(requesterId)) return res.status(409).json({error:'NV đang có yêu cầu ca làm chờ xử lý'});
+  const hrDay=scheduleDay(requesterId, date);
+  if(hrDay && !['WORKING','WORKING_DOUBLE','SUBSTITUTE'].includes(hrDay.status)) return res.status(400).json({error:'Ngày yêu cầu không phải ngày làm việc'});
   let curShift = fromShift;
   if(!curShift){
     const sched = db.schedules.find(s=>s.employeeId===requesterId && s.days.some(d=>d.date===date));
@@ -7212,13 +7265,14 @@ app.post('/api/shift-swap/hr-broadcast', authMiddleware, roleCheck(['Admin','HR'
 });
 // ============ ĐỔI OFF <-> CA LÀM (NV yêu cầu, Admin đổi thủ công) ============
 // NV Chính thức xin đổi: ngày OFF <-> ngày WORKING của chính mình. Admin/HR duyệt mới lật lịch.
-app.post('/api/off-work-swap', (req,res)=>{
+app.post('/api/off-work-swap', optionalEmployeeAuth, (req,res)=>{
   const requesterId = req.body.requesterId || req.body.employeeId || req.user?.employeeId;
   const { offDate, workDate, reason, swapCode } = req.body;
   const emp = db.employees.find(e=>e.employeeId===requesterId);
   if(!emp) return res.status(404).json({error:'Không tìm thấy nhân viên yêu cầu'});
   if(emp.type!=='OFFICIAL' && emp.status!=='OFFICIAL') return res.status(403).json({error:'Chỉ nhân viên Chính thức mới được đổi OFF <-> ca làm'});
-  // Key kích hoạt 1 lần do Admin cấp theo mã NV: bắt buộc, đúng NV, chưa dùng
+  const pendingReq=pendingShiftRequest(requesterId);
+  if(pendingReq) return res.status(409).json({error:'Bạn đang có một yêu cầu ca làm chờ xử lý', request:pendingReq});
   const code = String(swapCode||'').trim().toUpperCase();
   if(!code) return res.status(400).json({error:'Vui lòng nhập key kích hoạt do Admin cấp'});
   if(!db.swapKeys) db.swapKeys = [];
@@ -7458,6 +7512,8 @@ app.post('/api/schedules/manual-flip', authMiddleware, roleCheck(['Admin','HR','
   if(!['OFF','WORKING'].includes(toStatus)) return res.status(400).json({error:'toStatus chỉ nhận OFF hoặc WORKING'});
   const emp = db.employees.find(e=>e.employeeId===employeeId);
   if(!emp) return res.status(404).json({error:'Không tìm thấy nhân viên'});
+  const schedule = db.schedules.find(s=>s.employeeId===employeeId && (s.days||[]).some(d=>d.date===date));
+  if(req.user.role!=='Admin' && schedule && Array.isArray(db.settings?.off?.lockedWeeks) && db.settings.off.lockedWeeks.includes(schedule.weekStart)) return res.status(423).json({error:'Lịch tuần đã khóa. Chỉ Admin được sửa khẩn cấp'});
   if(emp.branchId && req.user.role==='Manager' && !req.user.branchScope.includes(emp.branchId)) return res.status(403).json({error:'Manager chỉ xử lý CN được phân quyền'});
   const before = db.schedules.find(s=>s.employeeId===employeeId && (s.days||[]).some(d=>d.date===date));
   const beforeDay = before ? {...before.days.find(d=>d.date===date)} : null;
@@ -7503,6 +7559,7 @@ app.post('/api/shift-swap/:id/approve', authMiddleware, roleCheck(['Admin','HR',
     }
   }
 
+  if(r.isHrCreated && r.acceptedBy) addShiftAssistanceAllowance(r, r.acceptedBy); else if(r.isHrCreated && targetId) addShiftAssistanceAllowance(r, targetId);
   audit(req.user.username,'APPROVE_SHIFT_SWAP_HR','SHIFT_SWAP',null,r,req.ip);
   addSyncQueue('SHIFT_SWAP','UPDATE',r,req.user.username,'WEB_HR');
   saveDB();
@@ -7918,7 +7975,7 @@ app.get('/api/schedules/approve-test-status', authMiddleware, roleCheck(['Admin'
   const locked = Array.isArray(db.settings?.off?.lockedWeeks) && db.settings.off.lockedWeeks.includes(nextWeekStart);
   const drafts = db.schedules.filter(s=> s.weekStart===nextWeekStart && s.approvalStatus==='PENDING_APPROVAL').length;
   const approved = db.schedules.filter(s=> s.weekStart===nextWeekStart && s.approvalStatus==='APPROVED').length;
-  const canApprove = vip || !windowOpen;
+  const canApprove = (vip || !windowOpen) && (req.user.role==='Admin' || !locked);
   // Ai khoa/luc nao (de HR doi chieu khi nut bi khoa ma khong nho da bam)
   let lockInfo = null;
   if(locked){
@@ -7933,6 +7990,8 @@ app.get('/api/schedules/approve-test-status', authMiddleware, roleCheck(['Admin'
 app.post('/api/schedules/approve-test-week', authMiddleware, roleCheck(['Admin','HR']), async (req,res)=>{
   const nextWeekStart = getNextWeekStartStr();
   const vip = !!db.settings?.off?.vipTestMode;
+  const locked = Array.isArray(db.settings?.off?.lockedWeeks) && db.settings.off.lockedWeeks.includes(nextWeekStart);
+  if(req.user.role!=='Admin' && locked) return res.status(423).json({error:'Tài khoản HR đã duyệt và khóa lịch tuần này. Chờ chu kỳ tiếp theo'});
   if(!vip && isOffWindowOpen()) return res.status(400).json({error:'Đang trong giờ đăng ký OFF (T6 12:00-T7 15:00). Nút duyệt mở sau 15h00 Thứ 7 (hoặc bật VIP test để duyệt test).'});
   // HR (không phải Admin) phải nhập key do Admin cấp (30 phút, 1 lần)
   const keyCheck = requireTestWeekKey(req);
@@ -9018,10 +9077,11 @@ app.post('/api/quiz/open', async (req,res)=>{
     const pool = Array.isArray(bank.questions)? bank.questions : [];
     if(pool.length === 0) return res.status(400).json({error:'Ngân hàng đề rỗng — không có câu hỏi trên Google Sheet'});
     const targetCount = Math.min(25, pool.length);
-    // Dùng lại ca thi đang mở nếu còn hiệu lực, tránh random lại khi NV tải lại trang
     const sess = emp.testSchedule;
+    const sessExpiresAt = sess?.expiresAt ? new Date(sess.expiresAt).getTime() : 0;
+    if(sess && sess.status==='IN_PROGRESS' && sessExpiresAt && sessExpiresAt<=Date.now()) sess.status='EXPIRED';
     let picked = null;
-    if(sess && sess.type==='ONLINE_QUIZ' && sess.status==='IN_PROGRESS' && Array.isArray(sess.questionIds) && sess.questionIds.length===targetCount){
+    if(sess && sess.type==='ONLINE_QUIZ' && sess.status==='IN_PROGRESS' && (!sessExpiresAt || sessExpiresAt>Date.now()) && Array.isArray(sess.questionIds) && sess.questionIds.length===targetCount){
       const valid = sess.questionIds.map(id=>pool.find(q=>q.id===id)).filter(Boolean);
       if(valid.length===targetCount) picked = valid;
     }
@@ -9033,7 +9093,9 @@ app.post('/api/quiz/open', async (req,res)=>{
       pickedQuestions: picked.map(q=>({ id:q.id, question:q.question, options:q.options, correct:q.correct, explanation:q.explanation })),
       status:'IN_PROGRESS',
       startedAt: getVietnamISOString(),
-      timeLimitSec: 8*60, // 8 phút cho 25 câu trắc nghiệm (bỏ ràng buộc 5s/câu)
+      createdAt: picked && sess?.createdAt ? sess.createdAt : getVietnamISOString(),
+      expiresAt: picked && sess?.expiresAt ? sess.expiresAt : new Date(Date.now()+24*60*60*1000).toISOString(),
+      timeLimitSec: 8*60,
       total: targetCount,
       openedBy: openedBy || emp.testSchedule?.openedBy || 'HR',
       force: true,
@@ -9041,10 +9103,12 @@ app.post('/api/quiz/open', async (req,res)=>{
     };
     emp.status='WAITING_TEST';
     emp.updated_at=getVietnamISOString();
+    if(openedBy && !db.notifications.some(n=>n.to===employeeId && n.type==='QUIZ_EXAM' && n.expiresAt===emp.testSchedule.expiresAt)) db.notifications.unshift({ id:uuidv4(), to:employeeId, type:'QUIZ_EXAM', title:'Bài thi chính thức đã sẵn sàng', content:'HR đã tạo đề thi 25 câu. Bài thi có hiệu lực trong 24 giờ.', createdAt:getVietnamISOString(), expiresAt:emp.testSchedule.expiresAt, read:false });
     audit(openedBy||'HR','OPEN_QUIZ','TEST',{employeeId},{total:targetCount, courseId: bank.id}, req.ip);
     saveDB();
     io.emit('employees:update', db.employees);
-    res.json({ success:true, courseId: bank.id, questions: picked.map(q=>({id:q.id, question:q.question, options:q.options})), questionIds: picked.map(q=>q.id), employee:{employeeId:emp.employeeId, name:emp.name, phone:emp.phone}, total: targetCount, timeLimitSec: 8*60 });
+    io.emit('notifications:update', db.notifications);
+    res.json({ success:true, courseId: bank.id, questions: picked.map(q=>({id:q.id, question:q.question, options:q.options})), questionIds: picked.map(q=>q.id), employee:{employeeId:emp.employeeId, name:emp.name, phone:emp.phone}, total: targetCount, timeLimitSec: 8*60, expiresAt:emp.testSchedule.expiresAt });
   }catch(e){ res.status(500).json({error:e.message}); }
 });
 app.post('/api/courses/:id/submit', (req,res)=>{
@@ -9056,7 +9120,9 @@ app.post('/api/courses/:id/submit', (req,res)=>{
   // Chốt đúng 25 câu của ca thi (chống tráo đề, đa tầng fallback bảo vệ tránh lỗi ID ca thi)
   const bank = Array.isArray(course.questions)? course.questions : [];
   const sess = emp.testSchedule;
-  const sessIds = (sess && sess.type==='ONLINE_QUIZ' && Array.isArray(sess.questionIds) && sess.questionIds.length===25) ? sess.questionIds : null;
+  if(!sess || sess.type!=='ONLINE_QUIZ' || sess.status!=='IN_PROGRESS') return res.status(409).json({error:'Bài thi không còn hiệu lực'});
+  if(sess.expiresAt && new Date(sess.expiresAt).getTime()<=Date.now()){ sess.status='EXPIRED'; saveDB(); return res.status(410).json({error:'Bài thi đã hết hạn 24 giờ'}); }
+  const sessIds = (Array.isArray(sess.questionIds) && sess.questionIds.length===25) ? sess.questionIds : null;
   const ids = (Array.isArray(questionIds) && questionIds.length===25) ? questionIds : (sessIds || bank.slice(0,25).map(q=>q.id));
   
   // Tầng 1: Tìm theo IDs trong ngân hàng câu hỏi
@@ -10589,6 +10655,38 @@ function financeAuthMiddleware(req,res,next){
     next();
   }catch(e){ return res.status(401).json({error:'Token không hợp lệ hoặc đã hết hạn - vui lòng đăng nhập lại', needLogin:true, expired:true}); }
 }
+const CASHFLOW_ACCOUNTS = {
+  'umbomilk@gmail.com': { level:3, name:'Admin Tổng' },
+  'thehung.170291@gmail.com': { level:1, name:'Level 1' },
+  'thaovo2604@gmail.com': { level:2, name:'Level 2' }
+};
+function cashflowExpiry(duration){ const d=new Date(); const days={ '24h':1, '7d':7, '30d':30, '6mo':183, '1y':365 }[duration]; d.setDate(d.getDate()+days); return d.toISOString(); }
+function cashflowRequiredLevels(amount){ return amount<2000000?[1]:amount<10000000?[1,2]:[1,2,3]; }
+function cashflowHash(amount, recipient, content, date){ return crypto.createHash('sha256').update([amount,recipient,content,date].map(v=>String(v).trim().toLowerCase()).join('|')).digest('hex'); }
+app.post('/api/cashflow-keys/grant', authMiddleware, roleCheck(['Admin']), (req,res)=>{
+  const email=String(req.body.email||'').trim().toLowerCase(), duration=req.body.duration;
+  if(!CASHFLOW_ACCOUNTS[email] || !['24h','7d','30d','6mo','1y'].includes(duration)) return res.status(400).json({error:'Email hoặc thời hạn không hợp lệ'});
+  db.cashflowKeys.filter(k=>k.email===email&&k.status==='ACTIVE').forEach(k=>k.status='REVOKED');
+  const rec={id:uuidv4(),email,key:`CASH-${crypto.randomBytes(6).toString('hex').toUpperCase()}`,duration,expiresAt:cashflowExpiry(duration),status:'ACTIVE',createdAt:getVietnamISOString(),createdBy:req.user.username};
+  db.cashflowKeys.unshift(rec); saveDB(); audit(req.user.username,'GRANT_CASHFLOW_KEY','CASHFLOW_KEY',null,rec,req.ip); res.json(rec);
+});
+app.get('/api/cashflow-keys', authMiddleware, roleCheck(['Admin']), (req,res)=>{ db.cashflowKeys.forEach(k=>{if(k.status==='ACTIVE'&&new Date(k.expiresAt)<=new Date()) k.status='EXPIRED';}); saveDB(); res.json(db.cashflowKeys); });
+app.post('/api/cashflow-keys/:id/revoke', authMiddleware, roleCheck(['Admin']), (req,res)=>{ const k=db.cashflowKeys.find(k=>k.id===req.params.id); if(!k)return res.status(404).json({error:'Không tìm thấy key'}); k.status='REVOKED'; saveDB(); res.json(k); });
+app.post('/api/auth/cashflow-login', (req,res)=>{
+  const email=String(req.body.email||'').trim().toLowerCase(), key=String(req.body.key||'').trim(), account=CASHFLOW_ACCOUNTS[email], rec=db.cashflowKeys.find(k=>k.email===email&&k.key===key);
+  if(!account||!rec||rec.status!=='ACTIVE') return res.status(401).json({error:'Cashflow Key không hợp lệ hoặc không còn dùng được. Vui lòng liên hệ Admin.'});
+  if(new Date(rec.expiresAt)<=new Date()){rec.status='EXPIRED';saveDB();return res.status(403).json({error:'Cashflow Key đã hết hạn. Vui lòng liên hệ Admin.',expired:true});}
+  const expSec=Math.floor((new Date(rec.expiresAt)-Date.now())/1000), token=jwt.sign({cashflowKeyId:rec.id,email,level:account.level,role:'Cashflow'},JWT_SECRET,{expiresIn:expSec}); res.json({token,key:{...rec,level:account.level,name:account.name},expiresAt:rec.expiresAt});
+});
+function cashflowAuth(req,res,next){
+  try{const token=req.headers.authorization?.replace('Bearer ',''); const user=jwt.verify(token,JWT_SECRET), rec=db.cashflowKeys.find(k=>k.id===user.cashflowKeyId); if(!rec||rec.status!=='ACTIVE'||new Date(rec.expiresAt)<=new Date()){if(rec){rec.status='EXPIRED';saveDB();}return res.status(403).json({error:'Cashflow Key đã hết hạn. Vui lòng liên hệ Admin.',needLogin:true,expired:true});} req.cashflow=user; next();}catch(_){res.status(401).json({error:'Phiên Cashflow không hợp lệ. Vui lòng liên hệ Admin.',needLogin:true});}
+}
+app.get('/api/cashflow/dashboard', cashflowAuth, (req,res)=>{ const master=db.cashflowFundAccounts.find(a=>a.type==='MASTER')||{balance:0}; const bills=db.cashflowRecurringBills; const due=bills.filter(b=>b.active!==false&&new Date(b.nextDue)<=new Date(Date.now()+7*864e5)); const outgoing=bills.filter(b=>b.active!==false).reduce((s,b)=>s+Number(b.amount||0),0); res.json({accounts:db.cashflowFundAccounts,expenses:db.cashflowExpenses,bills,transactions:db.cashflowTransactions,masterBalance:Number(master.balance||0),forecast:Number(master.balance||0)-outgoing,due,level:req.cashflow.level}); });
+app.post('/api/cashflow/fund-accounts', cashflowAuth, (req,res)=>{if(req.cashflow.level!==3)return res.status(403).json({error:'Chỉ Admin Tổng được quản lý tài khoản quỹ'});const {name,type,balance=0,branch}=req.body;if(!name||!['STORE','APPFOOD','MASTER'].includes(type))return res.status(400).json({error:'Dữ liệu tài khoản không hợp lệ'});const a={id:uuidv4(),name,type,branch,balance:Number(balance)||0};db.cashflowFundAccounts.push(a);saveDB();res.json(a);});
+app.post('/api/cashflow/collect', cashflowAuth, (req,res)=>{if(req.cashflow.level!==3)return res.status(403).json({error:'Chỉ Admin Tổng được gom quỹ'});const {accountId,amount}=req.body,a=db.cashflowFundAccounts.find(x=>x.id===accountId),master=db.cashflowFundAccounts.filter(x=>x.type==='MASTER').slice(-1)[0]||db.cashflowFundAccounts.find(x=>x.type==='MASTER');if(!a||!master||!(Number(amount)>0)||Number(amount)>Number(a.balance))return res.status(400).json({error:'Số dư hoặc số tiền gom không hợp lệ'});a.balance-=Number(amount);master.balance=Number(master.balance||0)+Number(amount);db.cashflowTransactions.unshift({id:uuidv4(),type:'COLLECT',accountId,amount:Number(amount),date:getVietnamTodayStr()});saveDB();res.json({account:a,master});});
+app.post('/api/cashflow/expenses', cashflowAuth, (req,res)=>{const {amount,recipient,content,date=getVietnamTodayStr(),branch}=req.body,n=Number(amount);if(!(n>0)||!recipient||!content||!/^\d{4}-\d{2}-\d{2}$/.test(date))return res.status(400).json({error:'Thông tin đề nghị chi không hợp lệ'});const hash=cashflowHash(n,recipient,content,date),recent=db.cashflowExpenses.find(x=>x.hash===hash&&Date.now()-new Date(x.createdAt).getTime()<48*3600000);if(recent)return res.status(409).json({error:'Đề nghị chi trùng trong 48 giờ đã bị khóa',duplicateId:recent.id});const e={id:uuidv4(),amount:n,recipient,content,date,branch,hash,requiredLevels:cashflowRequiredLevels(n),approvals:[],status:'PENDING',createdBy:req.cashflow.email,createdAt:getVietnamISOString()};db.cashflowExpenses.unshift(e);saveDB();res.json(e);});
+app.post('/api/cashflow/expenses/:id/approve', cashflowAuth, (req,res)=>{const e=db.cashflowExpenses.find(x=>x.id===req.params.id);if(!e||e.status!=='PENDING')return res.status(404).json({error:'Không có đề nghị chờ duyệt'});const needed=e.requiredLevels[e.approvals.length];if(req.cashflow.level!==3&&req.cashflow.level!==needed)return res.status(403).json({error:'Không đúng cấp duyệt hiện tại'});if(e.approvals.some(a=>a.email===req.cashflow.email))return res.status(409).json({error:'Không thể duyệt hai lần'});e.approvals.push({email:req.cashflow.email,level:req.cashflow.level,at:getVietnamISOString()});if(e.approvals.length===e.requiredLevels.length){e.status='APPROVED';const master=db.cashflowFundAccounts.find(a=>a.type==='MASTER');if(master){master.balance=Number(master.balance||0)-e.amount;}db.cashflowTransactions.unshift({id:uuidv4(),type:'EXPENSE',amount:e.amount,branch:e.branch,date:e.date,expenseId:e.id});}saveDB();res.json(e);});
+app.post('/api/cashflow/bills', cashflowAuth, (req,res)=>{if(req.cashflow.level!==3)return res.status(403).json({error:'Chỉ Admin Tổng được quản lý lịch chi'});const {name,amount,nextDue,branch}=req.body;if(!name||!(Number(amount)>0)||!nextDue)return res.status(400).json({error:'Thông tin lịch chi không hợp lệ'});const b={id:uuidv4(),name,amount:Number(amount),nextDue,branch,active:true};db.cashflowRecurringBills.push(b);saveDB();res.json(b);});
 // Finance reports - chỉ đọc báo cáo chấm công (reuse logic)
 app.get('/api/finance/reports/overview', financeAuthMiddleware, (req,res)=>{
   const { month, branch } = req.query;
@@ -10709,6 +10807,7 @@ app.get('/api/finance/reports/matrix', financeAuthMiddleware, (req,res)=>{
   let totalHoursAll = 0;
   let totalDaysAll = 0;
 
+  const allowByEmp=new Map(); (db.shiftAssistanceAllowances||[]).forEach(a=>{ if(a.status==='APPROVED'&&a.date.startsWith(m)) allowByEmp.set(a.employeeId,(allowByEmp.get(a.employeeId)||0)+Number(a.amount||0)); });
   const rows = emps.map(emp=>{
     const bId = emp.branchId || 'CN3';
     branchCounters[bId] = (branchCounters[bId] || 0) + 1;
@@ -10770,6 +10869,7 @@ app.get('/api/finance/reports/matrix', financeAuthMiddleware, (req,res)=>{
       name: (emp.name || '').toUpperCase(),
       luongHocViec,
       mucLuong,
+      hoTroDoiCa: allowByEmp.get(emp.employeeId)||0,
       days,
       tongGio: Math.round(empTotalHours*10)/10,
       ngayCong: empTotalDays,
@@ -11028,7 +11128,9 @@ app.get('/api/finance/reports/payroll-summary', financeAuthMiddleware, (req,res)
       if(a.violations && a.violations.includes('LATE')) giamTru += 20000;
     });
 
-    const thucLinh = luongHocViec + luongChinhThuc + luongLeThem + hoanDongPhuc + hoanKhamSK - giamTru;
+    const allowRows=(db.shiftAssistanceAllowances||[]).filter(a=>a.employeeId===emp.employeeId && a.date>=start && a.date<=end && a.status==='APPROVED');
+    const hoTroDoiCa=allowRows.reduce((s,a)=>s+Number(a.amount||0),0);
+    const thucLinh = luongHocViec + luongChinhThuc + luongLeThem + hoanDongPhuc + hoanKhamSK + hoTroDoiCa - giamTru;
 
     return {
       employeeId: emp.employeeId,
@@ -11043,6 +11145,8 @@ app.get('/api/finance/reports/payroll-summary', financeAuthMiddleware, (req,res)
       leChiTiet,
       hoanDongPhuc,
       hoanKhamSK,
+      hoTroDoiCa,
+      hoTroDoiCaCount: allowRows.length,
       giamTru,
       thucLinh
     };

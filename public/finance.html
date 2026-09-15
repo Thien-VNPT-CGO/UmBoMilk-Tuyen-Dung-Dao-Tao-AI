@@ -63,8 +63,10 @@
     </div>
     <div class="bg-white rounded-3xl p-6 shadow-2xl border border-slate-100">
       <form id="loginForm" class="space-y-4">
+        <div class="flex gap-2"><button type="button" id="payrollModeBtn" onclick="setFinanceMode('payroll')" class="flex-1 rounded-xl bg-pink-600 text-white py-2 text-xs font-bold">Ke toan luong</button><button type="button" id="cashflowModeBtn" onclick="setFinanceMode('cashflow')" class="flex-1 rounded-xl bg-slate-100 py-2 text-xs font-bold">Cashflow</button></div>
+        <div id="cashflowEmailWrap" class="hidden"><label class="text-[11px] font-bold tracking-wider text-slate-500 uppercase">Email Cashflow</label><input id="cashflowEmail" placeholder="umbomilk@gmail.com" class="w-full mt-2 px-4 py-3.5 rounded-2xl border border-slate-200 bg-slate-50 outline-none text-sm font-bold text-slate-800"></div>
         <div>
-          <label class="text-[11px] font-bold tracking-wider text-slate-500 uppercase">Nhập Khóa Tài chính (Finance Key)</label>
+          <label class="text-[11px] font-bold tracking-wider text-slate-500 uppercase"><span id="financeKeyLabel">Nhập Khóa Tài chính (Finance Key)</span></label>
           <input id="financeKey" placeholder="FIN-W-XXXX / FIN-M-XXXX / FIN-Y-XXXX" class="w-full mt-2 px-4 py-3.5 rounded-2xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-pink-500 focus:ring-4 focus:ring-pink-100 outline-none font-mono text-sm font-bold text-slate-800">
         </div>
         <div class="rounded-2xl bg-amber-50 border border-amber-200 p-3 flex gap-2.5 items-center">
@@ -147,7 +149,7 @@
     </div>
 
     <!-- Thanh chuyển Tab chuẩn 3 mẫu Sheet -->
-    <div class="flex flex-wrap gap-2 p-1.5 bg-slate-200/80 rounded-2xl w-fit">
+    <div id="payrollTabs" class="flex flex-wrap gap-2 p-1.5 bg-slate-200/80 rounded-2xl w-fit">
       <button onclick="switchTab('matrix')" id="tabBtn-matrix" class="tab-btn active px-4 py-2.5 rounded-xl text-xs font-extrabold flex items-center gap-2">
         <i class="fa-solid fa-calendar-days text-amber-400"></i> BẢNG CHẤM CÔNG THÁNG (MẪU 1)
       </button>
@@ -168,6 +170,7 @@
       </button>
     </div>
 
+    <div id="cashflowTabs" class="hidden flex flex-wrap gap-2 p-1.5 bg-slate-800 rounded-2xl w-fit"><button onclick="switchTab('cf-fund')" id="tabBtn-cf-fund" class="tab-btn active px-4 py-2.5 rounded-xl text-xs font-extrabold">Gom Quy 8 TK</button><button onclick="switchTab('cf-expense')" id="tabBtn-cf-expense" class="tab-btn px-4 py-2.5 rounded-xl text-xs font-extrabold">Duyet Chi</button><button onclick="switchTab('cf-bills')" id="tabBtn-cf-bills" class="tab-btn px-4 py-2.5 rounded-xl text-xs font-extrabold">Lich Chi & Bao Dong</button><button onclick="switchTab('cf-report')" id="tabBtn-cf-report" class="tab-btn px-4 py-2.5 rounded-xl text-xs font-extrabold">Bao Cao Dong Tien</button></div>
     <!-- ================================================================= -->
     <!-- TAB 1: BẢNG CHẤM CÔNG THÁNG (MẪU 1: GRID 1 - 31 NGÀY)            -->
     <!-- ================================================================= -->
@@ -506,6 +509,6 @@
   </div>
 </div>
 
-<script src="/js/finance.js"></script>
+<div id="tab-cf-fund" class="tab-section hidden card p-4 space-y-3"><h3 class="font-black text-sm">Gom Quy 8 TK</h3><div id="cfFundGrid" class="grid md:grid-cols-4 gap-3"></div><div id="cfMaster" class="p-3 bg-slate-900 text-white rounded-xl"></div></div><div id="tab-cf-expense" class="tab-section hidden card p-4 space-y-3"><h3 class="font-black text-sm">Duyet Chi 2-3 cap</h3><form onsubmit="cfCreateExpense(event)" class="grid md:grid-cols-5 gap-2"><input id="cfExpAmount" type="number" placeholder="So tien" class="border rounded-xl px-3 py-2 text-sm"><input id="cfExpRecipient" placeholder="Nguoi nhan" class="border rounded-xl px-3 py-2 text-sm"><input id="cfExpContent" placeholder="Noi dung chi" class="border rounded-xl px-3 py-2 text-sm"><input id="cfExpDate" type="date" class="border rounded-xl px-3 py-2 text-sm"><button class="bg-pink-600 text-white rounded-xl px-4 py-2 text-xs font-bold">Tao de nghi</button></form><div id="cfExpenseList" class="space-y-2"></div></div><div id="tab-cf-bills" class="tab-section hidden card p-4 space-y-3"><h3 class="font-black text-sm">Lich Chi Co Dinh & Bao Dong</h3><form onsubmit="cfCreateBill(event)" class="flex gap-2 flex-wrap"><input id="cfBillName" placeholder="Ten khoan" class="border rounded-xl px-3 py-2 text-sm"><input id="cfBillAmount" type="number" placeholder="So tien" class="border rounded-xl px-3 py-2 text-sm"><input id="cfBillDue" type="date" class="border rounded-xl px-3 py-2 text-sm"><button class="bg-slate-900 text-white rounded-xl px-4 py-2 text-xs font-bold">Them lich chi</button></form><div id="cfBillList"></div><div id="cfAlert" class="p-3 rounded-xl font-bold text-sm"></div><div id="cfForecast" class="p-3 bg-amber-50 rounded-xl text-sm"></div></div><div id="tab-cf-report" class="tab-section hidden card p-4 space-y-3"><h3 class="font-black text-sm">Bao Cao Dong Tien</h3><div class="flex gap-2"><input id="cfReportBranch" placeholder="Chi nhanh" class="border rounded-xl px-3 py-2 text-sm"><input id="cfReportDay" type="date" class="border rounded-xl px-3 py-2 text-sm"><button onclick="cfLoadReport()" class="bg-emerald-600 text-white rounded-xl px-4 py-2 text-xs font-bold">Tai</button></div><div id="cfReportBody" class="text-sm"></div></div><script src="/js/finance.js"></script>
 </body>
 </html>

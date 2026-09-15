@@ -756,6 +756,7 @@ button:active{transform:scale(.97)}
       <!-- Báo cáo chấm công - 7 màn hình Spec -->
       <!-- ĐÃ XÓA tab Báo cáo chấm công khỏi web HR theo yêu cầu (backend /api/reports/* giữ nguyên cho Finance/Employee) -->
 
+      <section id="tab-cashflow-keys" class="tab-section hidden"><div class="flex flex-wrap items-center justify-between gap-3 mb-4"><h2 class="text-xl font-black text-slate-900">Cashflow Keys</h2><div class="flex gap-2"><select id="cashflowEmailSel" class="border rounded-xl px-3 py-2 text-sm"><option value="umbomilk@gmail.com">umbomilk@gmail.com - L3 Admin Tong</option><option value="thehung.170291@gmail.com">thehung.170291@gmail.com - L1 &lt;2tr</option><option value="thaovo2604@gmail.com">thaovo2604@gmail.com - L2 2-10tr</option></select><select id="cashflowDurationSel" class="border rounded-xl px-3 py-2 text-sm"><option value="24h">24h</option><option value="7d">7d</option><option value="30d">30d</option><option value="6mo">6 thang</option><option value="1y">1 nam</option></select><button onclick="grantCashflowKey()" class="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold">Cap Key</button></div></div><table class="w-full text-sm"><thead class="bg-slate-800 text-white text-xs"><tr><th class="px-3 py-2">Email</th><th class="px-3 py-2">Key</th><th class="px-3 py-2">Han</th><th class="px-3 py-2">Het han</th><th class="px-3 py-2">Trang thai</th><th class="px-3 py-2">Thao tac</th></tr></thead><tbody id="cashflowKeysTbody"></tbody></table></section>
       <!-- Finance Keys - Kế toán -->
       <section id="tab-finance-keys" class="tab-section hidden">
         <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
@@ -1090,5 +1091,6 @@ button:active{transform:scale(.97)}
 </div>
 
 <script src="/js/admin.js"></script>
+<script src="/js/mascot.js"></script>
 </body>
 </html>

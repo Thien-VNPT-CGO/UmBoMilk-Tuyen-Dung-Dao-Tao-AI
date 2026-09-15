@@ -5,7 +5,11 @@ function getVietnamNow(){ return new Date(new Date().toLocaleString('en-US', {ti
 let financeToken = localStorage.getItem('finance_token');
 let financeKey = JSON.parse(localStorage.getItem('finance_key')||'null');
 let financeExpires = localStorage.getItem('finance_expires');
+let financeMode = localStorage.getItem('finance_mode')||'payroll';
 let currentTab = 'matrix';
+function isCashflow(){return financeMode==='cashflow';}
+function setFinanceMode(m){financeMode=m;localStorage.setItem('finance_mode',m);document.getElementById('payrollModeBtn')?.classList.toggle('bg-pink-600',m==='payroll');document.getElementById('cashflowModeBtn')?.classList.toggle('bg-pink-600',m==='cashflow');document.getElementById('cashflowEmailWrap')?.classList.toggle('hidden',m==='payroll');document.getElementById('financeKeyLabel').textContent=m==='cashflow'?'Cashflow Key':'Finance Key';}
+setTimeout(()=>setFinanceMode(financeMode),0);
 
 // Cache dữ liệu để tìm kiếm nhanh
 let matrixCache = null;
@@ -54,52 +58,27 @@ document.getElementById('loginForm')?.addEventListener('submit', async (e)=>{
   const err = document.getElementById('loginError');
   const info = document.getElementById('keyInfo');
   try{
-    const res = await fetch('/api/auth/finance-login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key })
-    });
+    const url = isCashflow()?'/api/auth/cashflow-login':'/api/auth/finance-login';
+    const body = isCashflow()?{email:document.getElementById('cashflowEmail').value.trim(),key}:{key};
+    const res = await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const data = await res.json();
-    if(!res.ok) throw new Error(data.error || 'Khóa tài chính không hợp lệ');
-
-    financeToken = data.token;
-    financeKey = data.key;
-    financeExpires = data.expiresAt;
-    localStorage.setItem('finance_token', financeToken);
-    localStorage.setItem('finance_key', JSON.stringify(financeKey));
-    localStorage.setItem('finance_expires', financeExpires);
-
-    err.classList.add('hidden');
-    info.classList.remove('hidden');
-    info.innerHTML = `<i class="fa-solid fa-circle-check mr-1.5"></i> Đăng nhập thành công • Hết hạn: ${new Date(financeExpires).toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'})}`;
+    if(!res.ok) throw new Error(data.error || 'Khóa không hợp lệ');
+    financeToken = data.token; financeKey = data.key; financeExpires = data.expiresAt;
+    localStorage.setItem('finance_token', financeToken); localStorage.setItem('finance_key', JSON.stringify(financeKey)); localStorage.setItem('finance_expires', financeExpires);
+    err.classList.add('hidden'); info.classList.remove('hidden'); info.innerHTML = `<i class="fa-solid fa-circle-check mr-1.5"></i> Đăng nhập thành công • Hết hạn: ${new Date(financeExpires).toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'})}`;
     setTimeout(showApp, 400);
-  }catch(err2){
-    err.textContent = err2.message;
-    err.classList.remove('hidden');
-  }
+  }catch(err2){ err.textContent = err2.message; err.classList.remove('hidden'); }
 });
 
 function showApp(){
-  if(!financeToken || !financeKey || !financeExpires){
-    document.getElementById('loginOverlay').classList.remove('hidden');
-    document.getElementById('app').classList.add('hidden');
-    return;
-  }
-  if(new Date(financeExpires).getTime() <= Date.now()){
-    logout(true);
-    return;
-  }
-  document.getElementById('loginOverlay').classList.add('hidden');
-  document.getElementById('app').classList.remove('hidden');
-  document.getElementById('keyLabel').textContent = `${financeKey.key} • ${viType(financeKey.type)}`;
+  if(!financeToken || !financeKey || !financeExpires){ document.getElementById('loginOverlay').classList.remove('hidden'); document.getElementById('app').classList.add('hidden'); return; }
+  if(new Date(financeExpires).getTime() <= Date.now()){ logout(true); return; }
+  document.getElementById('loginOverlay').classList.add('hidden'); document.getElementById('app').classList.remove('hidden');
+  document.getElementById('keyLabel').textContent = `${financeKey.key} ${financeKey.email?'• '+financeKey.email:''} • ${financeKey.level?('L'+financeKey.level):viType(financeKey.type)}`;
   document.getElementById('keyExpiry').textContent = new Date(financeExpires).toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'});
-  
-  if(!document.getElementById('reportMonth').value){
-    document.getElementById('reportMonth').value = getVietnamTodayStr().slice(0,7);
-  }
-  startCountdown();
-  switchTab('matrix');
-  loadEmployeesForDaily();
+  const hrms=document.querySelector('.hrms-workspace'); if(hrms){ document.getElementById('payrollTabs')?.classList.toggle('hidden',isCashflow()); document.getElementById('cashflowTabs')?.classList.toggle('hidden',!isCashflow()); hrms.querySelectorAll('.tab-section').forEach(s=>s.classList.add('hidden')); }
+  if(!document.getElementById('reportMonth').value) document.getElementById('reportMonth').value = getVietnamTodayStr().slice(0,7);
+  startCountdown(); switchTab(isCashflow()?'cf-fund':'matrix'); if(!isCashflow()) loadEmployeesForDaily();
 }
 
 function logout(isExpired){
@@ -147,23 +126,26 @@ function switchTab(id){
   currentTab = id;
   document.querySelectorAll('.tab-section').forEach(s => s.classList.add('hidden'));
   document.getElementById('tab-' + id)?.classList.remove('hidden');
-
-  document.querySelectorAll('.tab-btn').forEach(b => {
-    b.classList.remove('active');
-    b.classList.remove('bg-slate-900', 'text-white');
-  });
-  const activeBtn = document.getElementById('tabBtn-' + id);
-  if(activeBtn){
-    activeBtn.classList.add('active');
-  }
-
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tabBtn-' + id)?.classList.add('active');
   if(id === 'matrix') loadMatrix();
   else if(id === 'dongphuc') loadDongPhuc();
   else if(id === 'khamsk') loadKhamSK();
   else if(id === 'payroll') loadPayrollSummary();
   else if(id === 'daily') loadDaily();
   else if(id === 'anomalies') loadAnomalies();
+  else if(id === 'cf-fund') cfLoadDashboard();
+  else if(id === 'cf-expense') cfLoadDashboard();
+  else if(id === 'cf-bills') cfLoadDashboard();
+  else if(id === 'cf-report') cfLoadReport();
 }
+async function cfApi(p,o={}){ const h={'Content-Type':'application/json',Authorization:'Bearer '+financeToken}; const r=await fetch(p,{...o,headers:{...h,...(o.headers||{})}}); const d=await r.json().catch(()=>({})); if(!r.ok) throw new Error(d.error||'Loi'); return d; }
+async function cfLoadDashboard(){ try{ const d=await cfApi('/api/cashflow/dashboard'); const grid=document.getElementById('cfFundGrid'); if(grid) grid.innerHTML=(d.accounts.filter(a=>a.type!=='MASTER') ).map(a=>`<div class="p-3 rounded-xl border ${Number(a.balance)===0?'bg-red-50 border-red-300':'bg-emerald-50 border-emerald-300'}"><div class="font-bold text-xs">${a.name}</div><div class="font-black">${a.balance.toLocaleString()} đ</div><div class="text-[11px]">${a.type} ${a.branch||''}</div><button onclick="cfCollect('${a.id}')" class="mt-2 text-xs bg-slate-900 text-white px-2 py-1 rounded">Gom ve TK tong</button></div>`).join('')||'<div class="text-xs text-slate-400">Chua co 8 TK</div>'; document.getElementById('cfMaster').textContent='TK Tong: '+(d.masterBalance||0).toLocaleString()+' đ | Du bao: '+(d.forecast||0).toLocaleString()+' đ'; document.getElementById('cfExpenseList').innerHTML=(d.expenses||[]).map(e=>`<div class="p-2 border rounded-xl flex justify-between text-xs"><span>${e.amount.toLocaleString()} - ${e.recipient} - ${e.content} [${e.status}] ${e.approvals.length}/${e.requiredLevels.length}</span><button onclick="cfApprove('${e.id}')" class="bg-emerald-600 text-white px-2 py-1 rounded">Duyet</button></div>`).join(''); document.getElementById('cfBillList').innerHTML=(d.bills||[]).map(b=>`<div class="text-xs">${b.name} ${b.amount.toLocaleString()} han ${b.nextDue} ${new Date(b.nextDue)<=new Date()?'QUA HAN':''}</div>`).join(''); const due=(d.due||[]).length; document.getElementById('cfAlert').textContent=due?`Thieu tien / Sap den han: ${due} khoan`:'Khong co canh bao'; document.getElementById('cfAlert').className=due?'p-3 rounded-xl bg-red-100 text-red-700':'p-3 rounded-xl bg-emerald-100 text-emerald-700'; document.getElementById('cfForecast').textContent='Master forecast: '+(d.forecast||0).toLocaleString()+' đ'; }catch(e){} }
+async function cfCollect(id){ const a=prompt('So tien gom:'); if(!a) return; try{ await cfApi('/api/cashflow/collect',{method:'POST',body:JSON.stringify({accountId:id,amount:Number(a)})}); cfLoadDashboard(); }catch(e){alert(e.message);} }
+async function cfCreateExpense(e){ e.preventDefault(); try{ await cfApi('/api/cashflow/expenses',{method:'POST',body:JSON.stringify({amount:Number(document.getElementById('cfExpAmount').value),recipient:document.getElementById('cfExpRecipient').value,content:document.getElementById('cfExpContent').value,date:document.getElementById('cfExpDate').value||getVietnamTodayStr()})}); cfLoadDashboard(); }catch(err){alert(err.message);} }
+async function cfApprove(id){ try{ await cfApi('/api/cashflow/expenses/'+id+'/approve',{method:'POST'}); cfLoadDashboard(); }catch(err){alert(err.message);} }
+async function cfCreateBill(e){ e.preventDefault(); try{ await cfApi('/api/cashflow/bills',{method:'POST',body:JSON.stringify({name:document.getElementById('cfBillName').value,amount:Number(document.getElementById('cfBillAmount').value),nextDue:document.getElementById('cfBillDue').value})}); cfLoadDashboard(); }catch(err){alert(err.message);} }
+async function cfLoadReport(){ try{ const branch=document.getElementById('cfReportBranch').value, day=document.getElementById('cfReportDay').value||getVietnamTodayStr(); const d=await cfApi('/api/cashflow/dashboard'); const tx=(d.transactions||[]).filter(t=>!branch||t.branch===branch).filter(t=>!day||t.date===day); let inflow=0,outflow=0; tx.forEach(t=> t.type==='COLLECT'?inflow+=t.amount:outflow+=t.amount); document.getElementById('cfReportBody').innerHTML=`<div>Inflow: ${inflow.toLocaleString()} | Outflow: ${outflow.toLocaleString()} | Branch: ${branch||'ALL'} Day: ${day}</div><div class="mt-2 space-y-1">${tx.map(t=>`<div class="border p-2 rounded">${t.type} ${t.amount.toLocaleString()} ${t.branch||''} ${t.date}</div>`).join('')}</div>`; }catch(e){} }
 
 async function loadAll(){
   if(currentTab === 'matrix') await loadMatrix();

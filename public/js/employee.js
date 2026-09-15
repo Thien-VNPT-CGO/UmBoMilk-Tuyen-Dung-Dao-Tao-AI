@@ -642,7 +642,15 @@ function connectSocket(){
     if(ev === 'notifications:update'){
       playNotificationSound();
     }
-    // Holidays realtime: Admin them/xoa le custom -> refresh tab luong NV
+    if(ev === 'shiftSwap:update' || ev === 'shiftSwapRequests:update'){
+      if(Array.isArray(data)){
+        shiftSwapRequests = data;
+      } else if(shiftSwapRequests && typeof data==='object'){
+        const idx=shiftSwapRequests.findIndex(r=>r.id===data.id);
+        if(idx>=0) shiftSwapRequests[idx]=data; else shiftSwapRequests.unshift(data);
+      }
+      applyShiftSwapLocks();
+    }
     if(ev === 'holidays:update' && employee){
       try{
         const ds = document.querySelectorAll('#salaryTableBody tr');
@@ -997,7 +1005,47 @@ function isOffWindowOpen(){
 // Attendance
 let streamCheckin=null, streamCheckout=null;
 let capturedCheckin=null, capturedCheckout=null;
+let qualityCheckin=false, qualityCheckout=false;
 let _camFacing='environment';
+const ATTENDANCE_SHIFTS={CA_SANG:{start:420,end:720},CA_CHIEU:{start:720,end:1080},CA_TRUA:{start:720,end:1080},CA_TOI:{start:1080,end:1380}};
+function attendanceCameraState(schedules, now){
+  const date=toVietnamDateStr(now);
+  const minute=now.getHours()*60+now.getMinutes();
+  const days=(schedules||[]).flatMap(s=>s.days||[]);
+  const today=days.find(d=>d.date===date);
+  const shifts=[];
+  if(today && ['WORKING','SUBSTITUTE','WORKING_DOUBLE'].includes(today.status)) [today.shift,...(today.shifts||[]),today.shift2,today.shift3,today.additionalShift,today.secondShift].forEach(s=>{ if(s && s!=='OFF' && !shifts.includes(s)) shifts.push(s); });
+  const active=shifts.find(s=>ATTENDANCE_SHIFTS[s] && minute>=ATTENDANCE_SHIFTS[s].start-30 && minute<=ATTENDANCE_SHIFTS[s].end);
+  if(active) return {open:true,shift:active,remaining:0};
+  let next=null;
+  days.forEach(d=>{
+    if(!['WORKING','SUBSTITUTE','WORKING_DOUBLE'].includes(d.status)) return;
+    [d.shift,...(d.shifts||[]),d.shift2,d.shift3,d.additionalShift,d.secondShift].forEach(s=>{
+      if(!ATTENDANCE_SHIFTS[s]) return;
+      const p=d.date.split('-').map(Number);
+      const at=new Date(p[0],p[1]-1,p[2],Math.floor((ATTENDANCE_SHIFTS[s].start-30)/60),(ATTENDANCE_SHIFTS[s].start-30)%60);
+      if(at>now && (!next || at<next)) next=at;
+    });
+  });
+  return {open:false,shift:null,remaining:next?next-now:null};
+}
+function stopAttendanceCameras(){
+  [streamCheckin,streamCheckout].forEach(s=>{ if(s) s.getTracks().forEach(t=>t.stop()); });
+  streamCheckin=null; streamCheckout=null;
+}
+async function applyAttendanceCameraState(schedules, now=getVietnamNow()){
+  const state=attendanceCameraState(schedules,now);
+  const msg=document.getElementById('attendanceShiftMsg');
+  if(!state.open){
+    stopAttendanceCameras();
+    if(msg){ const countdown=state.remaining===null?'Chưa có ca làm việc tiếp theo':`Ca tiếp theo mở sau ${Math.max(0,Math.ceil(state.remaining/60000))} phút`; msg.textContent=`Camera đang khóa • ${countdown}`; msg.className='card bg-amber-50 border-amber-200 text-amber-800 text-sm font-bold text-center p-6'; msg.classList.remove('hidden'); }
+    return state;
+  }
+  window._currentActiveShift=state.shift;
+  const type=document.getElementById('cardCheckout')?.classList.contains('hidden')?'checkin':'checkout';
+  if(!(type==='checkin'?streamCheckin:streamCheckout)) await startCamera(type);
+  return state;
+}
 async function startCamera(type, facing){
   const useFacing = facing || _camFacing;
   _camFacing = useFacing;
@@ -1032,9 +1080,15 @@ function capture(type){
   if(!video.srcObject) return alert('Chưa bật camera');
   canvas.width=video.videoWidth; canvas.height=video.videoHeight;
   const ctx = canvas.getContext('2d');
+  if(_camFacing==='user'){ ctx.translate(canvas.width,0); ctx.scale(-1,1); }
   ctx.drawImage(video,0,0);
   const data = canvas.toDataURL('image/jpeg',0.7);
-  if(type==='checkin') capturedCheckin=data; else capturedCheckout=data;
+  const uniform=document.getElementById('uniform'+(type==='checkin'?'Checkin':'Checkout'));
+  const badge=document.getElementById('badge'+(type==='checkin'?'Checkin':'Checkout'));
+  const quality=!!(uniform?.checked && badge?.checked);
+  if(type==='checkin'){ capturedCheckin=data; qualityCheckin=quality; } else { capturedCheckout=data; qualityCheckout=quality; }
+  const qualityEl=document.getElementById('qualityResult'+(type==='checkin'?'Checkin':'Checkout'));
+  if(qualityEl) qualityEl.textContent=quality?'Ảnh đạt cổng chất lượng.':'Ảnh cần chụp lại: xác nhận áo đồng phục và bảng tên nhìn thấy rõ.';
   preview.src=data; preview.classList.remove('hidden'); video.classList.add('hidden');
   const stream = type==='checkin'?streamCheckin:streamCheckout;
   if(stream) stream.getTracks().forEach(t=>t.stop());
@@ -1070,6 +1124,7 @@ function getGPS(type){
   }, {enableHighAccuracy:true, timeout:10000, maximumAge:0});
 }
 async function submitCheckin(){
+  if(!qualityCheckin) return showToast('Chất lượng ảnh chưa đạt - tick ô áo đồng phục và bảng tên rõ ràng rồi chụp lại','error');
   if(!capturedCheckin) return showToast('Chưa chụp ảnh vào ca bằng camera sau','error');
   const gpsEl=document.getElementById('gpsCheckin');
   const gps=gpsEl.textContent;
@@ -1093,6 +1148,7 @@ async function submitCheckin(){
   }
 }
 async function submitCheckout(){
+  if(!qualityCheckout) return showToast('Chất lượng ảnh chưa đạt - tick ô áo đồng phục và bảng tên rồi chụp lại','error');
   if(!capturedCheckout) return showToast('Chưa chụp ảnh ra ca bằng camera sau','error');
   const gpsEl=document.getElementById('gpsCheckout');
   const gps=gpsEl.textContent;
@@ -1138,7 +1194,11 @@ async function loadAttendanceTab(){
   // Sequential Check-in / Check-out UI + AI window realtime (official)
   try{
     const today = getVietnamTodayStr();
-    const atts = await api('/api/attendances?employeeId='+employee.employeeId+'&date='+today);
+    const [atts,schedules] = await Promise.all([
+      api('/api/attendances?employeeId='+employee.employeeId+'&date='+today),
+      api('/api/schedules?employeeId='+employee.employeeId)
+    ]);
+    mySchedules=Array.isArray(schedules)?schedules:[];
     const todayAtt = atts[0];
 
     const cardCheckin = document.getElementById('cardCheckin');
@@ -1358,6 +1418,7 @@ async function loadAttendanceTab(){
         }
       }
     }
+    await applyAttendanceCameraState(mySchedules, now);
   }catch(e){}
 
   // history
@@ -2247,11 +2308,29 @@ async function respondEmergency(requestId, action){
 }
 // Đổi ca (Official) - 24h AI tự duyệt
 let shiftSwapRequests=[];
+function hasPendingShiftSwap(list){
+  return Array.isArray(list) && list.some(r=> String(r.status||'').includes('PENDING'));
+}
+function applyShiftSwapLocks(){
+  const locked = hasPendingShiftSwap(shiftSwapRequests);
+  ['swapForm','offWorkForm','shiftSwapForm','hrAssistForm'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el){
+      el.querySelectorAll('button, input, select, textarea').forEach(n=>{
+        if(n.id==='offWorkKey') return;
+        if(locked) n.setAttribute('disabled','disabled'); else n.removeAttribute('disabled');
+      });
+      el.classList.toggle('opacity-50', locked);
+      el.classList.toggle('pointer-events-none', locked);
+    }
+  });
+  const gate=document.getElementById('shiftSwapPendingNote');
+  if(gate) gate.classList.toggle('hidden', !locked);
+}
 async function loadShiftSwap(){
   try{
     try{ const gn=document.getElementById('swapGateNote'); if(gn) gn.classList.toggle('hidden', !!window._shiftSwapEnabled); }catch(e){}
     try{ let c=''; try{ c=localStorage.getItem(swapKeyStorage())||''; }catch(e){} setOffWorkLock(!c); }catch(e){}
-    // Load all employees cùng chi nhánh để chọn người thay thế
     const branchEmps = await api('/api/employees?branch='+employee.branchId).catch(()=>[]);
     const emps = Array.isArray(branchEmps) ? branchEmps : (branchEmps.data||[]);
     const opts = emps.filter(e=>e.employeeId!==employee.employeeId && e.status==='OFFICIAL').map(e=>`<option value="${e.employeeId}">${e.name} - ${e.employeeId} - ${getShiftVi(normalizeShift(e.shift))}</option>`).join('');
@@ -2295,6 +2374,7 @@ async function loadShiftSwap(){
       </div>`;
     }).join('') || '<div class="text-xs text-slate-400 text-center py-2">Không có lời mời đổi ca</div>';
     try{ loadOffWorkSwap(); }catch(e){}
+    applyShiftSwapLocks();
   }catch(e){ console.error('loadShiftSwap',e); }
 }
 let shiftSwapSending=false;
@@ -2448,8 +2528,10 @@ async function loadElearning(){
     const isEligible = employee.status==='TRAINING' || employee.status==='WAITING_TEST' || employee.status==='RETEST' || employee.type==='TRAINING';
     const canTake = isEligible || employee.status==='OFFICIAL'; // allow all for demo
     const lastResult = results[0];
+    const examExpiresAt = employee.testSchedule?.type==='ONLINE_QUIZ' && employee.testSchedule?.status==='IN_PROGRESS' ? employee.testSchedule.expiresAt : null;
     const el=document.getElementById('elearningContent');
     el.innerHTML = `
+      ${examExpiresAt?`<div class="mb-3 bg-amber-50 border-2 border-amber-300 rounded-2xl p-4"><div class="font-black text-amber-900">Bài thi chính thức đã sẵn sàng</div><div class="text-xs text-amber-700 mt-1">Hết hạn sau <span id="quizExpiryCountdown" class="font-black"></span></div></div>`:''}
       <div class="bg-white rounded-2xl border border-purple-200 p-4">
         <div class="flex justify-between items-start">
           <div><div class="font-black text-purple-900">Khóa học E-learning</div><div class="text-xs text-slate-600">Dành cho nhân viên Training đủ điều kiện (7 ngày Training mặc định)</div></div>
@@ -2479,6 +2561,11 @@ async function loadElearning(){
         </div>
       </div>
     `;
+    if(examExpiresAt){
+      clearInterval(window.quizExpiryInterval);
+      const tick=()=>{ const left=Math.max(new Date(examExpiresAt).getTime()-Date.now(),0); const el=document.getElementById('quizExpiryCountdown'); if(el) el.textContent=`${String(Math.floor(left/3600000)).padStart(2,'0')}:${String(Math.floor(left/60000)%60).padStart(2,'0')}:${String(Math.floor(left/1000)%60).padStart(2,'0')}`; if(!left){ clearInterval(window.quizExpiryInterval); loadElearning(); } };
+      tick(); window.quizExpiryInterval=setInterval(tick,1000);
+    }
   }catch(e){}
 }
 async function startTest(courseId){

@@ -58,6 +58,7 @@ const NAV = [
   {id:'attendance', icon:'fa-camera', label:'Bản ghi điểm danh', desc:'GPS/Ảnh', group:'Vận hành'},
   {id:'zalo', icon:'fa-brands fa-viber', label:'Lịch sử Zalo', desc:'Đã gửi/Lỗi', group:'Vận hành'},
   {id:'finance-keys', icon:'fa-coins', label:'Khóa Tài chính', badge:'Kế toán', group:'Hệ thống'},
+  {id:'cashflow-keys', icon:'fa-dollar-sign', label:'Keys Cashflow', badge:'Quyền phê duyệt', group:'Hệ thống'},
   {id:'google-sheet-hub', icon:'fa-database', label:'Trung tâm Google Sheet', badge:'Vận hành', group:'Hệ thống', desc:'1rcq/17iXM/Tài chính'},
   {id:'elearning', icon:'fa-graduation-cap', label:'Đào tạo', desc:'Kiểm tra', group:'Hệ thống'},
   {id:'settings', icon:'fa-gear', label:'Cài đặt', badge:'Admin', group:'Hệ thống'},
@@ -358,6 +359,7 @@ function switchTab(id){
   if(id==='zalo') safeCall(loadZalo());
   if(id==='elearning') safeCall(loadElearning());
   if(id==='finance-keys') safeCall(loadFinanceKeys());
+  if(id==='cashflow-keys') safeCall(loadCashflowKeys());
   if(id==='google-sheet-hub') safeCall(loadGoogleSheetHub());
   if(id==='settings') safeCall(loadSettings());
   if(id==='audit') safeCall(loadAudit());
@@ -571,7 +573,7 @@ function connectSocket(){
     safeCall(loadAttendances());
     safeCall(loadRequests());
   });
-  const refreshEvents = ['employees:update','applicants:update','attendances:update','schedules:update','offRequests:update','emergencyRequests:update','deviceRequests:update','trainingShiftRequests:update','shiftSwapRequests:update','shiftSwap:update','zalo:update','audit:new','sync:update','keys:update','notifications:update','testResults:update','settings:update','interviews:update','drive:update','overtime:update','leave:update','payrollPeriods:update','payrollSnapshots:update','financeKeys:update','holidays:update'];
+  const refreshEvents = ['employees:update','applicants:update','attendances:update','schedules:update','offRequests:update','emergencyRequests:update','deviceRequests:update','trainingShiftRequests:update','shiftSwapRequests:update','shiftSwap:update','zalo:update','audit:new','sync:update','keys:update','notifications:update','testResults:update','settings:update','interviews:update','drive:update','overtime:update','leave:update','payrollPeriods:update','payrollSnapshots:update','financeKeys:update','cashflowKeys:update','holidays:update'];
   refreshEvents.forEach(ev=>{
     socket.on(ev, (data)=>{
       // debounce refresh current tab
@@ -5948,6 +5950,24 @@ async function revokeFinanceKey(id){
   try{ await api('/api/finance-keys/'+id+'/revoke', {method:'POST', headers:{Authorization:'Bearer '+token}}); showToast('Đã thu hồi','success'); loadFinanceKeys(); }catch(e){ showToast(e.message,'error'); }
 }
 function copyFinanceKey(key){ navigator.clipboard.writeText(key).then(()=>showToast('Đã copy '+key,'success')); }
+async function loadCashflowKeys(){
+  try{
+    const list = await api('/api/cashflow-keys', {headers:{Authorization:'Bearer '+token}});
+    const tbody=document.getElementById('cashflowKeysTbody');
+    if(!tbody) return;
+    tbody.innerHTML=list.map(k=>`<tr class="hover:bg-slate-50"><td class="px-3 py-2">${k.email}</td><td class="px-3 py-2 font-mono text-xs">${k.key}</td><td class="px-3 py-2">${k.duration}</td><td class="px-3 py-2">${new Date(k.expiresAt).toLocaleString('vi-VN')}</td><td class="px-3 py-2"><span class="text-[11px] font-black px-2 py-1 rounded-full ${k.status==='ACTIVE'?'bg-emerald-500 text-white':k.status==='EXPIRED'?'bg-slate-400 text-white':'bg-red-100 text-red-700'}">${k.status}</span></td><td class="px-3 py-2 text-right">${k.status==='ACTIVE'?`<button onclick="revokeCashflowKey('${k.id}')" class="text-xs bg-red-50 border border-red-200 text-red-600 px-2 py-1 rounded-lg hover:bg-red-100">Thu hồi</button>`:''}</td></tr>`).join('');
+  }catch(e){console.error(e);}
+}
+async function grantCashflowKey(){
+  try{
+    await api('/api/cashflow-keys/grant',{method:'POST',headers:{Authorization:'Bearer '+token},body:JSON.stringify({email:document.getElementById('cashflowEmailSel').value,duration:document.getElementById('cashflowDurationSel').value})});
+    showToast('Da cap Cashflow Key','success'); loadCashflowKeys();
+  }catch(e){showToast(e.message,'error');}
+}
+async function revokeCashflowKey(id){
+  if(!confirm('Thu hồi Cashflow Key?')) return;
+  try{ await api('/api/cashflow-keys/'+id+'/revoke',{method:'POST',headers:{Authorization:'Bearer '+token}}); showToast('Đã thu hồi','success'); loadCashflowKeys(); }catch(e){showToast(e.message,'error');}
+}
 
 // ShiftSwap HR (<24h)
 async function loadShiftSwapAdmin(){

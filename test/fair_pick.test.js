@@ -56,4 +56,11 @@ describe('Chia ca cong bang 3/4 (pickFair)', () => {
     const src = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
     assert.ok(src.includes('backupList'), 'audit xoa lich phai luu full backup');
   });
+
+  it('6. HR bi khoa sau duyet, Admin bypass khoa', () => {
+    const src = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+    assert.ok(src.includes("req.user.role==='Admin' || !locked"));
+    assert.ok(src.includes("req.user.role!=='Admin' && locked"));
+    assert.ok(src.includes("req.user.role!=='Admin' && schedule"));
+  });
 });
