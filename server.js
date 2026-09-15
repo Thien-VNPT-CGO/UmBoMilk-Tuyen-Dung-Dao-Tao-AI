@@ -6099,7 +6099,12 @@ app.get('/api/schedules', authMiddleware, (req,res)=>{
     const empIds = db.employees.filter(e=>e.branchId===branch).map(e=>e.employeeId);
     list = list.filter(s=>empIds.includes(s.employeeId));
   }
-  // enrich with employee info
+  const isEmployeeCaller = !!(req.user && req.user.employeeId);
+  const nextWeekStartStr = getNextWeekStartStr();
+  if(isEmployeeCaller && list.some(s=>s.weekStart===nextWeekStartStr)){
+    const released = Array.isArray(db.settings?.off?.lockedWeeks) && db.settings.off.lockedWeeks.includes(nextWeekStartStr);
+    if(!released) list = list.filter(s=> s.weekStart!==nextWeekStartStr);
+  }
   const enriched = list.map(s=>{
     const emp = db.employees.find(e=>e.employeeId===s.employeeId);
     return { ...s, employeeName: emp?.name, branchId: emp?.branchId, shift: emp?.shift };
@@ -7900,6 +7905,7 @@ app.post('/api/schedules/approve-next-week', authMiddleware, roleCheck(['Admin',
       db.zaloRecords.unshift(zr);
     }
   });
+  if(!db.settings.off) db.settings.off={}; if(!Array.isArray(db.settings.off.lockedWeeks)) db.settings.off.lockedWeeks=[]; if(!db.settings.off.lockedWeeks.includes(nextWeekStart)) db.settings.off.lockedWeeks.push(nextWeekStart);
   saveDB();
   io.emit('schedules:update', db.schedules);
   io.emit('schedules:approved', { weekStart: nextWeekStart, count: drafts.length });
@@ -8058,10 +8064,12 @@ app.post('/api/schedules/unlock-week', authMiddleware, roleCheck(['Admin','HR'])
   db.settings.off.lockedWeeks = db.settings.off.lockedWeeks.filter(w=> w!==weekStart);
   const wasLocked = before.length !== db.settings.off.lockedWeeks.length;
   if(keyCheck.rec) consumeTestWeekKey(keyCheck.rec, req.user.username, weekStart);
-  audit(req.user.username,'UNLOCK_WEEK_SCHEDULE','SCHEDULE', { weekStart, lockedWeeks: before }, { weekStart, lockedWeeks: db.settings.off.lockedWeeks }, req.ip);
+  const draftApprovedCount = db.schedules.filter(s=> s.weekStart===weekStart && s.approvalStatus==='APPROVED').length;
+  db.schedules.forEach(s=>{ if(s.weekStart===weekStart && s.approvalStatus==='APPROVED'){ s.approvalStatus='PENDING_APPROVAL'; delete s.approvedBy; delete s.approvedAt; s.version=(s.version||1)+1; s.updated_at=getVietnamISOString(); }});
+  audit(req.user.username,'UNLOCK_WEEK_SCHEDULE','SCHEDULE', { weekStart, lockedWeeks: before, approvedHidden: draftApprovedCount }, { weekStart, lockedWeeks: db.settings.off.lockedWeeks }, req.ip);
   saveDB();
   io.emit('schedules:update', db.schedules);
-  res.json({ success:true, weekStart, wasLocked, locked:false, message: wasLocked ? `Đã mở khóa đăng ký OFF tuần ${weekStart} - NV có thể đăng ký tiếp (TH1/TH2 giữ nguyên)` : `Tuần ${weekStart} vốn không bị khóa` });
+  res.json({ success:true, weekStart, wasLocked, locked:false, unpublished: draftApprovedCount, message: wasLocked ? `Đã mở khóa đăng ký OFF tuần ${weekStart} - NV có thể đăng ký tiếp (TH1/TH2 giữ nguyên)` : `Tuần ${weekStart} vốn không bị khóa` });
 });
 
 // API: Xóa lịch tuần (Admin only - destructive, có confirm 2 lớp ở UI).

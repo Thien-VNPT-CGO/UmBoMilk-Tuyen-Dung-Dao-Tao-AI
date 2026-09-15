@@ -6278,6 +6278,9 @@ function syncAiAvatarSoundIcon(){
   }catch(e){}
 }
 function createAiAvatar(){
+  document.getElementById('umbAiAvatar')?.remove();
+  _umbAiAvatar = null;
+  return;
   if(document.getElementById('umbAiAvatar')){ try{ syncAiAvatarSoundIcon(); }catch(e){} return; }
   const avatar = document.createElement('div');
   avatar.id = 'umbAiAvatar';

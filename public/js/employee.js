@@ -1481,17 +1481,9 @@ async function loadSchedule(){
     let displaySchedules = [...mySchedules];
     if(isOfficial){
       const nextMon = toVietnamDateStr(getMonday(new Date(getVietnamNow().getTime()+7*24*60*60*1000)));
-      const nextWeekSched = mySchedules.find(s=>s.weekStart===nextMon);
-      // Fix: kiểm tra OFF theo khoảng ngày tuần sau (T2-CN), không phụ thuộc nextWeekSched đã tồn tại hay chưa — để realtime cập nhật ngay sau khi đăng ký
-      const nextWeekDates = [];
-      for(let _i=0; _i<7; _i++){ const _d=new Date(nextMon); _d.setDate(new Date(nextMon).getDate()+_i); nextWeekDates.push(toVietnamDateStr(_d)); }
-      const hasOffForNextWeek = (await api('/api/off-requests?employeeId='+employee.employeeId).catch(()=>[])).some(r=>r.status==='APPROVED' && r.dates && r.dates.some(d=> nextWeekDates.includes(d)));
-      // Fix: hiển thị lịch tuần sau ngay khi NV đã đăng ký OFF 2 ngày (realtime), không chờ HR duyệt draft
       displaySchedules = mySchedules.filter(s=>{
         if(s.weekStart===nextMon){
-          // Hiện tuần sau khi NV đã đăng ký OFF (kể cả draft PENDING) HOẶC lịch đã được Admin/HR duyệt — không ẩn lịch đã duyệt chỉ vì thiếu phiếu OFF
-          const approved = s.approvalStatus==='APPROVED';
-          if(!hasOffForNextWeek && !approved) return false;
+          if(s.approvalStatus!=='APPROVED') return false;
         }
         // Chỉ hiện tuần hiện tại (0) và tuần sau (1): ẩn tuần cũ (<0) lẫn tuần xa (>1) để lịch không lặp/thừa thẻ
         const weekDate = new Date(s.weekStart);
