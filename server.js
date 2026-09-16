@@ -662,6 +662,19 @@ setTimeout(()=>{ rehydrateFromSheet().catch(()=>{}); }, 20000);
 // KÉO DỮ LIỆU TỪ SHEET 17iXM LÊN WEB MỖI LẦN KHỞI ĐỘNG (deploy/cập nhật code/sửa tính năng).
 // Upsert theo mã NV: thiếu thì thêm (giữ nguyên mã NV + key), có rồi thì chỉ ghi đè
 // khi dòng Sheet mới hơn local. Không bao giờ xóa local. Không push ngược (tránh loop).
+function isSheetHeaderCode(code){
+  if(code === null || code === undefined) return true;
+  const t = String(code).trim().toLowerCase();
+  return t === '' || t === 'id' || t === 'mã nv' || t === 'ma nv' || t === 'họ tên' || t === 'ho ten';
+}
+function isSheetJunkHeaderRow(r){
+  if(!Array.isArray(r)) return false;
+  if(!isSheetHeaderCode(r[0])) return false;
+  const second = (r[2] !== undefined ? r[2] : r[1]).toString().trim().toLowerCase();
+  const secondH = second === '' || ['họ tên', 'ho ten', 'mã nv', 'ma nv', 'id'].includes(second);
+  const digits = (r[3] !== undefined ? r[3] : '').toString().replace(/\D/g, '');
+  return secondH && digits.length < 9;
+}
 async function bootPullFromMasterSheet(manualBy){
   if(isSystemResetting) return { pulled:0, updated:0, keys:0, skipped:0 };
   const out = { pulled:0, updated:0, keys:0, skipped:0 };
@@ -691,7 +704,7 @@ async function bootPullFromMasterSheet(manualBy){
       for(let r=1;r<values.length;r++){
         const row = values[r];
         const maNV=(row[iMaNV]||'').toString().trim();
-        if(!maNV){ out.skipped++; continue; }
+        if(isSheetHeaderCode(maNV)){ out.skipped++; continue; }
         const sheetUpdated=(row[iUpdated]||'').toString().trim();
         const sheetTime = sheetUpdated ? new Date(sheetUpdated).getTime() : 0;
         const shift = ['CA_SANG','CA_CHIEU','CA_TOI'].includes((row[iShift]||'').toString().trim()) ? row[iShift].toString().trim() : 'CA_SANG';
@@ -767,7 +780,7 @@ async function bootPullFromMasterSheet(manualBy){
             const row = vals[r];
             const id = (row[iId]||'').toString().trim();
             const phone = (row[iPhone]||'').toString().trim();
-            if(!id || !normalizePhone(phone)){ out.skipped++; continue; }
+            if(isSheetHeaderCode(id) || !normalizePhone(phone)){ out.skipped++; continue; }
             const sheetUpd = (row[iUpd]||'').toString().trim();
             const sheetTime = sheetUpd ? new Date(sheetUpd).getTime() : 0;
             const sText = (row[iShiftT]||'').toString().trim();
@@ -3627,6 +3640,54 @@ app.post('/api/admin/pull-from-sheet', authMiddleware, roleCheck(['Admin']), asy
   audit(req.user.username,'PULL_FROM_SHEET','EMPLOYEE',null,{...out, tabs}, req.ip);
   res.json({success:true, ...out, tabs, employees: db.employees.length, keys: db.keys.length});
 });
+app.post('/api/admin/reconcile-employees', authMiddleware, roleCheck(['Admin']), async (req,res)=>{
+  try{
+    const pull = await bootPullFromMasterSheet(req.user.username || 'RECONCILE');
+    const pushTraining = await syncSheetTab('NHAN_VIEN_TRAINING');
+    const pushOfficial = await syncSheetTab('NHAN_VIEN_CHINH_THUC');
+    const spreadsheetId = db.settings?.googleSheet?.spreadsheetId || '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w';
+    const token = await getGoogleAccessToken();
+    if(!token || !spreadsheetId) return res.status(500).json({error:'Chưa cấu hình ServiceAccount/Sheet'});
+    const readTab = async (name)=>{
+      const resp = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(name)}!A1:Z5000`, { headers:{ Authorization:`Bearer ${token}` }});
+      if(!resp.ok) return { ids: new Set(), codes: new Set(), rows: 0 };
+      const j = await resp.json().catch(()=>({}));
+      const ids = new Set(), codes = new Set();
+      let rows = 0;
+      (j.values || []).forEach((row)=>{
+        const id = (row[0] || '').toString().trim();
+        const code = (row[1] || '').toString().trim();
+        if(isSheetHeaderCode(id) && isSheetHeaderCode(code)) return;
+        if(id) ids.add(id);
+        if(code && !/^(mã nv|ma nv|id)$/i.test(code)) codes.add(code);
+        if(id || code) rows++;
+      });
+      return { ids, codes, rows };
+    };
+    const tr = await readTab('NHAN_VIEN_TRAINING');
+    const of = await readTab('NHAN_VIEN_CHINH_THUC');
+    const sheetIds = new Set([...tr.ids, ...of.ids]);
+    const sheetCodes = new Set([...tr.codes, ...of.codes]);
+    let verified = 0;
+    const stillMissing = [];
+    const locals = db.employees.filter(e=>!isTestRecord(e) && (e.type==='OFFICIAL' || e.type==='TRAINING'));
+    locals.forEach(e=>{
+      const present = sheetIds.has(e.id) || sheetCodes.has(e.employeeId);
+      if(present){ verified++; if(e.sync_status!=='SYNCED'){ e.sync_status='SYNCED'; } }
+      else { e.sync_status='PENDING'; stillMissing.push(e.employeeId); }
+    });
+    saveDB();
+    const report = {
+      pull, pushTraining, pushOfficial,
+      sheetRows: { training: tr.rows, official: of.rows },
+      local: { training: locals.filter(e=>e.type==='TRAINING').length, official: locals.filter(e=>e.type==='OFFICIAL').length },
+      verified, stillMissing
+    };
+    audit(req.user.username, 'RECONCILE_EMPLOYEES', 'EMPLOYEE', null, report, req.ip);
+    io.emit('employees:update', db.employees);
+    res.json({ success: true, ...report });
+  }catch(e){ res.status(500).json({error:e.message}); }
+});
 
 function normalizePhone(phone) {
   if (!phone) return '';
@@ -5033,10 +5094,15 @@ async function syncSheetTab(sheetKey){
     const phoneIndexMap = new Map();
     let droppedTest = 0;
     let droppedDupPhone = 0;
+    let droppedJunk = 0;
     existing.forEach((r)=>{
       // Chặn và dọn dẹp triệt để dữ liệu test trên Google Sheet
       if(isTestRecord(r)){
         droppedTest++;
+        return;
+      }
+      if(isSheetJunkHeaderRow(r)){
+        droppedJunk++;
         return;
       }
       // RÀNG BUỘC CHỐNG TRÙNG SĐT TRÊN GOOGLE SHEET:
@@ -5106,12 +5172,18 @@ async function syncSheetTab(sheetKey){
       }
     });
     // Ghi đè đúng vùng (update, giữ nguyên dữ liệu thật)
+    let putOk = false, putStatus = 0;
     if(merged.length>0){
       const endRow = 1 + merged.length;
-      await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(def.sheetName)}!A2:Z${endRow}?valueInputOption=RAW`, {
-        method:'PUT', headers:{ Authorization:`Bearer ${token}`, 'Content-Type':'application/json'},
-        body: JSON.stringify({ values: merged })
-      });
+      try{
+        const putRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(def.sheetName)}!A2:Z${endRow}?valueInputOption=RAW`, {
+          method:'PUT', headers:{ Authorization:`Bearer ${token}`, 'Content-Type':'application/json'},
+          body: JSON.stringify({ values: merged })
+        });
+        putStatus = putRes.status;
+        putOk = putRes.ok;
+        if(!putRes.ok) console.error(`[SHEET] Ghi ${def.sheetName} that bai HTTP ${putRes.status}: ${(await putRes.text().catch(()=> '')).slice(0, 200)}`);
+      }catch(e){ console.error(`[SHEET] Ghi ${def.sheetName} loi:`, e.message); }
       // Thumbnail ảnh trong Sheet (chỉ RECORD_DIEM_DANH): cột I/M = công thức IMAGE từ URL Drive (cột J/N).
       // Ghi RIÊNG 2 cột ảnh bằng USER_ENTERED để không reinterpret SĐT/mã NV ở các cột khác (vẫn RAW).
       // Không có URL -> giữ marker cũ (admin xem ảnh trên web app / link Drive).
@@ -5132,15 +5204,16 @@ async function syncSheetTab(sheetKey){
       }
       // Nếu có dòng test bị dọn hoặc dòng trùng SĐT bị dọn (merged ngắn hơn existing), xóa vùng thừa để dọn sạch
       const oldEndRow = 1 + existing.length;
-      if((droppedTest > 0 || droppedDupPhone > 0) && oldEndRow > endRow){
+      if((droppedTest > 0 || droppedDupPhone > 0 || droppedJunk > 0) && oldEndRow > endRow){
         await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(def.sheetName)}!A${endRow+1}:Z${oldEndRow}:clear`, {
           method:'POST', headers:{ Authorization:`Bearer ${token}` }
         });
-        console.log(`[SHEET CLEANUP] Đã dọn ${droppedTest} dòng test và ${droppedDupPhone} dòng trùng SĐT trên ${def.sheetName}`);
+        console.log(`[SHEET CLEANUP] Đã dọn ${droppedTest} dòng test, ${droppedDupPhone} dòng trùng SĐT và ${droppedJunk} dòng header rac trên ${def.sheetName}`);
       }
     }
-    console.log(`[SHEET] Đã đồng bộ ${def.sheetName}: giữ nguyên ${existing.length - droppedTest - droppedDupPhone} dòng thật + dọn ${droppedTest} dòng test + dọn ${droppedDupPhone} dòng trùng SĐT + cập nhật ${updated} + thêm ${appended}`);
-  }catch(e){ console.error(`syncSheetTab ${sheetKey} error`, e.message); }
+    console.log(`[SHEET] Đã đồng bộ ${def.sheetName}: giữ nguyên ${existing.length - droppedTest - droppedDupPhone - droppedJunk} dòng thật + dọn ${droppedTest} dòng test + dọn ${droppedDupPhone} dòng trùng SĐT + dọn ${droppedJunk} header rac + cập nhật ${updated} + thêm ${appended} + ghi ${putOk ? 'OK' : 'THAT BAI'}`);
+    return { sheetKey, sheetName: def.sheetName, kept: existing.length - droppedTest - droppedDupPhone - droppedJunk, droppedTest, droppedDupPhone, droppedJunk, updated, appended, total: merged.length, putOk, putStatus };
+  }catch(e){ console.error(`syncSheetTab ${sheetKey} error`, e.message); return null; }
 }
 async function syncAllTabsToSheetsRealtime(){
   if(isSystemResetting) return;
