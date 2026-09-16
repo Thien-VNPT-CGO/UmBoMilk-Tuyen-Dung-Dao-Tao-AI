@@ -16,4 +16,5 @@ data/archive/
 *.bundle
 
 test_private.js
-
+cloudflared.exe
+*.exe
