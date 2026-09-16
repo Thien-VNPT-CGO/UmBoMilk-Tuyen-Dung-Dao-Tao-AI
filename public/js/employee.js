@@ -2351,8 +2351,10 @@ function swapStatusColor(s){
   return 'bg-slate-100 text-slate-600';
 }
 function swapTitle(r){
-  if(r.type==='OFF_WORK_SWAP') return `OFF ${fmtDMY(r.offDate)} ↔ Làm ${fmtDMY(r.workDate)}`;
-  return `${fmtDMY(r.date)} • ${getShiftVi(normalizeShift(r.fromShift))} → ${getShiftVi(normalizeShift(r.toShift))}`;
+  if(r.type==='OFF_WORK_SWAP' && !r.date) return `OFF ${fmtDMY(r.offDate)} ↔ Làm ${fmtDMY(r.workDate)}`;
+  if(r.type==='OFF_WORK_SWAP' && r.date) return `${r.toType==='OFF'?'Nghỉ':'Làm'} ngày ${fmtDMY(r.date)}${r.toType!=='OFF'&&r.workShift?' ('+getShiftVi(normalizeShift(r.workShift))+')':''}`;
+  const bDate = r.targetDate && r.targetDate!==r.date ? ` • B: ${fmtDMY(r.targetDate)}` : '';
+  return `Bạn: ${fmtDMY(r.date)}${bDate} • ${getShiftVi(normalizeShift(r.fromShift))} → ${getShiftVi(normalizeShift(r.toShift))}`;
 }
 async function loadShiftSwap(){
   try{
@@ -2510,7 +2512,8 @@ function renderSwapForm(forceReset=false){
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label class="text-xs font-bold text-slate-700">1. Ngày của bạn <span class="text-red-500">*</span></label>
-            <input id="peerDate" type="date" class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm outline-none focus:border-pink-500">
+            <input id="peerDate" type="date" onchange="var t=document.getElementById('peerTargetDate');if(t&&!t.value)t.value=this.value;saveSwapDraft();" class="w-full mt-1 px-4 py-3 rounded-xl border border-pink-200 text-sm outline-none focus:border-pink-500">
+            <div class="text-[11px] text-slate-500 mt-1">Có thể tráo cùng ngày hoặc khác ngày với đồng nghiệp.</div>
           </div>
           <div>
             <label class="text-xs font-bold text-slate-700">2. Ca / OFF của bạn muốn tráo <span class="text-red-500">*</span></label>

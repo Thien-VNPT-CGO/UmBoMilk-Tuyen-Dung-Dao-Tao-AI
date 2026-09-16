@@ -6971,7 +6971,7 @@ app.post('/api/shift-swap', optionalEmployeeAuth, (req,res)=>{
     return res.status(403).json({error:'Chức năng đổi ca đang tạm khóa - vui lòng liên hệ HR mở.'});
   }
   const requesterId = req.body.requesterId || req.body.employeeId || req.user?.employeeId;
-  const { date, fromShift, toShift, targetEmployeeId, reason } = req.body;
+  const { date, fromShift, toShift, targetEmployeeId, targetDate, reason } = req.body;
   const emp = db.employees.find(e=>e.employeeId===requesterId);
   if(!emp) return res.status(404).json({error:'Không tìm thấy nhân viên yêu cầu'});
   if(emp.type!=='OFFICIAL' && emp.status!=='OFFICIAL') return res.status(403).json({error:'Chỉ nhân viên Chính thức mới được đổi ca'});
@@ -6988,9 +6988,12 @@ app.post('/api/shift-swap', optionalEmployeeAuth, (req,res)=>{
   const targetEmp = targetEmployeeId ? db.employees.find(e=>e.employeeId===targetEmployeeId) : null;
   if(targetEmployeeId && !targetEmp) return res.status(404).json({error:'Không tìm thấy nhân viên thay thế'});
   if(targetEmp && targetEmp.branchId!==emp.branchId) return res.status(403).json({error:'Chỉ nhân viên cùng chi nhánh mới được đổi ca'});
+  const bDate = (targetDate && /^\d{4}-\d{2}-\d{2}$/.test(targetDate)) ? targetDate : date;
   const requesterDay=scheduleDay(requesterId,date);
-  if(requesterDay && !['WORKING','WORKING_DOUBLE','SUBSTITUTE'].includes(requesterDay.status)) return res.status(400).json({error:'Ngày yêu cầu không phải ngày làm việc'});
-  if(targetEmp){ const td=scheduleDay(targetEmployeeId,date); if(td && !['WORKING','WORKING_DOUBLE','SUBSTITUTE','OFF'].includes(td.status)) return res.status(400).json({error:'Nhân viên thay thế không có lịch thực tế ngày này'}); }
+  if(curShift==='OFF'){
+    if(requesterDay && requesterDay.status!=='OFF') return res.status(400).json({error:'Ngày của bạn hiện không phải OFF'});
+  } else if(requesterDay && !['WORKING','WORKING_DOUBLE','SUBSTITUTE'].includes(requesterDay.status)) return res.status(400).json({error:'Ngày yêu cầu không phải ngày làm việc'});
+  if(targetEmp){ const td=scheduleDay(targetEmployeeId,bDate); if(td && !['WORKING','WORKING_DOUBLE','SUBSTITUTE','OFF'].includes(td.status)) return res.status(400).json({error:'Nhân viên thay thế không có lịch thực tế ngày này'}); }
   const existing = pendingShiftRequest(requesterId);
   if(existing) return res.status(409).json({error:'Bạn đang có một yêu cầu ca làm chờ xử lý', request: existing});
   const now = getVietnamNow();
@@ -7002,6 +7005,7 @@ app.post('/api/shift-swap', optionalEmployeeAuth, (req,res)=>{
     requesterId, requesterName: emp.name, branchId: emp.branchId,
     date, fromShift: curShift, toShift: finalToShift,
     targetEmployeeId: targetEmployeeId||null, targetEmployeeName: targetEmp?targetEmp.name:null,
+    targetDate: targetEmployeeId ? bDate : null,
     reason: reason||'',
     status: isDirect ? 'PENDING_TARGET' : 'PENDING_BROADCAST',
     createdAt: now.toISOString(), expiresAt, version:1,
@@ -7066,11 +7070,13 @@ function applyAcceptedSwapSchedules(r, actor){
     }
     return sc;
   }
+  const bDate = r.targetDate || r.date;
   [[requester, 0], [target, 1]].forEach(([e, idx])=>{
     if(!e) return;
-    const sched = ensureSwapWeek(e.employeeId, r.date, idx===0?requesterShift:targetShift);
-    captureSwapSnapshot(r, e.employeeId, r.date);
-    const day = sched.days.find(d=>d.date===r.date);
+    const dStr = idx===0 ? r.date : bDate;
+    const sched = ensureSwapWeek(e.employeeId, dStr, idx===0?requesterShift:targetShift);
+    captureSwapSnapshot(r, e.employeeId, dStr);
+    const day = sched.days.find(d=>d.date===dStr);
     if(day){
       if(idx===0){
         if(isDoubleShift){
