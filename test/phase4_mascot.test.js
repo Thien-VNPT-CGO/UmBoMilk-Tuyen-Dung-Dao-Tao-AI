@@ -51,10 +51,11 @@ describe('Phase 4: Mascot Bò Sữa & Voice Jingle Suite', () => {
     assert.strictEqual(content.includes('setPointerCapture'), true);
   });
 
-  it('4. admin.html and employee.html include mascot.js script tag', () => {
+  it('4. chi admin.html include mascot.js (employee da go bo sua)', () => {
     const adminHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'admin.html'), 'utf8');
     const empHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'employee.html'), 'utf8');
     assert.strictEqual(adminHtml.includes('/js/mascot.js'), true);
-    assert.strictEqual(empHtml.includes('/js/mascot.js'), true);
+    assert.strictEqual(empHtml.includes('/js/mascot.js'), false);
+    assert.ok(empHtml.includes('function speakUmb') || fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'employee.js'), 'utf8').includes('function speakUmb'), 'employee phai co TTS rieng');
   });
 });

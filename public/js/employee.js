@@ -2636,7 +2636,7 @@ async function submitPeerSwap(){
         targetEmployeeId:peerTarget,
         targetDate:peerTargetDate,
         reason,
-        doubleShift: peerMyShift!==peerToShift
+        doubleShift: false
       })
     });
     clearSwapDraft();

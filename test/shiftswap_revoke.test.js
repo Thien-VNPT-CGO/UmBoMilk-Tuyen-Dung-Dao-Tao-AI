@@ -97,10 +97,12 @@ describe('Admin/HR thu hoi phieu doi ca (hoan lich)', () => {
     assert.ok(Array.isArray(ap.body.request.beforeSchedule) && ap.body.request.beforeSchedule.length === 2, 'phai co snapshot 2 ngay: ' + JSON.stringify(ap.body.request.beforeSchedule));
     let dayA = await getDay(adminToken, empA, date);
     let dayB = await getDay(adminToken, empB, date);
-    assert.equal(dayA.status, 'OFF', 'A phai OFF');
+    assert.equal(dayA.status, 'WORKING', 'A lam ca da trao');
+    assert.equal(dayA.shift, 'CA_CHIEU', 'A nhan ca chieu cua B');
     assert.equal(dayA.substituteFor, empB, 'A ghi nguoi thay B');
-    assert.equal(dayB.status, 'WORKING_DOUBLE', 'B phai 2 ca');
-    assert.equal(dayB.secondShift, 'CA_SANG', 'B them ca sang cua A');
+    assert.equal(dayB.status, 'WORKING', 'B lam ca da trao');
+    assert.equal(dayB.shift, 'CA_SANG', 'B nhan ca sang cua A');
+    assert.equal(dayB.substituteFor, empA, 'B ghi nguoi thay A');
     // Admin thu hoi
     const rv = await api(`/api/shift-swap/${reqId}/revoke`, { method: 'POST' }, adminToken);
     assert.equal(rv.status, 200, JSON.stringify(rv.body));
@@ -111,7 +113,7 @@ describe('Admin/HR thu hoi phieu doi ca (hoan lich)', () => {
     assert.equal(dayA.status, 'WORKING', 'A ve lam');
     assert.equal(dayA.shift, 'CA_SANG', 'A ve ca sang');
     assert.ok(!dayA.substituteFor && !dayA.secondShift && !dayA.doubleShiftGiven, 'A sach dau swap');
-    assert.equal(dayB.status, 'WORKING', 'B ve 1 ca');
+    assert.equal(dayB.status, 'WORKING', 'B ve lam');
     assert.equal(dayB.shift, 'CA_CHIEU', 'B ve ca chieu');
     assert.ok(!dayB.secondShift && !dayB.substituteFor && !dayB.doubleShiftInfo, 'B sach dau swap');
     // Thu hoi lan 2 -> 400

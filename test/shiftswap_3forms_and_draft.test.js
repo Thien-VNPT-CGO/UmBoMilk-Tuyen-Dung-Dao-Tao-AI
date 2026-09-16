@@ -241,9 +241,12 @@ describe('3 Forms Shift Swap & Single Date Off-Work-Swap Verification', () => {
     assert.equal(ap1.status, 200, JSON.stringify(ap1.body));
     const dayA1 = await getDay(adminToken, empA, dateA);
     const dayB1 = await getDay(adminToken, empB, dateB);
-    assert.equal(dayA1.status, 'OFF', 'A OFF dung ngay cua A');
-    assert.equal(dayB1.status, 'WORKING_DOUBLE', 'B 2 ca dung ngay cua B');
-    assert.equal(dayB1.secondShift, 'CA_SANG', 'B nhan ca sang cua A');
+    assert.equal(dayA1.status, 'WORKING', 'A lam dung ngay cua A');
+    assert.equal(dayA1.shift, 'CA_CHIEU', 'A nhan ca chieu cua B');
+    assert.equal(dayA1.substituteFor, empB);
+    assert.equal(dayB1.status, 'WORKING', 'B lam dung ngay cua B');
+    assert.equal(dayB1.shift, 'CA_SANG', 'B nhan ca sang cua A');
+    assert.equal(dayB1.substituteFor, empA);
 
     const c2 = await api('/api/shift-swap', {
       method: 'POST',
@@ -254,6 +257,66 @@ describe('3 Forms Shift Swap & Single Date Off-Work-Swap Verification', () => {
     const ap2 = await api(`/api/shift-swap/${c2.body.request.id}/approve`, { method: 'POST' }, adminToken);
     assert.equal(ap2.status, 200, JSON.stringify(ap2.body));
     const dayA2 = await getDay(adminToken, empA, dateB);
-    assert.equal(dayA2.status, 'OFF', 'A OFF dung ngay chung');
+    assert.equal(dayA2.status, 'WORKING', 'A lam dung ngay chung');
+    assert.equal(dayA2.shift, 'CA_SANG', 'A nhan ca sang cua B');
+    assert.equal(dayA2.substituteFor, empB);
+  });
+
+  it('6. Form 2 TH1 cung ca / TH2 khac ca / OFF<->ca: hoan doi thuan', async () => {
+    const empA = await makeOfficial(adminToken, 'SwapA', 'CN1', 'CA_SANG');
+    const empB = await makeOfficial(adminToken, 'SwapB', 'CN1', 'CA_CHIEU');
+    createdEmployees.push(empA, empB);
+    const m = mondayWeeksAhead(8);
+    const weekStart = fmtLocal(m);
+    const mkDays = (offIdx) => [0, 1, 2, 3, 4, 5, 6].map(i => {
+      const d = new Date(m);
+      d.setDate(m.getDate() + i);
+      const ds = fmtLocal(d);
+      const isOff = i === offIdx;
+      return { date: ds, dayName: ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'][i], shift: isOff ? 'OFF' : 'CA_SANG', status: isOff ? 'OFF' : 'WORKING' };
+    });
+    await api('/api/schedules', { method: 'POST', body: JSON.stringify({ employeeId: empA, weekStart, days: mkDays(0) }) }, adminToken);
+    await api('/api/schedules', { method: 'POST', body: JSON.stringify({ employeeId: empB, weekStart, days: mkDays(-1) }) }, adminToken);
+    const at = (i) => { const d = new Date(m); d.setDate(m.getDate() + i); return fmtLocal(d); };
+    const flow = async (payload) => {
+      const c = await api('/api/shift-swap', { method: 'POST', body: JSON.stringify(payload) }, adminToken);
+      assert.equal(c.status, 200, JSON.stringify(c.body));
+      const acc = await api(`/api/shift-swap/${c.body.request.id}/respond`, { method: 'POST', body: JSON.stringify({ employeeId: payload.targetEmployeeId, action: 'ACCEPT' }) });
+      assert.equal(acc.body.request.status, 'PENDING_HR');
+      const ap = await api(`/api/shift-swap/${c.body.request.id}/approve`, { method: 'POST' }, adminToken);
+      assert.equal(ap.status, 200, JSON.stringify(ap.body));
+      return ap.body.request.id;
+    };
+    await flow({ requesterId: empA, date: at(2), fromShift: 'CA_SANG', toShift: 'CA_SANG', targetEmployeeId: empB, targetDate: at(4), reason: 'TH1 cung ca' });
+    let dA = await getDay(adminToken, empA, at(2));
+    let dB = await getDay(adminToken, empB, at(4));
+    assert.equal(dA.status, 'WORKING'); assert.equal(dA.shift, 'CA_SANG'); assert.equal(dA.substituteFor, empB);
+    assert.equal(dB.status, 'WORKING'); assert.equal(dB.shift, 'CA_SANG'); assert.equal(dB.substituteFor, empA);
+
+    await flow({ requesterId: empA, date: at(3), fromShift: 'CA_SANG', toShift: 'CA_CHIEU', targetEmployeeId: empB, targetDate: at(5), reason: 'TH2 khac ca' });
+    dA = await getDay(adminToken, empA, at(3));
+    dB = await getDay(adminToken, empB, at(5));
+    assert.equal(dA.status, 'WORKING'); assert.equal(dA.shift, 'CA_CHIEU');
+    assert.equal(dB.status, 'WORKING'); assert.equal(dB.shift, 'CA_SANG');
+    assert.ok(dB.status !== 'WORKING_DOUBLE' && dB.status !== 'OFF', 'TH2 phai hoan doi thuan, khong double/OFF');
+
+    await flow({ requesterId: empA, date: at(0), fromShift: 'OFF', toShift: 'CA_SANG', targetEmployeeId: empB, targetDate: at(6), reason: 'OFF doi ca' });
+    dA = await getDay(adminToken, empA, at(0));
+    dB = await getDay(adminToken, empB, at(6));
+    assert.equal(dA.status, 'WORKING'); assert.equal(dA.shift, 'CA_SANG');
+    assert.equal(dB.status, 'OFF', 'B nghi bu dung ngay cua B');
+
+    const cc = await api('/api/shift-swap', {
+      method: 'POST', body: JSON.stringify({ requesterId: empA, date: at(4), fromShift: 'CA_SANG', toShift: 'CA_SANG', targetEmployeeId: empB, targetDate: at(4), reason: 'Nhuong ca cover', doubleShift: true })
+    });
+    assert.equal(cc.status, 200, JSON.stringify(cc.body));
+    await api(`/api/shift-swap/${cc.body.request.id}/respond`, { method: 'POST', body: JSON.stringify({ employeeId: empB, action: 'ACCEPT' }) });
+    const apc = await api(`/api/shift-swap/${cc.body.request.id}/approve`, { method: 'POST' }, adminToken);
+    assert.equal(apc.status, 200, JSON.stringify(apc.body));
+    dA = await getDay(adminToken, empA, at(4));
+    dB = await getDay(adminToken, empB, at(4));
+    assert.equal(dA.status, 'OFF', 'A nghi sau khi nhuong ca');
+    assert.equal(dB.status, 'WORKING_DOUBLE', 'B lam 2 ca');
+    assert.equal(dB.secondShift, 'CA_SANG', 'B nhan them ca sang cua A');
   });
 });

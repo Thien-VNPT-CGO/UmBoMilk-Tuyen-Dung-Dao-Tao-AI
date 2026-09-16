@@ -141,8 +141,10 @@ describe('Tab Quan ly Doi Ca thong nhat (Official)', () => {
     assert.equal(ap.body.request.status, 'APPROVED');
     const dayA = await getDay(adminToken, empA, global._tabReqDate);
     const dayB = await getDay(adminToken, empB, global._tabReqDate);
-    assert.equal(dayA.status, 'OFF', 'A OFF sau duyet');
-    assert.equal(dayB.status, 'WORKING_DOUBLE', 'B 2 ca sau duyet');
+    assert.equal(dayA.status, 'WORKING', 'A lam ca da trao sau duyet');
+    assert.equal(dayA.shift, 'CA_CHIEU', 'A nhan ca chieu cua B');
+    assert.equal(dayB.status, 'WORKING', 'B lam ca da trao sau duyet');
+    assert.equal(dayB.shift, 'CA_SANG', 'B nhan ca sang cua A');
     const nA = await empNotifs(empA, 'SHIFT_SWAP_APPROVED');
     const nB = await empNotifs(empB, 'SHIFT_SWAP_APPROVED');
     assert.ok(nA.length > 0 && nB.length > 0, 'A va B phai nhan TB duyet');

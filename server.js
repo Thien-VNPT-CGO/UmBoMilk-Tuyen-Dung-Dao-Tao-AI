@@ -7006,6 +7006,7 @@ app.post('/api/shift-swap', optionalEmployeeAuth, (req,res)=>{
     date, fromShift: curShift, toShift: finalToShift,
     targetEmployeeId: targetEmployeeId||null, targetEmployeeName: targetEmp?targetEmp.name:null,
     targetDate: targetEmployeeId ? bDate : null,
+    doubleShift: req.body.doubleShift === true,
     reason: reason||'',
     status: isDirect ? 'PENDING_TARGET' : 'PENDING_BROADCAST',
     createdAt: now.toISOString(), expiresAt, version:1,
@@ -7055,7 +7056,7 @@ function applyAcceptedSwapSchedules(r, actor){
   const target = targetId ? db.employees.find(e=>e.employeeId===targetId) : null;
   const requesterShift = requester?.shift || r.fromShift;
   const targetShift = target?.shift || r.toShift;
-  const isDoubleShift = r.doubleShift === true || (requesterShift !== targetShift);
+  const isDoubleShift = !!r.doubleShift && r.fromShift === r.toShift && r.fromShift !== 'OFF' && r.toShift !== 'OFF';
   function ensureSwapWeek(employeeIdSW, dateStr, empShift){
     const ws = toVietnamDateStr(getMonday(new Date(dateStr)));
     let sc = db.schedules.find(s=>s.employeeId===employeeIdSW && s.weekStart===ws);
@@ -7084,6 +7085,11 @@ function applyAcceptedSwapSchedules(r, actor){
           day.shift = requesterShift;
           day.substituteFor = r.targetEmployeeId;
           day.doubleShiftGiven = true;
+        } else if(r.toShift === 'OFF'){
+          day.status = 'OFF';
+          day.shift = 'OFF';
+          day.shifts = [];
+          day.substituteFor = r.targetEmployeeId;
         } else {
           day.shift = r.toShift;
           day.status = 'WORKING';
@@ -7097,6 +7103,11 @@ function applyAcceptedSwapSchedules(r, actor){
           day.shifts = [...new Set([targetShift, requesterShift].filter(Boolean))];
           day.substituteFor = r.requesterId;
           day.doubleShiftInfo = { originalEmployeeId: r.requesterId, originalEmployeeName: r.requesterName, originalShift: requesterShift, acceptedAt: getVietnamISOString() };
+        } else if(r.fromShift === 'OFF'){
+          day.status = 'OFF';
+          day.shift = 'OFF';
+          day.shifts = [];
+          day.substituteFor = r.requesterId;
         } else {
           day.status = 'WORKING';
           day.shift = r.fromShift;
@@ -7154,7 +7165,7 @@ app.post('/api/shift-swap/:id/respond', optionalEmployeeAuth, (req,res)=>{
       }
       const requesterShift = requester?.shift || r.fromShift;
       const targetShift = target?.shift || r.toShift;
-      const isDoubleShift = r.doubleShift === true || (requesterShift !== targetShift);
+      const isDoubleShift = !!r.doubleShift && r.fromShift === r.toShift && r.fromShift !== 'OFF' && r.toShift !== 'OFF';
       
       r.status='PENDING_HR'; r.acceptedBy=employeeId; r.acceptedAt=getVietnamISOString();
       r.doubleShift = isDoubleShift;
