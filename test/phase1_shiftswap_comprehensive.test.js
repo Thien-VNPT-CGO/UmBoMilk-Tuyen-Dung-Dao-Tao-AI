@@ -84,7 +84,7 @@ describe('Phase 1: Global Pending, Allowance, Payroll, UI Lock', () => {
     for (const eid of [empAId, empBId, empCId]) {
       if (eid) await api(`/api/employees/${eid}?hard=true`, { method: 'DELETE' }, adminToken).catch(() => {});
     }
-    await api('/api/settings', { method: 'PUT', body: JSON.stringify({ path: 'features.employeeShiftSwap', value: false }) }, adminToken);
+    await api('/api/settings', { method: 'PUT', body: JSON.stringify({ path: 'features.employeeShiftSwap', value: true }) }, adminToken);
   });
 
   it('1. Global pending: 1 request toi da moi NV across shift-swap, off-work-swap, hr-broadcast', async () => {

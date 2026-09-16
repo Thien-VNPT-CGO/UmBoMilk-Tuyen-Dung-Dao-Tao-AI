@@ -153,7 +153,7 @@ const DEFAULT_SETTINGS = {
   test: { minPerQuestion: 5, totalQuestions: 25, passScore: 8, retakeMin: 5, maxRetest: 3 },
   security: { sessionTimeout: 120, deviceBind: true },
   mail: { smtpHost: 'smtp.gmail.com', smtpPort: 465, user: '', pass: '', enabled: false, weeklyTo: ['nguyenthanhthien.dev.1602@gmail.com','umbomilk@gmail.com','dothidoandoan063@gmail.com'], weeklyHour: 23, lastWeeklySent: '', lastAttendanceReset: '' },
-  features: { employeeShiftSwap: false, empAttendance: true, empSchedule: true, empSalary: true, empOff: false, empEmergency: true, empAccount: false },
+  features: { employeeShiftSwap: true, empAttendance: true, empSchedule: true, empSalary: true, empOff: false, empEmergency: true, empAccount: false },
   holidays: { custom: [] }
 };
 

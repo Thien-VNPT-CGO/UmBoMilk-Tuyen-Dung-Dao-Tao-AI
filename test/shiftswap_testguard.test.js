@@ -33,7 +33,7 @@ describe('Chong ro ri test vao phieu doi ca', () => {
 
   after(async () => {
     try {
-      await api('/api/settings', { method: 'PUT', body: JSON.stringify({ path: 'features.employeeShiftSwap', value: false }) }, adminToken);
+      await api('/api/settings', { method: 'PUT', body: JSON.stringify({ path: 'features.employeeShiftSwap', value: true }) }, adminToken);
       if (empId) await api(`/api/employees/${empId}?hard=true`, { method: 'DELETE' }, adminToken);
     } catch (_) {}
   });

@@ -64,7 +64,7 @@ describe('Admin/HR thu hoi phieu doi ca (hoan lich)', () => {
 
   after(async () => {
     try {
-      await api('/api/settings', { method: 'PUT', body: JSON.stringify({ path: 'features.employeeShiftSwap', value: false }) }, adminToken);
+      await api('/api/settings', { method: 'PUT', body: JSON.stringify({ path: 'features.employeeShiftSwap', value: true }) }, adminToken);
       const list = await api('/api/employees', {}, adminToken);
       for (const e of (Array.isArray(list.body) ? list.body : [])) {
         if ((e.name || '').startsWith('SwapRevoke')) {

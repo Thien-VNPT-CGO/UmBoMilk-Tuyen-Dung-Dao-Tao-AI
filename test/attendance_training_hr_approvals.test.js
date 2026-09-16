@@ -393,11 +393,11 @@ test('Comprehensive Attendance, Training Shifts, 5 Days OFF & HR Approval Center
     headers: { 'Authorization': `Bearer ${adminToken}` }
   });
 
-  // Tra chuc nang doi ca ve tat (mac dinh HR tat)
+  // Tra chuc nang doi ca ve mo (mac dinh mo)
   await fetch(`${BASE}/api/settings`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
-    body: JSON.stringify({ path: 'features.employeeShiftSwap', value: false })
+    body: JSON.stringify({ path: 'features.employeeShiftSwap', value: true })
   });
 
   // Verify no test employees remain in db.json

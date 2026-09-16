@@ -11,7 +11,7 @@ describe('Mac dinh hien thi web NV Chinh thuc', () => {
     const m = src.match(/features:\s*\{[^}]*\}/);
     assert.ok(m, 'khong tim thay DEFAULT features');
     const f = m[0];
-    assert.ok(f.includes('employeeShiftSwap: false'), 'Doi ca mac dinh tat');
+    assert.ok(f.includes('employeeShiftSwap: true'), 'Doi ca mac dinh mo');
     assert.ok(f.includes('empAttendance: true'), 'Diem danh mac dinh bat');
     assert.ok(f.includes('empSchedule: true'), 'Lich mac dinh bat');
     assert.ok(f.includes('empSalary: true'), 'Luong AI mac dinh bat');

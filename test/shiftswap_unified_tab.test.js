@@ -82,7 +82,7 @@ describe('Tab Quan ly Doi Ca thong nhat (Official)', () => {
 
   after(async () => {
     try {
-      await api('/api/settings', { method: 'PUT', body: JSON.stringify({ path: 'features.employeeShiftSwap', value: false }) }, adminToken);
+      await api('/api/settings', { method: 'PUT', body: JSON.stringify({ path: 'features.employeeShiftSwap', value: true }) }, adminToken);
       for (const e of [empA, empB]) {
         if (e) await api(`/api/employees/${e}?hard=true`, { method: 'DELETE' }, adminToken);
       }

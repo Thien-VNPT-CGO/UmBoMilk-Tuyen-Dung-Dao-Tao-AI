@@ -56,12 +56,12 @@ describe('Batch 8: doi ca HR-gate + OFF-block + hieu ung + TTS', () => {
   before(async () => {
     adminToken = await login('admin', 'Master@@2027') || await login('admin', 'admin123');
     assert.ok(adminToken, 'admin login');
-    await api('/api/settings', { method: 'PUT', body: JSON.stringify({ path: 'features.employeeShiftSwap', value: false }) }, adminToken);
+    await api('/api/settings', { method: 'PUT', body: JSON.stringify({ path: 'features.employeeShiftSwap', value: true }) }, adminToken);
   });
 
   after(async () => {
     try {
-      await api('/api/settings', { method: 'PUT', body: JSON.stringify({ path: 'features.employeeShiftSwap', value: false }) }, adminToken);
+      await api('/api/settings', { method: 'PUT', body: JSON.stringify({ path: 'features.employeeShiftSwap', value: true }) }, adminToken);
       const list = await api('/api/employees', {}, adminToken);
       for (const e of (Array.isArray(list.body) ? list.body : [])) {
         if ((e.name || '').startsWith('Batch8 Test')) {
@@ -71,27 +71,27 @@ describe('Batch 8: doi ca HR-gate + OFF-block + hieu ung + TTS', () => {
     } catch (_) {}
   });
 
-  it('1. Mac dinh tat doi ca NV + me tra flag', async () => {
+  it('1. Mac dinh mo doi ca NV + me tra flag', async () => {
     const s = await api('/api/settings/masked', {}, adminToken);
-    assert.equal(s.body.features.employeeShiftSwap, false, 'mac dinh phai tat: ' + JSON.stringify(s.body).slice(0, 200));
+    assert.equal(s.body.features.employeeShiftSwap, true, 'mac dinh phai mo: ' + JSON.stringify(s.body).slice(0, 200));
     const nu = await makeEmp('Main');
     empId = nu.id; empKey = nu.key;
     const el = await api('/api/auth/employee-login', { method: 'POST', body: JSON.stringify({ employeeId: empId, key: empKey, deviceId: 'b8-dev' }) });
     const me = await api('/api/employee/me', {}, el.body.token);
     assert.equal(me.body.valid, true);
-    assert.equal(me.body.features.employeeShiftSwap, false);
+    assert.equal(me.body.features.employeeShiftSwap, true);
   });
 
-  it('2. Tat: tao phieu doi ca 403; bat: 200', async () => {
+  it('2. Bat: tao phieu doi ca 200; tat: 403', async () => {
     await ensureEmp();
     const d = new Date(); d.setDate(d.getDate() + 20);
     const payload = { requesterId: empId, date: fmtLocal(d), fromShift: 'CA_SANG', toShift: 'CA_CHIEU', reason: 'Batch8' };
-    const off = await api('/api/shift-swap', { method: 'POST', body: JSON.stringify(payload) }, adminToken);
-    assert.equal(off.status, 403, JSON.stringify(off.body));
-    await api('/api/settings', { method: 'PUT', body: JSON.stringify({ path: 'features.employeeShiftSwap', value: true }) }, adminToken);
     const on = await api('/api/shift-swap', { method: 'POST', body: JSON.stringify(payload) }, adminToken);
     assert.equal(on.status, 200, JSON.stringify(on.body));
     await api('/api/settings', { method: 'PUT', body: JSON.stringify({ path: 'features.employeeShiftSwap', value: false }) }, adminToken);
+    const off = await api('/api/shift-swap', { method: 'POST', body: JSON.stringify(payload) }, adminToken);
+    assert.equal(off.status, 403, JSON.stringify(off.body));
+    await api('/api/settings', { method: 'PUT', body: JSON.stringify({ path: 'features.employeeShiftSwap', value: true }) }, adminToken);
   });
 
   it('3. Ngay OFF: checkin 400; ngay WORKING: checkin 200', async () => {
