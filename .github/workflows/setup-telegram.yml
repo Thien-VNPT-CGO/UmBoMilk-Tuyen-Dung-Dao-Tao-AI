@@ -16,8 +16,8 @@ jobs:
           FIN_BOT_TOKEN: ${{ secrets.FIN_BOT_TOKEN }}
         run: |
           set -e
-          for cfg in "employee:$EMP_BOT_TOKEN:/tg-employee" "finance:$FIN_BOT_TOKEN:/tg-finance"; do
-            IFS=':' read -r role tok path <<< "$cfg"
+          for cfg in "employee|$EMP_BOT_TOKEN|/tg-employee" "finance|$FIN_BOT_TOKEN|/tg-finance"; do
+            IFS='|' read -r role tok path <<< "$cfg"
             tok=$(echo "$tok" | tr -d '[:space:]')
             if [ -z "$tok" ]; then echo "[$role] SKIP: secret rỗng"; continue; fi
             echo "[$role] getMe (kiểm tra token)..."
