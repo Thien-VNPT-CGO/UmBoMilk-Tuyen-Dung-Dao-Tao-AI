@@ -105,10 +105,11 @@
     let tgName = '';
     try { const u = T.WA && T.WA.initDataUnsafe && T.WA.initDataUnsafe.user; if (u) tgName = (u.first_name || '') + (u.username ? ' (@' + u.username + ')' : ''); } catch (e) {}
     return T.heroHTML((tgName ? tgName + ' • ' : '') + 'Mini App Nhân viên')
-      + '<div class="tg-card"><h3>🔗 Liên kết tài khoản nhân viên</h3>'
-      + '<label class="tg-lab">Mã NV (HR cấp)</label><input id="lkEmp" class="tg-inp" placeholder="CN261_..._NV...">'
-      + '<label class="tg-lab">KEY kích hoạt</label><input id="lkKey" class="tg-inp" placeholder="KEY-...">'
-      + '<button class="tg-btn" id="btnLink">Liên kết</button></div>';
+      + '<div class="tg-card"><h3>⚡ Đăng nhập & Bắt đầu làm việc</h3>'
+      + '<p class="tg-sub" style="font-size:13px;color:#64748b;margin-bottom:12px">Nhập Số điện thoại hoặc Mã nhân viên (chỉ cần đăng nhập 1 lần duy nhất):</p>'
+      + '<label class="tg-lab">Số điện thoại hoặc Mã NV</label><input id="lkEmp" class="tg-inp" placeholder="VD: 090... hoặc CN261_...">'
+      + '<label class="tg-lab">KEY kích hoạt (nếu có)</label><input id="lkKey" class="tg-inp" placeholder="Để trống nếu đăng nhập bằng SĐT">'
+      + '<button class="tg-btn" id="btnLink">🚀 Đăng nhập ngay</button></div>';
   };
   T.pages['emp-link:mount'] = async () => {
     const r = await tryTelegramAuth();
@@ -117,10 +118,13 @@
       let tid = '';
       try { const u = T.WA && T.WA.initDataUnsafe && T.WA.initDataUnsafe.user; if (u && u.id) tid = String(u.id); } catch (e) {}
       if (!tid) tid = 'web-' + Date.now();
+      const val = (T.$('lkEmp').value || '').trim();
+      const key = (T.$('lkKey').value || '').trim();
+      if (!val) { T.toast('Vui lòng nhập Số điện thoại hoặc Mã NV'); return; }
       try {
-        const j = await T.call('/api/telegram/link', { method: 'POST', body: { telegramId: tid, employeeId: T.$('lkEmp').value.trim(), key: T.$('lkKey').value.trim() } });
+        const j = await T.call('/api/telegram/link', { method: 'POST', body: { telegramId: tid, employeeId: val, phone: val, key: key || undefined } });
         T.store.set('emp_token', j.token); T.store.set('emp_user', j.employee);
-        T.notifyOk(); T.toast('Liên kết thành công ✅'); bootTabs();
+        T.notifyOk(); T.toast('Đăng nhập thành công ✅ Chào mừng ' + (j.employee.name || '')); bootTabs();
       } catch (err) { T.notifyErr(); T.toast(err.message); }
     };
   };

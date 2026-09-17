@@ -12398,20 +12398,35 @@ app.post('/api/telegram/auth', (req,res)=>{
   }
   return res.json({ ok:true, linked:false, telegramUser: v.user, telegramId });
 });
-// Liên kết Telegram <-> Mã NV + Key (từ Mini App, không cần JWT trước)
+// Liên kết Telegram <-> SĐT hoặc Mã NV + Key (từ Mini App, không cần JWT trước)
 app.post('/api/telegram/link', (req,res)=>{
-  const { telegramId, username, employeeId, key, chatId } = req.body||{};
-  if(!telegramId || !employeeId || !key) return res.status(400).json({ error:'Thiếu telegramId/employeeId/key' });
-  const emp = (db.employees||[]).find(e=>e.employeeId===employeeId);
-  if(!emp) return res.status(404).json({ error:'Mã nhân viên không tồn tại' });
-  const keyRec = (db.keys||[]).find(k=>k.employeeId===employeeId && k.key===key);
-  if(!keyRec) return res.status(401).json({ error:'KEY không hợp lệ' });
-  if(keyRec.status!=='ACTIVE') return res.status(403).json({ error:'KEY đã bị vô hiệu hóa' });
+  const { telegramId, username, employeeId, key, phone, chatId } = req.body||{};
+  if(!telegramId) return res.status(400).json({ error:'Thiếu telegramId' });
+  const inputVal = String(phone || employeeId || '').trim();
+  if(!inputVal) return res.status(400).json({ error:'Vui lòng nhập Số điện thoại hoặc Mã nhân viên' });
+
+  let emp = null;
+  const cleanPhone = inputVal.replace(/\D/g,'');
+  if(cleanPhone.length >= 9){
+    emp = (db.employees||[]).find(e=> String(e.phone||'').replace(/\D/g,'')===cleanPhone);
+  }
+  if(!emp){
+    emp = (db.employees||[]).find(e=> e.employeeId===inputVal || (cleanPhone.length >= 9 && String(e.phone||'').replace(/\D/g,'')===cleanPhone));
+  }
+  if(!emp) return res.status(404).json({ error:'Không tìm thấy nhân viên với thông tin: ' + inputVal });
+  if(['ARCHIVED','TERMINATED','RESIGNED'].includes(emp.status)) return res.status(403).json({ error:'Tài khoản nhân viên đã bị vô hiệu hóa' });
+
+  // Nếu có truyền key và nhân viên có key thì kiểm tra
+  if(key){
+    const keyRec = (db.keys||[]).find(k=>k.employeeId===emp.employeeId && k.key===key);
+    if(keyRec && keyRec.status!=='ACTIVE') return res.status(403).json({ error:'KEY đã bị vô hiệu hóa' });
+  }
+
   let link = findTelegramLink(telegramId);
   if(!link){ link = { telegramId: String(telegramId), createdAt: getVietnamISOString() }; db.telegramLinks.push(link); }
-  link.employeeId = employeeId; link.username = username||link.username||'';
+  link.employeeId = emp.employeeId; link.username = username||link.username||'';
   link.chatId = chatId||telegramId; link.linkedAt = getVietnamISOString();
-  audit(employeeId,'TELEGRAM_LINK','TELEGRAM',null,{telegramId, employeeId}, req.ip);
+  audit(emp.employeeId,'TELEGRAM_LINK','TELEGRAM',null,{telegramId, employeeId: emp.employeeId}, req.ip);
   saveDB();
   try{ io.emit('telegram:update', { count: db.telegramLinks.length }); }catch(e){}
   const token = jwt.sign({ employeeId: emp.employeeId, name: emp.name, type: emp.type, status: emp.status, branchId: emp.branchId, via: 'telegram' }, JWT_SECRET, {expiresIn:'12h'});
@@ -12546,6 +12561,26 @@ io.on('connection', (socket)=>{
   socket.on('ping:heartbeat', ()=> socket.emit('pong:heartbeat', { now: getVietnamISOString() }));
 });
 
+async function autoSetupTelegramBots(){
+  if(OUTBOUND_SYNC_DISABLED || process.env.NODE_ENV==='test') return;
+  const base = (db.settings.telegram?.webAppUrl || process.env.TELEGRAM_WEBAPP_URL || '').replace(/\/telegram\/?$/, '').replace(/\/tg-(hr|employee|finance)\/?$/, '');
+  if(!base) return;
+  console.log(`[TELEGRAM] Đang tự động cấu hình Webhook & Menu Button 3 Bot tới: ${base}...`);
+  for(const role of ['hr','employee','finance']){
+    const cfg = getTelegramCfg(role);
+    if(!cfg.botToken) continue;
+    try{
+      const rolePath = role==='hr' ? '/tg-hr' : role==='employee' ? '/tg-employee' : '/tg-finance';
+      const whUrl = base + '/api/telegram/webhook/' + role;
+      const wh = await tg.setTelegramWebhook(cfg.botToken, whUrl);
+      const menu = await tg.setTelegramMenuButton(cfg.botToken, base + rolePath);
+      console.log(`[TELEGRAM] ✅ Bot ${role} (@${cfg.botUsername}): Webhook OK=${wh.ok}, Menu OK=${menu.ok}`);
+    }catch(e){
+      console.log(`[TELEGRAM] ⚠️ Bot ${role} setup:`, e.message);
+    }
+  }
+}
+
 server.listen(PORT, ()=> {
   console.log(`Ụm Bò Milk HR running at http://localhost:${PORT}`);
   try{
@@ -12554,4 +12589,5 @@ server.listen(PORT, ()=> {
     console.log(`[TELEGRAM] ${hasTok ? 'Bot Token SET' : 'Bot Token EMPTY (đặt TELEGRAM_BOT_TOKEN để bật)'} • Mini App: /telegram • Username: ${t.botUsername || process.env.TELEGRAM_BOT_USERNAME || 'EMPTY'}`);
   }catch(e){}
   try{ startTelegramPolling(); }catch(e){}
+  try{ setTimeout(autoSetupTelegramBots, 1500); }catch(e){}
 });
