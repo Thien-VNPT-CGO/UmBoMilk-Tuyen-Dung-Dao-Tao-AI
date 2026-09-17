@@ -89,6 +89,10 @@ describe('Telegram Mini App — tích hợp (giữ nguyên chức năng cũ)', (
     }
     assert.ok(html.includes('/tg/tg-core.js') && html.includes('/tg/tg-boot.js'), 'telegram.html phải nạp app native');
     assert.ok(!html.includes('<iframe'), 'Mini App thực thụ không dùng iframe');
+    const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'tg', 'tg.css'), 'utf8');
+    for (const m of ['--umb-grad', '.ripple', 'page-enter', '@keyframes', '@media (min-width:1100px)', '.tg-toast.show']) {
+      assert.ok(css.includes(m), 'theme hồng thiếu hiệu ứng: ' + m);
+    }
   });
 
   it('7. Settings masked có telegram.botToken (không lộ secret)', async () => {

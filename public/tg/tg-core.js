@@ -35,10 +35,32 @@
     haptic('light');
     let t = document.querySelector('.tg-toast');
     if (!t) { t = document.createElement('div'); t.className = 'tg-toast'; document.body.appendChild(t); }
-    t.textContent = msg; t.style.display = 'block';
+    t.textContent = msg;
+    t.classList.remove('ok', 'err', 'show');
+    const m = String(msg || '');
+    if (/^(✅|Đã|Xong|Lưu|Liên kết|Gửi thành|Đăng nhập|Nạp|Backup)/.test(m)) { t.classList.add('ok'); notifyOk(); }
+    else if (/^(⚠️|❌|Lỗi|Không|Thiếu|Sai)/.test(m)) { t.classList.add('err'); notifyErr(); }
+    void t.offsetWidth;
+    t.classList.add('show');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => { t.style.display = 'none'; }, ms || 2200);
+    toastTimer = setTimeout(() => { t.classList.remove('show'); }, ms || 2200);
   }
+  // Ripple khi chạm nút + tab (hiệu ứng click hiện đại)
+  document.addEventListener('pointerdown', (ev) => {
+    const el = ev.target && ev.target.closest ? ev.target.closest('.tg-btn,.tg-menu,.tg-tab') : null;
+    if (!el) return;
+    try {
+      const r = el.getBoundingClientRect();
+      const s = document.createElement('span');
+      s.className = 'ripple';
+      const d = Math.max(r.width, r.height);
+      s.style.width = s.style.height = d + 'px';
+      s.style.left = (ev.clientX - r.left - d / 2) + 'px';
+      s.style.top = (ev.clientY - r.top - d / 2) + 'px';
+      el.appendChild(s);
+      setTimeout(() => { try { s.remove(); } catch (e) {} }, 550);
+    } catch (e) {}
+  }, { passive: true });
   function confirmDlg(msg) {
     return new Promise((resolve) => {
       try {
@@ -150,6 +172,7 @@
       console.error(e);
       el.innerHTML = '<div class="tg-card">⚠️ ' + esc(e.message || 'Lỗi tải trang') + '<button class="tg-btn ghost" onclick="TG.back()">Quay lại</button></div>';
     }
+    try { el.classList.remove('page-enter'); void el.offsetWidth; el.classList.add('page-enter'); } catch (e) {}
     try { window.scrollTo(0, 0); } catch (e) {}
   }
   function back() {
