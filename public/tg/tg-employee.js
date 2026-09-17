@@ -401,20 +401,12 @@
     return '<div class="tg-card"><div class="tg-row"><div class="ic">👤</div><div class="bd"><div class="tt">' + T.esc(e.name || '') + '</div><div class="sm">' + T.esc(e.employeeId || '') + ' • ' + T.esc(e.phone || '') + '</div></div></div>'
       + '<div class="tg-row"><div class="ic">🏪</div><div class="bd"><div class="tt">Chi nhánh & ca</div><div class="sm">' + T.esc(e.branchId || '') + ' • ' + T.shiftVi(e.shift) + '</div></div></div>'
       + '<div class="tg-row"><div class="ic">📱</div><div class="bd"><div class="tt">Thiết bị</div><div class="sm">' + T.esc(deviceId()) + '</div></div></div></div>'
-      + '<button class="tg-btn ghost" id="btnUnlink">🔓 Hủy liên kết Telegram</button>'
       + '<button class="tg-btn danger" id="btnLogout">Đăng xuất</button>';
   };
   T.pages['emp-account:mount'] = async () => {
     if (T.$('btnLogout')) T.$('btnLogout').onclick = async () => {
       if (!await T.confirmDlg('Đăng xuất khỏi Mini App?')) return;
       T.store.del('emp_token'); T.store.del('emp_user'); T.setTabs([]); T.go('emp-link', {}, true);
-    };
-    if (T.$('btnUnlink')) T.$('btnUnlink').onclick = async () => {
-      try {
-        const u = T.WA && T.WA.initDataUnsafe && T.WA.initDataUnsafe.user;
-        if (u && u.id) await T.call('/api/telegram/unlink', { method: 'POST', body: { telegramId: String(u.id) } });
-        T.toast('Đã hủy liên kết');
-      } catch (err) { T.toast(err.message); }
     };
   };
 
