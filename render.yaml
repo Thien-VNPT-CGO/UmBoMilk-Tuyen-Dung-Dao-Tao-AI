@@ -66,6 +66,15 @@ services:
         value: 1h06TrHMRnBOHMkp7Ri4Rz8yRw8ptemQp0ftjMldHYdc
       - key: QUIZ_BANK_SHEET_NAME
         value: ""
+      # Telegram Bot + Mini App (@umbomilkhrbot) — Token set thủ công trên Render Dashboard (Environment), KHÔNG commit vào git
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_BOT_USERNAME
+        value: umbomilkhrbot
+      # URL public của service + /telegram — sửa <ten-service> thành domain thật trên Render
+      # Ví dụ: https://umbomilk-hr.onrender.com/telegram
+      - key: TELEGRAM_WEBAPP_URL
+        sync: false
 
 # Postgres free 90 ngày (tùy chọn, nếu cần 24/7 DB thay db.json)
 # databases:

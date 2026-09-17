@@ -20,6 +20,7 @@ const nodemailer = require('nodemailer');
 const JSZip = require('jszip');
 const { pickFair } = require('./services/fairPick');
 const { getHolidayInfo, getHolidaysInRange, getYearHolidays } = require('./services/vietnamHoliday');
+const tg = require('./services/telegram');
 
 // === ENV & SECURITY CONFIG (Realtime & Automation foundation) ===
 const PORT = process.env.PORT || 3000;
@@ -145,6 +146,8 @@ const DEFAULT_SETTINGS = {
   finance: { webhookUrl: 'https://script.google.com/macros/s/AKfycbxYZhMjR9riLFQfYEkgLfub33XtWlSP2IokghTt82Lb4SQVL4tKxQyNACr69yC0ACA/exec', secret: DEFAULT_WEBHOOK_SECRET, spreadsheetId: '13Y4rycVMq2-HXGySjaJJBl2YZswKEaK5WkSLWVkLjuY' },
   ai: { provider: 'openai', baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o', temperature: 0.7 },
   zalo: { oaId: '', accessToken: '', template: '', reminderEnabled: true },
+  // Telegram Bot + Mini App — cấu hình tại Admin(Cài đặt)->Telegram hoặc ENV TELEGRAM_*
+  telegram: { botToken: '', botUsername: '', webAppUrl: '', enabled: false, useWebhook: false, webhookSecret: '' },
   calendar: { clientId: '', clientSecret: '', calendarId: 'primary', duration: 30, reminderOnce: true },
   scoring: { criteria: [{ name: 'Kinh nghiệm', weight: 30 }, { name: 'Giao tiếp', weight: 25 }, { name: 'Thái độ', weight: 25 }, { name: 'Sẵn sàng ca', weight: 20 }], passThreshold: 70 },
   attendance: { checkInOpenBefore: 30, checkInCloseAfter: 60, lateThreshold: 15, earlyLeaveThreshold: 15, penaltyLate: 30000, penaltyAbsent: 100000, penaltyNoCheckout: 50000 },
@@ -223,7 +226,9 @@ let db = {
   cashflowExpenses: [],
   cashflowRecurringBills: [],
   cashflowTransactions: [],
-  scheduleBackups: []
+  scheduleBackups: [],
+  telegramLinks: [],
+  telegramLogs: []
 };
 
 // === SYSTEM RESET LOCK (Ngăn chặn background sync ghi đè/hồi sinh dữ liệu khi đang reset) ===
@@ -268,7 +273,8 @@ function decryptSettingsSecrets(settings){
     ['ai','apiKey'],
     ['zalo','accessToken'],
     ['calendar','clientSecret'],
-    ['mail','pass']
+    ['mail','pass'],
+    ['telegram','botToken']
   ];
   fields.forEach(([grp,key])=>{
     if(settings[grp] && settings[grp][key] && typeof settings[grp][key]==='string' && settings[grp][key].startsWith('enc:')){
@@ -290,6 +296,7 @@ function getMaskedSettings(settings){
   if(m.zalo?.accessToken) m.zalo.accessToken = maskSecretValue(settings.zalo.accessToken);
   if(m.calendar?.clientSecret) m.calendar.clientSecret = maskSecretValue(settings.calendar.clientSecret);
   if(m.mail?.pass) m.mail.pass = maskSecretValue(settings.mail.pass);
+  if(m.telegram?.botToken) m.telegram.botToken = maskSecretValue(settings.telegram.botToken);
   return m;
 }
 
@@ -334,6 +341,10 @@ function loadDB() {
       if (!db.scheduleBackups) db.scheduleBackups = [];
       if (!db.overtimeRequests) db.overtimeRequests = [];
       if (!db.leaveRequests) db.leaveRequests = [];
+      if (!db.settings.telegram) db.settings.telegram = { ...DEFAULT_SETTINGS.telegram };
+      Object.keys(DEFAULT_SETTINGS.telegram).forEach(k=>{ if(db.settings.telegram[k]===undefined) db.settings.telegram[k]=DEFAULT_SETTINGS.telegram[k]; });
+      if (!db.telegramLinks) db.telegramLinks = [];
+      if (!db.telegramLogs) db.telegramLogs = [];
       // Tự động chuẩn hóa branchPreference và shiftPreference nếu chưa có
       if (Array.isArray(db.applicants)) {
         db.applicants.forEach(a => {
@@ -398,6 +409,9 @@ function saveDB() {
       }
       if(clone.settings.mail?.pass && !clone.settings.mail.pass.startsWith('enc:') && clone.settings.mail.pass.length>5 && !clone.settings.mail.pass.includes('•')){
         clone.settings.mail.pass = encryptSecret(clone.settings.mail.pass);
+      }
+      if(clone.settings.telegram?.botToken && !clone.settings.telegram.botToken.startsWith('enc:') && clone.settings.telegram.botToken.length>10 && !clone.settings.telegram.botToken.includes('•')){
+        clone.settings.telegram.botToken = encryptSecret(clone.settings.telegram.botToken);
       }
     }
     // atomic write: write to temp then rename
@@ -551,6 +565,13 @@ if(process.env.GOOGLE_OAUTH_CLIENT_SECRET) db.settings.calendar.clientSecret = p
 if(process.env.GOOGLE_CALENDAR_ID) db.settings.calendar.calendarId = process.env.GOOGLE_CALENDAR_ID;
 if(process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID) db.settings.googleDrive.rootFolderId = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
 if(process.env.GOOGLE_DRIVE_BACKUP_FOLDER_ID) db.settings.googleDrive.backupFolderId = process.env.GOOGLE_DRIVE_BACKUP_FOLDER_ID;
+// Telegram Bot + Mini App — ưu tiên ENV > DB (phục vụ deploy, token thật nằm ở ENV)
+if(!db.settings.telegram) db.settings.telegram = { ...DEFAULT_SETTINGS.telegram };
+if(process.env.TELEGRAM_BOT_TOKEN) db.settings.telegram.botToken = process.env.TELEGRAM_BOT_TOKEN;
+if(process.env.TELEGRAM_BOT_USERNAME) db.settings.telegram.botUsername = process.env.TELEGRAM_BOT_USERNAME;
+if(process.env.TELEGRAM_WEBAPP_URL) db.settings.telegram.webAppUrl = process.env.TELEGRAM_WEBAPP_URL;
+if(process.env.TELEGRAM_ENABLED === 'true') db.settings.telegram.enabled = true;
+if(process.env.TELEGRAM_WEBHOOK_SECRET) db.settings.telegram.webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
 // Log ràng buộc đã áp dụng
 console.log(`[CONFIG] Google Sheet Hub: Form=${db.settings.googleSheet.formResponsesSheetId.slice(0,8)}... DB=${db.settings.googleSheet.targetDatabaseSpreadsheetId.slice(0,8)}... Webhooks=${getAllWebhookUrls().length} [${getAllWebhookUrls().map(u=>u.slice(0,35)+'...').join(', ')}]`);
 console.log(`[CONFIG] Finance: ${db.settings.finance?.webhookUrl ? db.settings.finance.webhookUrl.slice(0,35)+'...' : 'EMPTY'} • Calendar: ${db.settings.calendar.clientId ? 'OAuth SET' : 'EMPTY'} • Drive: ${db.settings.googleDrive.rootFolderId ? db.settings.googleDrive.rootFolderId.slice(0,8)+'...' : 'EMPTY'}`);
@@ -2547,6 +2568,8 @@ async function sendZaloBotNotification(payload) {
 
   saveDB();
   io.emit('zalo:update', db.zaloRecords);
+  // Kênh bổ sung: đẩy song song qua Telegram nếu NV đã liên kết (không ảnh hưởng Zalo)
+  try{ notifyTelegramForPhone(phone, content); }catch(e){}
   return zr;
 }
 
@@ -4906,6 +4929,78 @@ function addDriveFile(employeeId, dateStr, type, fileName, meta){
   })();
   return file;
 }
+
+// ============ DRIVE AUTO-BACKUP db.json (kho backup cấp 2 trên Google Drive 2TB) ============
+// Chạy mỗi đêm 02:00 giờ VN + nút bấm tay. Giữ 30 bản mới nhất (umb-db-*.json).
+let __lastDriveBackupDay = '';
+async function backupDbToDrive(reason) {
+  if (OUTBOUND_SYNC_DISABLED) return { ok: false, skipped: 'disabled', reason: 'Chế độ test — không đẩy ra ngoài' };
+  try {
+    const token = await getGoogleAccessToken();
+    if (!token) return { ok: false, skipped: 'no-token', reason: 'Chưa cấu hình Service Account (Cài đặt → Google Sheet)' };
+    const folderId = db.settings?.googleDrive?.backupFolderId || db.settings?.googleDrive?.rootFolderId;
+    if (!folderId) return { ok: false, skipped: 'no-folder', reason: 'Chưa cấu hình Drive Folder (Cài đặt → Google Drive)' };
+    if (!fs.existsSync(DATA_FILE)) return { ok: false, skipped: 'no-file', reason: 'Không thấy data/db.json' };
+    const vn = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
+    const pad = (n) => String(n).padStart(2, '0');
+    const name = `umb-db-${vn.getFullYear()}${pad(vn.getMonth() + 1)}${pad(vn.getDate())}-${pad(vn.getHours())}${pad(vn.getMinutes())}.json`;
+    const data = fs.readFileSync(DATA_FILE);
+    const boundary = '-------umbdbbackup31415926';
+    const metadata = JSON.stringify({ name, parents: [folderId], mimeType: 'application/json' });
+    const part1 = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n`;
+    const part2Header = `--${boundary}\r\nContent-Type: application/json\r\n\r\n`;
+    const end = `\r\n--${boundary}--`;
+    const bodyBuffer = Buffer.concat([Buffer.from(part1), Buffer.from(part2Header), data, Buffer.from(end)]);
+    const upRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+      method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': `multipart/related; boundary=${boundary}` }, body: bodyBuffer
+    });
+    const upData = await upRes.json().catch(() => ({}));
+    if (!upData.id) return { ok: false, skipped: 'upload-failed', reason: upData?.error?.message || 'Drive từ chối upload' };
+    const url = `https://drive.google.com/file/d/${upData.id}/view`;
+    if (!db.driveFiles) db.driveFiles = [];
+    db.driveFiles.unshift({ id: uuidv4(), employeeId: '', name: '', date: getVietnamTodayStr(), type: 'DB_BACKUP', fileName: name, driveFileId: upData.id, url, size: data.length, reason: reason || 'AUTO', createdAt: getVietnamISOString(), sync_status: 'SYNCED' });
+    if (db.driveFiles.length > 300) db.driveFiles.length = 300;
+    saveDB();
+    try { io.emit('drive:update', db.driveFiles.slice(0, 20)); } catch (e) {}
+    // Tỉa bản cũ trên Drive: giữ 30 bản umb-db-* mới nhất
+    try {
+      const q = encodeURIComponent(`'${folderId}' in parents and name contains 'umb-db-' and trashed=false`);
+      const lr = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&orderBy=createdTime desc&pageSize=100&fields=files(id,createdTime)`, { headers: { Authorization: `Bearer ${token}` } });
+      const lj = await lr.json().catch(() => ({}));
+      const olds = (lj.files || []).slice(30);
+      for (const f of olds) { try { await fetch(`https://www.googleapis.com/drive/v3/files/${f.id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }); } catch (e) {} }
+    } catch (e) { console.error('[DRIVE BACKUP] prune error', e.message); }
+    console.log(`[DRIVE BACKUP] OK ${name} (${Math.round(data.length / 1024)}KB) -> ${upData.id} [${reason || 'AUTO'}]`);
+    return { ok: true, fileId: upData.id, name, size: data.length, url };
+  } catch (e) {
+    console.error('[DRIVE BACKUP] error', e.message);
+    return { ok: false, skipped: 'error', reason: e.message };
+  }
+}
+// Lịch đêm 02:00 giờ VN — kiểm tra mỗi phút
+setInterval(() => {
+  try {
+    const vn = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
+    const pad = (n) => String(n).padStart(2, '0');
+    const day = `${vn.getFullYear()}-${pad(vn.getMonth() + 1)}-${pad(vn.getDate())}`;
+    if (vn.getHours() === 2 && vn.getMinutes() === 0 && __lastDriveBackupDay !== day) {
+      __lastDriveBackupDay = day;
+      backupDbToDrive('NIGHTLY').catch(() => {});
+    }
+  } catch (e) {}
+}, 60 * 1000);
+
+// API Admin backup ngay + xem danh sách bản backup
+app.post('/api/admin/drive/backup', authMiddleware, roleCheck(['Admin']), async (req, res) => {
+  const r = await backupDbToDrive('MANUAL:' + (req.user.username || 'admin'));
+  audit(req.user.username, 'DRIVE_BACKUP', 'SYSTEM', null, { ok: r.ok, file: r.name || r.skipped }, req.ip);
+  if (r.ok) return res.json({ success: true, fileId: r.fileId, name: r.name, size: r.size, url: r.url });
+  return res.json({ success: false, skipped: r.skipped, reason: r.reason });
+});
+app.get('/api/admin/drive/backups', authMiddleware, roleCheck(['Admin']), (req, res) => {
+  const arr = (db.driveFiles || []).filter((f) => f.type === 'DB_BACKUP').slice(0, 30);
+  res.json({ backups: arr, count: arr.length });
+});
 
 // ============ GOOGLE SHEET REALTIME 1:1 - Auto-create sheets per HR tab ============
 async function ensureSheetsExist(){
@@ -10472,6 +10567,33 @@ app.post('/api/admin/env/sync', authMiddleware, roleCheck(['Admin']), (req,res)=
   res.json({ success: true, message: 'Đã ép đồng bộ realtime 18 biến môi trường Render', data: report });
 });
 
+// API Admin nạp lại DB từ đĩa (dùng sau khi scp db.json lên server — khỏi restart).
+// An toàn: validate file trước, backup bản RAM ra db_before_reload.json, lỗi thì giữ nguyên RAM.
+app.post('/api/admin/db/reload', authMiddleware, roleCheck(['Admin']), (req,res)=>{
+  try{
+    if(!fs.existsSync(DATA_FILE)) return res.status(404).json({ error:'Không thấy file data/db.json trên server' });
+    let parsed;
+    try{ parsed = JSON.parse(fs.readFileSync(DATA_FILE,'utf8')); }
+    catch(e){ return res.status(400).json({ error:'File db.json lỗi cú pháp — giữ nguyên dữ liệu trong RAM', detail: e.message }); }
+    if(!parsed || typeof parsed!=='object' || !Array.isArray(parsed.employees) || !Array.isArray(parsed.keys)){
+      return res.status(400).json({ error:'File db.json không đúng cấu trúc (thiếu employees/keys) — giữ nguyên dữ liệu trong RAM' });
+    }
+    try{ fs.writeFileSync(path.join(path.dirname(DATA_FILE),'db_before_reload.json'), JSON.stringify(db)); }catch(e){}
+    loadDB();
+    audit(req.user.username,'DB_RELOAD','SYSTEM',null,{employees:db.employees.length, keys:db.keys.length}, req.ip);
+    try{
+      io.emit('db:update', { timestamp: getVietnamISOString() });
+      io.emit('employees:update', db.employees);
+      io.emit('keys:update', db.keys);
+      io.emit('schedules:update', db.schedules);
+      io.emit('attendances:update', db.attendances);
+      io.emit('notifications:update', db.notifications);
+      io.emit('sync:update', db.syncQueue);
+    }catch(e){}
+    res.json({ success:true, employees:db.employees.length, keys:(db.keys||[]).length, applicants:(db.applicants||[]).length, attendances:(db.attendances||[]).length, at:getVietnamISOString() });
+  }catch(e){ res.status(500).json({ error:'Nạp DB thất bại — giữ nguyên dữ liệu trong RAM', detail: e.message }); }
+});
+
 // ============ P0 PHASE 1: Security inventory endpoint (Master 6.6) ============
 // Liet ke endpoint cong khai (khong authMiddleware) de HR/Admin review.
 // Chi Admin/HR duoc xem. Khong tra secret.
@@ -11644,11 +11766,232 @@ app.post('/api/finance/sheets/kham-suc-khoe', financeAuthMiddleware, async (req,
   res.json({ success:true, row });
 });
 
+// ============ TELEGRAM BOT + MINI APP (tích hợp, không thay đổi luồng cũ) ============
+// Helpers liên kết Telegram <-> tài khoản nội bộ
+function getTelegramCfg(){
+  const t = (db.settings && db.settings.telegram) || {};
+  return {
+    botToken: t.botToken && !t.botToken.includes('•') ? t.botToken : (process.env.TELEGRAM_BOT_TOKEN || ''),
+    botUsername: t.botUsername || process.env.TELEGRAM_BOT_USERNAME || '',
+    webAppUrl: t.webAppUrl || process.env.TELEGRAM_WEBAPP_URL || '',
+    enabled: !!(t.enabled || process.env.TELEGRAM_BOT_TOKEN),
+    webhookSecret: t.webhookSecret || process.env.TELEGRAM_WEBHOOK_SECRET || ''
+  };
+}
+function findTelegramLink(telegramId){
+  if(!db.telegramLinks) db.telegramLinks = [];
+  return db.telegramLinks.find(l=> String(l.telegramId)===String(telegramId));
+}
+function logTelegram(direction, chatId, text, status){
+  try{
+    if(!db.telegramLogs) db.telegramLogs = [];
+    db.telegramLogs.unshift({ id: uuidv4(), direction, chatId: String(chatId||''), text: String(text||'').slice(0,500), status: status||'OK', at: getVietnamISOString() });
+    if(db.telegramLogs.length>200) db.telegramLogs.length = 200;
+  }catch(e){}
+}
+// Gửi Telegram best-effort theo SĐT (dùng khi Zalo gửi — giữ nguyên return của Zalo)
+function notifyTelegramForPhone(phone, text){
+  try{
+    const cfg = getTelegramCfg();
+    if(!cfg.botToken || OUTBOUND_SYNC_DISABLED) return;
+    const digits = String(phone||'').replace(/\D/g,'');
+    const emp = (db.employees||[]).find(e=> String(e.phone||'').replace(/\D/g,'')===digits || String(e.phone||'').replace(/\D/g,'').endsWith(digits.slice(-9)));
+    if(!emp) return;
+    const link = (db.telegramLinks||[]).find(l=> l.employeeId===emp.employeeId && l.chatId);
+    if(!link) return;
+    tg.sendTelegramMessage(cfg.botToken, link.chatId, text).then(r=>{
+      logTelegram('OUT', link.chatId, text, r.ok?'SENT':'FAILED');
+    }).catch(()=>{});
+  }catch(e){}
+}
+async function processTelegramUpdate(update){
+  const cfg = getTelegramCfg();
+  if(!cfg.botToken) return;
+  const ctx = {
+    webAppUrl: cfg.webAppUrl,
+    linkEmployee: async (telegramId, username, employeeId, key, chatId)=>{
+      const emp = (db.employees||[]).find(e=>e.employeeId===employeeId);
+      if(!emp) return { ok:false, error:'Mã nhân viên không tồn tại.' };
+      const keyRec = (db.keys||[]).find(k=>k.employeeId===employeeId && k.key===key);
+      if(!keyRec) return { ok:false, error:'KEY không hợp lệ.' };
+      if(keyRec.status!=='ACTIVE') return { ok:false, error:'KEY đã bị vô hiệu hóa.' };
+      let link = findTelegramLink(telegramId);
+      if(!link){ link = { telegramId: String(telegramId), username: username||'', chatId: chatId||telegramId, createdAt: getVietnamISOString() }; db.telegramLinks.push(link); }
+      link.employeeId = employeeId; link.chatId = chatId||telegramId; link.username = username||link.username; link.linkedAt = getVietnamISOString();
+      saveDB();
+      try{ io.emit('telegram:update', { count: db.telegramLinks.length }); }catch(e){}
+      return { ok:true, label: `${emp.name} (${employeeId})` };
+    },
+    linkByStartPayload: async (telegramId, payload)=>{
+      // payload dạng EMP:<employeeId>:<key> (tạo từ Mini App nút "Liên kết Telegram")
+      const m = String(payload||'').match(/^EMP:(.+):(.+)$/);
+      if(!m) return { ok:false, error:'Mã liên kết không hợp lệ.' };
+      const emp = (db.employees||[]).find(e=>e.employeeId===m[1]);
+      if(!emp) return { ok:false, error:'Mã nhân viên không tồn tại.' };
+      const keyRec = (db.keys||[]).find(k=>k.employeeId===m[1] && k.key===m[2]);
+      if(!keyRec) return { ok:false, error:'KEY không hợp lệ.' };
+      let link = findTelegramLink(telegramId);
+      if(!link){ link = { telegramId: String(telegramId), createdAt: getVietnamISOString() }; db.telegramLinks.push(link); }
+      link.employeeId = m[1]; link.linkedAt = getVietnamISOString();
+      saveDB();
+      try{ io.emit('telegram:update', { count: db.telegramLinks.length }); }catch(e){}
+      return { ok:true, label: `${emp.name} (${m[1]})` };
+    },
+    unlink: async (telegramId)=>{
+      if(!db.telegramLinks) return;
+      db.telegramLinks = db.telegramLinks.filter(l=> String(l.telegramId)!==String(telegramId));
+      saveDB();
+      try{ io.emit('telegram:update', { count: db.telegramLinks.length }); }catch(e){}
+    },
+    getSchedule: async (telegramId)=>{
+      const link = findTelegramLink(telegramId);
+      if(!link?.employeeId) return { text: 'Bạn chưa liên kết tài khoản. Dùng /link <code>MÃ_NV KEY</code> trước.' };
+      const emp = (db.employees||[]).find(e=>e.employeeId===link.employeeId);
+      if(!emp) return { text: 'Tài khoản liên kết không còn tồn tại.' };
+      const today = getVietnamTodayStr();
+      const upcoming = (db.schedules||[]).filter(s=> s.employeeId===emp.employeeId && s.date>=today).slice(0,7);
+      if(!upcoming.length) return { text: `📅 <b>${emp.name}</b> chưa có lịch 7 ngày tới.` };
+      const lines = upcoming.map(s=> `• ${fmtDMY(s.date)} — ${s.shift} (${s.status||'WORKING'})`);
+      return { text: `📅 <b>Lịch của ${emp.name}</b>\n` + lines.join('\n') };
+    }
+  };
+  const actions = await tg.handleTelegramUpdate(update, ctx);
+  for(const a of actions){
+    try{
+      logTelegram('OUT', a.chatId, a.text, 'SENDING');
+      const r = await tg.sendTelegramMessage(cfg.botToken, a.chatId, a.text, a.extra||{});
+      logTelegram('OUT', a.chatId, a.text, r.ok?'SENT':'FAILED');
+    }catch(e){ logTelegram('OUT', a.chatId, a.text, 'FAILED: '+e.message); }
+  }
+}
+// Polling getUpdates (dự phòng khi không dùng webhook) — tắt khi test/thiếu token
+let __tgPolling = false;
+async function startTelegramPolling(){
+  if(__tgPolling || OUTBOUND_SYNC_DISABLED) return;
+  const cfg = getTelegramCfg();
+  if(!cfg.botToken || cfg.useWebhook) return;
+  if(process.env.TELEGRAM_POLLING !== 'true') return; // mặc định tắt, bật bằng TELEGRAM_POLLING=true
+  __tgPolling = true;
+  let offset = 0;
+  console.log('[TELEGRAM] Polling getUpdates bật');
+  const loop = async ()=>{
+    if(!process.env.TELEGRAM_POLLING) return;
+    try{
+      const url = `https://api.telegram.org/bot${cfg.botToken}/getUpdates?timeout=25&offset=${offset}`;
+      const r = await fetch(url);
+      const j = await r.json().catch(()=>({}));
+      for(const u of (j.result||[])){
+        offset = u.update_id + 1;
+        await processTelegramUpdate(u);
+      }
+    }catch(e){}
+    setTimeout(loop, 1000);
+  };
+  loop();
+}
+
+// Public: cấu hình an toàn cho Mini App (không lộ token)
+app.get('/api/telegram/config', (req,res)=>{
+  const cfg = getTelegramCfg();
+  res.json({ enabled: cfg.enabled, botUsername: cfg.botUsername, webAppUrl: cfg.webAppUrl, hasToken: !!cfg.botToken });
+});
+// Webhook nhận update từ Telegram (verify secret nếu có cấu hình)
+app.post('/api/telegram/webhook', async (req,res)=>{
+  try{
+    const cfg = getTelegramCfg();
+    const secret = req.headers['x-telegram-bot-api-secret-token'];
+    if(cfg.webhookSecret && secret !== cfg.webhookSecret) return res.status(403).json({ error:'Sai webhook secret' });
+    logTelegram('IN', req.body?.message?.chat?.id || '', req.body?.message?.text || 'update', 'RECEIVED');
+    if(cfg.botToken && !OUTBOUND_SYNC_DISABLED) await processTelegramUpdate(req.body||{});
+    res.json({ ok:true });
+  }catch(e){ res.json({ ok:true }); }
+});
+// Xác thực initData từ Mini App -> trả JWT dùng chung (nhân viên) hoặc yêu cầu link
+app.post('/api/telegram/auth', (req,res)=>{
+  const { initData } = req.body||{};
+  const cfg = getTelegramCfg();
+  if(!cfg.botToken) return res.status(503).json({ error:'Chưa cấu hình Telegram Bot Token (ENV TELEGRAM_BOT_TOKEN hoặc Cài đặt->Telegram)' });
+  const v = tg.verifyTelegramInitData(initData||'', cfg.botToken);
+  if(!v.ok) return res.status(401).json({ error: v.error || 'initData không hợp lệ' });
+  const telegramId = String(v.user?.id || '');
+  const link = telegramId ? findTelegramLink(telegramId) : null;
+  if(link?.employeeId){
+    const emp = (db.employees||[]).find(e=>e.employeeId===link.employeeId);
+    if(emp && !['ARCHIVED','TERMINATED','RESIGNED'].includes(emp.status)){
+      const token = jwt.sign({ employeeId: emp.employeeId, name: emp.name, type: emp.type, status: emp.status, branchId: emp.branchId, via: 'telegram' }, JWT_SECRET, {expiresIn:'12h'});
+      return res.json({ ok:true, linked:true, token, employee: emp, telegramUser: v.user });
+    }
+  }
+  return res.json({ ok:true, linked:false, telegramUser: v.user, telegramId });
+});
+// Liên kết Telegram <-> Mã NV + Key (từ Mini App, không cần JWT trước)
+app.post('/api/telegram/link', (req,res)=>{
+  const { telegramId, username, employeeId, key, chatId } = req.body||{};
+  if(!telegramId || !employeeId || !key) return res.status(400).json({ error:'Thiếu telegramId/employeeId/key' });
+  const emp = (db.employees||[]).find(e=>e.employeeId===employeeId);
+  if(!emp) return res.status(404).json({ error:'Mã nhân viên không tồn tại' });
+  const keyRec = (db.keys||[]).find(k=>k.employeeId===employeeId && k.key===key);
+  if(!keyRec) return res.status(401).json({ error:'KEY không hợp lệ' });
+  if(keyRec.status!=='ACTIVE') return res.status(403).json({ error:'KEY đã bị vô hiệu hóa' });
+  let link = findTelegramLink(telegramId);
+  if(!link){ link = { telegramId: String(telegramId), createdAt: getVietnamISOString() }; db.telegramLinks.push(link); }
+  link.employeeId = employeeId; link.username = username||link.username||'';
+  link.chatId = chatId||telegramId; link.linkedAt = getVietnamISOString();
+  audit(employeeId,'TELEGRAM_LINK','TELEGRAM',null,{telegramId, employeeId}, req.ip);
+  saveDB();
+  try{ io.emit('telegram:update', { count: db.telegramLinks.length }); }catch(e){}
+  const token = jwt.sign({ employeeId: emp.employeeId, name: emp.name, type: emp.type, status: emp.status, branchId: emp.branchId, via: 'telegram' }, JWT_SECRET, {expiresIn:'12h'});
+  res.json({ ok:true, token, employee: emp });
+});
+app.post('/api/telegram/unlink', (req,res)=>{
+  const { telegramId } = req.body||{};
+  if(!telegramId) return res.status(400).json({ error:'Thiếu telegramId' });
+  db.telegramLinks = (db.telegramLinks||[]).filter(l=> String(l.telegramId)!==String(telegramId));
+  saveDB();
+  try{ io.emit('telegram:update', { count: db.telegramLinks.length }); }catch(e){}
+  res.json({ ok:true });
+});
+// Admin/HR gửi tin nhắn Telegram (giữ Zalo nguyên — đây là kênh bổ sung)
+app.post('/api/telegram/send', authMiddleware, async (req,res)=>{
+  const { chatId, telegramId, employeeId, text } = req.body||{};
+  const cfg = getTelegramCfg();
+  if(!cfg.botToken) return res.status(503).json({ error:'Chưa cấu hình Telegram Bot Token' });
+  let target = chatId || telegramId;
+  if(!target && employeeId){
+    const link = (db.telegramLinks||[]).find(l=> l.employeeId===employeeId);
+    target = link?.chatId;
+  }
+  if(!target || !text) return res.status(400).json({ error:'Thiếu người nhận hoặc nội dung' });
+  const r = await tg.sendTelegramMessage(cfg.botToken, target, text);
+  logTelegram('OUT', target, text, r.ok?'SENT':'FAILED');
+  saveDB();
+  res.json({ ok: r.ok, disabled: !!r.disabled, error: r.error||null });
+});
+// Danh sách liên kết (Admin/HR)
+app.get('/api/telegram/links', authMiddleware, roleCheck(['Admin','HR','Manager']), (req,res)=>{
+  res.json({ links: db.telegramLinks||[], count: (db.telegramLinks||[]).length });
+});
+// Lưu cấu hình Telegram (Admin)
+app.put('/api/telegram/settings', authMiddleware, roleCheck(['Admin']), (req,res)=>{
+  const { botToken, botUsername, webAppUrl, enabled, useWebhook, webhookSecret } = req.body||{};
+  if(!db.settings.telegram) db.settings.telegram = { ...DEFAULT_SETTINGS.telegram };
+  if(botToken !== undefined && !String(botToken).includes('•')) db.settings.telegram.botToken = String(botToken);
+  if(botUsername !== undefined) db.settings.telegram.botUsername = sanitizeString(botUsername,100);
+  if(webAppUrl !== undefined) db.settings.telegram.webAppUrl = String(webAppUrl).slice(0,500);
+  if(enabled !== undefined) db.settings.telegram.enabled = !!enabled;
+  if(useWebhook !== undefined) db.settings.telegram.useWebhook = !!useWebhook;
+  if(webhookSecret !== undefined) db.settings.telegram.webhookSecret = String(webhookSecret).slice(0,200);
+  audit(req.user.username,'TELEGRAM_SETTINGS','SETTINGS',null,{botUsername: db.settings.telegram.botUsername, enabled: db.settings.telegram.enabled}, req.ip);
+  saveDB();
+  res.json({ ok:true, settings: getMaskedSettings(db.settings).telegram });
+});
+
 // Serve frontend
 app.get('/', (req,res)=> res.sendFile(path.join(__dirname,'public','index.html')));
 app.get('/admin', (req,res)=> res.sendFile(path.join(__dirname,'public','admin.html')));
 app.get('/employee', (req,res)=> res.sendFile(path.join(__dirname,'public','employee.html')));
 app.get('/finance', (req,res)=> res.sendFile(path.join(__dirname,'public','finance.html')));
+app.get('/telegram', (req,res)=> res.sendFile(path.join(__dirname,'public','telegram.html')));
 
 // Socket - Realtime with optional auth + heartbeat
 io.use((socket, next)=>{
@@ -11683,4 +12026,12 @@ io.on('connection', (socket)=>{
   socket.on('ping:heartbeat', ()=> socket.emit('pong:heartbeat', { now: getVietnamISOString() }));
 });
 
-server.listen(PORT, ()=> console.log(`Ụm Bò Milk HR running at http://localhost:${PORT}`));
+server.listen(PORT, ()=> {
+  console.log(`Ụm Bò Milk HR running at http://localhost:${PORT}`);
+  try{
+    const t = (db.settings && db.settings.telegram) || {};
+    const hasTok = !!(t.botToken || process.env.TELEGRAM_BOT_TOKEN);
+    console.log(`[TELEGRAM] ${hasTok ? 'Bot Token SET' : 'Bot Token EMPTY (đặt TELEGRAM_BOT_TOKEN để bật)'} • Mini App: /telegram • Username: ${t.botUsername || process.env.TELEGRAM_BOT_USERNAME || 'EMPTY'}`);
+  }catch(e){}
+  try{ startTelegramPolling(); }catch(e){}
+});

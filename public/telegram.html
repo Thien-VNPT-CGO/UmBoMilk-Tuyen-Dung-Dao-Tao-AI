@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Ụm Bò Milk — Mini App</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="/socket.io/socket.io.js"></script>
+<link rel="stylesheet" href="/tg/tg.css">
+</head>
+<body>
+<div id="tgApp">
+  <div class="tg-top">
+    <div class="logo">🐮</div>
+    <div><div class="t">ỤM BÒ MILK</div><div class="s" id="tgUserLine">Mini App nhân sự</div></div>
+    <div class="sp"></div>
+    <span class="tg-dot">TELEGRAM</span>
+  </div>
+  <div id="tgPage"></div>
+  <div id="fullWeb" style="padding:0 12px 8px;display:none">
+    <div class="tg-sec">Bản web đầy đủ (dự phòng)</div>
+    <div class="tg-flex">
+      <a class="tg-btn ghost" style="text-align:center;text-decoration:none" href="/employee">🧑‍🍳 Nhân viên</a>
+      <a class="tg-btn ghost" style="text-align:center;text-decoration:none" href="/admin">🛡️ HR</a>
+      <a class="tg-btn ghost" style="text-align:center;text-decoration:none" href="/finance">💰 Kế toán</a>
+    </div>
+  </div>
+  <nav id="tgTabs" class="tg-tabs"></nav>
+</div>
+<script src="/tg/tg-core.js"></script>
+<script src="/tg/tg-employee.js"></script>
+<script src="/tg/tg-admin.js"></script>
+<script src="/tg/tg-finance.js"></script>
+<script src="/tg/tg-boot.js"></script>
+<script>
+(function () {
+  try {
+    var inTg = !!(window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData);
+    if (!inTg) document.getElementById('fullWeb').style.display = 'block';
+  } catch (e) {}
+  document.addEventListener('DOMContentLoaded', function () {
+    try {
+      var u = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initDataUnsafe && window.Telegram.WebApp.initDataUnsafe.user;
+      if (u) document.getElementById('tgUserLine').textContent = (u.first_name || 'Mini App') + (u.username ? ' @' + u.username : '');
+    } catch (e) {}
+  });
+})();
+</script>
+</body>
+</html>

@@ -18,3 +18,7 @@ data/archive/
 test_private.js
 cloudflared.exe
 *.exe
+# Chua secret/token — KHONG commit
+auto-sync-alwaysdata.bat
+auto-upload-db.bat
+*.log

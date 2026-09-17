@@ -1,0 +1,39 @@
+# CI/CD: local push len GitHub -> tu dong day code sang Alwaysdata + restart site.
+# Repo root = thu muc um-bo-milk-app. Can 2 Secrets (Settings -> Secrets -> Actions):
+#   ALWAYS_SSH_KEY   : noi dung private key SSH (VD: ~/.ssh/umbomilk_alwaysdata)
+#   ALWAYS_API_TOKEN : API token Alwaysdata (Ho so -> Access Tokens)
+name: Deploy to Alwaysdata
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.ALWAYS_SSH_KEY }}
+
+      - name: Push code to Alwaysdata
+        run: |
+          ssh-keyscan -H ssh-umbomilk.alwaysdata.net >> ~/.ssh/known_hosts
+          ssh umbomilk@ssh-umbomilk.alwaysdata.net "mkdir -p /home/umbomilk/app/public/tg /home/umbomilk/app/public/js /home/umbomilk/app/services /home/umbomilk/app/test"
+          scp server.js umbomilk@ssh-umbomilk.alwaysdata.net:/home/umbomilk/app/server.js
+          scp services/telegram.js umbomilk@ssh-umbomilk.alwaysdata.net:/home/umbomilk/app/services/telegram.js
+          scp public/telegram.html public/index.html public/admin.html umbomilk@ssh-umbomilk.alwaysdata.net:/home/umbomilk/app/public/
+          scp public/js/admin.js public/js/employee.js public/js/finance.js umbomilk@ssh-umbomilk.alwaysdata.net:/home/umbomilk/app/public/js/
+          scp public/tg/tg-core.js public/tg/tg.css public/tg/tg-employee.js public/tg/tg-admin.js public/tg/tg-finance.js public/tg/tg-boot.js umbomilk@ssh-umbomilk.alwaysdata.net:/home/umbomilk/app/public/tg/
+          scp package.json umbomilk@ssh-umbomilk.alwaysdata.net:/home/umbomilk/app/package.json
+          ssh umbomilk@ssh-umbomilk.alwaysdata.net "cd /home/umbomilk/app && npm install --only=production --no-audit --no-fund"
+
+      - name: Restart site
+        run: |
+          curl -s -X POST --basic --user "${{ secrets.ALWAYS_API_TOKEN }} account=umbomilk:" https://api.alwaysdata.com/v1/site/1077282/restart/
+          sleep 20
+          curl -s https://umbomilk.alwaysdata.net/health

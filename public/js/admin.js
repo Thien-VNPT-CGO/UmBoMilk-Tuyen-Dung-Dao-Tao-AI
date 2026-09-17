@@ -5678,6 +5678,43 @@ async function syncRenderEnvRealtime(){
     showToast('Lỗi khi đồng bộ môi trường Render: ' + (e.message || 'Thử lại'), 'error');
   }
 }
+async function reloadDbFromDisk(){
+  try{
+    if(!confirm('Nạp lại data/db.json từ đĩa vào RAM?\n\nDùng sau khi chép db.json mới lên server (scp). Dữ liệu trong RAM sẽ được thay bằng bản trên đĩa (đã backup RAM ra db_before_reload.json).')) return;
+    showToast('Đang nạp lại DB từ đĩa...', 'info');
+    const res = await api('/api/admin/db/reload', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    if(res && res.success){
+      showToast(`Đã nạp DB: ${res.employees} NV • ${res.keys} key • ${res.attendances} chấm công`, 'success');
+      if(typeof loadDashboard === 'function') loadDashboard();
+    } else {
+      showToast('Nạp DB thất bại: ' + ((res && res.error) || 'Thử lại'), 'error');
+    }
+  }catch(e){
+    console.error('reloadDbFromDisk error', e);
+    showToast('Lỗi khi nạp lại DB: ' + (e.message || 'Thử lại'), 'error');
+  }
+}
+async function backupDbToDriveNow(){
+  try{
+    if(!confirm('Đẩy ngay data/db.json lên Google Drive?\n\nFile nằm trong folder backup đã cấu hình (Cài đặt → Google Drive), giữ 30 bản mới nhất.')) return;
+    showToast('Đang đẩy backup lên Drive...', 'info');
+    const res = await api('/api/admin/drive/backup', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    if(res && res.success){
+      showToast(`Backup OK: ${res.name} (${Math.round((res.size||0)/1024)}KB) ✅`, 'success');
+    } else {
+      showToast('Backup chưa chạy: ' + ((res && res.reason) || 'Thử lại'), 'error');
+    }
+  }catch(e){
+    console.error('backupDbToDriveNow error', e);
+    showToast('Lỗi khi backup Drive: ' + (e.message || 'Thử lại'), 'error');
+  }
+}
 async function loadGoogleSheetHub(){
   // Hub dùng chung data với Settings, chỉ khác view
   await loadSettings();

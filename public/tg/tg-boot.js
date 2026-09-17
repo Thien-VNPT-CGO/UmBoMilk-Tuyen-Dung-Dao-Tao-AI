@@ -1,0 +1,145 @@
+/* TG boot — cổng chọn vai trò + tabs + realtime socket. */
+(function () {
+  const T = window.TG;
+
+  async function tryTelegramAuth() {
+    try {
+      const initData = T.WA && T.WA.initData;
+      if (!initData) return { linked: false };
+      const j = await T.call('/api/telegram/auth', { method: 'POST', body: { initData } });
+      if (j.linked && j.token) {
+        T.store.set('emp_token', j.token);
+        T.store.set('emp_user', j.employee);
+        return { linked: true, employee: j.employee };
+      }
+      return { linked: false, telegramId: j.telegramId, user: j.telegramUser };
+    } catch (e) { return { linked: false }; }
+  }
+
+  T.pages['hub'] = async () => {
+    const hasEmp = !!T.S.emp, hasHr = !!T.S.hr, hasFin = !!T.S.fin;
+    let tgUser = '';
+    try { const u = T.WA && T.WA.initDataUnsafe && T.WA.initDataUnsafe.user; if (u) tgUser = (u.first_name || '') + (u.username ? ' (@' + u.username + ')' : ''); } catch (e) {}
+    return '<div class="tg-card" style="text-align:center;padding:20px 14px"><div style="font-size:44px">🐮</div>'
+      + '<div style="font-weight:900;font-size:18px">ỤM BÒ MILK</div>'
+      + '<div class="sm" style="font-size:12px;color:var(--tg-hint)">' + (T.esc(tgUser) || 'Mini App nhân sự nội bộ') + '</div></div>'
+      + '<div class="tg-sec">Chọn cổng làm việc</div>'
+      + '<div class="tg-card">'
+      + '<button class="tg-menu" data-role="emp" style="margin-bottom:8px"><span class="mi">🧑‍🍳</span>Nhân viên' + (hasEmp ? ' ✅' : '') + '</button>'
+      + '<button class="tg-menu" data-role="hr" style="margin-bottom:8px"><span class="mi">🛡️</span>Quản trị HR' + (hasHr ? ' ✅' : '') + '</button>'
+      + '<button class="tg-menu" data-role="fin"><span class="mi">💰</span>Tài chính' + (hasFin ? ' ✅' : '') + '</button></div>'
+      + '<div id="linkBox"></div>';
+  };
+  T.pages['hub:mount'] = async () => {
+    document.querySelectorAll('[data-role]').forEach((b) => { b.onclick = () => enterRole(b.dataset.role); });
+    if (!T.S.emp) {
+      const r = await tryTelegramAuth();
+      if (r.linked) { T.toast('Đã liên kết: ' + (r.employee.name || '')); bootTabs(); return; }
+      T.$('linkBox').innerHTML = '<div class="tg-card"><h3>🔗 Liên kết Telegram (nhân viên)</h3>'
+        + '<label class="tg-lab">Mã NV</label><input id="lkEmp" class="tg-inp" placeholder="CN261_..._NV...">'
+        + '<label class="tg-lab">KEY</label><input id="lkKey" class="tg-inp" placeholder="KEY-...">'
+        + '<button class="tg-btn" id="btnLink">Liên kết</button></div>';
+      T.$('btnLink').onclick = async () => {
+        let tid = '';
+        try { const u = T.WA && T.WA.initDataUnsafe && T.WA.initDataUnsafe.user; if (u && u.id) tid = String(u.id); } catch (e) {}
+        if (!tid) tid = 'web-' + Date.now();
+        try {
+          const j = await T.call('/api/telegram/link', { method: 'POST', body: { telegramId: tid, employeeId: T.$('lkEmp').value.trim(), key: T.$('lkKey').value.trim() } });
+          T.store.set('emp_token', j.token); T.store.set('emp_user', j.employee);
+          T.notifyOk(); T.toast('Liên kết thành công ✅'); bootTabs();
+        } catch (err) { T.notifyErr(); T.toast(err.message); }
+      };
+    }
+  };
+
+  function empTabs() {
+    T._tab = 0;
+    T.setTabs([
+      { icon: '🏠', label: 'Trang chủ', page: 'emp-home' },
+      { icon: '📍', label: 'Điểm danh', page: 'emp-att' },
+      { icon: '📅', label: 'Lịch', page: 'emp-sched' },
+      { icon: '➕', label: 'Thêm', page: 'emp-more' },
+    ]);
+    T.go('emp-home', {}, true);
+  }
+  function hrTabs() {
+    T._tab = 0;
+    T.setTabs([
+      { icon: '📊', label: 'Tổng quan', page: 'hr-home' },
+      { icon: '✅', label: 'Duyệt', page: 'hr-approve' },
+      { icon: '👥', label: 'Nhân sự', page: 'hr-staff' },
+      { icon: '👤', label: 'Tôi', page: 'hr-me' },
+    ]);
+    T.go('hr-home', {}, true);
+  }
+  function finTabs() {
+    T._tab = 0;
+    T.setTabs([
+      { icon: '🧮', label: 'Chấm công', page: 'fin-home' },
+      { icon: '💵', label: 'Lương', page: 'fin-pay' },
+      { icon: '👕', label: 'Đồng phục', page: 'fin-dp' },
+      { icon: '💸', label: 'Thêm', page: 'fin-more' },
+    ]);
+    T.go('fin-home', {}, true);
+  }
+  T.pages['hr-me'] = async () => {
+    const u = T.store.get('hr_user', {});
+    return '<div class="tg-card"><div class="tg-row"><div class="ic">🛡️</div><div class="bd"><div class="tt">' + T.esc(u.displayName || u.username || '') + '</div><div class="sm">' + T.esc(u.role || '') + ' • ' + T.esc((u.branchScope || []).join(',')) + '</div></div></div></div>'
+      + '<button class="tg-btn ghost" data-go="hr-settings">⚙️ Cài đặt hệ thống</button>'
+      + '<button class="tg-btn danger" id="hrOut">Đăng xuất HR</button>';
+  };
+  T.pages['hr-me:mount'] = async () => {
+    document.querySelectorAll('[data-go]').forEach((b) => { b.onclick = () => T.go(b.dataset.go); });
+    T.$('hrOut').onclick = () => { T.store.del('hr_token'); T.store.del('hr_user'); location.reload(); };
+  };
+  T.pages['fin-more'] = async () => '<div class="tg-grid">'
+    + '<button class="tg-menu" data-go="fin-ksk"><span class="mi">🏥</span>Khám SK</button>'
+    + '<button class="tg-menu" data-go="fin-daily"><span class="mi">🔍</span>Chi tiết</button>'
+    + '<button class="tg-menu" data-go="fin-cf"><span class="mi">💸</span>Dòng tiền</button>'
+    + '<button class="tg-menu" data-act="out"><span class="mi">🚪</span>Thoát</button></div>';
+  T.pages['fin-more:mount'] = async () => {
+    document.querySelectorAll('[data-go]').forEach((b) => { b.onclick = () => T.go(b.dataset.go); });
+    document.querySelectorAll('[data-act="out"]').forEach((b) => { b.onclick = () => { T.store.del('fin_token'); location.reload(); }; });
+  };
+
+  function enterRole(role) {
+    T.haptic('medium');
+    if (role === 'emp') {
+      if (T.S.emp) empTabs();
+      else T.toast('Liên kết Telegram ở khung bên dưới trước');
+    }
+    if (role === 'hr') {
+      if (T.S.hr) hrTabs();
+      else T.go('hr-login');
+    }
+    if (role === 'fin') {
+      if (T.S.fin) finTabs();
+      else T.go('fin-login');
+    }
+  }
+
+  function bootTabs() {
+    if (T.S.emp) empTabs();
+    else if (T.S.hr) hrTabs();
+    else if (T.S.fin) finTabs();
+    else { T.setTabs([]); T.go('hub', {}, true); }
+  }
+
+  // Realtime: socket cập nhật badge + toast khi có thông báo mới
+  function connectSocket() {
+    try {
+      if (!window.io) return;
+      const token = T.S.emp || T.S.hr || T.S.fin;
+      const s = window.io({ auth: token ? { token } : {} });
+      s.on('notifications:update', () => { try { T.haptic('light'); } catch (e) {} });
+      s.on('hr:action', (m) => { try { T.toast('🔔 ' + (m.message || m.action || 'Cập nhật mới')); } catch (e) {} });
+    } catch (e) {}
+  }
+
+  window.TG_APP = { bootTabs, enterRole };
+  document.addEventListener('DOMContentLoaded', () => {
+    try { document.getElementById('tgUserLine'); } catch (e) {}
+    bootTabs();
+    setTimeout(connectSocket, 1500);
+  });
+})();
