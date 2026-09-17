@@ -128,20 +128,35 @@
 
   // ---------- Nhân viên ----------
   T.pages['hr-emps'] = async (p) => {
-    let arr = [];
-    try { const j = await H('/api/employees'); arr = Array.isArray(j) ? j : (j.employees || j.data || []); } catch (ex) { return '<div class="tg-card">⚠️ ' + T.esc(ex.message) + '</div>'; }
+    const live = !!(p && p.live);
+    let arr = [], liveErr = '';
+    try {
+      if (live) {
+        const [tr, of] = await Promise.all([
+          T.sheetLive('NHAN_VIEN_TRAINING', (u) => H(u)).catch(() => []),
+          T.sheetLive('NHAN_VIEN_CHINH_THUC', (u) => H(u)).catch(() => []),
+        ]);
+        const mapR = (r, type) => ({ id: r['ID'], employeeId: r['Mã NV'], name: r['Họ tên'], phone: r['SĐT'] || '', branchId: r['Chi nhánh'], shift: r['Ca'], status: r['Trạng thái'] || type, type, _live: true });
+        arr = tr.map((r) => mapR(r, 'TRAINING')).concat(of.map((r) => mapR(r, 'OFFICIAL'))).filter((e) => e.employeeId);
+      } else {
+        const j = await H('/api/employees');
+        arr = Array.isArray(j) ? j : (j.employees || j.data || []);
+      }
+    } catch (ex) { liveErr = ex.message; if (live) return '<div class="tg-card">⚠️ Sheet: ' + T.esc(liveErr) + '<button class="tg-btn ghost" onclick="TG.go(\'hr-emps\')">Về nguồn server</button></div>'; return '<div class="tg-card">⚠️ ' + T.esc(ex.message) + '</div>'; }
     const type = (p && p.type) || '';
     const q = (p && p.q) || '';
     let list = arr;
     if (type) list = list.filter((e) => e.type === type);
-    if (q) list = list.filter((e) => (e.name + e.employeeId + (e.phone || '')).toLowerCase().includes(q.toLowerCase()));
-    return '<div class="tg-card"><input id="empQ" class="tg-inp" placeholder="🔍 Tên / mã NV / SĐT..." value="' + T.esc(q) + '">'
+    if (q) list = list.filter((e) => ((e.name || '') + (e.employeeId || '') + (e.phone || '')).toLowerCase().includes(q.toLowerCase()));
+    return '<div class="tg-card"><div class="tg-flex"><input id="empQ" class="tg-inp" style="margin-top:0" placeholder="🔍 Tên / mã NV / SĐT..." value="' + T.esc(q) + '">'
+      + '<button class="tg-btn ' + (live ? '' : 'ghost') + '" style="max-width:150px;margin-top:0" data-live="' + (live ? '' : '1') + '">' + (live ? '📄 Sheet trực tiếp ✅' : '📄 Sheet trực tiếp') + '</button></div>'
       + '<div class="tg-flex" style="margin-top:8px"><button class="tg-btn ghost" data-t="">Tất cả</button><button class="tg-btn ghost" data-t="TRAINING">Training</button><button class="tg-btn ghost" data-t="OFFICIAL">Chính thức</button></div></div>'
       + '<div class="tg-card">' + (list.slice(0, 60).map((e) => '<div class="tg-row"><div class="ic">👷</div><div class="bd"><div class="tt">' + T.esc(e.name || '') + '</div><div class="sm">' + T.esc(e.employeeId || '') + ' • ' + T.esc(e.branchId || '') + ' • ' + T.shiftVi(e.shift) + '</div></div>' + T.statusBadge(e.status) + ' <button class="tg-btn sm ghost" data-open="' + e.id + '">›</button></div>').join('') || T.empty('Không có nhân viên')) + '</div>'
       + '<div class="sm" style="font-size:12px;color:var(--tg-hint);text-align:center">Hiển thị ' + Math.min(60, list.length) + '/' + list.length + '</div>';
   };
   T.pages['hr-emps:mount'] = async (p) => {
-    document.querySelectorAll('[data-t]').forEach((b) => { b.onclick = () => T.go('hr-emps', { type: b.dataset.t, q: (T.$('empQ') || {}).value || '' }); });
+    document.querySelectorAll('[data-live]').forEach((b) => { b.onclick = () => T.go('hr-emps', { type: (p && p.type) || '', q: (T.$('empQ') || {}).value || '', live: b.dataset.live ? 1 : 0 }); });
+    document.querySelectorAll('[data-t]').forEach((b) => { b.onclick = () => T.go('hr-emps', { type: b.dataset.t, q: (T.$('empQ') || {}).value || '', live: (p && p.live) || 0 }); });
     if (T.$('empQ')) T.$('empQ').onchange = () => T.go('hr-emps', { type: (p && p.type) || '', q: T.$('empQ').value });
     document.querySelectorAll('[data-open]').forEach((b) => { b.onclick = () => T.go('hr-emp', { id: b.dataset.open }); });
   };

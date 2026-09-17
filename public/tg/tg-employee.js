@@ -126,14 +126,27 @@
   };
 
   // ---------- Lịch ----------
-  T.pages['emp-sched'] = async () => {
+  T.pages['emp-sched'] = async (p) => {
     const e = emp(); if (!e) return T.empty('Chưa đăng nhập');
+    const live = !!(p && p.live);
     let list = [];
-    try { const j = await T.empApi('/api/schedules?employeeId=' + encodeURIComponent(e.employeeId)); list = Array.isArray(j) ? j : (j.schedules || j.data || []); } catch (ex) { return '<div class="tg-card">⚠️ ' + T.esc(ex.message) + '</div>'; }
+    try {
+      if (live) {
+        const rows = await T.sheetLive('LICH_LAM_VIEC', (u) => T.empApi(u));
+        list = rows.filter((r) => String(r['Mã NV'] || '') === e.employeeId).map((r) => ({ date: r['Ngày'], shift: r['Ca'], status: r['Trạng thái'], branchId: r['Chi nhánh'], substituteFor: r['Người thay'] }));
+      } else {
+        const j = await T.empApi('/api/schedules?employeeId=' + encodeURIComponent(e.employeeId));
+        list = Array.isArray(j) ? j : (j.schedules || j.data || []);
+      }
+    } catch (ex) { return '<div class="tg-card">⚠️ ' + (live ? 'Sheet: ' : '') + T.esc(ex.message) + (live ? '<button class="tg-btn ghost" onclick="TG.go(\'emp-sched\')">Về nguồn server</button>' : '') + '</div>'; }
     const sorted = list.slice().sort((a, b) => String(a.date) > String(b.date) ? 1 : -1).slice(0, 21);
-    return '<div class="tg-sec">Lịch làm việc (' + sorted.length + ' ngày tới)</div><div class="tg-card">'
+    const tgBtn = '<div class="tg-card"><button class="tg-btn ' + (live ? '' : 'ghost') + '" data-schedlive="' + (live ? '' : '1') + '">' + (live ? '📄 Lịch Sheet trực tiếp ✅' : '📄 Lịch Sheet trực tiếp') + '</button></div>';
+    return tgBtn + '<div class="tg-sec">Lịch làm việc (' + sorted.length + ' ngày tới)</div><div class="tg-card">'
       + (sorted.map((s) => '<div class="tg-row"><div class="ic">' + (String(s.status).includes('OFF') ? '🌙' : '☀️') + '</div><div class="bd"><div class="tt">' + T.fmtDMY(s.date) + ' • ' + T.shiftVi(s.shift) + '</div>'
         + '<div class="sm">' + T.esc(s.branchId || '') + (s.substituteFor ? ' • Thay: ' + T.esc(s.substituteFor) : '') + '</div></div>' + T.statusBadge(s.status) + '</div>').join('') || T.empty('Chưa có lịch')) + '</div>';
+  };
+  T.pages['emp-sched:mount'] = async () => {
+    document.querySelectorAll('[data-schedlive]').forEach((b) => { b.onclick = () => T.go('emp-sched', { live: b.dataset.schedlive ? 1 : 0 }); });
   };
 
   // ---------- Hub "Thêm" ----------

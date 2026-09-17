@@ -735,7 +735,8 @@ async function bootPullFromMasterSheet(manualBy){
       const headers = values[0];
       const col = (h, fb)=>{ const i=headers.findIndex(x=>x===h); return i!==-1?i:fb; };
       const isOfficial = sheetName==='NHAN_VIEN_CHINH_THUC';
-      const iMaNV=col('Mã NV',1), iName=col('Họ tên',2), iPhone=col('SĐT',3), iKey=col('Khóa',4),
+      const hasPhone = headers.includes('SĐT');
+      const iMaNV=col('Mã NV',1), iName=col('Họ tên',2), iPhone=hasPhone?col('SĐT',3):-1, iKey=col('Khóa',4),
             iBranch=col('Chi nhánh',5), iShift=col('Ca',6), iStart=col('Ngày bắt đầu',7),
             iStatus=col('Trạng thái', isOfficial?8:10), iUpdated=col('Cập nhật lúc', isOfficial?13:16);
       for(let r=1;r<values.length;r++){
@@ -3715,6 +3716,23 @@ app.get('/api/admin/sheet/inspect', authMiddleware, roleCheck(['Admin']), async 
       }catch(e){ counts[name] = { exists:true, rows:'?' }; }
     }
     res.json({ ok:true, spreadsheetId, tabs: titles, counts, localEmployees: db.employees.length });
+  }catch(e){ res.json({ ok:false, reason: e.message }); }
+});
+// Sheet là sự thật: đọc LIVE từng ô đúng tab đúng cột (thin proxy, không qua db.json).
+// Mọi JWT hợp lệ (HR hoặc NV) đều gọi được — quyền xem chi tiết do client lọc theo mã NV.
+const SHEET_LIVE_TABS = ['NHAN_VIEN_MOI','NHAN_VIEN_TRAINING','NHAN_VIEN_CHINH_THUC','LICH_LAM_VIEC','PHIEU_OFF_HANG_TUAN','PHIEU_OFF_DOT_XUAT','RECORD_DIEM_DANH'];
+app.get('/api/sheet/live/:tab', authMiddleware, async (req,res)=>{
+  const tab = String(req.params.tab||'').toUpperCase();
+  if(!SHEET_LIVE_TABS.includes(tab)) return res.status(400).json({ ok:false, reason:'Tab không hỗ trợ đọc trực tiếp' });
+  const spreadsheetId = db.settings?.googleSheet?.spreadsheetId || '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w';
+  const token = await getGoogleAccessToken();
+  if(!token || !spreadsheetId) return res.json({ ok:false, reason:'Chưa cấu hình ServiceAccount/Sheet (Cài đặt → Google Sheet)' });
+  try{
+    const rv = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(tab)}!A1:Z5000`, { headers:{ Authorization:`Bearer ${token}` }});
+    if(!rv.ok) return res.json({ ok:false, reason:'Sheet từ chối đọc (quyền Service Account?) HTTP '+rv.status });
+    const vj = await rv.json().catch(()=>({}));
+    const vals = vj.values || [];
+    res.json({ ok:true, tab, headers: vals[0]||[], rows: vals.slice(1), count: Math.max(0, vals.length-1), at: getVietnamISOString() });
   }catch(e){ res.json({ ok:false, reason: e.message }); }
 });
 app.post('/api/admin/reconcile-employees', authMiddleware, roleCheck(['Admin']), async (req,res)=>{

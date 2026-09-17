@@ -216,6 +216,18 @@
   }
   function refresh() { const cur = stack[stack.length - 1]; if (cur) { stack.pop(); go(cur.name, cur.params); } }
 
+  // ---- Sheet là sự thật: đọc live đúng tab đúng cột, map theo header ----
+  async function sheetLive(tab, apiFn) {
+    const j = await apiFn('/api/sheet/live/' + encodeURIComponent(tab));
+    if (!j.ok) throw new Error(j.reason || 'Không đọc được Sheet');
+    const headers = j.headers || [];
+    return (j.rows || []).map((r) => {
+      const o = {};
+      headers.forEach((h, i) => { o[h] = (r[i] !== undefined ? r[i] : ''); });
+      return o;
+    });
+  }
+
   // ---- GPS ----
   function getGPS() {
     return new Promise((resolve) => {
@@ -232,7 +244,7 @@
     WA, $, store, S, call, empApi, hrApi, finApi,
     toast, confirmDlg, mainBtn, hideMainBtn, haptic, notifyOk, notifyErr, cowSVG, heroHTML,
     vnToday, fmtDMY, fmtMoney, esc, badge, statusBadge, shiftVi, loading, empty,
-    pages, go, back, refresh, setTabs, renderTabs, getGPS, applyTheme,
+    pages, go, back, refresh, setTabs, renderTabs, getGPS, applyTheme, sheetLive,
     _tab: 0,
   };
   document.addEventListener('DOMContentLoaded', () => {
