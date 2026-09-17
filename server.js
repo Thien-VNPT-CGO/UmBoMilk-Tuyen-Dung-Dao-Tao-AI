@@ -12056,8 +12056,8 @@ function getTelegramCfg(role){
   const rolePath = role === 'hr' ? '/tg-hr' : role === 'employee' ? '/tg-employee' : '/tg-finance';
   const pick = {
     hr: { tok: tgCleanTok(t.botToken, 'TELEGRAM_BOT_TOKEN'), user: t.botUsername || process.env.TELEGRAM_BOT_USERNAME || '' },
-    employee: { tok: tgCleanTok(t.empBotToken, 'TELEGRAM_EMP_BOT_TOKEN'), user: t.empBotUsername || process.env.TELEGRAM_EMP_BOT_USERNAME || 'umbomilknhanvienbot' },
-    finance: { tok: tgCleanTok(t.finBotToken, 'TELEGRAM_FIN_BOT_TOKEN'), user: t.finBotUsername || process.env.TELEGRAM_FIN_BOT_USERNAME || 'umbomilkketoanbot' }
+    employee: { tok: tgCleanTok(t.empBotToken, 'TELEGRAM_EMP_BOT_TOKEN'), user: t.empBotUsername || process.env.TELEGRAM_EMP_BOT_USERNAME || 'umbomilknvbot' },
+    finance: { tok: tgCleanTok(t.finBotToken, 'TELEGRAM_FIN_BOT_TOKEN'), user: t.finBotUsername || process.env.TELEGRAM_FIN_BOT_USERNAME || 'umbomilkktbot' }
   }[role];
   return {
     role,
