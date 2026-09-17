@@ -147,7 +147,7 @@ const DEFAULT_SETTINGS = {
   ai: { provider: 'openai', baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o', temperature: 0.7 },
   zalo: { oaId: '', accessToken: '', template: '', reminderEnabled: true },
   // Telegram 3 Bot + Mini App — HR quản trị, NV, Kế toán (ENV TELEGRAM_* hoặc Cài đặt->Telegram)
-  telegram: { botToken: '', botUsername: '', empBotToken: '', empBotUsername: 'umbomilknhanvienbot', finBotToken: '', finBotUsername: 'umbomilkketoanbot', webAppUrl: '', enabled: false, useWebhook: false, webhookSecret: '' },
+  telegram: { botToken: '', botUsername: '', empBotToken: '', empBotUsername: 'umbomilknhanvienbot', finBotToken: '', finBotUsername: 'umbomilkketoanbot', webAppUrl: '', enabled: false, useWebhook: false, webhookSecret: '', notify: { checkin: true, checkout: true, off: true, swap: true } },
   calendar: { clientId: '', clientSecret: '', calendarId: 'primary', duration: 30, reminderOnce: true },
   scoring: { criteria: [{ name: 'Kinh nghiệm', weight: 30 }, { name: 'Giao tiếp', weight: 25 }, { name: 'Thái độ', weight: 25 }, { name: 'Sẵn sàng ca', weight: 20 }], passThreshold: 70 },
   attendance: { checkInOpenBefore: 30, checkInCloseAfter: 60, lateThreshold: 15, earlyLeaveThreshold: 15, penaltyLate: 30000, penaltyAbsent: 100000, penaltyNoCheckout: 50000 },
@@ -228,7 +228,8 @@ let db = {
   cashflowTransactions: [],
   scheduleBackups: [],
   telegramLinks: [],
-  telegramLogs: []
+  telegramLogs: [],
+  hrBotChats: []
 };
 
 // === SYSTEM RESET LOCK (Ngăn chặn background sync ghi đè/hồi sinh dữ liệu khi đang reset) ===
@@ -349,6 +350,8 @@ function loadDB() {
       Object.keys(DEFAULT_SETTINGS.telegram).forEach(k=>{ if(db.settings.telegram[k]===undefined) db.settings.telegram[k]=DEFAULT_SETTINGS.telegram[k]; });
       if (!db.telegramLinks) db.telegramLinks = [];
       if (!db.telegramLogs) db.telegramLogs = [];
+      if (!db.hrBotChats) db.hrBotChats = [];
+      if (!db.settings.telegram.notify) db.settings.telegram.notify = { ...DEFAULT_SETTINGS.telegram.notify };
       // Tự động chuẩn hóa branchPreference và shiftPreference nếu chưa có
       if (Array.isArray(db.applicants)) {
         db.applicants.forEach(a => {
@@ -934,6 +937,20 @@ function notifyAdminAndHR({ action, employeeId, employeeName, branchId, title, m
   try {
     audit(employeeId || 'EMPLOYEE', `NOTIF_${(action||'ACTION').toUpperCase()}`, 'NOTIFICATION', null, { title, message }, 'web_employee');
   } catch(e){}
+
+  // Bot chủ HR thu thập từ Bot NV: điểm danh / OFF / đổi ca theo mã NV (fire-and-forget)
+  try{
+    const KIND = { checkin:'checkin', checkout:'checkout',
+      register_off_training:'off', register_off_official:'off', emergency_request:'off',
+      training_shift_swap_off:'swap', training_add_shift:'swap', training_shift_change:'swap',
+      shift_swap_accepted:'swap', shift_swap_th2_accepted:'swap', off_work_swap_request:'swap' };
+    const kind = KIND[action];
+    if(kind){
+      const label = { checkin:'📍 Check-in', checkout:'🏁 Check-out', off:'🌙 Đăng ký OFF', swap:'🔄 Đổi ca' }[kind];
+      const text = `${label}: ${empTag(employeeId)}${branchId?` • ${branchId}`:''}\n${String(message||'').slice(0,700)}`;
+      notifyHRMaster(kind, text, { employeeId, name: employeeName }).catch(()=>{});
+    }
+  }catch(e){}
 
   return notif;
 }
@@ -11815,6 +11832,7 @@ function findTelegramLink(telegramId){
   return db.telegramLinks.find(l=> String(l.telegramId)===String(telegramId));
 }
 function logTelegram(direction, chatId, text, status){
+  if(OUTBOUND_SYNC_DISABLED) return; // test/CI không ghi log rác vào db.json
   try{
     if(!db.telegramLogs) db.telegramLogs = [];
     db.telegramLogs.unshift({ id: uuidv4(), direction, chatId: String(chatId||''), text: String(text||'').slice(0,500), status: status||'OK', at: getVietnamISOString() });
@@ -11859,6 +11877,51 @@ async function broadcastTelegramEmployees(text, branchId, via){
   try{ audit(via||'HR_BROADCAST','TELEGRAM_BROADCAST','TELEGRAM',null,{sent, failed, branchId: branchId||'ALL'}, 'bot'); }catch(e){}
   saveDB();
   return { ok:true, sent, failed, text: `📣 Đã gửi tới <b>${sent}</b> NV qua Bot Nhân viên${failed?` (${failed} lỗi)`:''}.` };
+}
+// Bot chủ HR thu thập tin từ Bot NV: gửi tin sự kiện NV tới mọi chat HR đã /start Bot HR.
+// settings.telegram.notify {checkin, checkout, off, swap} làm công tắc từng loại.
+async function notifyHRMaster(kind, text, probe) {
+  try {
+    if (OUTBOUND_SYNC_DISABLED) return { ok: false, skipped: 'disabled' };
+    if (probe && isTestRecord(probe)) return { ok: false, skipped: 'test-record' };
+    const nz = (db.settings && db.settings.telegram && db.settings.telegram.notify) || {};
+    if (nz[kind] === false) return { ok: false, skipped: 'muted' };
+    const cfg = getTelegramCfg('hr');
+    if (!cfg.botToken) return { ok: false, skipped: 'no-token' };
+    const chats = (db.hrBotChats || []).filter((c) => c.chatId);
+    if (!chats.length) return { ok: false, skipped: 'no-subscriber' };
+    let sent = 0;
+    for (const c of chats) {
+      try {
+        const r = await tg.sendTelegramMessage(cfg.botToken, c.chatId, text);
+        logTelegram('OUT', c.chatId, text, r.ok ? 'SENT' : 'FAILED');
+        if (r.ok) sent++;
+      } catch (e) { logTelegram('OUT', c.chatId, text, 'FAILED: ' + e.message); }
+    }
+    return { ok: sent > 0, sent };
+  } catch (e) { return { ok: false, skipped: 'error' }; }
+}
+function empTag(employeeId) {
+  const e = (db.employees || []).find((x) => x.employeeId === employeeId);
+  if (!e) return `<b>${employeeId}</b>`;
+  return `<b>${e.name}</b> (<code>${e.employeeId}</code> • ${e.branchId || ''} • ${e.shift || ''})`;
+}
+function upsertHrChat(chatId, username) {
+  try {
+    if (!chatId) return false;
+    if (!db.hrBotChats) db.hrBotChats = [];
+    let c = db.hrBotChats.find((x) => String(x.chatId) === String(chatId));
+    if (!c) {
+      c = { chatId: String(chatId), createdAt: getVietnamISOString() };
+      db.hrBotChats.push(c);
+      if (username) c.username = username;
+      c.lastSeen = getVietnamISOString();
+      return true;
+    }
+    if (username) c.username = username;
+    c.lastSeen = getVietnamISOString();
+    return false;
+  } catch (e) { return false; }
 }
 async function processTelegramUpdate(update, role){
   role = ['hr','employee','finance'].includes(role) ? role : 'hr';
@@ -11997,6 +12060,10 @@ async function handleTelegramWebhook(req,res,role){
     const secret = req.headers['x-telegram-bot-api-secret-token'];
     if(cfg.webhookSecret && secret !== cfg.webhookSecret) return res.status(403).json({ error:'Sai webhook secret' });
     logTelegram('IN', req.body?.message?.chat?.id || '', '['+role+'] '+(req.body?.message?.text || 'update'), 'RECEIVED');
+    if(role==='hr'){
+      const from = req.body?.message?.from;
+      if(upsertHrChat(req.body?.message?.chat?.id, from?.username)) { saveDB(); try{ io.emit('telegram:update', { hrChats: db.hrBotChats.length }); }catch(e){} }
+    }
     if(cfg.botToken && !OUTBOUND_SYNC_DISABLED) await processTelegramUpdate(req.body||{}, role);
     res.json({ ok:true });
   }catch(e){ res.json({ ok:true }); }
@@ -12081,10 +12148,25 @@ app.post('/api/telegram/send', authMiddleware, async (req,res)=>{
 app.get('/api/telegram/links', authMiddleware, roleCheck(['Admin','HR','Manager']), (req,res)=>{
   res.json({ links: db.telegramLinks||[], count: (db.telegramLinks||[]).length });
 });
+// Subscribers Bot chủ HR (ai /start Bot HR thì tự vào danh sách nhận tin NV)
+app.get('/api/telegram/hr-chats', authMiddleware, roleCheck(['Admin','HR','Manager']), (req,res)=>{
+  res.json({ chats: db.hrBotChats||[], count: (db.hrBotChats||[]).length });
+});
+app.delete('/api/telegram/hr-chats/:chatId', authMiddleware, roleCheck(['Admin']), (req,res)=>{
+  const before = (db.hrBotChats||[]).length;
+  db.hrBotChats = (db.hrBotChats||[]).filter(c=> String(c.chatId)!==String(req.params.chatId));
+  audit(req.user.username,'HR_CHAT_REMOVE','TELEGRAM',null,{chatId:req.params.chatId}, req.ip);
+  saveDB();
+  res.json({ ok:true, removed: before - db.hrBotChats.length });
+});
 // Lưu cấu hình Telegram 3 bot (Admin)
 app.put('/api/telegram/settings', authMiddleware, roleCheck(['Admin']), (req,res)=>{
-  const { botToken, botUsername, empBotToken, empBotUsername, finBotToken, finBotUsername, webAppUrl, enabled, useWebhook, webhookSecret } = req.body||{};
+  const { botToken, botUsername, empBotToken, empBotUsername, finBotToken, finBotUsername, webAppUrl, enabled, useWebhook, webhookSecret, notify } = req.body||{};
   if(!db.settings.telegram) db.settings.telegram = { ...DEFAULT_SETTINGS.telegram };
+  if(notify && typeof notify==='object'){
+    if(!db.settings.telegram.notify) db.settings.telegram.notify = { ...DEFAULT_SETTINGS.telegram.notify };
+    ['checkin','checkout','off','swap'].forEach(k=>{ if(notify[k]!==undefined) db.settings.telegram.notify[k]=!!notify[k]; });
+  }
   const setTok = (k,v)=>{ if(v !== undefined && !String(v).includes('•')) db.settings.telegram[k] = String(v); };
   setTok('botToken', botToken); setTok('empBotToken', empBotToken); setTok('finBotToken', finBotToken);
   if(botUsername !== undefined) db.settings.telegram.botUsername = sanitizeString(botUsername,100);

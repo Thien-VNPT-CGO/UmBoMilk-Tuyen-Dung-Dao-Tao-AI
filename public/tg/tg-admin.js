@@ -339,13 +339,19 @@
     return '<div class="tg-card">' + (arr.slice(0, 40).map((l) => '<div class="tg-row"><div class="ic">📜</div><div class="bd"><div class="tt">' + T.esc(l.actor || '') + ' • ' + T.esc(l.action || '') + '</div><div class="sm">' + T.esc(l.entity || '') + ' • ' + T.esc(l.timestamp || l.at || '') + '</div></div></div>').join('') || T.empty('Chưa có log')) + '</div>';
   };
   T.pages['hr-tg'] = async () => {
-    let links = [], bots = [];
+    let links = [], bots = [], subs = [], nz = {};
     try { const j = await H('/api/telegram/links'); links = j.links || []; } catch (ex) {}
     try { const j = await T.call('/api/telegram/config'); bots = j.bots || []; } catch (ex) {}
+    try { const j = await H('/api/telegram/hr-chats'); subs = j.chats || []; } catch (ex) {}
+    try { const j = await H('/api/settings'); nz = (j.settings && j.settings.telegram && j.settings.telegram.notify) || {}; } catch (ex) {}
     const bIcon = { hr: '🛡️', employee: '🧑‍🍳', finance: '💰' };
     return '<div class="tg-card"><h3>🤖 3 Bot Telegram</h3>'
       + bots.map((b) => '<div class="tg-row"><div class="ic">' + (bIcon[b.role] || '🤖') + '</div><div class="bd"><div class="tt">@' + T.esc(b.botUsername || b.role) + '</div><div class="sm">' + T.esc(b.webAppUrl || '') + '</div></div>' + (b.hasToken ? T.badge('Token OK', 'b-ok') : T.badge('Thiếu token', 'b-bad')) + '</div>').join('')
       + '<button class="tg-btn" data-act="setup">⚙️ Gắn webhook + Menu cả 3 Bot</button><div class="sm" id="setupOut" style="font-size:12px;color:var(--tg-hint);margin-top:6px"></div></div>'
+      + '<div class="tg-card"><h3>👑 Bot chủ HR nhận tin NV</h3><div class="sm" style="font-size:12px;color:var(--tg-hint)">Ai /start Bot HR thì tự vào danh sách. Tắt loại nào thì Bot chủ không nhận loại đó.</div>'
+      + [['checkin', '📍 Check-in'], ['checkout', '🏁 Check-out'], ['off', '🌙 Đăng ký OFF'], ['swap', '🔄 Đổi ca']].map((x) => '<div class="tg-row"><div class="bd"><div class="tt">' + x[1] + '</div></div><button class="tg-btn sm' + (nz[x[0]] === false ? ' ghost' : ' ok') + '" data-nz="' + x[0] + '">' + (nz[x[0]] === false ? 'Tắt' : 'Bật') + '</button></div>').join('') + '</div>'
+      + '<div class="tg-card"><h3>👥 Người nhận tin Bot chủ (' + subs.length + ')</h3>'
+      + (subs.map((s) => '<div class="tg-row"><div class="ic">👤</div><div class="bd"><div class="tt">@' + T.esc(s.username || s.chatId) + '</div><div class="sm">' + T.esc(s.lastSeen || s.createdAt || '') + '</div></div><button class="tg-btn sm danger" data-unsub="' + T.esc(s.chatId) + '">Xóa</button></div>').join('') || T.empty('Chưa ai /start Bot HR')) + '</div>'
       + '<div class="tg-card"><h3>📣 Broadcast qua Bot Nhân viên (quản lý Bot NV)</h3>'
       + '<div class="tg-flex"><input id="bcBranch" class="tg-inp" placeholder="Chi nhánh (trống = tất cả)"><input id="bcText" class="tg-inp" placeholder="Nội dung..."></div>'
       + '<button class="tg-btn" data-act="bc">Gửi broadcast</button></div>'
@@ -370,6 +376,17 @@
         const j = await H('/api/telegram/emp-broadcast', { method: 'POST', body: { text, branchId: branchId || undefined } });
         T.notifyOk(); T.toast(j.text ? j.text.replace(/<[^>]+>/g, '') : 'Đã gửi');
       } catch (err) { T.notifyErr(); T.toast(err.message); }
+    }; });
+    document.querySelectorAll('[data-nz]').forEach((b) => { b.onclick = async () => {
+      const k = b.dataset.nz;
+      const cur = b.textContent.trim() === 'Bật';
+      try { await H('/api/telegram/settings', { method: 'PUT', body: { notify: { [k]: !cur } } }); T.toast(cur ? 'Đã tắt' : 'Đã bật'); T.refresh(); }
+      catch (err) { T.toast(err.message); }
+    }; });
+    document.querySelectorAll('[data-unsub]').forEach((b) => { b.onclick = async () => {
+      if (!await T.confirmDlg('Xóa người nhận này khỏi Bot chủ?')) return;
+      try { await T.call('/api/telegram/hr-chats/' + encodeURIComponent(b.dataset.unsub), { method: 'DELETE', token: T.S.hr }); T.toast('Đã xóa'); T.refresh(); }
+      catch (err) { T.toast(err.message); }
     }; });
     document.querySelectorAll('[data-msg]').forEach((b) => { b.onclick = async () => {
       const text = prompt('Nhắn tới ' + b.dataset.msg + ':');
