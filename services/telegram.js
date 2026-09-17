@@ -406,14 +406,14 @@ async function handleTelegramUpdate(update, ctx) {
           + 'Bạn vui lòng nhắn trực tiếp 2 ngày muốn nghỉ vào khung chat này theo định dạng:\n'
           + '👉 <code>dd/mm/yyyy, dd/mm/yyyy</code>\n\n'
           + '<i>Ví dụ:</i> <code>18/09/2026, 22/09/2026</code>\n\n'
-          + '🤖 <i>Bot Telegram sẽ tự động ghi nhận 2 ngày OFF này và cập nhật tất cả các ngày còn lại trong tuần là ngày LÀM VIỆC (WORKING) đồng bộ lên Google Sheet ngay lập tức cho bạn!</i>',
+          + '🤖 <i>Bot Telegram sẽ tự động ghi nhận 2 ngày OFF này và cập nhật các ngày còn lại trong tuần là ngày LÀM VIỆC (WORKING) để chuyển HR phê duyệt lịch tuần cho bạn!</i>',
       });
     } else if (isOffRegistration(text)) {
       const dates = extractOffDates(text);
       if (dates.length === 0) {
         actions.push({
           chatId,
-          text: '📅 <b>Đăng ký lịch OFF (2 ngày/tuần)</b>\nCú pháp: Nhắn đúng 2 ngày theo định dạng <code>dd/mm/yyyy</code>\nVí dụ: <code>18/09/2026, 22/09/2026</code>\n(Bot sẽ tự động ghi nhận ngày OFF và cập nhật những ngày còn lại là ngày làm việc lên Google Sheet).',
+          text: '📅 <b>Đăng ký lịch OFF (2 ngày/tuần)</b>\nCú pháp: Nhắn đúng 2 ngày theo định dạng <code>dd/mm/yyyy</code>\nVí dụ: <code>18/09/2026, 22/09/2026</code>\n(Bot sẽ tự động ghi nhận ngày OFF và cập nhật những ngày còn lại là ngày làm việc cho bạn).',
         });
       } else if (ctx?.registerOffSchedule) {
         const r = await ctx.registerOffSchedule(String(from?.id), dates, from?.username || '');

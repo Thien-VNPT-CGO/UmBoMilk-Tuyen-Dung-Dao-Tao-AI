@@ -12508,7 +12508,7 @@ async function processTelegramUpdate(update, role){
           + `🏪 Chi nhánh: <b>${emp.branchId || '—'}</b> • Ca: <b>${emp.shift || '—'}</b>\n\n`
           + `🏖️ <b>Ngày nghỉ OFF:</b>\n${offFormatted}\n\n`
           + `💼 <b>Các ngày còn lại trong tuần:</b> Đã cập nhật là ngày <b>LÀM VIỆC (WORKING)</b>.\n`
-          + `📊 <b>Google Sheet:</b> Đã tự động cập nhật vào Tab <i>Lịch làm việc</i> & <i>Phiếu OFF hàng tuần</i>.`
+          + `📌 <b>Trạng thái:</b> Đã ghi nhận thành công, đang chờ HR duyệt và chốt lịch tuần!`
       };
     }
   };
