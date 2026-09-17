@@ -3693,6 +3693,30 @@ app.post('/api/admin/pull-from-sheet', authMiddleware, roleCheck(['Admin']), asy
   audit(req.user.username,'PULL_FROM_SHEET','EMPLOYEE',null,{...out, tabs}, req.ip);
   res.json({success:true, ...out, tabs, employees: db.employees.length, keys: db.keys.length});
 });
+// Kiểm tra Sheet nguồn: liệt kê tab + đếm dòng dữ liệu (không đụng DB, chỉ đọc)
+app.get('/api/admin/sheet/inspect', authMiddleware, roleCheck(['Admin']), async (req,res)=>{
+  const spreadsheetId = db.settings?.googleSheet?.spreadsheetId || '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w';
+  const token = await getGoogleAccessToken();
+  if(!token || !spreadsheetId) return res.json({ ok:false, reason:'Chưa cấu hình ServiceAccount/Sheet (Cài đặt → Google Sheet)' });
+  try{
+    const meta = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties.title`, { headers:{ Authorization:`Bearer ${token}` } });
+    if(!meta.ok) return res.json({ ok:false, reason:'Không mở được Sheet (quyền Service Account?) HTTP '+meta.status });
+    const mj = await meta.json().catch(()=>({}));
+    const titles = (mj.sheets||[]).map(s=> s.properties && s.properties.title).filter(Boolean);
+    const keyTabs = ['NHAN_VIEN_TRAINING','NHAN_VIEN_CHINH_THUC','NHAN_VIEN_MOI'];
+    const counts = {};
+    for(const name of keyTabs){
+      if(!titles.includes(name)){ counts[name] = { exists:false, rows:0 }; continue; }
+      try{
+        const rv = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(name)}!A1:A5000`, { headers:{ Authorization:`Bearer ${token}` }});
+        const vj = await rv.json().catch(()=>({}));
+        const vals = vj.values || [];
+        counts[name] = { exists:true, rows: Math.max(0, vals.length - 1) };
+      }catch(e){ counts[name] = { exists:true, rows:'?' }; }
+    }
+    res.json({ ok:true, spreadsheetId, tabs: titles, counts, localEmployees: db.employees.length });
+  }catch(e){ res.json({ ok:false, reason: e.message }); }
+});
 app.post('/api/admin/reconcile-employees', authMiddleware, roleCheck(['Admin']), async (req,res)=>{
   try{
     const pull = await bootPullFromMasterSheet(req.user.username || 'RECONCILE');
@@ -4788,6 +4812,7 @@ async function ensureDriveFolderCake(employee, dateStr, type){
   }catch(e){ console.error('Drive cake error', e.message); return null; }
 }
 async function getGoogleAccessToken(){
+  if(OUTBOUND_SYNC_DISABLED) return null; // test/CI không bao giờ chạm Google thật
   const cfg = db.settings?.googleSheet;
   if(!cfg || !cfg.serviceAccountEmail || !cfg.privateKey) return null;
   try{

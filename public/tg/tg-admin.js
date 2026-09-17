@@ -40,7 +40,7 @@
     ];
     return '<div class="tg-sec">Tổng quan</div><div class="tg-kpi">'
       + cards.map((c) => '<div class="k"><div class="n">' + c[1] + '</div><div class="l">' + c[0] + '</div></div>').join('') + '</div>'
-      + '<div class="tg-card" style="margin-top:12px"><div class="tg-row"><div class="ic">🔄</div><div class="bd"><div class="tt">Đồng bộ Sheet</div><div class="sm">' + pend + ' mục chờ/lỗi • ' + sync.length + ' tổng</div></div><button class="tg-btn sm" data-act="pull">Kéo Sheet</button></div></div>'
+      + '<div class="tg-card" style="margin-top:12px"><div class="tg-row"><div class="ic">🔄</div><div class="bd"><div class="tt">Đồng bộ Sheet</div><div class="sm">' + pend + ' mục chờ/lỗi • ' + sync.length + ' tổng</div></div><button class="tg-btn sm" data-act="pull">Kéo Sheet</button> <button class="tg-btn sm ghost" data-act="inspect">Kiểm tra Sheet</button></div><div class="sm" id="sheetInsp" style="font-size:12px;color:var(--tg-hint)"></div></div>'
       + '<div class="tg-sec">Tác vụ nhanh</div><div class="tg-grid">'
       + '<button class="tg-menu" data-go="hr-applicants"><span class="mi">🧲</span>UV mới</button>'
       + '<button class="tg-menu" data-go="hr-emps"><span class="mi">👥</span>Nhân sự</button>'
@@ -52,6 +52,17 @@
     document.querySelectorAll('[data-act="pull"]').forEach((b) => { b.onclick = async () => {
       try { T.toast('Đang kéo Sheet...'); await H('/api/admin/pull-from-sheet', { method: 'POST' }); T.notifyOk(); T.toast('Đã kéo ✅'); T.refresh(); }
       catch (err) { T.toast(err.message); }
+    }; });
+    document.querySelectorAll('[data-act="inspect"]').forEach((b) => { b.onclick = async () => {
+      const box = T.$('sheetInsp');
+      try {
+        if (box) box.innerHTML = 'Đang đọc Sheet...';
+        const j = await H('/api/admin/sheet/inspect');
+        if (!j.ok) { if (box) box.innerHTML = '⚠️ ' + T.esc(j.reason || 'Không đọc được'); return; }
+        const c = j.counts || {};
+        const line = (k, label) => label + ': ' + (!c[k] || !c[k].exists ? 'KHÔNG CÓ TAB' : c[k].rows + ' dòng');
+        if (box) box.innerHTML = '📊 ' + line('NHAN_VIEN_TRAINING', 'Training') + ' • ' + line('NHAN_VIEN_CHINH_THUC', 'Chính thức') + ' • ' + line('NHAN_VIEN_MOI', 'UV mới') + '<br>Server đang giữ: ' + j.localEmployees + ' NV';
+      } catch (err) { if (box) box.innerHTML = '⚠️ ' + T.esc(err.message); }
     }; });
   };
 
