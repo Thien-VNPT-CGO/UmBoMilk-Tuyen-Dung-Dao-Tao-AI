@@ -12267,28 +12267,47 @@ async function processTelegramUpdate(update, role){
     },
     getSchedule: async (telegramId)=>{
       const link = findTelegramLink(telegramId);
-      if(!link?.employeeId) return { text: 'Bạn chưa liên kết tài khoản. Dùng /link <code>MÃ_NV KEY</code> trước.' };
+      if(!link?.employeeId) return { text: '⚠️ <b>Bạn chưa liên kết tài khoản</b>\nVui lòng nhắn số điện thoại của bạn (hoặc /link <code>SĐT</code>) vào đây để liên kết nhé.' };
       const emp = (db.employees||[]).find(e=>e.employeeId===link.employeeId);
       if(!emp) return { text: 'Tài khoản liên kết không còn tồn tại.' };
       const today = getVietnamTodayStr();
       const upcoming = (db.schedules||[]).filter(s=> s.employeeId===emp.employeeId && s.date>=today).slice(0,7);
-      if(!upcoming.length) return { text: `📅 <b>${emp.name}</b> chưa có lịch 7 ngày tới.` };
-      const lines = upcoming.map(s=> `• ${fmtDMY(s.date)} — ${s.shift} (${s.status||'WORKING'})`);
-      return { text: `📅 <b>Lịch của ${emp.name}</b>\n` + lines.join('\n') };
+      if(!upcoming.length) return {
+        text: `📅 <b>LỊCH LÀM VIỆC 7 NGÀY TỚI</b>\n👤 <b>${emp.name}</b> (<code>${emp.employeeId}</code>)\n\nHiện chưa có lịch xếp sẵn. Bạn có thể nhắn trực tiếp 2 ngày muốn nghỉ OFF (VD: <code>18/09/2026, 22/09/2026</code>) để bot đăng ký cho bạn nhé!`
+      };
+      const lines = upcoming.map(s=> {
+        const isOff = s.status === 'OFF' || s.shift === 'OFF';
+        return `• <b>${fmtDMY(s.date)}</b>: ${s.shift || 'Ca làm'} ${isOff ? '🏖️ (NGHỈ OFF)' : '💼 (LÀM VIỆC)'}`;
+      });
+      return {
+        text: `📅 <b>LỊCH LÀM VIỆC 7 NGÀY TỚI</b>\n👤 <b>${emp.name}</b> (<code>${emp.employeeId}</code>)\n🏪 Chi nhánh: <b>${emp.branchId || 'Ụm Bò Milk'}</b>\n\n`
+          + lines.join('\n')
+          + `\n\n💬 <i>Muốn đăng ký OFF hoặc đổi ca, bạn chỉ cần nhắn trực tiếp vào khung chat này nhé!</i>`
+      };
     },
     getTodayStatus: async (telegramId)=>{
       const link = findTelegramLink(telegramId);
-      if(!link?.employeeId) return { text: 'Bạn chưa liên kết. Dùng /link <code>MÃ_NV KEY</code> trước.' };
+      if(!link?.employeeId) return { text: '⚠️ <b>Bạn chưa liên kết tài khoản</b>\nVui lòng nhắn số điện thoại của bạn (hoặc /link <code>SĐT</code>) vào đây để liên kết nhé.' };
+      const emp = (db.employees||[]).find(e=>e.employeeId===link.employeeId);
       const today = getVietnamTodayStr();
       const rec = (db.attendances||[]).find(a=> a.employeeId===link.employeeId && String(a.date||'').split('T')[0]===today);
-      const ci = rec && (rec.checkIn || rec.checkInAt) ? '✅' : '—';
-      const co = rec && (rec.checkOut || rec.checkOutAt) ? '✅' : '—';
-      return { text: `📍 <b>Điểm danh hôm nay (${fmtDMY(today)})</b>\nVào ca: ${ci}\nRa ca: ${co}\nMở Mini App để điểm danh camera + GPS.` };
+      const ci = rec && (rec.checkIn || rec.checkInAt) ? `✅ Đã vào ca (${rec.checkInAt ? rec.checkInAt.split('T')[1].slice(0,5) : 'Đã chấm'})` : '⚪ Chưa vào ca';
+      const co = rec && (rec.checkOut || rec.checkOutAt) ? `✅ Đã ra ca (${rec.checkOutAt ? rec.checkOutAt.split('T')[1].slice(0,5) : 'Đã chấm'})` : '⚪ Chưa ra ca';
+      const branchName = emp ? (emp.branchId || '') : '';
+      const shiftName = (rec && rec.shift) || (emp && emp.shift) || 'Chưa gán ca';
+      return {
+        text: `📍 <b>TÌNH TRẠNG ĐIỂM DANH HÔM NAY (${fmtDMY(today)})</b>\n\n`
+          + `👤 Nhân viên: <b>${emp ? emp.name : link.employeeId}</b> (<code>${link.employeeId}</code>)\n`
+          + `🏪 Chi nhánh: <b>${branchName || 'Ụm Bò Milk'}</b> • Ca: <b>${shiftName}</b>\n\n`
+          + `• <b>Vào ca (Check-in):</b> ${ci}\n`
+          + `• <b>Ra ca (Check-out):</b> ${co}\n\n`
+          + `💬 <i>Nếu bạn cần báo ca đột xuất hoặc đổi ca, chỉ cần nhắn trực tiếp vào khung chat này để HR hỗ trợ ngay!</i>`
+      };
     },
     getSalary: async (telegramId)=>{
       const link = findTelegramLink(telegramId);
       const m = getVietnamTodayStr().slice(0,7);
-      if(!link?.employeeId) return { text: 'Bạn chưa liên kết. Dùng /link <code>MÃ_NV KEY</code> trước.' };
+      if(!link?.employeeId) return { text: '⚠️ <b>Bạn chưa liên kết tài khoản</b>\nVui lòng nhắn số điện thoại của bạn (hoặc /link <code>SĐT</code>) vào đây để liên kết nhé.' };
       const emp = (db.employees||[]).find(e=>e.employeeId===link.employeeId);
       const rate = emp && emp.type==='OFFICIAL' ? 25500 : 21000;
       const hours = { CA_SANG:5, CA_CHIEU:6, CA_TRUA:6, CA_TOI:5 };
@@ -12296,7 +12315,15 @@ async function processTelegramUpdate(update, role){
       (db.attendances||[]).filter(a=> a.employeeId===link.employeeId && String(a.date||'').startsWith(m)).forEach(a=>{
         if((a.checkIn||a.checkInAt) && (a.checkOut||a.checkOutAt)){ shifts++; total += (hours[a.shift]||5)*rate; }
       });
-      return { text: `💰 <b>Lương tạm tính ${m}</b>\nCa hợp lệ: ${shifts}\nTạm tính: ${Number(total).toLocaleString('vi-VN')}đ\n(Số chính thức do kế toán chốt)` };
+      const monthFormatted = m.split('-').reverse().join('/');
+      return {
+        text: `💰 <b>TẠM TÍNH LƯƠNG THÁNG ${monthFormatted}</b>\n\n`
+          + `👤 Nhân viên: <b>${emp ? emp.name : link.employeeId}</b>\n`
+          + `💵 Mức lương: <b>${rate.toLocaleString('vi-VN')}đ / giờ</b> (${emp?.type==='OFFICIAL'?'Chính thức':'Thử việc'})\n\n`
+          + `• Số ca hợp lệ: <b>${shifts} ca</b>\n`
+          + `• Tổng lương tạm tính: <b>${Number(total).toLocaleString('vi-VN')}đ</b>\n\n`
+          + `📌 <i>Số liệu chính thức do phòng Kế toán đối soát và chốt vào kỳ lương cuối tháng.</i>`
+      };
     },
     getPendingCounts: async ()=>{
       const isP = (s)=> String(s||'').toUpperCase()==='PENDING';
@@ -12485,6 +12512,9 @@ async function processTelegramUpdate(update, role){
       };
     }
   };
+  if (update.callback_query?.id && cfg.botToken) {
+    try { await tg.answerTelegramCallbackQuery(cfg.botToken, update.callback_query.id); } catch(e) {}
+  }
   const actions = await tg.handleTelegramUpdate(update, ctx);
   for(const a of actions){
     try{

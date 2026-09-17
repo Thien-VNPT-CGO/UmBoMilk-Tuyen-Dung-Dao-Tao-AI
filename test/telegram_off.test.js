@@ -128,5 +128,64 @@ describe('Telegram Bot — Đăng ký lịch OFF 2 ngày/tuần qua chat bot', (
     assert.equal(linkedPhone, '0842112530');
     assert.ok(a[0].text.includes('Đã liên kết thành công'));
   });
+
+  it('8. Nhấn các nút chức năng (callback_query) phản hồi chat trực tiếp, không ép mở Mini App', async () => {
+    const mockCtx = {
+      role: 'employee',
+      webAppUrl: 'https://test.app',
+      getTodayStatus: async () => ({ text: '📍 TÌNH TRẠNG ĐIỂM DANH: Vào ca: ✅' }),
+      getSchedule: async () => ({ text: '📅 LỊCH LÀM VIỆC 7 NGÀY TỚI: 18/09 Ca sáng' }),
+      getSalary: async () => ({ text: '💰 TẠM TÍNH LƯƠNG: 5.000.000đ' })
+    };
+
+    // 1. Điểm danh
+    const aDiemDanh = await tg.handleTelegramUpdate(
+      { callback_query: { id: 'c1', message: { chat: { id: 100 } }, from: { id: 100 }, data: '/diemdanh' } },
+      mockCtx
+    );
+    assert.ok(aDiemDanh[0].text.includes('ĐIỂM DANH'));
+    assert.equal(aDiemDanh[0].extra?.reply_markup, undefined);
+
+    // 2. Lịch làm
+    const aLich = await tg.handleTelegramUpdate(
+      { callback_query: { id: 'c2', message: { chat: { id: 100 } }, from: { id: 100 }, data: '/lich' } },
+      mockCtx
+    );
+    assert.ok(aLich[0].text.includes('LỊCH LÀM VIỆC'));
+    assert.equal(aLich[0].extra?.reply_markup, undefined);
+
+    // 3. Đăng ký OFF
+    const aOff = await tg.handleTelegramUpdate(
+      { callback_query: { id: 'c3', message: { chat: { id: 100 } }, from: { id: 100 }, data: '/off' } },
+      mockCtx
+    );
+    assert.ok(aOff[0].text.includes('Đăng ký lịch OFF'));
+    assert.equal(aOff[0].extra?.reply_markup, undefined);
+
+    // 4. Xem lương
+    const aLuong = await tg.handleTelegramUpdate(
+      { callback_query: { id: 'c4', message: { chat: { id: 100 } }, from: { id: 100 }, data: '/luong' } },
+      mockCtx
+    );
+    assert.ok(aLuong[0].text.includes('LƯƠNG'));
+    assert.equal(aLuong[0].extra?.reply_markup, undefined);
+
+    // 5. Đổi ca
+    const aDoiCa = await tg.handleTelegramUpdate(
+      { callback_query: { id: 'c5', message: { chat: { id: 100 } }, from: { id: 100 }, data: '/doica' } },
+      mockCtx
+    );
+    assert.ok(aDoiCa[0].text.includes('Đổi ca') || aDoiCa[0].text.includes('ĐỔI CA'));
+    assert.equal(aDoiCa[0].extra?.reply_markup, undefined);
+
+    // 6. Báo hỏng
+    const aBaoHong = await tg.handleTelegramUpdate(
+      { callback_query: { id: 'c6', message: { chat: { id: 100 } }, from: { id: 100 }, data: '/baohong' } },
+      mockCtx
+    );
+    assert.ok(aBaoHong[0].text.includes('Báo hỏng') || aBaoHong[0].text.includes('BÁO HỎNG'));
+    assert.equal(aBaoHong[0].extra?.reply_markup, undefined);
+  });
 });
+
 

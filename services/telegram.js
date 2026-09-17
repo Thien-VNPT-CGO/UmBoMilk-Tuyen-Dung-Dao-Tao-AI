@@ -68,6 +68,18 @@ async function sendTelegramMessage(botToken, chatId, text, extra = {}) {
   }
 }
 
+async function answerTelegramCallbackQuery(botToken, callbackQueryId, text = '') {
+  if (!botToken || !callbackQueryId) return { ok: false, skipped: true };
+  try {
+    const payload = { callback_query_id: String(callbackQueryId) };
+    if (text) payload.text = text;
+    const j = await tgApi(botToken, 'answerCallbackQuery', payload);
+    return { ok: true, result: j.result };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
 async function setTelegramWebhook(botToken, webhookUrl) {
   if (!botToken || !webhookUrl) return { ok: false, skipped: true };
   try {
@@ -239,6 +251,12 @@ async function handleTelegramUpdate(update, ctx) {
     const webAppUrl = ctx?.webAppUrl || '';
     const role = ctx?.role && START_TEXTS[ctx.role] ? ctx.role : 'employee';
 
+    const photoList = update.message?.photo || update.edited_message?.photo;
+    const caption = (update.message?.caption || update.edited_message?.caption || '').trim();
+    if (photoList && photoList.length > 0 && !text) {
+      text = caption ? `${caption} (Đính kèm ảnh)` : 'Báo cáo sự cố thiết bị (Đính kèm ảnh)';
+    }
+
     if (text.startsWith('/start')) {
       const payload = text.replace('/start', '').trim();
       if (payload && ctx?.linkByStartPayload) {
@@ -257,7 +275,7 @@ async function handleTelegramUpdate(update, ctx) {
           extra: role === 'employee' ? employeeMenuKeyboard(webAppUrl) : webAppKeyboard(webAppUrl),
         });
       }
-    } else if (text.startsWith('/menu')) {
+    } else if (text.startsWith('/menu') || text.toLowerCase() === 'menu' || text.toLowerCase() === 'bảng chức năng') {
       actions.push({
         chatId,
         text: '📱 <b>BẢNG CHỨC NĂNG NHANH — ỤM BÒ MILK</b>\n\nNhấn chọn chức năng bên dưới hoặc gõ trực tiếp cú pháp lệnh:\n• <code>/diemdanh</code> — Điểm danh hôm nay\n• <code>/lich</code> — Xem lịch 7 ngày tới\n• <code>18/09/2026, 22/09/2026</code> — Đăng ký 2 ngày OFF\n• <code>/luong</code> — Lương tạm tính tháng này\n• <code>/doica</code> — Đổi ca làm việc\n• <code>/baohong</code> — Báo hỏng thiết bị',
@@ -269,17 +287,25 @@ async function handleTelegramUpdate(update, ctx) {
         text: '🐮 Nhấn nút bên dưới để mở Mini App Ụm Bò Milk:',
         extra: webAppKeyboard(webAppUrl),
       });
-    } else if (text.startsWith('/doica')) {
+    } else if (text.startsWith('/doica') || text.includes('Đổi ca') || /^đổi ca$|^doi ca$/i.test(text)) {
       actions.push({
         chatId,
-        text: '🔄 <b>Đổi ca & Tráo ca làm việc</b>\n\nĐể đổi ca hoặc tìm người thế ca khẩn cấp, vui lòng mở Mini App bên dưới để chọn ca và người thay thế thuận tiện nhất:',
-        extra: webAppKeyboard(webAppUrl),
+        text: '🔄 <b>YÊU CẦU ĐỔI CA / TRÁO CA LÀM VIỆC</b>\n\n'
+          + 'Bạn không cần mở app! Hãy nhắn trực tiếp yêu cầu đổi ca vào khung chat này theo mẫu sau:\n\n'
+          + '👉 <i>Mẫu nhắn:</i>\n'
+          + '<code>Đổi ca ngày dd/mm/yyyy từ ca [Sáng/Chiều/Tối] sang ca [...] với bạn [Tên hoặc Mã NV]</code>\n\n'
+          + '<i>Ví dụ cụ thể:</i>\n'
+          + '<code>Đổi ca ngày 20/09 ca Sáng sang ca Tối với bạn Lan</code>\n\n'
+          + '🤖 <i>Bot sẽ tự động tiếp nhận và chuyển tiếp yêu cầu đến Quản lý & HR phê duyệt ngay!</i>',
       });
-    } else if (text.startsWith('/baohong')) {
+    } else if (text.startsWith('/baohong') || text.includes('Báo hỏng') || /^báo hỏng$|^bao hong$/i.test(text)) {
       actions.push({
         chatId,
-        text: '🛠️ <b>Báo hỏng thiết bị & Sự cố cửa hàng</b>\n\nĐể gửi hình ảnh và mô tả hỏng hóc thiết bị, vui lòng mở Mini App bên dưới (chức năng Báo hỏng):',
-        extra: webAppKeyboard(webAppUrl),
+        text: '🛠️ <b>Báo hỏng thiết bị & Sự cố cửa hàng (Báo hỏng qua chat)</b>\n\n'
+          + 'Bạn không cần mở app! Hãy nhắn trực tiếp mô tả sự cố hoặc gửi kèm ảnh chụp thiết bị hỏng vào đây:\n\n'
+          + '👉 <i>Ví dụ:</i>\n'
+          + '<code>Máy ép nắp ly quầy bar chi nhánh 1 bị hỏng rơ-le nhiệt</code>\n\n'
+          + '📸 <i>Bạn có thể chụp và gửi trực tiếp hình ảnh sự cố vào khung chat này. Bot sẽ tự động ghi nhận và chuyển báo cáo khẩn cấp tới HR và Kỹ thuật!</i>',
       });
     } else if (text.startsWith('/link') || /^(0|\+84|84)?\d{9,10}$/.test(text.replace(/[\s.-]/g, ''))) {
       let phoneArg = '';
@@ -325,26 +351,26 @@ async function handleTelegramUpdate(update, ctx) {
         await ctx.unlink(String(from?.id));
         actions.push({ chatId, text: '✅ Đã hủy liên kết Telegram.' });
       }
-    } else if (text.startsWith('/lich')) {
+    } else if (text.startsWith('/lich') || text.includes('Lịch làm') || /^lịch làm$|^lich lam$|^xem lịch$|^xem lich$/i.test(text)) {
       if (ctx?.getSchedule) {
         const r = await ctx.getSchedule(String(from?.id));
-        actions.push({ chatId, text: r.text, extra: webAppKeyboard(webAppUrl) });
+        actions.push({ chatId, text: r.text });
       } else {
-        actions.push({ chatId, text: 'Mở Mini App để xem lịch làm việc.', extra: webAppKeyboard(webAppUrl) });
+        actions.push({ chatId, text: '📅 Chưa thể lấy thông tin lịch lúc này.' });
       }
-    } else if (text.startsWith('/diemdanh')) {
+    } else if (text.startsWith('/diemdanh') || text.includes('Điểm danh') || /^điểm danh$|^diem danh$/i.test(text)) {
       if (ctx?.getTodayStatus) {
         const r = await ctx.getTodayStatus(String(from?.id));
-        actions.push({ chatId, text: r.text, extra: webAppKeyboard(webAppUrl) });
+        actions.push({ chatId, text: r.text });
       } else {
-        actions.push({ chatId, text: 'Mở Mini App để điểm danh.', extra: webAppKeyboard(webAppUrl) });
+        actions.push({ chatId, text: '📍 Chưa thể kiểm tra điểm danh lúc này.' });
       }
-    } else if (text.startsWith('/luong')) {
+    } else if (text.startsWith('/luong') || text.includes('Xem lương') || /^xem lương$|^xem luong$|^lương$|^luong$/i.test(text)) {
       if (ctx?.getSalary) {
         const r = await ctx.getSalary(String(from?.id));
-        actions.push({ chatId, text: r.text, extra: webAppKeyboard(webAppUrl) });
+        actions.push({ chatId, text: r.text });
       } else {
-        actions.push({ chatId, text: 'Mở Mini App Tài chính để xem lương.', extra: webAppKeyboard(webAppUrl) });
+        actions.push({ chatId, text: '💰 Chưa thể tính lương lúc này.' });
       }
     } else if (text.startsWith('/duyet')) {
       if (ctx?.getPendingCounts) {
@@ -373,27 +399,39 @@ async function handleTelegramUpdate(update, ctx) {
     } else if (text.startsWith('/help')) {
       const role = ctx?.role && HELP_TEXTS[ctx.role] ? ctx.role : 'employee';
       actions.push({ chatId, text: HELP_TEXTS[role], extra: webAppKeyboard(webAppUrl) });
-    } else if (text.startsWith('/off') || isOffRegistration(text)) {
+    } else if (text === '/off' || text.includes('Đăng ký OFF') || /^đăng ký off$|^dang ky off$/i.test(text)) {
+      actions.push({
+        chatId,
+        text: '🏖️ <b>Đăng ký lịch OFF (2 ngày/tuần)</b>\n\n'
+          + 'Bạn vui lòng nhắn trực tiếp 2 ngày muốn nghỉ vào khung chat này theo định dạng:\n'
+          + '👉 <code>dd/mm/yyyy, dd/mm/yyyy</code>\n\n'
+          + '<i>Ví dụ:</i> <code>18/09/2026, 22/09/2026</code>\n\n'
+          + '🤖 <i>Bot Telegram sẽ tự động ghi nhận 2 ngày OFF này và cập nhật tất cả các ngày còn lại trong tuần là ngày LÀM VIỆC (WORKING) đồng bộ lên Google Sheet ngay lập tức cho bạn!</i>',
+      });
+    } else if (isOffRegistration(text)) {
       const dates = extractOffDates(text);
       if (dates.length === 0) {
         actions.push({
           chatId,
           text: '📅 <b>Đăng ký lịch OFF (2 ngày/tuần)</b>\nCú pháp: Nhắn đúng 2 ngày theo định dạng <code>dd/mm/yyyy</code>\nVí dụ: <code>18/09/2026, 22/09/2026</code>\n(Bot sẽ tự động ghi nhận ngày OFF và cập nhật những ngày còn lại là ngày làm việc lên Google Sheet).',
-          extra: webAppKeyboard(webAppUrl),
         });
       } else if (ctx?.registerOffSchedule) {
         const r = await ctx.registerOffSchedule(String(from?.id), dates, from?.username || '');
-        actions.push({ chatId, text: r.text, extra: webAppKeyboard(webAppUrl) });
+        actions.push({ chatId, text: r.text });
       } else {
-        actions.push({ chatId, text: 'Mở Mini App để đăng ký lịch OFF.', extra: webAppKeyboard(webAppUrl) });
+        actions.push({ chatId, text: '📅 Đăng ký lịch OFF thất bại, vui lòng thử lại.' });
       }
     } else {
       // Bot NV: tin nhắn tự do -> lễ tân AI đọc hiểu + chuyển Bot chủ
       if ((ctx?.role || 'employee') === 'employee' && ctx?.relayEmployeeMessage && text.length > 1) {
         const r = await ctx.relayEmployeeMessage(String(from?.id), from?.username || '', text);
-        actions.push({ chatId, text: r.text, extra: webAppKeyboard(webAppUrl) });
+        actions.push({ chatId, text: r.text });
       } else {
-        actions.push({ chatId, text: 'Nhấn nút bên dưới để mở Mini App Ụm Bò Milk 👇', extra: webAppKeyboard(webAppUrl) });
+        actions.push({
+          chatId,
+          text: '🤖 <b>Trợ lý Bot Ụm Bò Milk</b>\n\nBạn có thể nhắn trực tiếp với Bot:\n• <code>/diemdanh</code> — Xem trạng thái vào/ra ca hôm nay\n• <code>/lich</code> — Xem lịch 7 ngày tới\n• <code>18/09/2026, 22/09/2026</code> — Đăng ký 2 ngày OFF\n• <code>/luong</code> — Xem tạm tính lương\n• <code>/doica</code> — Hướng dẫn đổi ca\n• <code>/baohong</code> — Báo hỏng thiết bị\n\nHoặc nhắn bất kỳ câu hỏi/yêu cầu nào để Bot chuyển tới HR hỗ trợ bạn nhé!',
+          extra: employeeMenuKeyboard(webAppUrl),
+        });
       }
     }
   } catch (e) {
@@ -407,6 +445,7 @@ module.exports = {
   verifyTelegramInitData,
   tgApi,
   sendTelegramMessage,
+  answerTelegramCallbackQuery,
   setTelegramWebhook,
   setTelegramMenuButton,
   setTelegramCommands,
