@@ -88,7 +88,7 @@
   };
   T.pages['hr-me:mount'] = async () => {
     document.querySelectorAll('[data-go]').forEach((b) => { b.onclick = () => T.go(b.dataset.go); });
-    T.$('hrOut').onclick = () => { T.store.del('hr_token'); T.store.del('hr_user'); location.reload(); };
+    T.$('hrOut').onclick = () => { T.store.del('hr_token'); T.store.del('hr_user'); T.setTabs([]); T.go('hr-login', {}, true); };
   };
   T.pages['fin-more'] = async () => '<div class="tg-grid">'
     + '<button class="tg-menu" data-go="fin-ksk"><span class="mi">🏥</span>Khám SK</button>'
@@ -97,7 +97,7 @@
     + '<button class="tg-menu" data-act="out"><span class="mi">🚪</span>Thoát</button></div>';
   T.pages['fin-more:mount'] = async () => {
     document.querySelectorAll('[data-go]').forEach((b) => { b.onclick = () => T.go(b.dataset.go); });
-    document.querySelectorAll('[data-act="out"]').forEach((b) => { b.onclick = () => { T.store.del('fin_token'); location.reload(); }; });
+    document.querySelectorAll('[data-act="out"]').forEach((b) => { b.onclick = () => { T.store.del('fin_token'); T.setTabs([]); T.go('fin-login', {}, true); }; });
   };
 
   // Màn liên kết NV độc lập — Bot NV chỉ thấy màn này, không thấy HR/KT
@@ -231,8 +231,11 @@
       if (!res.ok) return;
       const data = await res.json();
       if (lastSeenVersion !== null && data.version > lastSeenVersion) {
-        // Có dữ liệu mới từ Google Sheet / Server -> làm mới trang hiện tại
-        if (typeof T.refresh === 'function') T.refresh();
+        // Có dữ liệu mới từ Google Sheet / Server -> làm mới ngầm, KHÔNG làm mới nếu đang nhập liệu
+        const tag = document.activeElement ? document.activeElement.tagName : '';
+        if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') {
+          if (typeof T.refresh === 'function') T.refresh(true);
+        }
       }
       lastSeenVersion = data.version;
     } catch (e) {}
@@ -242,12 +245,12 @@
   document.addEventListener('DOMContentLoaded', () => {
     try { document.getElementById('tgUserLine'); } catch (e) {}
     bootTabs();
-    setInterval(checkVersionPoll, 4000);
+    setInterval(checkVersionPoll, 5000);
   });
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) {
+      // Khi quay lại màn hình: chỉ check version ngầm, TUYỆT ĐỐI không gọi T.refresh() gây chớp giật
       checkVersionPoll();
-      if (typeof T.refresh === 'function') T.refresh();
     }
   });
 })();

@@ -191,30 +191,50 @@
       else WA.BackButton.hide();
     } catch (e) {}
   }
-  async function go(name, params, replace) {
+  async function go(name, params, replace, silent) {
     hideMainBtn();
-    if (!replace) stack.push({ name, params: params || {} });
-    else { stack.length = 0; stack.push({ name, params: params || {} }); }
+    if (silent) {
+      // Làm mới ngầm: giữ nguyên history stack
+    } else if (!replace) {
+      stack.push({ name, params: params || {} });
+    } else {
+      stack.length = 0;
+      stack.push({ name, params: params || {} });
+    }
     renderBack();
     const el = $('tgPage');
-    el.innerHTML = loading();
+    if (!silent && !el.innerHTML.trim()) {
+      el.innerHTML = loading();
+    }
     try {
       const fn = pages[name];
       if (!fn) { el.innerHTML = empty('Không tìm thấy trang'); return; }
-      el.innerHTML = await fn(params || {});
-      if (pages[name + ':mount']) { try { await pages[name + ':mount'](params || {}); } catch (e) { console.error(e); } }
+      const newHtml = await fn(params || {});
+      el.innerHTML = newHtml;
+      if (pages[name + ':mount']) {
+        try { await pages[name + ':mount'](params || {}); } catch (e) { console.error(e); }
+      }
     } catch (e) {
       console.error(e);
-      el.innerHTML = '<div class="tg-card">⚠️ ' + esc(e.message || 'Lỗi tải trang') + '<button class="tg-btn ghost" onclick="TG.back()">Quay lại</button></div>';
+      if (!silent) {
+        el.innerHTML = '<div class="tg-card">⚠️ ' + esc(e.message || 'Lỗi tải trang') + '<button class="tg-btn ghost" onclick="TG.back()">Quay lại</button></div>';
+      }
     }
-    try { el.classList.remove('page-enter'); void el.offsetWidth; el.classList.add('page-enter'); } catch (e) {}
-    try { window.scrollTo(0, 0); } catch (e) {}
+    if (!silent) {
+      try { el.classList.remove('page-enter'); void el.offsetWidth; el.classList.add('page-enter'); } catch (e) {}
+      try { window.scrollTo(0, 0); } catch (e) {}
+    }
   }
   function back() {
     hideMainBtn();
     if (stack.length > 1) { stack.pop(); const cur = stack[stack.length - 1]; stack.pop(); go(cur.name, cur.params); }
   }
-  function refresh() { const cur = stack[stack.length - 1]; if (cur) { stack.pop(); go(cur.name, cur.params); } }
+  function refresh(silent = true) {
+    const cur = stack[stack.length - 1];
+    if (cur) {
+      go(cur.name, cur.params, false, silent);
+    }
+  }
 
   // ---- Sheet là sự thật: đọc live đúng tab đúng cột, map theo header ----
   async function sheetLive(tab, apiFn) {

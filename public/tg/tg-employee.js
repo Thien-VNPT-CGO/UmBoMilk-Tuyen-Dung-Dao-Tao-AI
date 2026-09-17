@@ -24,7 +24,7 @@
   T.pages['emp-home'] = async () => {
     let e = emp();
     try { const j = await me(); e = j.employee; } catch (err) {
-      if (err.status === 401) { T.store.del('emp_token'); T.store.del('emp_user'); location.reload(); return ''; }
+      if (err.status === 401) { T.store.del('emp_token'); T.store.del('emp_user'); T.setTabs([]); T.go('emp-link', {}, true); return ''; }
       throw err;
     }
     const today = T.vnToday();
@@ -407,7 +407,7 @@
   T.pages['emp-account:mount'] = async () => {
     if (T.$('btnLogout')) T.$('btnLogout').onclick = async () => {
       if (!await T.confirmDlg('Đăng xuất khỏi Mini App?')) return;
-      T.store.del('emp_token'); T.store.del('emp_user'); location.reload();
+      T.store.del('emp_token'); T.store.del('emp_user'); T.setTabs([]); T.go('emp-link', {}, true);
     };
     if (T.$('btnUnlink')) T.$('btnUnlink').onclick = async () => {
       try {

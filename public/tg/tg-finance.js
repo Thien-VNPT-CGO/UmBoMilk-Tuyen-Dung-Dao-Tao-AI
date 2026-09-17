@@ -46,7 +46,7 @@
   };
   T.pages['fin-home:mount'] = async () => {
     document.querySelectorAll('[data-go]').forEach((b) => { b.onclick = () => T.go(b.dataset.go); });
-    document.querySelectorAll('[data-act="logout"]').forEach((b) => { b.onclick = () => { T.store.del('fin_token'); location.reload(); }; });
+    document.querySelectorAll('[data-act="logout"]').forEach((b) => { b.onclick = () => { T.store.del('fin_token'); T.setTabs([]); T.go('fin-login', {}, true); }; });
   };
 
   T.pages['fin-pay'] = async () => {

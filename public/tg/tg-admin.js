@@ -339,7 +339,7 @@
         if (act === 'reload') { if (!await T.confirmDlg('Nạp lại db.json từ đĩa?')) return; const j = await H('/api/admin/db/reload', { method: 'POST' }); T.notifyOk(); T.toast('Đã nạp: ' + j.employees + ' NV ✅'); }
         if (act === 'drvbak') { const j = await H('/api/admin/drive/backup', { method: 'POST' }); if (j.success) { T.notifyOk(); T.toast('Backup OK: ' + j.name + ' ✅'); } else T.toast(j.reason || 'Chưa cấu hình Drive'); }
         if (act === 'finkey') { await H('/api/finance-keys/generate', { method: 'POST', body: { type: 'PAYROLL' } }); T.notifyOk(); T.toast('Đã tạo FIN-KEY ✅'); }
-        if (act === 'logout') { T.store.del('hr_token'); T.store.del('hr_user'); location.reload(); }
+        if (act === 'logout') { T.store.del('hr_token'); T.store.del('hr_user'); T.setTabs([]); T.go('hr-login', {}, true); }
       } catch (err) { T.notifyErr(); T.toast(err.message); }
     }; });
   };
