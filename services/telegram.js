@@ -230,7 +230,13 @@ async function handleTelegramUpdate(update, ctx) {
       const role = ctx?.role && HELP_TEXTS[ctx.role] ? ctx.role : 'employee';
       actions.push({ chatId, text: HELP_TEXTS[role], extra: webAppKeyboard(webAppUrl) });
     } else {
-      actions.push({ chatId, text: 'Nhấn nút bên dưới để mở Mini App Ụm Bò Milk 👇', extra: webAppKeyboard(webAppUrl) });
+      // Bot NV: tin nhắn tự do -> lễ tân AI đọc hiểu + chuyển Bot chủ
+      if ((ctx?.role || 'employee') === 'employee' && ctx?.relayEmployeeMessage && text.length > 1) {
+        const r = await ctx.relayEmployeeMessage(String(from?.id), from?.username || '', text);
+        actions.push({ chatId, text: r.text, extra: webAppKeyboard(webAppUrl) });
+      } else {
+        actions.push({ chatId, text: 'Nhấn nút bên dưới để mở Mini App Ụm Bò Milk 👇', extra: webAppKeyboard(webAppUrl) });
+      }
     }
   } catch (e) {
     // không throw — Bot không được crash vì 1 update lỗi

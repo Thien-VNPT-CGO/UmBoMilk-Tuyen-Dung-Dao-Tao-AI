@@ -353,12 +353,19 @@
       + '<div class="tg-card"><h3>👥 Người nhận tin Bot chủ (' + subs.length + ')</h3>'
       + (subs.map((s) => '<div class="tg-row"><div class="ic">👤</div><div class="bd"><div class="tt">@' + T.esc(s.username || s.chatId) + '</div><div class="sm">' + T.esc(s.lastSeen || s.createdAt || '') + '</div></div><button class="tg-btn sm danger" data-unsub="' + T.esc(s.chatId) + '">Xóa</button></div>').join('') || T.empty('Chưa ai /start Bot HR')) + '</div>'
       + '<div class="tg-card"><h3>📣 Broadcast qua Bot Nhân viên (quản lý Bot NV)</h3>'
+      + '<div class="sm" id="aiRelaySt" style="font-size:12px;color:var(--tg-hint)">🤖 Lễ tân AI đọc tin NV: đang kiểm tra...</div>'
       + '<div class="tg-flex"><input id="bcBranch" class="tg-inp" placeholder="Chi nhánh (trống = tất cả)"><input id="bcText" class="tg-inp" placeholder="Nội dung..."></div>'
       + '<button class="tg-btn" data-act="bc">Gửi broadcast</button></div>'
       + '<div class="tg-card"><h3>✈️ Liên kết Telegram (' + links.length + ')</h3>'
       + (links.slice(0, 40).map((l) => '<div class="tg-row"><div class="ic">🔗</div><div class="bd"><div class="tt">' + T.esc(l.employeeId || '') + '</div><div class="sm">TG: ' + T.esc(l.telegramId || '') + ' • @' + T.esc(l.username || '') + '</div></div><button class="tg-btn sm ghost" data-msg="' + T.esc(l.employeeId || '') + '">Nhắn</button></div>').join('') || T.empty('Chưa ai liên kết')) + '</div>';
   };
   T.pages['hr-tg:mount'] = async () => {
+    try {
+      const s = await H('/api/settings');
+      const ai = (s.settings && s.settings.ai) || {};
+      const el = T.$('aiRelaySt');
+      if (el) el.innerHTML = ai.apiKey ? '🤖 Lễ tân AI đọc tin NV: <b>BẬT</b> (' + T.esc(ai.model || '') + ' — tin NV tự tóm tắt về Bot chủ)' : '🤖 Lễ tân AI: <b>CHƯA có key</b> (Cài đặt → AI) — tin NV chuyển nguyên văn về Bot chủ';
+    } catch (e) {}
     document.querySelectorAll('[data-act="setup"]').forEach((b) => { b.onclick = async () => {
       try {
         T.toast('Đang gắn webhook 3 bot...');

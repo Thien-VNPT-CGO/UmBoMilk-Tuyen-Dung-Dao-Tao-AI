@@ -11878,6 +11878,45 @@ async function broadcastTelegramEmployees(text, branchId, via){
   saveDB();
   return { ok:true, sent, failed, text: `📣 Đã gửi tới <b>${sent}</b> NV qua Bot Nhân viên${failed?` (${failed} lỗi)`:''}.` };
 }
+// Gọi AI theo cấu hình Cài đặt → AI (chuẩn OpenAI-compatible: OpenAI/Gemini endpoint tương thích)
+async function aiChat(messages, maxTokens) {
+  const ai = (db.settings && db.settings.ai) || {};
+  const apiKey = ai.apiKey && !String(ai.apiKey).includes('•') ? ai.apiKey : '';
+  if (!apiKey) return { ok: false, reason: 'no-key' };
+  if (OUTBOUND_SYNC_DISABLED) return { ok: false, reason: 'disabled' };
+  try {
+    const base = (ai.baseUrl || 'https://api.openai.com/v1').replace(/\/$/, '');
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 20000);
+    const r = await fetch(base + '/chat/completions', {
+      method: 'POST', signal: ctrl.signal,
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + apiKey },
+      body: JSON.stringify({ model: ai.model || 'gpt-4o', temperature: ai.temperature != null ? ai.temperature : 0.3, max_tokens: maxTokens || 300, messages })
+    });
+    clearTimeout(timer);
+    const j = await r.json().catch(() => ({}));
+    const text = j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
+    if (!text) return { ok: false, reason: (j.error && j.error.message) || 'empty' };
+    return { ok: true, text: String(text).trim() };
+  } catch (e) { return { ok: false, reason: e.message }; }
+}
+// AI đọc hiểu tin nhắn tự do của NV: phân loại ý định + tóm tắt 1 dòng (JSON, có fallback nguyên văn)
+async function summarizeEmployeeMessage(emp, text) {
+  const fallback = { ok: false, intent: 'TIN_NHAN', summary: String(text).slice(0, 200) };
+  const ai = (db.settings && db.settings.ai) || {};
+  if (!ai.apiKey || String(ai.apiKey).includes('•')) return fallback;
+  const r = await aiChat([
+    { role: 'system', content: 'Bạn là lễ tân HR quán trà sữa Ụm Bò Milk. Đọc tin nhắn nhân viên, trả về JSON duy nhất {"intent":"...","summary":"..."} với intent thuộc [NGHI_OFF, DOI_CA, BAO_HONG, HOI_LICH, HOI_LUONG, DOI_THIET_BI, XIN_NGHI_TRETRE, KHAC], summary ≤ 30 từ tiếng Việt.' },
+    { role: 'user', content: `NV ${emp.name} (${emp.employeeId}, ${emp.branchId}, ${emp.shift}): ${text}` }
+  ], 200);
+  if (!r.ok) return fallback;
+  try {
+    const m = r.text.match(/\{[\s\S]*\}/);
+    const j = JSON.parse(m ? m[0] : r.text);
+    if (j && j.summary) return { ok: true, intent: String(j.intent || 'KHAC').toUpperCase().slice(0, 30), summary: String(j.summary).slice(0, 300) };
+  } catch (e) {}
+  return { ok: true, intent: 'KHAC', summary: r.text.slice(0, 200) };
+}
 // Bot chủ HR thu thập tin từ Bot NV: gửi tin sự kiện NV tới mọi chat HR đã /start Bot HR.
 // settings.telegram.notify {checkin, checkout, off, swap} làm công tắc từng loại.
 async function notifyHRMaster(kind, text, probe) {
@@ -12010,6 +12049,20 @@ async function processTelegramUpdate(update, role){
     },
     broadcastToEmployees: async (fromTelegramId, msg)=>{
       return await broadcastTelegramEmployees(msg, null, 'HR_BOT:'+fromTelegramId);
+    },
+    // Lễ tân AI Bot NV: NV chat tự do -> AI đọc hiểu + tóm tắt -> Bot chủ (kèm mã NV)
+    relayEmployeeMessage: async (telegramId, username, text)=>{
+      const link = findTelegramLink(telegramId);
+      if(!link?.employeeId) return { text: 'Bạn chưa liên kết tài khoản. Dùng /link <code>MÃ_NV KEY</code> trước, rồi nhắn lại nhé.' };
+      const emp = (db.employees||[]).find(e=>e.employeeId===link.employeeId);
+      if(!emp) return { text: 'Tài khoản liên kết không còn tồn tại.' };
+      if(isTestRecord(emp)) return { text: 'Đã ghi nhận (bản ghi test).' };
+      const s = await summarizeEmployeeMessage(emp, text);
+      const fwd = `💬 <b>${emp.name} (<code>${emp.employeeId}</code> • ${emp.branchId || ''} • ${emp.shift || ''})</b>\n📌 Ý định: <b>${s.intent}</b>\n📝 Tóm tắt: ${s.summary}\n💭 Nguyên văn: ${String(text).slice(0, 500)}`;
+      const r = await notifyHRMaster('chat', fwd, emp);
+      try{ audit(link.employeeId, 'TELEGRAM_CHAT_RELAY', 'TELEGRAM', null, { intent: s.intent, ai: s.ok }, 'bot'); }catch(e){}
+      if(r.ok) return { text: `✅ Đã chuyển tới HR.\n📌 Tóm tắt: ${s.summary}` };
+      return { text: `✅ Đã ghi nhận tin nhắn của bạn.\n📌 Tóm tắt: ${s.summary}\n(HR sẽ phản hồi trong Mini App)` };
     }
   };
   const actions = await tg.handleTelegramUpdate(update, ctx);
