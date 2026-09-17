@@ -12432,6 +12432,63 @@ app.post('/api/telegram/link', (req,res)=>{
   const token = jwt.sign({ employeeId: emp.employeeId, name: emp.name, type: emp.type, status: emp.status, branchId: emp.branchId, via: 'telegram' }, JWT_SECRET, {expiresIn:'12h'});
   res.json({ ok:true, token, employee: emp });
 });
+
+// Tra cứu nhanh bằng Số điện thoại -> Tự động trả về KEY kích hoạt và tự động đăng nhập liên kết Telegram
+app.post('/api/telegram/lookup-phone', (req,res)=>{
+  const { phone, telegramId, username, chatId } = req.body||{};
+  const rawPhone = String(phone||'').trim();
+  const clean = rawPhone.replace(/\D/g,'');
+  if(!clean || clean.length < 8) return res.status(400).json({ error:'Vui lòng nhập Số điện thoại hợp lệ' });
+
+  const norm = (s) => {
+    let p = String(s || '').replace(/\D/g, '');
+    if (p.startsWith('84') && p.length >= 11) p = p.slice(2);
+    if (p.startsWith('0')) p = p.slice(1);
+    return p;
+  };
+  const normInput = norm(rawPhone);
+  const emp = (db.employees||[]).find(e => (norm(e.phone) === normInput && normInput.length >= 8) || (e.employeeId && e.employeeId.toLowerCase() === rawPhone.toLowerCase()));
+  if(!emp) return res.status(404).json({ error:`Không tìm thấy nhân viên với SĐT ${rawPhone}. Vui lòng liên hệ Quản trị HR.` });
+  if(['ARCHIVED','TERMINATED','RESIGNED'].includes(emp.status)){
+    return res.status(403).json({ error:`Tài khoản của bạn đã bị ${emp.status}. Vui lòng liên hệ HR.` });
+  }
+
+  // Lấy KEY kích hoạt của nhân viên
+  let keyRec = (db.keys||[]).find(k=> k.employeeId===emp.employeeId && k.status==='ACTIVE')
+            || (db.keys||[]).find(k=> k.employeeId===emp.employeeId);
+  if(!keyRec){
+    const generatedKey = 'KEY-' + Math.random().toString(36).substring(2,10).toUpperCase();
+    keyRec = { employeeId: emp.employeeId, key: generatedKey, status: 'ACTIVE', createdAt: getVietnamISOString() };
+    if(!db.keys) db.keys = [];
+    db.keys.push(keyRec);
+  }
+
+  // Tự động liên kết Telegram ID nếu có truyền lên
+  if(telegramId){
+    let link = findTelegramLink(telegramId);
+    if(!link){
+      link = { telegramId: String(telegramId), createdAt: getVietnamISOString() };
+      db.telegramLinks.push(link);
+    }
+    link.employeeId = emp.employeeId;
+    link.username = username || link.username || '';
+    link.chatId = chatId || telegramId;
+    link.linkedAt = getVietnamISOString();
+    audit(emp.employeeId, 'TELEGRAM_AUTO_LINK_PHONE', 'TELEGRAM', null, { telegramId, phone: clean }, req.ip);
+    saveDB();
+    try{ io.emit('telegram:update', { count: db.telegramLinks.length }); }catch(e){}
+  }
+
+  const token = jwt.sign({ employeeId: emp.employeeId, name: emp.name, type: emp.type, status: emp.status, branchId: emp.branchId, via: 'telegram' }, JWT_SECRET, {expiresIn:'12h'});
+  res.json({
+    ok: true,
+    key: keyRec.key,
+    employee: emp,
+    token,
+    name: emp.name,
+    employeeId: emp.employeeId
+  });
+});
 app.post('/api/telegram/unlink', (req,res)=>{
   const { telegramId } = req.body||{};
   if(!telegramId) return res.status(400).json({ error:'Thiếu telegramId' });

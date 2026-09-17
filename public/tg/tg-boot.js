@@ -105,28 +105,75 @@
     let tgName = '';
     try { const u = T.WA && T.WA.initDataUnsafe && T.WA.initDataUnsafe.user; if (u) tgName = (u.first_name || '') + (u.username ? ' (@' + u.username + ')' : ''); } catch (e) {}
     return T.heroHTML((tgName ? tgName + ' • ' : '') + 'Mini App Nhân viên')
-      + '<div class="tg-card"><h3>⚡ Đăng nhập & Bắt đầu làm việc</h3>'
-      + '<p class="tg-sub" style="font-size:13px;color:#64748b;margin-bottom:12px">Nhập Số điện thoại hoặc Mã nhân viên (chỉ cần đăng nhập 1 lần duy nhất):</p>'
-      + '<label class="tg-lab">Số điện thoại hoặc Mã NV</label><input id="lkEmp" class="tg-inp" placeholder="VD: 090... hoặc CN261_...">'
-      + '<label class="tg-lab">KEY kích hoạt (nếu có)</label><input id="lkKey" class="tg-inp" placeholder="Để trống nếu đăng nhập bằng SĐT">'
-      + '<button class="tg-btn" id="btnLink">🚀 Đăng nhập ngay</button></div>';
+      + '<div class="tg-card"><h3>⚡ Đăng nhập & Kích hoạt tự động</h3>'
+      + '<p class="tg-sub" style="font-size:13px;color:#64748b;margin-bottom:14px">Nhập Số điện thoại của bạn, hệ thống sẽ tự động tìm Key và đưa bạn vào làm việc ngay:</p>'
+      + '<label class="tg-lab">Số điện thoại nhân viên</label>'
+      + '<input id="lkEmp" type="tel" class="tg-inp" placeholder="Nhập SĐT (VD: 0905...)" style="font-size:16px;font-weight:600;letter-spacing:0.5px">'
+      + '<div id="keyBox" style="margin-top:10px;display:none;background:#f0fdf4;border:1px solid #86efac;padding:10px 14px;border-radius:12px">'
+      + '<div style="font-size:11px;font-weight:700;color:#166534;text-transform:uppercase">🔑 Khóa kích hoạt của bạn:</div>'
+      + '<div id="keyVal" style="font-size:16px;font-weight:800;color:#15803d;margin-top:2px;letter-spacing:1px">---</div>'
+      + '</div>'
+      + '<div id="lkStatus" style="font-size:13px;color:#ec4899;font-weight:600;margin-top:8px;min-height:18px"></div>'
+      + '<button class="tg-btn" id="btnLink" style="margin-top:10px">🚀 Bắt đầu làm việc ngay</button>'
+      + '</div>';
   };
   T.pages['emp-link:mount'] = async () => {
     const r = await tryTelegramAuth();
     if (r.linked) { T.toast('Đã liên kết: ' + (r.employee.name || '')); bootTabs(); return; }
-    T.$('btnLink').onclick = async () => {
+
+    let autoLoggingIn = false;
+    async function doLookupAndLogin(phoneVal) {
+      if (autoLoggingIn) return;
+      const clean = (phoneVal || '').replace(/\D/g, '');
+      if (clean.length < 9) return;
+      autoLoggingIn = true;
       let tid = '';
       try { const u = T.WA && T.WA.initDataUnsafe && T.WA.initDataUnsafe.user; if (u && u.id) tid = String(u.id); } catch (e) {}
       if (!tid) tid = 'web-' + Date.now();
-      const val = (T.$('lkEmp').value || '').trim();
-      const key = (T.$('lkKey').value || '').trim();
-      if (!val) { T.toast('Vui lòng nhập Số điện thoại hoặc Mã NV'); return; }
+      const statusEl = T.$('lkStatus');
+      const keyBox = T.$('keyBox');
+      const keyVal = T.$('keyVal');
+      if (statusEl) statusEl.innerHTML = '🔍 Đang kiểm tra hồ sơ nhân viên...';
+
       try {
-        const j = await T.call('/api/telegram/link', { method: 'POST', body: { telegramId: tid, employeeId: val, phone: val, key: key || undefined } });
-        T.store.set('emp_token', j.token); T.store.set('emp_user', j.employee);
-        T.notifyOk(); T.toast('Đăng nhập thành công ✅ Chào mừng ' + (j.employee.name || '')); bootTabs();
-      } catch (err) { T.notifyErr(); T.toast(err.message); }
-    };
+        const j = await T.call('/api/telegram/lookup-phone', {
+          method: 'POST',
+          body: { phone: clean, telegramId: tid }
+        });
+        if (keyBox) keyBox.style.display = 'block';
+        if (keyVal) keyVal.textContent = j.key || 'ĐÃ KÍCH HOẠT';
+        if (statusEl) {
+          statusEl.style.color = '#15803d';
+          statusEl.innerHTML = `✅ Xin chào <b>${T.esc(j.name)}</b>! Đang mở bảng làm việc...`;
+        }
+        T.store.set('emp_token', j.token);
+        T.store.set('emp_user', j.employee);
+        T.haptic('success');
+        setTimeout(() => {
+          T.notifyOk();
+          T.toast('Đăng nhập thành công ✅ Chào mừng ' + (j.name || ''));
+          bootTabs();
+        }, 700);
+      } catch (err) {
+        autoLoggingIn = false;
+        if (statusEl) {
+          statusEl.style.color = '#dc2626';
+          statusEl.textContent = '⚠️ ' + err.message;
+        }
+        T.haptic('error');
+      }
+    }
+
+    const inp = T.$('lkEmp');
+    if (inp) {
+      inp.focus();
+      inp.addEventListener('input', (e) => {
+        const c = e.target.value.replace(/\D/g, '');
+        if (c.length >= 10) doLookupAndLogin(c);
+      });
+      inp.addEventListener('change', (e) => doLookupAndLogin(e.target.value));
+    }
+    T.$('btnLink').onclick = () => doLookupAndLogin(inp ? inp.value : '');
   };
 
   function enterRole(role) {
