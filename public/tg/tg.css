@@ -62,3 +62,10 @@ html,body{margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe
 .tg-quiz-opt.sel{border-color:var(--tg-link);background:#eaf4fd}
 .tg-progress{height:6px;background:var(--tg-secondary);border-radius:99px;overflow:hidden;margin-top:8px}
 .tg-progress>div{height:100%;background:var(--tg-link);width:0}
+/* Desktop / Telegram Web: nới rộng, menu nhiều cột — mobile giữ nguyên */
+@media (min-width:720px){
+  #tgApp{max-width:920px}
+  .tg-tabs{max-width:920px}
+  .tg-grid{grid-template-columns:repeat(6,1fr)}
+  #tgPage{padding:16px 20px 20px}
+}
