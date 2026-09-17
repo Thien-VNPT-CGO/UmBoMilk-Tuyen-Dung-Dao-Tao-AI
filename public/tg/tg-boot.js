@@ -114,7 +114,6 @@
       + '<div id="keyVal" style="font-size:16px;font-weight:800;color:#15803d;margin-top:2px;letter-spacing:1px">---</div>'
       + '</div>'
       + '<div id="lkStatus" style="font-size:13px;color:#ec4899;font-weight:600;margin-top:8px;min-height:18px"></div>'
-      + '<button class="tg-btn" id="btnLink" style="margin-top:10px">🚀 Bắt đầu làm việc ngay</button>'
       + '</div>';
   };
   T.pages['emp-link:mount'] = async () => {
@@ -173,7 +172,7 @@
       });
       inp.addEventListener('change', (e) => doLookupAndLogin(e.target.value));
     }
-    T.$('btnLink').onclick = () => doLookupAndLogin(inp ? inp.value : '');
+    if (T.$('btnLink')) T.$('btnLink').onclick = () => doLookupAndLogin(inp ? inp.value : '');
   };
 
   function enterRole(role) {
