@@ -18,8 +18,11 @@ jobs:
           set -e
           for cfg in "employee:$EMP_BOT_TOKEN:/tg-employee" "finance:$FIN_BOT_TOKEN:/tg-finance"; do
             IFS=':' read -r role tok path <<< "$cfg"
-            if [ -z "$tok" ]; then echo "[$role] SKIP: thiếu secret"; continue; fi
-            echo "[$role] setWebhook..."
+            tok=$(echo "$tok" | tr -d '[:space:]')
+            if [ -z "$tok" ]; then echo "[$role] SKIP: secret rỗng"; continue; fi
+            echo "[$role] getMe (kiểm tra token)..."
+            curl -s "https://api.telegram.org/bot${tok}/getMe"
+            echo; echo "[$role] setWebhook..."
             curl -s -X POST "https://api.telegram.org/bot${tok}/setWebhook" \
               -H 'Content-Type: application/json' \
               -d "{\"url\":\"https://umbomilk.alwaysdata.net/api/telegram/webhook/$role\",\"allowed_updates\":[\"message\",\"callback_query\"]}"
