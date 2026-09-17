@@ -122,6 +122,11 @@ const HELP_TEXTS = {
   ].join('\n'),
 };
 const HELP_TEXT = HELP_TEXTS.employee;
+const START_TEXTS = {
+  hr: '🛡️ <b>Chào mừng đến Mini App Quản trị HR!</b>\nNhấn nút bên dưới để mở app và đăng nhập tài khoản Admin/HR/Manager.',
+  employee: '🧑‍🍳 <b>Chào mừng đến Mini App Nhân viên!</b>\nNhấn nút bên dưới để mở app.\nDùng /link <code>MÃ_NV KEY</code> để liên kết tài khoản trước (1 lần duy nhất).',
+  finance: '💰 <b>Chào mừng đến Mini App Tài chính!</b>\nNhấn nút bên dưới để mở app và đăng nhập bằng khóa FIN-KEY.',
+};
 
 function webAppKeyboard(webAppUrl) {
   if (!webAppUrl) return {};
@@ -145,6 +150,7 @@ async function handleTelegramUpdate(update, ctx) {
     const webAppUrl = ctx?.webAppUrl || '';
 
     if (text.startsWith('/start')) {
+      const role = ctx?.role && START_TEXTS[ctx.role] ? ctx.role : 'employee';
       const payload = text.replace('/start', '').trim();
       if (payload && ctx?.linkByStartPayload) {
         const r = await ctx.linkByStartPayload(String(from?.id), payload);
@@ -156,11 +162,7 @@ async function handleTelegramUpdate(update, ctx) {
           extra: webAppKeyboard(webAppUrl),
         });
       } else {
-        actions.push({
-          chatId,
-          text: '🐮 <b>Chào mừng đến Ụm Bò Milk!</b>\nNhấn nút bên dưới để mở Mini App (Admin / Nhân viên / Tài chính).\nNếu là nhân viên, dùng /link để liên kết tài khoản trước.',
-          extra: webAppKeyboard(webAppUrl),
-        });
+        actions.push({ chatId, text: START_TEXTS[role], extra: webAppKeyboard(webAppUrl) });
       }
     } else if (text.startsWith('/link')) {
       const parts = text.split(/\s+/).slice(1);
@@ -246,6 +248,7 @@ module.exports = {
   handleTelegramUpdate,
   HELP_TEXT,
   HELP_TEXTS,
+  START_TEXTS,
   BOT_ROLES,
   webAppKeyboard,
 };

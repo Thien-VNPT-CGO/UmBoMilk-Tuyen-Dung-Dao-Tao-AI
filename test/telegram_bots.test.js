@@ -38,6 +38,19 @@ describe('Telegram 3 Bot (HR/NV/KT) + HR quản lý Bot NV', () => {
     assert.ok(att[0].text.includes('Vào ca'));
   });
 
+  it('2b. Câu chào /start riêng từng bot, không lộ vai trò khác', async () => {
+    for (const role of ['hr', 'employee', 'finance']) {
+      const a = await tg.handleTelegramUpdate(
+        { message: { chat: { id: 1 }, from: { id: 1 }, text: '/start' } },
+        { role, webAppUrl: 'https://x' }
+      );
+      assert.ok(a.length === 1);
+      const others = { hr: ['Nhân viên', 'Tài chính', 'FIN-KEY'], employee: ['Quản trị', 'Tài chính', 'FIN-KEY'], finance: ['Quản trị', 'Nhân viên', '/link'] };
+      for (const w of others[role]) assert.ok(!a[0].text.includes(w), role + ' lộ chữ: ' + w);
+    }
+    assert.ok(tg.START_TEXTS.employee.includes('/link'));
+  });
+
   it('3. GET 3 Mini App URL đều 200, không iframe', async () => {
     for (const p of ['/telegram', '/tg-hr', '/tg-employee', '/tg-finance']) {
       const r = await fetch(`${BASE}${p}`);
