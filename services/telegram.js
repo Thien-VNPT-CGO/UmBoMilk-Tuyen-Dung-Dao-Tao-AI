@@ -209,6 +209,131 @@ function employeeMenuKeyboard(webAppUrl) {
   return { reply_markup: { inline_keyboard } };
 }
 
+function hrMenuKeyboard(role, webAppUrl) {
+  const r = String(role || '').toUpperCase();
+  let inline_keyboard = [];
+  if (r === 'ADMIN') {
+    inline_keyboard = [
+      [
+        { text: '📊 Ma trận Lịch tuần', callback_data: '/tonghop_lich' },
+        { text: '✍️ Xếp lịch NV', callback_data: '/sap_lich_nv' }
+      ],
+      [
+        { text: '✅ Duyệt phiếu', callback_data: '/duyet' },
+        { text: '👥 Danh sách User', callback_data: '/users' }
+      ],
+      [
+        { text: '🧪 Chạy Test', callback_data: '/test' },
+        { text: '🗑️ Dọn dẹp Test', callback_data: '/delete_test' }
+      ],
+      [
+        { text: '🚪 Đăng xuất', callback_data: '/logout' }
+      ]
+    ];
+  } else if (r === 'HR') {
+    inline_keyboard = [
+      [
+        { text: '📊 Ma trận Lịch tuần', callback_data: '/tonghop_lich' },
+        { text: '✍️ Xếp lịch NV', callback_data: '/sap_lich_nv' }
+      ],
+      [
+        { text: '✅ Duyệt phiếu', callback_data: '/duyet' },
+        { text: '📋 Báo cáo ngày', callback_data: '/baocao' }
+      ],
+      [
+        { text: '🚪 Đăng xuất', callback_data: '/logout' }
+      ]
+    ];
+  } else if (r === 'MANAGER' || r === 'QL') {
+    inline_keyboard = [
+      [
+        { text: '📍 Điểm danh CN', callback_data: '/diemdanh_cn' },
+        { text: '📅 Lịch làm CN', callback_data: '/lich_cn' }
+      ],
+      [
+        { text: '🔄 Duyệt đổi ca', callback_data: '/duyet_ca' },
+        { text: '🛠️ Báo hỏng CN', callback_data: '/baohong_cn' }
+      ],
+      [
+        { text: '🚪 Đăng xuất', callback_data: '/logout' }
+      ]
+    ];
+  } else if (r === 'MKT') {
+    inline_keyboard = [
+      [
+        { text: '📢 Tin Marketing', callback_data: '/broadcast_mkt' },
+        { text: '🎁 Sự kiện', callback_data: '/sukien' }
+      ],
+      [
+        { text: '📰 Tin tức chuỗi', callback_data: '/tintuc' },
+        { text: '🚪 Đăng xuất', callback_data: '/logout' }
+      ]
+    ];
+  } else {
+    inline_keyboard = [
+      [
+        { text: '📊 Báo cáo', callback_data: '/baocao' },
+        { text: '🚪 Đăng xuất', callback_data: '/logout' }
+      ]
+    ];
+  }
+  if (webAppUrl) {
+    inline_keyboard.push([{ text: '🛡️ Mở Mini App Quản trị', web_app: { url: webAppUrl } }]);
+  }
+  return { reply_markup: { inline_keyboard } };
+}
+
+function getHrRoleMenuText(user) {
+  const role = String(user?.role || 'HR').toUpperCase();
+  const name = user?.displayName || user?.username || 'Quản trị viên';
+  if (role === 'ADMIN') {
+    return `👑 <b>BẢNG ĐIỀU KHIỂN ADMIN (FULL QUYỀN) — ỤM BÒ MILK</b>\n`
+      + `👤 Người dùng: <b>${name}</b> (Role: <code>ADMIN</code>)\n\n`
+      + `👉 <b>Lệnh vận hành ca & lịch:</b>\n`
+      + `• <code>/tonghop_lich [tuần]</code> — Ma trận lịch tuần 🟢/🔴 theo chi nhánh & ca\n`
+      + `• <code>/sap_lich_nv [mã] [lịch]</code> — Xếp/chỉnh lịch NV (VD: <code>/sap_lich_nv NV1288 T2-ON, T5-OFF, CN-ON</code>)\n`
+      + `• <code>/duyet</code> — Xem và duyệt các phiếu chờ (OFF, Đổi ca, Thiết bị)\n`
+      + `• <code>/broadcast [nội dung]</code> — Phát thông báo tới Mini App NV\n\n`
+      + `👉 <b>Quản trị người dùng & phân quyền:</b>\n`
+      + `• <code>/users</code> — Danh sách tài khoản hệ thống (HR, QL, MKT)\n`
+      + `• <code>/capquyen [username] [role]</code> — Gán vai trò (Admin, HR, QL, MKT)\n`
+      + `• <code>/phanquyen [username] [tabs]</code> — Cấp quyền tab (VD: <code>/phanquyen hr_lan candidates,training</code>)\n\n`
+      + `👉 <b>Chế độ kiểm thử an toàn (Test Mode):</b>\n`
+      + `• <code>/test [loại]</code> — Chạy thử 1 chức năng (tạo bản ghi isTest: true)\n`
+      + `• <code>/delete_test</code> — Dọn dẹp sạch sẽ 100% toàn bộ dữ liệu test\n\n`
+      + `• <code>/logout</code> — Đăng xuất`;
+  }
+  if (role === 'HR') {
+    return `🛡️ <b>BẢNG CHỨC NĂNG NHÂN SỰ (HR) — ỤM BÒ MILK</b>\n`
+      + `👤 Người dùng: <b>${name}</b> (Role: <code>HR</code>)\n\n`
+      + `• <code>/tonghop_lich [tuần]</code> — Ma trận lịch tuần 🟢/🔴 theo chi nhánh & ca\n`
+      + `• <code>/sap_lich_nv [mã] [lịch]</code> — Xếp/chỉnh lịch làm việc cho nhân viên\n`
+      + `• <code>/duyet</code> — Duyệt các phiếu chờ (OFF, Đổi ca, Sự cố)\n`
+      + `• <code>/baocao</code> — Tóm tắt tình hình nhân sự hôm nay\n`
+      + `• <code>/broadcast [nội dung]</code> — Gửi thông báo tới nhân viên\n`
+      + `• <code>/logout</code> — Đăng xuất`;
+  }
+  if (role === 'MANAGER' || role === 'QL') {
+    const branches = (user?.branchScope || []).join(', ') || 'Tất cả';
+    return `🏪 <b>BẢNG QUẢN LÝ CỬA HÀNG (QL) — ỤM BÒ MILK</b>\n`
+      + `👤 Quản lý: <b>${name}</b> • Chi nhánh: <b>${branches}</b>\n\n`
+      + `• <code>/diemdanh_cn</code> — Điểm danh vào/ra ca hôm nay tại chi nhánh\n`
+      + `• <code>/lich_cn</code> — Xem lịch làm việc tuần của nhân viên tại chi nhánh\n`
+      + `• <code>/duyet_ca</code> — Phê duyệt đổi ca / tráo ca của chi nhánh\n`
+      + `• <code>/baohong_cn</code> — Báo cáo sự cố thiết bị tại chi nhánh\n`
+      + `• <code>/logout</code> — Đăng xuất`;
+  }
+  if (role === 'MKT') {
+    return `📢 <b>BẢNG CHỨC NĂNG MARKETING (MKT) — ỤM BÒ MILK</b>\n`
+      + `👤 Người dùng: <b>${name}</b> (Role: <code>MKT</code>)\n\n`
+      + `• <code>/broadcast_mkt [nội dung]</code> — Đăng thông báo / chiến dịch tới Mini App NV\n`
+      + `• <code>/sukien</code> — Danh sách sự kiện & CTKM sắp tới\n`
+      + `• <code>/tintuc</code> — Đăng tin nội bộ chuỗi\n`
+      + `• <code>/logout</code> — Đăng xuất`;
+  }
+  return `🛡️ <b>MENU HỆ THỐNG — ỤM BÒ MILK</b>\n👤 Người dùng: <b>${name}</b>\n• <code>/baocao</code> — Xem báo cáo\n• <code>/logout</code> — Đăng xuất`;
+}
+
 function extractOffDates(text) {
   if (!text) return [];
   const regex = /\b(\d{1,2})[/\-.](\d{1,2})[/\-](\d{4})\b/g;
@@ -229,7 +354,7 @@ function extractOffDates(text) {
 function isOffRegistration(text) {
   if (!text) return false;
   const lower = text.trim().toLowerCase();
-  if (lower.startsWith('/off')) return true;
+  if (lower.startsWith('/off') || lower.startsWith('/dang_ky_off') || lower.startsWith('/dangkyoff')) return true;
   const dates = extractOffDates(text);
   if (dates.length === 0) return false;
   if (lower.includes('off') || lower.includes('nghỉ') || lower.includes('đăng ký') || lower.includes('dang ky')) return true;
@@ -257,6 +382,253 @@ async function handleTelegramUpdate(update, ctx) {
       text = caption ? `${caption} (Đính kèm ảnh)` : 'Báo cáo sự cố thiết bị (Đính kèm ảnh)';
     }
 
+    // --- PHÂN LUỒNG XỬ LÝ RIÊNG CHO BOT QUẢN TRỊ HR (@umbomilkhrbot) ---
+    if (role === 'hr') {
+      const hrSession = ctx?.getHrSession ? await ctx.getHrSession(chatId) : null;
+
+      // 1. Cú pháp Đăng nhập: /login <user> <pass> hoặc /dangnhap <user> <pass>
+      if (text.startsWith('/login') || text.startsWith('/dangnhap')) {
+        const parts = text.split(/\s+/).slice(1);
+        if (parts.length < 2) {
+          actions.push({
+            chatId,
+            text: '🔑 <b>CÚ PHÁP ĐĂNG NHẬP BOT QUẢN TRỊ HR:</b>\n\n'
+              + '👉 <code>/login <tên_đăng_nhập> <mật_khẩu></code>\n'
+              + '<i>Ví dụ:</i> <code>/login admin Master@@2027</code>\n'
+              + '<i>Ví dụ:</i> <code>/login hr hr123</code>\n\n'
+              + '<i>Hệ thống tự động cấp quyền theo vai trò: Admin, HR, Quản lý QL, Marketing.</i>'
+          });
+        } else if (ctx?.hrLogin) {
+          const r = await ctx.hrLogin(chatId, parts[0], parts[1]);
+          if (r.ok) {
+            const menuText = getHrRoleMenuText(r.user);
+            actions.push({
+              chatId,
+              text: `✅ <b>ĐĂNG NHẬP THÀNH CÔNG!</b>\nChào mừng <b>${r.user.displayName || r.user.username}</b> (Vai trò: <code>${r.user.role}</code>).\n\n${menuText}`,
+              extra: hrMenuKeyboard(r.user.role, webAppUrl)
+            });
+          } else {
+            actions.push({
+              chatId,
+              text: `❌ <b>Đăng nhập thất bại:</b> ${r.error || 'Sai tên đăng nhập hoặc mật khẩu.'}`
+            });
+          }
+        } else {
+          actions.push({ chatId, text: 'Hệ thống xác thực tạm thời không khả dụng.' });
+        }
+        return actions;
+      }
+
+      // 2. Cú pháp Đăng xuất: /logout hoặc /dangxuat
+      if (text.startsWith('/logout') || text.startsWith('/dangxuat')) {
+        if (ctx?.hrLogout) await ctx.hrLogout(chatId);
+        actions.push({
+          chatId,
+          text: '🚪 <b>Đã đăng xuất khỏi tài khoản Bot Quản trị.</b>\nĐể đăng nhập lại, gõ: <code>/login <tài_khoản> <mật_khẩu></code>'
+        });
+        return actions;
+      }
+
+      // 3. /start hoặc /help khi chưa đăng nhập
+      if (text.startsWith('/start') || text.startsWith('/help')) {
+        if (!hrSession) {
+          actions.push({
+            chatId,
+            text: '🛡️ <b>CHÀO MỪNG ĐẾN VỚI BOT QUẢN TRỊ ỤM BÒ MILK</b>\n\n'
+              + 'Vui lòng đăng nhập tài khoản quản trị để sử dụng các chức năng:\n'
+              + '👉 <code>/login <tên_đăng_nhập> <mật_khẩu></code>\n'
+              + '<i>Ví dụ:</i> <code>/login admin Master@@2027</code>\n\n'
+              + 'Hoặc nhấn nút bên dưới để mở Mini App Quản trị.',
+            extra: webAppKeyboard(webAppUrl)
+          });
+          return actions;
+        }
+      }
+
+      // 4. Nếu chưa đăng nhập: chặn toàn bộ lệnh khác và nhắc đăng nhập
+      if (!hrSession) {
+        actions.push({
+          chatId,
+          text: '⛔ <b>BẠN CHƯA ĐĂNG NHẬP VÀO HỆ THỐNG HR/ADMIN</b>\n\n'
+            + 'Vui lòng đăng nhập tài khoản để sử dụng chức năng này:\n'
+            + '👉 <code>/login <tên_đăng_nhập> <mật_khẩu></code>\n'
+            + '<i>Ví dụ:</i> <code>/login admin Master@@2027</code>\n\n'
+            + '<i>(Tài khoản phân quyền theo vai trò: Admin, HR, Quản lý QL, Marketing)</i>',
+          extra: webAppKeyboard(webAppUrl)
+        });
+        return actions;
+      }
+
+      // 5. Đã đăng nhập: phân phối theo lệnh quản trị
+      if (text.startsWith('/menu') || text.toLowerCase() === 'menu') {
+        actions.push({
+          chatId,
+          text: getHrRoleMenuText(hrSession),
+          extra: hrMenuKeyboard(hrSession.role, webAppUrl)
+        });
+      } else if (text.startsWith('/tonghop_lich')) {
+        const week = text.replace('/tonghop_lich', '').trim();
+        if (ctx?.getScheduleMatrix) {
+          const r = await ctx.getScheduleMatrix(week, hrSession);
+          actions.push({ chatId, text: r.text });
+        } else {
+          actions.push({ chatId, text: '📊 Chưa thể tổng hợp ma trận lịch lúc này.' });
+        }
+      } else if (text.startsWith('/sap_lich_nv')) {
+        const rawArgs = text.replace('/sap_lich_nv', '').trim();
+        if (!rawArgs) {
+          actions.push({
+            chatId,
+            text: '✍️ <b>HƯỚNG DẪN CÚ PHÁP XẾP / ĐIỀU CHỈNH LỊCH NHÂN VIÊN:</b>\n\n'
+              + '👉 <code>/sap_lich_nv <MÃ_NV> <LỊCH_TUẦN></code>\n\n'
+              + '• <b>Hỗ trợ mã ngắn:</b> <code>NV1288</code> hoặc <code>1288</code> (không cần gõ mã dài).\n'
+              + '• <b>Ví dụ xếp ca tuần:</b>\n'
+              + '<code>/sap_lich_nv NV1288 T2-ON, T3-ON, T4-OFF, T5-ON, T6-ON, T7-OFF, CN-ON</code>\n\n'
+              + '<i>Bot sẽ tự động kiểm tra chống trùng ca cùng chi nhánh, cập nhật lịch và thông báo tới Bot NV của nhân viên!</i>'
+          });
+        } else if (ctx?.hrReschedule) {
+          const parts = rawArgs.split(/\s+/);
+          const empQuery = parts[0];
+          const spec = parts.slice(1).join(' ');
+          const r = await ctx.hrReschedule(hrSession, empQuery, spec);
+          actions.push({ chatId, text: r.text });
+        } else {
+          actions.push({ chatId, text: 'Chức năng xếp lịch tạm thời không khả dụng.' });
+        }
+      } else if (text.startsWith('/test')) {
+        if (String(hrSession.role).toUpperCase() !== 'ADMIN') {
+          actions.push({ chatId, text: '⛔ Cú pháp /test chỉ dành riêng cho tài khoản Admin.' });
+        } else {
+          const testType = text.replace('/test', '').trim() || 'off';
+          if (ctx?.adminRunTest) {
+            const r = await ctx.adminRunTest(testType, hrSession);
+            actions.push({ chatId, text: r.text });
+          } else {
+            actions.push({ chatId, text: `🧪 [TEST] Đã chạy test chức năng: ${testType} (bản ghi giả lập).` });
+          }
+        }
+      } else if (text.startsWith('/delete_test')) {
+        if (String(hrSession.role).toUpperCase() !== 'ADMIN') {
+          actions.push({ chatId, text: '⛔ Cú pháp /delete_test chỉ dành riêng cho tài khoản Admin.' });
+        } else if (ctx?.adminDeleteTest) {
+          const r = await ctx.adminDeleteTest(hrSession);
+          actions.push({ chatId, text: r.text });
+        } else {
+          actions.push({ chatId, text: '🗑️ Đã xóa sạch dữ liệu test an toàn.' });
+        }
+      } else if (text.startsWith('/users')) {
+        if (String(hrSession.role).toUpperCase() !== 'ADMIN') {
+          actions.push({ chatId, text: '⛔ Cú pháp /users chỉ dành riêng cho tài khoản Admin.' });
+        } else if (ctx?.adminGetUsers) {
+          const r = await ctx.adminGetUsers(hrSession);
+          actions.push({ chatId, text: r.text });
+        } else {
+          actions.push({ chatId, text: '👥 Danh sách người dùng hệ thống.' });
+        }
+      } else if (text.startsWith('/capquyen')) {
+        if (String(hrSession.role).toUpperCase() !== 'ADMIN') {
+          actions.push({ chatId, text: '⛔ Cú pháp /capquyen chỉ dành riêng cho tài khoản Admin.' });
+        } else {
+          const parts = text.replace('/capquyen', '').trim().split(/\s+/);
+          if (parts.length < 2) {
+            actions.push({ chatId, text: 'Cú pháp: <code>/capquyen <username> <Admin|HR|QL|MKT></code>\nVí dụ: <code>/capquyen lan_manager QL</code>' });
+          } else if (ctx?.adminSetRole) {
+            const r = await ctx.adminSetRole(hrSession, parts[0], parts[1]);
+            actions.push({ chatId, text: r.text });
+          }
+        }
+      } else if (text.startsWith('/phanquyen')) {
+        if (String(hrSession.role).toUpperCase() !== 'ADMIN') {
+          actions.push({ chatId, text: '⛔ Cú pháp /phanquyen chỉ dành riêng cho tài khoản Admin.' });
+        } else {
+          const parts = text.replace('/phanquyen', '').trim().split(/\s+/);
+          if (parts.length < 2) {
+            actions.push({ chatId, text: 'Cú pháp: <code>/phanquyen <username> <tab1,tab2></code>\nVí dụ: <code>/phanquyen hr_lan candidates,training,elearning</code>' });
+          } else if (ctx?.adminSetTabs) {
+            const r = await ctx.adminSetTabs(hrSession, parts[0], parts[1]);
+            actions.push({ chatId, text: r.text });
+          }
+        }
+      } else if (text.startsWith('/diemdanh_cn')) {
+        if (ctx?.getBranchAttendance) {
+          const r = await ctx.getBranchAttendance(hrSession);
+          actions.push({ chatId, text: r.text });
+        } else {
+          actions.push({ chatId, text: '📍 Không thể lấy danh sách điểm danh chi nhánh lúc này.' });
+        }
+      } else if (text.startsWith('/lich_cn')) {
+        if (ctx?.getBranchSchedule) {
+          const r = await ctx.getBranchSchedule(hrSession);
+          actions.push({ chatId, text: r.text });
+        } else {
+          actions.push({ chatId, text: '📅 Không thể lấy lịch chi nhánh lúc này.' });
+        }
+      } else if (text.startsWith('/duyet_ca')) {
+        if (ctx?.getBranchSwapRequests) {
+          const r = await ctx.getBranchSwapRequests(hrSession);
+          actions.push({ chatId, text: r.text });
+        } else {
+          actions.push({ chatId, text: '🔄 Không có phiếu đổi ca chờ duyệt tại chi nhánh.' });
+        }
+      } else if (text.startsWith('/baohong_cn')) {
+        if (ctx?.getBranchDeviceRequests) {
+          const r = await ctx.getBranchDeviceRequests(hrSession);
+          actions.push({ chatId, text: r.text });
+        } else {
+          actions.push({ chatId, text: '🛠️ Không có sự cố thiết bị tại chi nhánh.' });
+        }
+      } else if (text.startsWith('/broadcast_mkt')) {
+        const mktMsg = text.replace('/broadcast_mkt', '').trim();
+        if (!mktMsg) {
+          actions.push({ chatId, text: 'Cú pháp: <code>/broadcast_mkt <nội dung tin tức khuyến mãi></code>' });
+        } else if (ctx?.broadcastMarketing) {
+          const r = await ctx.broadcastMarketing(hrSession, mktMsg);
+          actions.push({ chatId, text: r.text });
+        }
+      } else if (text.startsWith('/sukien')) {
+        if (ctx?.getMarketingEvents) {
+          const r = await ctx.getMarketingEvents(hrSession);
+          actions.push({ chatId, text: r.text });
+        } else {
+          actions.push({ chatId, text: '🎁 Danh sách sự kiện & khuyến mãi.' });
+        }
+      } else if (text.startsWith('/tintuc')) {
+        if (ctx?.getMarketingNews) {
+          const r = await ctx.getMarketingNews(hrSession);
+          actions.push({ chatId, text: r.text });
+        } else {
+          actions.push({ chatId, text: '📰 Bản tin nội bộ chuỗi.' });
+        }
+      } else if (text.startsWith('/duyet')) {
+        if (ctx?.getPendingCounts) {
+          const r = await ctx.getPendingCounts();
+          actions.push({ chatId, text: r.text, extra: webAppKeyboard(webAppUrl) });
+        }
+      } else if (text.startsWith('/baocao')) {
+        if (ctx?.getDailyReport) {
+          const r = await ctx.getDailyReport();
+          actions.push({ chatId, text: r.text, extra: webAppKeyboard(webAppUrl) });
+        }
+      } else if (text.startsWith('/broadcast')) {
+        const msg = text.replace('/broadcast', '').trim();
+        if (!msg) {
+          actions.push({ chatId, text: 'Cú pháp: /broadcast <code>nội dung gửi tới Mini App NV</code>' });
+        } else if (ctx?.broadcastToEmployees) {
+          const r = await ctx.broadcastToEmployees(hrSession.username || String(from?.id), msg);
+          actions.push({ chatId, text: r.text });
+        }
+      } else {
+        // Unknown command for authenticated HR user: show menu
+        actions.push({
+          chatId,
+          text: `❓ Lệnh không hợp lệ. Vui lòng xem bảng chức năng bên dưới:\n\n` + getHrRoleMenuText(hrSession),
+          extra: hrMenuKeyboard(hrSession.role, webAppUrl)
+        });
+      }
+      return actions;
+    }
+
+    // --- PHÂN LUỒNG XỬ LÝ CHO BOT NHÂN VIÊN & BOT TÀI CHÍNH ---
     if (text.startsWith('/start')) {
       const payload = text.replace('/start', '').trim();
       if (payload && ctx?.linkByStartPayload) {
@@ -278,7 +650,7 @@ async function handleTelegramUpdate(update, ctx) {
     } else if (text.startsWith('/menu') || text.toLowerCase() === 'menu' || text.toLowerCase() === 'bảng chức năng') {
       actions.push({
         chatId,
-        text: '📱 <b>BẢNG CHỨC NĂNG NHANH — ỤM BÒ MILK</b>\n\nNhấn chọn chức năng bên dưới hoặc gõ trực tiếp cú pháp lệnh:\n• <code>/diemdanh</code> — Điểm danh hôm nay\n• <code>/lich</code> — Xem lịch 7 ngày tới\n• <code>18/09/2026, 22/09/2026</code> — Đăng ký 2 ngày OFF\n• <code>/luong</code> — Lương tạm tính tháng này\n• <code>/doica</code> — Đổi ca làm việc\n• <code>/baohong</code> — Báo hỏng thiết bị',
+        text: '📱 <b>BẢNG CHỨC NĂNG NHANH — ỤM BÒ MILK</b>\n\nNhấn chọn chức năng bên dưới hoặc gõ trực tiếp cú pháp lệnh:\n• <code>/diemdanh</code> — Điểm danh hôm nay\n• <code>/lich</code> — Xem lịch 7 ngày tới\n• <code>18/09/2026, 22/09/2026</code> — Đăng ký 2 ngày OFF\n• <code>/luong</code> — Lương tạm tính tháng này\n• <code>/doica</code> — Đổi ca làm việc\n• <code>/baohong</code> — Báo hỏng thiết bị\n• <code>/sos</code> — Báo ca khẩn cấp',
         extra: employeeMenuKeyboard(webAppUrl),
       });
     } else if (text.startsWith('/app')) {
@@ -286,6 +658,15 @@ async function handleTelegramUpdate(update, ctx) {
         chatId,
         text: '🐮 Nhấn nút bên dưới để mở Mini App Ụm Bò Milk:',
         extra: webAppKeyboard(webAppUrl),
+      });
+    } else if (text.startsWith('/sos') || /^sos$/i.test(text)) {
+      actions.push({
+        chatId,
+        text: '🆘 <b>KÊNH HỖ TRỢ KHẨN CẤP / BÁO CA ĐỘT XUẤT (SOS)</b>\n\n'
+          + 'Nếu bạn gặp sự cố đột xuất (ốm đau khẩn cấp, tai nạn hoặc việc bất khả kháng không thể vào ca):\n'
+          + '1. Hãy nhắn trực tiếp lý do vào khung chat này để Bot lập tức báo khẩn cho Quản lý cửa hàng và HR.\n'
+          + '2. Hoặc liên hệ Hotline Trực ca Khẩn cấp: <b>0842.112.530</b> (Trực 24/7).\n'
+          + '3. HR & Quản lý sẽ chủ động điều phối nhân sự hỗ trợ ca cho bạn ngay lập tức!'
       });
     } else if (text.startsWith('/doica') || text.includes('Đổi ca') || /^đổi ca$|^doi ca$/i.test(text)) {
       actions.push({
@@ -372,42 +753,36 @@ async function handleTelegramUpdate(update, ctx) {
       } else {
         actions.push({ chatId, text: '💰 Chưa thể tính lương lúc này.' });
       }
-    } else if (text.startsWith('/duyet')) {
-      if (ctx?.getPendingCounts) {
-        const r = await ctx.getPendingCounts();
-        actions.push({ chatId, text: r.text, extra: webAppKeyboard(webAppUrl) });
-      } else {
-        actions.push({ chatId, text: 'Mở Mini App Quản trị để duyệt phiếu.', extra: webAppKeyboard(webAppUrl) });
-      }
-    } else if (text.startsWith('/baocao')) {
-      if (ctx?.getDailyReport) {
-        const r = await ctx.getDailyReport();
-        actions.push({ chatId, text: r.text, extra: webAppKeyboard(webAppUrl) });
-      } else {
-        actions.push({ chatId, text: 'Mở Mini App Quản trị để xem báo cáo.', extra: webAppKeyboard(webAppUrl) });
-      }
-    } else if (text.startsWith('/broadcast')) {
-      const msg = text.replace('/broadcast', '').trim();
-      if (!msg) {
-        actions.push({ chatId, text: 'Cú pháp: /broadcast <code>nội dung gửi tới Mini App NV</code>' });
-      } else if (ctx?.broadcastToEmployees) {
-        const r = await ctx.broadcastToEmployees(String(from?.id), msg);
-        actions.push({ chatId, text: r.text });
-      } else {
-        actions.push({ chatId, text: 'Dùng Mini App Quản trị → Telegram → Broadcast để gửi.' });
-      }
     } else if (text.startsWith('/help')) {
       const role = ctx?.role && HELP_TEXTS[ctx.role] ? ctx.role : 'employee';
       actions.push({ chatId, text: HELP_TEXTS[role], extra: webAppKeyboard(webAppUrl) });
-    } else if (text === '/off' || text.includes('Đăng ký OFF') || /^đăng ký off$|^dang ky off$/i.test(text)) {
-      actions.push({
-        chatId,
-        text: '🏖️ <b>Đăng ký lịch OFF (2 ngày/tuần)</b>\n\n'
-          + 'Bạn vui lòng nhắn trực tiếp 2 ngày muốn nghỉ vào khung chat này theo định dạng:\n'
-          + '👉 <code>dd/mm/yyyy, dd/mm/yyyy</code>\n\n'
-          + '<i>Ví dụ:</i> <code>18/09/2026, 22/09/2026</code>\n\n'
-          + '🤖 <i>Bot Telegram sẽ tự động ghi nhận 2 ngày OFF này và cập nhật các ngày còn lại trong tuần là ngày LÀM VIỆC (WORKING) để chuyển HR phê duyệt lịch tuần cho bạn!</i>',
-      });
+    } else if (text === '/off' || text.toLowerCase() === '/dang_ky_off' || text.includes('Đăng ký OFF') || /^đăng ký off$|^dang ky off$/i.test(text)) {
+      const win = ctx?.checkOffWindow ? ctx.checkOffWindow() : { isOpen: true, state: 'OPEN' };
+      if (win.state === 'BEFORE') {
+        actions.push({
+          chatId,
+          text: '⏳ <b>CHƯA ĐẾN KHUNG GIỜ ĐĂNG KÝ LỊCH OFF</b>\n\n'
+            + 'Cổng đăng ký lịch OFF tuần kế tiếp sẽ mở từ <b>12h00 Thứ 6</b> đến <b>15h00 Thứ 7</b> hàng tuần (theo Giờ Việt Nam).\n\n'
+            + '📌 <i>Vui lòng quay lại đúng khung giờ để đăng ký bạn nhé!</i>'
+        });
+      } else if (win.state === 'AFTER') {
+        actions.push({
+          chatId,
+          text: '🔒 <b>ĐÃ HẾT HẠN KHUNG GIỜ ĐĂNG KÝ LỊCH OFF</b>\n\n'
+            + 'Cổng đăng ký lịch OFF tuần đã đóng lúc <b>15h00 Thứ 7</b> (Giờ Việt Nam).\n'
+            + 'Trạng thái hiện tại: <b>CHỜ NHÂN SỰ CẬP NHẬT LỊCH...</b>\n\n'
+            + '📌 <i>Nếu bạn có việc đột xuất khẩn cấp, vui lòng dùng cú pháp <code>/sos</code> hoặc liên hệ trực tiếp Quản lý cửa hàng / HR!</i>'
+        });
+      } else {
+        actions.push({
+          chatId,
+          text: '🔔 <b>Đăng ký lịch OFF (2 ngày/tuần) — CỔNG ĐĂNG KÝ TUẦN ĐÃ MỞ!</b>\n\n'
+            + 'Bạn vui lòng nhắn trực tiếp 2 ngày muốn nghỉ vào khung chat này theo định dạng:\n'
+            + '👉 <code>dd/mm/yyyy, dd/mm/yyyy</code>\n\n'
+            + '<i>Ví dụ:</i> <code>18/09/2026, 22/09/2026</code>\n\n'
+            + '🤖 <i>Bot Telegram sẽ tự động ghi nhận 2 ngày OFF này và cập nhật các ngày còn lại trong tuần là ngày LÀM VIỆC (WORKING) để chuyển HR phê duyệt lịch tuần cho bạn!</i>',
+        });
+      }
     } else if (isOffRegistration(text)) {
       const dates = extractOffDates(text);
       if (dates.length === 0) {
@@ -416,8 +791,21 @@ async function handleTelegramUpdate(update, ctx) {
           text: '📅 <b>Đăng ký lịch OFF (2 ngày/tuần)</b>\nCú pháp: Nhắn đúng 2 ngày theo định dạng <code>dd/mm/yyyy</code>\nVí dụ: <code>18/09/2026, 22/09/2026</code>\n(Bot sẽ tự động ghi nhận ngày OFF và cập nhật những ngày còn lại là ngày làm việc cho bạn).',
         });
       } else if (ctx?.registerOffSchedule) {
-        const r = await ctx.registerOffSchedule(String(from?.id), dates, from?.username || '');
-        actions.push({ chatId, text: r.text });
+        const win = ctx?.checkOffWindow ? ctx.checkOffWindow() : { isOpen: true, state: 'OPEN' };
+        if (win.state === 'BEFORE' && !ctx?.bypassWindow) {
+          actions.push({
+            chatId,
+            text: '⏳ <b>CHƯA ĐẾN KHUNG GIỜ ĐĂNG KÝ LỊCH OFF</b>\n\nCổng đăng ký lịch OFF tuần kế tiếp sẽ mở từ <b>12h00 Thứ 6</b> đến <b>15h00 Thứ 7</b> hàng tuần (theo Giờ Việt Nam).\n\nVui lòng gửi lại yêu cầu khi cổng chính thức mở!'
+          });
+        } else if (win.state === 'AFTER' && !ctx?.bypassWindow) {
+          actions.push({
+            chatId,
+            text: '🔒 <b>ĐÃ HẾT HẠN KHUNG GIỜ ĐĂNG KÝ LỊCH OFF</b>\n\nCổng đăng ký đã đóng lúc <b>15h00 Thứ 7</b> (Giờ Việt Nam). Hiện đang ở trạng thái: <b>CHỜ NHÂN SỰ CẬP NHẬT LỊCH...</b>\n\nNếu bạn có phát sinh khẩn cấp, vui lòng nhắn <code>/sos</code>!'
+          });
+        } else {
+          const r = await ctx.registerOffSchedule(String(from?.id), dates, from?.username || '');
+          actions.push({ chatId, text: r.text });
+        }
       } else {
         actions.push({ chatId, text: '📅 Đăng ký lịch OFF thất bại, vui lòng thử lại.' });
       }
@@ -429,7 +817,7 @@ async function handleTelegramUpdate(update, ctx) {
       } else {
         actions.push({
           chatId,
-          text: '🤖 <b>Trợ lý Bot Ụm Bò Milk</b>\n\nBạn có thể nhắn trực tiếp với Bot:\n• <code>/diemdanh</code> — Xem trạng thái vào/ra ca hôm nay\n• <code>/lich</code> — Xem lịch 7 ngày tới\n• <code>18/09/2026, 22/09/2026</code> — Đăng ký 2 ngày OFF\n• <code>/luong</code> — Xem tạm tính lương\n• <code>/doica</code> — Hướng dẫn đổi ca\n• <code>/baohong</code> — Báo hỏng thiết bị\n\nHoặc nhắn bất kỳ câu hỏi/yêu cầu nào để Bot chuyển tới HR hỗ trợ bạn nhé!',
+          text: '🤖 <b>Trợ lý Bot Ụm Bò Milk</b>\n\nBạn có thể nhắn trực tiếp với Bot:\n• <code>/diemdanh</code> — Xem trạng thái vào/ra ca hôm nay\n• <code>/lich</code> — Xem lịch 7 ngày tới\n• <code>18/09/2026, 22/09/2026</code> — Đăng ký 2 ngày OFF\n• <code>/luong</code> — Xem tạm tính lương\n• <code>/doica</code> — Hướng dẫn đổi ca\n• <code>/baohong</code> — Báo hỏng thiết bị\n• <code>/sos</code> — Báo ca khẩn cấp\n\nHoặc nhắn bất kỳ câu hỏi/yêu cầu nào để Bot chuyển tới HR hỗ trợ bạn nhé!',
           extra: employeeMenuKeyboard(webAppUrl),
         });
       }
@@ -453,6 +841,8 @@ module.exports = {
   extractOffDates,
   isOffRegistration,
   employeeMenuKeyboard,
+  hrMenuKeyboard,
+  getHrRoleMenuText,
   HELP_TEXT,
   HELP_TEXTS,
   START_TEXTS,
