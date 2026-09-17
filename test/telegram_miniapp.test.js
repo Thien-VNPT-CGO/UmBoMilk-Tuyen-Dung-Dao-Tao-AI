@@ -78,6 +78,9 @@ describe('Telegram Mini App — tích hợp (giữ nguyên chức năng cũ)', (
     for (const p of ['emp-home', 'emp-att', 'emp-sched', 'emp-off', 'emp-sos', 'emp-swap', 'emp-learn', 'emp-notif', 'emp-device', 'emp-account', 'emp-salary']) {
       assert.ok(emp.includes(`pages['${p}']`), 'thiếu trang NV ' + p);
     }
+    const boot = fs.readFileSync(path.join(__dirname, '..', 'public', 'tg', 'tg-boot.js'), 'utf8');
+    assert.ok(boot.includes(`pages['emp-link']`), 'thiếu màn liên kết NV riêng');
+    assert.ok(boot.includes("T.go('emp-link'"), 'Bot NV phải khóa vào màn NV riêng, không qua hub chung');
     for (const p of ['hr-home', 'hr-applicants', 'hr-emps', 'hr-sched', 'hr-approve', 'hr-attrec', 'hr-zalo', 'hr-reports', 'hr-learn', 'hr-users', 'hr-settings', 'hr-audit']) {
       assert.ok(adm.includes(`pages['${p}']`), 'thiếu trang HR ' + p);
     }

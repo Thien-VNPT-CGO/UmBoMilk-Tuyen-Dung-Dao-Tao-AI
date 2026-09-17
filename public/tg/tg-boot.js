@@ -102,6 +102,33 @@
     document.querySelectorAll('[data-act="out"]').forEach((b) => { b.onclick = () => { T.store.del('fin_token'); location.reload(); }; });
   };
 
+  // Màn liên kết NV độc lập — Bot NV chỉ thấy màn này, không thấy HR/KT
+  T.pages['emp-link'] = async () => {
+    let tgName = '';
+    try { const u = T.WA && T.WA.initDataUnsafe && T.WA.initDataUnsafe.user; if (u) tgName = (u.first_name || '') + (u.username ? ' (@' + u.username + ')' : ''); } catch (e) {}
+    return '<div class="tg-card" style="text-align:center;padding:20px 14px"><div style="font-size:44px">🧑‍🍳</div>'
+      + '<div style="font-weight:900;font-size:18px">Mini App Nhân viên</div>'
+      + '<div class="sm" style="font-size:12px;color:var(--tg-hint)">' + (T.esc(tgName) || 'Liên kết 1 lần, lần sau vào thẳng') + '</div></div>'
+      + '<div class="tg-card"><h3>🔗 Liên kết tài khoản nhân viên</h3>'
+      + '<label class="tg-lab">Mã NV (HR cấp)</label><input id="lkEmp" class="tg-inp" placeholder="CN261_..._NV...">'
+      + '<label class="tg-lab">KEY kích hoạt</label><input id="lkKey" class="tg-inp" placeholder="KEY-...">'
+      + '<button class="tg-btn" id="btnLink">Liên kết</button></div>';
+  };
+  T.pages['emp-link:mount'] = async () => {
+    const r = await tryTelegramAuth();
+    if (r.linked) { T.toast('Đã liên kết: ' + (r.employee.name || '')); bootTabs(); return; }
+    T.$('btnLink').onclick = async () => {
+      let tid = '';
+      try { const u = T.WA && T.WA.initDataUnsafe && T.WA.initDataUnsafe.user; if (u && u.id) tid = String(u.id); } catch (e) {}
+      if (!tid) tid = 'web-' + Date.now();
+      try {
+        const j = await T.call('/api/telegram/link', { method: 'POST', body: { telegramId: tid, employeeId: T.$('lkEmp').value.trim(), key: T.$('lkKey').value.trim() } });
+        T.store.set('emp_token', j.token); T.store.set('emp_user', j.employee);
+        T.notifyOk(); T.toast('Liên kết thành công ✅'); bootTabs();
+      } catch (err) { T.notifyErr(); T.toast(err.message); }
+    };
+  };
+
   function enterRole(role) {
     T.haptic('medium');
     if (role === 'emp') {
@@ -133,7 +160,7 @@
     const pr = pathRole();
     if (pr === 'emp') {
       if (T.S.emp) { empTabs(); return; }
-      T.setTabs([]); T.go('hub', {}, true); return;
+      T.setTabs([]); T.go('emp-link', {}, true); return;
     }
     if (pr === 'hr') {
       if (T.S.hr) { hrTabs(); return; }
