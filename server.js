@@ -12807,7 +12807,8 @@ async function autoSetupTelegramBots(){
       const whUrl = base + '/api/telegram/webhook/' + role;
       const wh = await tg.setTelegramWebhook(cfg.botToken, whUrl);
       const menu = await tg.setTelegramMenuButton(cfg.botToken, base + rolePath);
-      console.log(`[TELEGRAM] ✅ Bot ${role} (@${cfg.botUsername}): Webhook OK=${wh.ok}, Menu OK=${menu.ok}`);
+      const cmds = await tg.setTelegramCommands(cfg.botToken, role);
+      console.log(`[TELEGRAM] ✅ Bot ${role} (@${cfg.botUsername}): Webhook OK=${wh.ok}, Menu OK=${menu.ok}, Commands OK=${cmds.ok}`);
     }catch(e){
       console.log(`[TELEGRAM] ⚠️ Bot ${role} setup:`, e.message);
     }

@@ -60,4 +60,25 @@ describe('Telegram Bot — Đăng ký lịch OFF 2 ngày/tuần qua chat bot', (
     assert.ok(actions[0].text.includes('Đăng ký lịch OFF (2 ngày/tuần)'));
     assert.ok(actions[0].text.includes('18/09/2026, 22/09/2026'));
   });
+
+  it('5. Cú pháp thao tác nhanh /menu, /app, /doica, /baohong phản hồi chính xác', async () => {
+    const m = await tg.handleTelegramUpdate(
+      { message: { chat: { id: 100 }, from: { id: 100 }, text: '/menu' } },
+      { role: 'employee', webAppUrl: 'https://x' }
+    );
+    assert.ok(m[0].text.includes('BẢNG CHỨC NĂNG NHANH'));
+    assert.ok(m[0].extra && m[0].extra.reply_markup);
+
+    const d = await tg.handleTelegramUpdate(
+      { message: { chat: { id: 100 }, from: { id: 100 }, text: '/doica' } },
+      { role: 'employee', webAppUrl: 'https://x' }
+    );
+    assert.ok(d[0].text.includes('Đổi ca'));
+
+    const b = await tg.handleTelegramUpdate(
+      { message: { chat: { id: 100 }, from: { id: 100 }, text: '/baohong' } },
+      { role: 'employee', webAppUrl: 'https://x' }
+    );
+    assert.ok(b[0].text.includes('Báo hỏng'));
+  });
 });

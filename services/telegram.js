@@ -90,6 +90,43 @@ async function setTelegramMenuButton(botToken, webAppUrl) {
   }
 }
 
+async function setTelegramCommands(botToken, role = 'employee') {
+  if (!botToken) return { ok: false, skipped: true };
+  const commandsByRole = {
+    employee: [
+      { command: 'menu', description: '📱 Bảng chức năng thao tác nhanh' },
+      { command: 'diemdanh', description: '📍 Điểm danh Check-in/Check-out GPS' },
+      { command: 'lich', description: '📅 Xem lịch làm việc 7 ngày tới' },
+      { command: 'off', description: '🏖️ Đăng ký lịch OFF 2 ngày/tuần' },
+      { command: 'luong', description: '💰 Xem lương tạm tính tháng này' },
+      { command: 'doica', description: '🔄 Đổi ca làm việc / Tráo ca' },
+      { command: 'baohong', description: '🛠️ Báo hỏng thiết bị cửa hàng' },
+      { command: 'app', description: '🐮 Mở Mini App Ụm Bò Milk' },
+      { command: 'link', description: '🔗 Liên kết tài khoản (nhập SĐT)' },
+      { command: 'help', description: '❓ Hướng dẫn sử dụng bot' }
+    ],
+    hr: [
+      { command: 'duyet', description: '✅ Duyệt phiếu chờ (thiết bị, OFF, đổi ca)' },
+      { command: 'baocao', description: '📊 Tóm tắt nhân sự hôm nay' },
+      { command: 'broadcast', description: '📢 Phát thông báo tới toàn bộ NV' },
+      { command: 'app', description: '🛡️ Mở Mini App Quản trị' },
+      { command: 'help', description: '❓ Hướng dẫn quản trị' }
+    ],
+    finance: [
+      { command: 'luong', description: '💰 Bảng lương tổng hợp tháng này' },
+      { command: 'app', description: '💵 Mở Mini App Tài chính' },
+      { command: 'help', description: '❓ Hướng dẫn kế toán' }
+    ]
+  };
+  const cmds = commandsByRole[role] || commandsByRole.employee;
+  try {
+    const j = await tgApi(botToken, 'setMyCommands', { commands: cmds });
+    return { ok: true, result: j.result };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
 // ---- Bot command logic (thuần, dễ test) — 3 bot theo vai trò ----
 const BOT_ROLES = ['hr', 'employee', 'finance'];
 const HELP_TEXTS = {
@@ -136,6 +173,28 @@ function webAppKeyboard(webAppUrl) {
       inline_keyboard: [[{ text: '🐮 Mở Ụm Bò Milk App', web_app: { url: webAppUrl } }]],
     },
   };
+}
+
+function employeeMenuKeyboard(webAppUrl) {
+  const url = webAppUrl || '';
+  const inline_keyboard = [
+    [
+      { text: '📍 Điểm danh', callback_data: '/diemdanh' },
+      { text: '📅 Lịch làm', callback_data: '/lich' }
+    ],
+    [
+      { text: '🏖️ Đăng ký OFF', callback_data: '/off' },
+      { text: '💰 Xem lương', callback_data: '/luong' }
+    ],
+    [
+      { text: '🔄 Đổi ca', callback_data: '/doica' },
+      { text: '🛠️ Báo hỏng', callback_data: '/baohong' }
+    ]
+  ];
+  if (url) {
+    inline_keyboard.push([{ text: '🐮 Mở Mini App', web_app: { url } }]);
+  }
+  return { reply_markup: { inline_keyboard } };
 }
 
 function extractOffDates(text) {
@@ -188,12 +247,40 @@ async function handleTelegramUpdate(update, ctx) {
           chatId,
           text: r.ok
             ? `✅ Đã liên kết Telegram với <b>${r.label}</b>.\nNhấn nút bên dưới để mở Mini App.`
-            : `⚠️ ${r.error || 'Mã liên kết không hợp lệ.'}\nDùng /link <code>MÃ_NV KEY</code> để liên kết thủ công.`,
-          extra: webAppKeyboard(webAppUrl),
+            : `⚠️ ${r.error || 'Mã liên kết không hợp lệ.'}\nDùng /link <code>MÃ_NV KEY</code> hoặc /link <code>SĐT</code> để liên kết.`,
+          extra: role === 'employee' ? employeeMenuKeyboard(webAppUrl) : webAppKeyboard(webAppUrl),
         });
       } else {
-        actions.push({ chatId, text: START_TEXTS[role], extra: webAppKeyboard(webAppUrl) });
+        actions.push({
+          chatId,
+          text: START_TEXTS[role],
+          extra: role === 'employee' ? employeeMenuKeyboard(webAppUrl) : webAppKeyboard(webAppUrl),
+        });
       }
+    } else if (text.startsWith('/menu')) {
+      actions.push({
+        chatId,
+        text: '📱 <b>BẢNG CHỨC NĂNG NHANH — ỤM BÒ MILK</b>\n\nNhấn chọn chức năng bên dưới hoặc gõ trực tiếp cú pháp lệnh:\n• <code>/diemdanh</code> — Điểm danh hôm nay\n• <code>/lich</code> — Xem lịch 7 ngày tới\n• <code>18/09/2026, 22/09/2026</code> — Đăng ký 2 ngày OFF\n• <code>/luong</code> — Lương tạm tính tháng này\n• <code>/doica</code> — Đổi ca làm việc\n• <code>/baohong</code> — Báo hỏng thiết bị',
+        extra: employeeMenuKeyboard(webAppUrl),
+      });
+    } else if (text.startsWith('/app')) {
+      actions.push({
+        chatId,
+        text: '🐮 Nhấn nút bên dưới để mở Mini App Ụm Bò Milk:',
+        extra: webAppKeyboard(webAppUrl),
+      });
+    } else if (text.startsWith('/doica')) {
+      actions.push({
+        chatId,
+        text: '🔄 <b>Đổi ca & Tráo ca làm việc</b>\n\nĐể đổi ca hoặc tìm người thế ca khẩn cấp, vui lòng mở Mini App bên dưới để chọn ca và người thay thế thuận tiện nhất:',
+        extra: webAppKeyboard(webAppUrl),
+      });
+    } else if (text.startsWith('/baohong')) {
+      actions.push({
+        chatId,
+        text: '🛠️ <b>Báo hỏng thiết bị & Sự cố cửa hàng</b>\n\nĐể gửi hình ảnh và mô tả hỏng hóc thiết bị, vui lòng mở Mini App bên dưới (chức năng Báo hỏng):',
+        extra: webAppKeyboard(webAppUrl),
+      });
     } else if (text.startsWith('/link')) {
       const parts = text.split(/\s+/).slice(1);
       if (parts.length === 1 && ctx?.linkByPhone && /^\d{9,11}$/.test(parts[0].replace(/\D/g, ''))) {
@@ -302,9 +389,11 @@ module.exports = {
   sendTelegramMessage,
   setTelegramWebhook,
   setTelegramMenuButton,
+  setTelegramCommands,
   handleTelegramUpdate,
   extractOffDates,
   isOffRegistration,
+  employeeMenuKeyboard,
   HELP_TEXT,
   HELP_TEXTS,
   START_TEXTS,
