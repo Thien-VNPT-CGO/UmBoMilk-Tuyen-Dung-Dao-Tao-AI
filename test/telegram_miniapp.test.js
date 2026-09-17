@@ -95,7 +95,8 @@ describe('Telegram Mini App — tích hợp (giữ nguyên chức năng cũ)', (
     }
     const core = fs.readFileSync(path.join(__dirname, '..', 'public', 'tg', 'tg-core.js'), 'utf8');
     assert.ok(core.includes('Ụm Bò Milk - Xin Chào!'), 'thiếu lời chào chuẩn');
-    assert.ok(core.includes('cowSVG'), 'thiếu logo bò sữa');
+    assert.ok(core.includes('/images/logo.png'), 'hero phải dùng logo chính thức');
+    assert.ok(fs.existsSync(path.join(__dirname, '..', 'public', 'images', 'logo.png')), 'thiếu file logo.png');
   });
 
   it('7. Settings masked có telegram.botToken (không lộ secret)', async () => {

@@ -57,7 +57,7 @@
       + '</svg>';
   }
   function heroHTML(sub) {
-    return '<div class="umb-hero"><div class="umb-cow">' + cowSVG(104) + '</div>'
+    return '<div class="umb-hero"><div class="umb-cow"><img src="/images/logo.png" alt="Ụm Bò Milk"></div>'
       + '<div class="umb-brand">Ụm Bò Milk - Xin Chào!</div>'
       + '<div class="umb-sub">' + esc(sub || 'Mini App nhân sự') + '</div></div>';
   }
@@ -239,7 +239,7 @@
     applyTheme();
     try {
       const logo = document.querySelector('.tg-top .logo');
-      if (logo && !logo.dataset.cow) { logo.dataset.cow = '1'; logo.innerHTML = cowSVG(28); logo.style.background = '#fff'; }
+      if (logo && !logo.dataset.cow) { logo.dataset.cow = '1'; logo.innerHTML = '<img src="/images/logo.png" alt="UBM" style="width:100%;height:100%;object-fit:cover;border-radius:10px">'; logo.style.background = '#fff'; logo.style.overflow = 'hidden'; }
     } catch (e) {}
   });
 })();
