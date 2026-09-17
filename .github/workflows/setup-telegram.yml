@@ -1,0 +1,33 @@
+# Gắn webhook + nút Menu cho 2 Bot mới (NV + KT). Chạy tay: Actions -> Setup Telegram Bots -> Run workflow.
+# Secrets cần: EMP_BOT_TOKEN, FIN_BOT_TOKEN (lấy từ BotFather, dán vào Settings -> Secrets -> Actions).
+# Log chỉ hiện kết quả OK/lỗi, KHÔNG in token.
+name: Setup Telegram Bots
+
+on:
+  workflow_dispatch:
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set webhook + menu 2 bots
+        env:
+          EMP_BOT_TOKEN: ${{ secrets.EMP_BOT_TOKEN }}
+          FIN_BOT_TOKEN: ${{ secrets.FIN_BOT_TOKEN }}
+        run: |
+          set -e
+          for cfg in "employee:$EMP_BOT_TOKEN:/tg-employee" "finance:$FIN_BOT_TOKEN:/tg-finance"; do
+            IFS=':' read -r role tok path <<< "$cfg"
+            if [ -z "$tok" ]; then echo "[$role] SKIP: thiếu secret"; continue; fi
+            echo "[$role] setWebhook..."
+            curl -s -X POST "https://api.telegram.org/bot${tok}/setWebhook" \
+              -H 'Content-Type: application/json' \
+              -d "{\"url\":\"https://umbomilk.alwaysdata.net/api/telegram/webhook/$role\",\"allowed_updates\":[\"message\",\"callback_query\"]}"
+            echo; echo "[$role] setMenuButton..."
+            curl -s -X POST "https://api.telegram.org/bot${tok}/setChatMenuButton" \
+              -H 'Content-Type: application/json' \
+              -d "{\"menu_button\":{\"type\":\"web_app\",\"text\":\"Mo Um Bo Milk\",\"web_app\":{\"url\":\"https://umbomilk.alwaysdata.net$path\"}}}"
+            echo; echo "[$role] getWebhookInfo..."
+            curl -s "https://api.telegram.org/bot${tok}/getWebhookInfo"
+            echo
+          done

@@ -11782,8 +11782,9 @@ app.post('/api/finance/sheets/kham-suc-khoe', financeAuthMiddleware, async (req,
 // ============ TELEGRAM BOT + MINI APP (tích hợp, không thay đổi luồng cũ) ============
 // Helpers liên kết Telegram <-> tài khoản nội bộ
 function tgCleanTok(v, envVal){
-  if(v && !v.includes('•')) return v;
-  return process.env[envVal] || '';
+  const clean = (s)=> String(s || '').trim().replace(/\s+/g, '');
+  if(v && !v.includes('•')) return clean(v);
+  return clean(process.env[envVal]);
 }
 // Cấu hình theo vai trò bot: hr (mặc định, tương thích cũ) | employee | finance
 function getTelegramCfg(role){
