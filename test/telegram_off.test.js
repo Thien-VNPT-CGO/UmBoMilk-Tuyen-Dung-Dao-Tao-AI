@@ -81,4 +81,52 @@ describe('Telegram Bot — Đăng ký lịch OFF 2 ngày/tuần qua chat bot', (
     );
     assert.ok(b[0].text.includes('Báo hỏng'));
   });
+
+  it('6. Cú pháp /link SĐT và số điện thoại trực tiếp gọi linkByPhone', async () => {
+    let linkedPhone = '';
+    const mockCtx = {
+      role: 'employee',
+      linkByPhone: async (tgId, username, phone) => {
+        linkedPhone = phone;
+        return { ok: true, label: 'Nguyễn Văn A (CN130_UBM_NV01)' };
+      }
+    };
+
+    // Trường hợp /link 0842112530
+    const a1 = await tg.handleTelegramUpdate(
+      { message: { chat: { id: 100 }, from: { id: 100 }, text: '/link 0842112530' } },
+      mockCtx
+    );
+    assert.equal(linkedPhone, '0842112530');
+    assert.ok(a1[0].text.includes('Đã liên kết thành công'));
+
+    // Trường hợp nhắn trực tiếp số điện thoại 0842112530
+    linkedPhone = '';
+    const a2 = await tg.handleTelegramUpdate(
+      { message: { chat: { id: 100 }, from: { id: 100 }, text: '0842112530' } },
+      mockCtx
+    );
+    assert.equal(linkedPhone, '0842112530');
+    assert.ok(a2[0].text.includes('Đã liên kết thành công'));
+  });
+
+  it('7. Xử lý update.edited_message khi nhân viên sửa tin nhắn trên Telegram', async () => {
+    let linkedPhone = '';
+    const mockCtx = {
+      role: 'employee',
+      linkByPhone: async (tgId, username, phone) => {
+        linkedPhone = phone;
+        return { ok: true, label: 'Nguyễn Văn A (CN130_UBM_NV01)' };
+      }
+    };
+
+    // Khi người dùng edit tin nhắn thành /link 0842112530
+    const a = await tg.handleTelegramUpdate(
+      { edited_message: { chat: { id: 100 }, from: { id: 100 }, text: '/link 0842112530' } },
+      mockCtx
+    );
+    assert.equal(linkedPhone, '0842112530');
+    assert.ok(a[0].text.includes('Đã liên kết thành công'));
+  });
 });
+

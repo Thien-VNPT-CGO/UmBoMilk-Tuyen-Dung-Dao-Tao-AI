@@ -231,15 +231,15 @@ function isOffRegistration(text) {
 async function handleTelegramUpdate(update, ctx) {
   const actions = [];
   try {
-    const msg = update.message || update.callback_query?.message;
+    const msg = update.message || update.edited_message || update.callback_query?.message;
     const chatId = msg?.chat?.id;
-    const from = update.message?.from || update.callback_query?.from;
-    const text = (update.message?.text || '').trim();
+    const from = update.message?.from || update.edited_message?.from || update.callback_query?.from;
+    const text = (update.message?.text || update.edited_message?.text || update.callback_query?.data || '').trim();
     if (!chatId) return actions;
     const webAppUrl = ctx?.webAppUrl || '';
+    const role = ctx?.role && START_TEXTS[ctx.role] ? ctx.role : 'employee';
 
     if (text.startsWith('/start')) {
-      const role = ctx?.role && START_TEXTS[ctx.role] ? ctx.role : 'employee';
       const payload = text.replace('/start', '').trim();
       if (payload && ctx?.linkByStartPayload) {
         const r = await ctx.linkByStartPayload(String(from?.id), payload);
@@ -281,23 +281,43 @@ async function handleTelegramUpdate(update, ctx) {
         text: '🛠️ <b>Báo hỏng thiết bị & Sự cố cửa hàng</b>\n\nĐể gửi hình ảnh và mô tả hỏng hóc thiết bị, vui lòng mở Mini App bên dưới (chức năng Báo hỏng):',
         extra: webAppKeyboard(webAppUrl),
       });
-    } else if (text.startsWith('/link')) {
-      const parts = text.split(/\s+/).slice(1);
-      if (parts.length === 1 && ctx?.linkByPhone && /^\d{9,11}$/.test(parts[0].replace(/\D/g, ''))) {
-        const r = await ctx.linkByPhone(String(from?.id), from?.username || '', parts[0], chatId);
+    } else if (text.startsWith('/link') || /^(0|\+84|84)?\d{9,10}$/.test(text.replace(/[\s.-]/g, ''))) {
+      let phoneArg = '';
+      if (text.startsWith('/link')) {
+        const parts = text.split(/\s+/).slice(1);
+        if (parts.length === 1 && /^\d{9,11}$/.test(parts[0].replace(/\D/g, ''))) {
+          phoneArg = parts[0];
+        } else if (parts.length >= 2 && ctx?.linkEmployee) {
+          const r = await ctx.linkEmployee(String(from?.id), from?.username || '', parts[0], parts[1], chatId);
+          actions.push({
+            chatId,
+            text: r.ok ? `✅ Đã liên kết với <b>${r.label}</b>.` : `⚠️ ${r.error || 'Liên kết thất bại.'}`,
+            extra: r.ok ? (role === 'employee' ? employeeMenuKeyboard(webAppUrl) : webAppKeyboard(webAppUrl)) : {},
+          });
+        } else {
+          actions.push({
+            chatId,
+            text: '🔗 <b>Cú pháp liên kết tài khoản:</b>\n\n'
+              + '• <b>Cách 1 (Nhanh nhất):</b> Nhắn <code>/link SĐT</code>\n'
+              + '   <i>Ví dụ:</i> <code>/link 0842112530</code> (hoặc chỉ cần nhắn SĐT của bạn)\n\n'
+              + '• <b>Cách 2:</b> Dùng Mã NV và Key\n'
+              + '   <i>Ví dụ:</i> <code>/link CN130_UBM07092026_NV6432 KEY-WBED02RS</code>\n\n'
+              + '• <b>Cách 3:</b> Nhấn nút bên dưới để mở Mini App và tự động kích hoạt.',
+            extra: webAppKeyboard(webAppUrl),
+          });
+        }
+      } else {
+        phoneArg = text;
+      }
+
+      if (phoneArg && ctx?.linkByPhone) {
+        const r = await ctx.linkByPhone(String(from?.id), from?.username || '', phoneArg, chatId);
         actions.push({
           chatId,
-          text: r.ok ? `✅ Đã liên kết với <b>${r.label}</b>.` : `⚠️ ${r.error || 'Liên kết thất bại.'}`,
-          extra: r.ok ? webAppKeyboard(webAppUrl) : {},
-        });
-      } else if (parts.length < 2) {
-        actions.push({ chatId, text: 'Cú pháp: /link <code>MÃ_NV KEY</code> hoặc /link <code>SĐT</code>' });
-      } else if (ctx?.linkEmployee) {
-        const r = await ctx.linkEmployee(String(from?.id), from?.username || '', parts[0], parts[1], chatId);
-        actions.push({
-          chatId,
-          text: r.ok ? `✅ Đã liên kết với <b>${r.label}</b>.` : `⚠️ ${r.error || 'Liên kết thất bại.'}`,
-          extra: r.ok ? webAppKeyboard(webAppUrl) : {},
+          text: r.ok
+            ? `✅ Đã liên kết thành công với <b>${r.label}</b>!\nBây giờ bạn có thể dùng tất cả cú pháp (nhắn 2 ngày OFF, /diemdanh, /lich, /luong...).`
+            : `⚠️ ${r.error || 'Liên kết thất bại.'}\nVui lòng kiểm tra lại SĐT đã đăng ký với HR (hoặc mở Mini App để đăng nhập).`,
+          extra: r.ok ? (role === 'employee' ? employeeMenuKeyboard(webAppUrl) : webAppKeyboard(webAppUrl)) : webAppKeyboard(webAppUrl),
         });
       }
     } else if (text.startsWith('/unlink')) {
