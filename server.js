@@ -146,8 +146,8 @@ const DEFAULT_SETTINGS = {
   finance: { webhookUrl: 'https://script.google.com/macros/s/AKfycbxYZhMjR9riLFQfYEkgLfub33XtWlSP2IokghTt82Lb4SQVL4tKxQyNACr69yC0ACA/exec', secret: DEFAULT_WEBHOOK_SECRET, spreadsheetId: '13Y4rycVMq2-HXGySjaJJBl2YZswKEaK5WkSLWVkLjuY' },
   ai: { provider: 'openai', baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o', temperature: 0.7 },
   zalo: { oaId: '', accessToken: '', template: '', reminderEnabled: true },
-  // Telegram Bot + Mini App — cấu hình tại Admin(Cài đặt)->Telegram hoặc ENV TELEGRAM_*
-  telegram: { botToken: '', botUsername: '', webAppUrl: '', enabled: false, useWebhook: false, webhookSecret: '' },
+  // Telegram 3 Bot + Mini App — HR quản trị, NV, Kế toán (ENV TELEGRAM_* hoặc Cài đặt->Telegram)
+  telegram: { botToken: '', botUsername: '', empBotToken: '', empBotUsername: 'umbomilknhanvienbot', finBotToken: '', finBotUsername: 'umbomilkketoanbot', webAppUrl: '', enabled: false, useWebhook: false, webhookSecret: '' },
   calendar: { clientId: '', clientSecret: '', calendarId: 'primary', duration: 30, reminderOnce: true },
   scoring: { criteria: [{ name: 'Kinh nghiệm', weight: 30 }, { name: 'Giao tiếp', weight: 25 }, { name: 'Thái độ', weight: 25 }, { name: 'Sẵn sàng ca', weight: 20 }], passThreshold: 70 },
   attendance: { checkInOpenBefore: 30, checkInCloseAfter: 60, lateThreshold: 15, earlyLeaveThreshold: 15, penaltyLate: 30000, penaltyAbsent: 100000, penaltyNoCheckout: 50000 },
@@ -274,7 +274,9 @@ function decryptSettingsSecrets(settings){
     ['zalo','accessToken'],
     ['calendar','clientSecret'],
     ['mail','pass'],
-    ['telegram','botToken']
+    ['telegram','botToken'],
+    ['telegram','empBotToken'],
+    ['telegram','finBotToken']
   ];
   fields.forEach(([grp,key])=>{
     if(settings[grp] && settings[grp][key] && typeof settings[grp][key]==='string' && settings[grp][key].startsWith('enc:')){
@@ -297,6 +299,8 @@ function getMaskedSettings(settings){
   if(m.calendar?.clientSecret) m.calendar.clientSecret = maskSecretValue(settings.calendar.clientSecret);
   if(m.mail?.pass) m.mail.pass = maskSecretValue(settings.mail.pass);
   if(m.telegram?.botToken) m.telegram.botToken = maskSecretValue(settings.telegram.botToken);
+  if(m.telegram?.empBotToken) m.telegram.empBotToken = maskSecretValue(settings.telegram.empBotToken);
+  if(m.telegram?.finBotToken) m.telegram.finBotToken = maskSecretValue(settings.telegram.finBotToken);
   return m;
 }
 
@@ -413,6 +417,11 @@ function saveDB() {
       if(clone.settings.telegram?.botToken && !clone.settings.telegram.botToken.startsWith('enc:') && clone.settings.telegram.botToken.length>10 && !clone.settings.telegram.botToken.includes('•')){
         clone.settings.telegram.botToken = encryptSecret(clone.settings.telegram.botToken);
       }
+      ['empBotToken','finBotToken'].forEach(k=>{
+        if(clone.settings.telegram?.[k] && !clone.settings.telegram[k].startsWith('enc:') && clone.settings.telegram[k].length>10 && !clone.settings.telegram[k].includes('•')){
+          clone.settings.telegram[k] = encryptSecret(clone.settings.telegram[k]);
+        }
+      });
     }
     // atomic write: write to temp then rename
     const tmpFile = DATA_FILE + '.tmp';
@@ -569,6 +578,10 @@ if(process.env.GOOGLE_DRIVE_BACKUP_FOLDER_ID) db.settings.googleDrive.backupFold
 if(!db.settings.telegram) db.settings.telegram = { ...DEFAULT_SETTINGS.telegram };
 if(process.env.TELEGRAM_BOT_TOKEN) db.settings.telegram.botToken = process.env.TELEGRAM_BOT_TOKEN;
 if(process.env.TELEGRAM_BOT_USERNAME) db.settings.telegram.botUsername = process.env.TELEGRAM_BOT_USERNAME;
+if(process.env.TELEGRAM_EMP_BOT_TOKEN) db.settings.telegram.empBotToken = process.env.TELEGRAM_EMP_BOT_TOKEN;
+if(process.env.TELEGRAM_EMP_BOT_USERNAME) db.settings.telegram.empBotUsername = process.env.TELEGRAM_EMP_BOT_USERNAME;
+if(process.env.TELEGRAM_FIN_BOT_TOKEN) db.settings.telegram.finBotToken = process.env.TELEGRAM_FIN_BOT_TOKEN;
+if(process.env.TELEGRAM_FIN_BOT_USERNAME) db.settings.telegram.finBotUsername = process.env.TELEGRAM_FIN_BOT_USERNAME;
 if(process.env.TELEGRAM_WEBAPP_URL) db.settings.telegram.webAppUrl = process.env.TELEGRAM_WEBAPP_URL;
 if(process.env.TELEGRAM_ENABLED === 'true') db.settings.telegram.enabled = true;
 if(process.env.TELEGRAM_WEBHOOK_SECRET) db.settings.telegram.webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
@@ -11768,15 +11781,33 @@ app.post('/api/finance/sheets/kham-suc-khoe', financeAuthMiddleware, async (req,
 
 // ============ TELEGRAM BOT + MINI APP (tích hợp, không thay đổi luồng cũ) ============
 // Helpers liên kết Telegram <-> tài khoản nội bộ
-function getTelegramCfg(){
+function tgCleanTok(v, envVal){
+  if(v && !v.includes('•')) return v;
+  return process.env[envVal] || '';
+}
+// Cấu hình theo vai trò bot: hr (mặc định, tương thích cũ) | employee | finance
+function getTelegramCfg(role){
+  role = ['hr','employee','finance'].includes(role) ? role : 'hr';
   const t = (db.settings && db.settings.telegram) || {};
+  const baseWeb = t.webAppUrl || process.env.TELEGRAM_WEBAPP_URL || '';
+  const baseOrigin = baseWeb ? baseWeb.replace(/\/telegram\/?$/, '').replace(/\/tg-(hr|employee|finance)\/?$/, '') : '';
+  const rolePath = role === 'hr' ? '/tg-hr' : role === 'employee' ? '/tg-employee' : '/tg-finance';
+  const pick = {
+    hr: { tok: tgCleanTok(t.botToken, 'TELEGRAM_BOT_TOKEN'), user: t.botUsername || process.env.TELEGRAM_BOT_USERNAME || '' },
+    employee: { tok: tgCleanTok(t.empBotToken, 'TELEGRAM_EMP_BOT_TOKEN'), user: t.empBotUsername || process.env.TELEGRAM_EMP_BOT_USERNAME || 'umbomilknhanvienbot' },
+    finance: { tok: tgCleanTok(t.finBotToken, 'TELEGRAM_FIN_BOT_TOKEN'), user: t.finBotUsername || process.env.TELEGRAM_FIN_BOT_USERNAME || 'umbomilkketoanbot' }
+  }[role];
   return {
-    botToken: t.botToken && !t.botToken.includes('•') ? t.botToken : (process.env.TELEGRAM_BOT_TOKEN || ''),
-    botUsername: t.botUsername || process.env.TELEGRAM_BOT_USERNAME || '',
-    webAppUrl: t.webAppUrl || process.env.TELEGRAM_WEBAPP_URL || '',
-    enabled: !!(t.enabled || process.env.TELEGRAM_BOT_TOKEN),
+    role,
+    botToken: pick.tok,
+    botUsername: pick.user,
+    webAppUrl: baseOrigin ? baseOrigin + rolePath : (role === 'hr' ? baseWeb : ''),
+    enabled: !!(pick.tok || (role === 'hr' && (t.enabled || process.env.TELEGRAM_BOT_TOKEN))),
     webhookSecret: t.webhookSecret || process.env.TELEGRAM_WEBHOOK_SECRET || ''
   };
+}
+function getTelegramBotsStatus(){
+  return ['hr','employee','finance'].map(r=>{ const c = getTelegramCfg(r); return { role: r, botUsername: c.botUsername, webAppUrl: c.webAppUrl, hasToken: !!c.botToken, enabled: c.enabled }; });
 }
 function findTelegramLink(telegramId){
   if(!db.telegramLinks) db.telegramLinks = [];
@@ -11790,9 +11821,11 @@ function logTelegram(direction, chatId, text, status){
   }catch(e){}
 }
 // Gửi Telegram best-effort theo SĐT (dùng khi Zalo gửi — giữ nguyên return của Zalo)
+// Ưu tiên Bot Nhân viên, fallback Bot HR
 function notifyTelegramForPhone(phone, text){
   try{
-    const cfg = getTelegramCfg();
+    let cfg = getTelegramCfg('employee');
+    if(!cfg.botToken) cfg = getTelegramCfg('hr');
     if(!cfg.botToken || OUTBOUND_SYNC_DISABLED) return;
     const digits = String(phone||'').replace(/\D/g,'');
     const emp = (db.employees||[]).find(e=> String(e.phone||'').replace(/\D/g,'')===digits || String(e.phone||'').replace(/\D/g,'').endsWith(digits.slice(-9)));
@@ -11804,10 +11837,34 @@ function notifyTelegramForPhone(phone, text){
     }).catch(()=>{});
   }catch(e){}
 }
-async function processTelegramUpdate(update){
-  const cfg = getTelegramCfg();
+// HR quản lý Bot NV: broadcast qua Bot Nhân viên tới các chat đã liên kết (lọc theo chi nhánh tùy chọn)
+async function broadcastTelegramEmployees(text, branchId, via){
+  const cfg = getTelegramCfg('employee');
+  if(!cfg.botToken) return { ok:false, error:'Bot Nhân viên chưa cấu hình token', sent:0 };
+  if(OUTBOUND_SYNC_DISABLED) return { ok:false, error:'Chế độ test', sent:0, disabled:true };
+  const links = (db.telegramLinks||[]).filter(l=> l.chatId && l.employeeId);
+  let sent = 0, failed = 0;
+  for(const l of links){
+    if(branchId){
+      const emp = (db.employees||[]).find(e=>e.employeeId===l.employeeId);
+      if(!emp || emp.branchId!==branchId) continue;
+    }
+    try{
+      const r = await tg.sendTelegramMessage(cfg.botToken, l.chatId, text);
+      logTelegram('OUT', l.chatId, text, r.ok?'SENT':'FAILED');
+      if(r.ok) sent++; else failed++;
+    }catch(e){ failed++; logTelegram('OUT', l.chatId, text, 'FAILED: '+e.message); }
+  }
+  try{ audit(via||'HR_BROADCAST','TELEGRAM_BROADCAST','TELEGRAM',null,{sent, failed, branchId: branchId||'ALL'}, 'bot'); }catch(e){}
+  saveDB();
+  return { ok:true, sent, failed, text: `📣 Đã gửi tới <b>${sent}</b> NV qua Bot Nhân viên${failed?` (${failed} lỗi)`:''}.` };
+}
+async function processTelegramUpdate(update, role){
+  role = ['hr','employee','finance'].includes(role) ? role : 'hr';
+  const cfg = getTelegramCfg(role);
   if(!cfg.botToken) return;
   const ctx = {
+    role,
     webAppUrl: cfg.webAppUrl,
     linkEmployee: async (telegramId, username, employeeId, key, chatId)=>{
       const emp = (db.employees||[]).find(e=>e.employeeId===employeeId);
@@ -11853,6 +11910,42 @@ async function processTelegramUpdate(update){
       if(!upcoming.length) return { text: `📅 <b>${emp.name}</b> chưa có lịch 7 ngày tới.` };
       const lines = upcoming.map(s=> `• ${fmtDMY(s.date)} — ${s.shift} (${s.status||'WORKING'})`);
       return { text: `📅 <b>Lịch của ${emp.name}</b>\n` + lines.join('\n') };
+    },
+    getTodayStatus: async (telegramId)=>{
+      const link = findTelegramLink(telegramId);
+      if(!link?.employeeId) return { text: 'Bạn chưa liên kết. Dùng /link <code>MÃ_NV KEY</code> trước.' };
+      const today = getVietnamTodayStr();
+      const rec = (db.attendances||[]).find(a=> a.employeeId===link.employeeId && String(a.date||'').split('T')[0]===today);
+      const ci = rec && (rec.checkIn || rec.checkInAt) ? '✅' : '—';
+      const co = rec && (rec.checkOut || rec.checkOutAt) ? '✅' : '—';
+      return { text: `📍 <b>Điểm danh hôm nay (${fmtDMY(today)})</b>\nVào ca: ${ci}\nRa ca: ${co}\nMở Mini App để điểm danh camera + GPS.` };
+    },
+    getSalary: async (telegramId)=>{
+      const link = findTelegramLink(telegramId);
+      const m = getVietnamTodayStr().slice(0,7);
+      if(!link?.employeeId) return { text: 'Bạn chưa liên kết. Dùng /link <code>MÃ_NV KEY</code> trước.' };
+      const emp = (db.employees||[]).find(e=>e.employeeId===link.employeeId);
+      const rate = emp && emp.type==='OFFICIAL' ? 25500 : 21000;
+      const hours = { CA_SANG:5, CA_CHIEU:6, CA_TRUA:6, CA_TOI:5 };
+      let shifts = 0, total = 0;
+      (db.attendances||[]).filter(a=> a.employeeId===link.employeeId && String(a.date||'').startsWith(m)).forEach(a=>{
+        if((a.checkIn||a.checkInAt) && (a.checkOut||a.checkOutAt)){ shifts++; total += (hours[a.shift]||5)*rate; }
+      });
+      return { text: `💰 <b>Lương tạm tính ${m}</b>\nCa hợp lệ: ${shifts}\nTạm tính: ${Number(total).toLocaleString('vi-VN')}đ\n(Số chính thức do kế toán chốt)` };
+    },
+    getPendingCounts: async ()=>{
+      const isP = (s)=> String(s||'').toUpperCase()==='PENDING';
+      const n = (arr)=> (arr||[]).filter(r=> isP(r.status)).length;
+      return { text: `✅ <b>Phiếu chờ duyệt</b>\n📱 Thiết bị: ${n(db.deviceRequests)}\n🆘 Đột xuất: ${n(db.emergencyRequests)}\n🌙 OFF: ${n(db.offRequests)}\n🔄 Đổi ca: ${n(db.shiftSwapRequests)} + ${n(db.trainingShiftRequests)}\nMở Mini App Quản trị để duyệt.` };
+    },
+    getDailyReport: async ()=>{
+      const today = getVietnamTodayStr();
+      const atts = (db.attendances||[]).filter(a=> String(a.date||'').split('T')[0]===today);
+      const ci = atts.filter(a=> a.checkIn||a.checkInAt).length;
+      return { text: `📊 <b>Hôm nay ${fmtDMY(today)}</b>\nNV: ${db.employees.length} • Chấm công: ${atts.length} • Đã vào ca: ${ci}\nỨng viên mới: ${(db.applicants||[]).length}` };
+    },
+    broadcastToEmployees: async (fromTelegramId, msg)=>{
+      return await broadcastTelegramEmployees(msg, null, 'HR_BOT:'+fromTelegramId);
     }
   };
   const actions = await tg.handleTelegramUpdate(update, ctx);
@@ -11890,29 +11983,45 @@ async function startTelegramPolling(){
   loop();
 }
 
-// Public: cấu hình an toàn cho Mini App (không lộ token)
+// Public: cấu hình an toàn cho Mini App (không lộ token) — ?role=hr|employee|finance
 app.get('/api/telegram/config', (req,res)=>{
-  const cfg = getTelegramCfg();
-  res.json({ enabled: cfg.enabled, botUsername: cfg.botUsername, webAppUrl: cfg.webAppUrl, hasToken: !!cfg.botToken });
+  const role = ['hr','employee','finance'].includes(req.query.role) ? req.query.role : 'hr';
+  const cfg = getTelegramCfg(role);
+  res.json({ role, enabled: cfg.enabled, botUsername: cfg.botUsername, webAppUrl: cfg.webAppUrl, hasToken: !!cfg.botToken, bots: getTelegramBotsStatus() });
 });
-// Webhook nhận update từ Telegram (verify secret nếu có cấu hình)
-app.post('/api/telegram/webhook', async (req,res)=>{
+// Webhook 3 bot riêng + legacy (mặc định HR để tương thích cũ)
+async function handleTelegramWebhook(req,res,role){
   try{
-    const cfg = getTelegramCfg();
+    const cfg = getTelegramCfg(role);
     const secret = req.headers['x-telegram-bot-api-secret-token'];
     if(cfg.webhookSecret && secret !== cfg.webhookSecret) return res.status(403).json({ error:'Sai webhook secret' });
-    logTelegram('IN', req.body?.message?.chat?.id || '', req.body?.message?.text || 'update', 'RECEIVED');
-    if(cfg.botToken && !OUTBOUND_SYNC_DISABLED) await processTelegramUpdate(req.body||{});
+    logTelegram('IN', req.body?.message?.chat?.id || '', '['+role+'] '+(req.body?.message?.text || 'update'), 'RECEIVED');
+    if(cfg.botToken && !OUTBOUND_SYNC_DISABLED) await processTelegramUpdate(req.body||{}, role);
     res.json({ ok:true });
   }catch(e){ res.json({ ok:true }); }
+}
+app.post('/api/telegram/webhook/:role', async (req,res)=>{
+  const role = ['hr','employee','finance'].includes(req.params.role) ? req.params.role : 'hr';
+  return handleTelegramWebhook(req,res,role);
 });
+app.post('/api/telegram/webhook', async (req,res)=> handleTelegramWebhook(req,res,'hr'));
 // Xác thực initData từ Mini App -> trả JWT dùng chung (nhân viên) hoặc yêu cầu link
 app.post('/api/telegram/auth', (req,res)=>{
-  const { initData } = req.body||{};
-  const cfg = getTelegramCfg();
-  if(!cfg.botToken) return res.status(503).json({ error:'Chưa cấu hình Telegram Bot Token (ENV TELEGRAM_BOT_TOKEN hoặc Cài đặt->Telegram)' });
-  const v = tg.verifyTelegramInitData(initData||'', cfg.botToken);
-  if(!v.ok) return res.status(401).json({ error: v.error || 'initData không hợp lệ' });
+  const { initData, role } = req.body||{};
+  const roles = ['hr','employee','finance'].includes(role) ? [role,'hr','employee','finance'] : ['employee','hr','finance'];
+  let v = { ok:false }, usedRole = null;
+  for(const r of [...new Set(roles)]){
+    const c = getTelegramCfg(r);
+    if(!c.botToken) continue;
+    const vv = tg.verifyTelegramInitData(initData||'', c.botToken);
+    if(vv.ok){ v = vv; usedRole = r; break; }
+    if(!v.error) v = vv;
+  }
+  if(!v.ok){
+    const anyTok = ['hr','employee','finance'].some(r=> getTelegramCfg(r).botToken);
+    if(!anyTok) return res.status(503).json({ error:'Chưa cấu hình Telegram Bot Token (ENV TELEGRAM_* hoặc Cài đặt->Telegram)' });
+    return res.status(401).json({ error: v.error || 'initData không hợp lệ' });
+  }
   const telegramId = String(v.user?.id || '');
   const link = telegramId ? findTelegramLink(telegramId) : null;
   if(link?.employeeId){
@@ -11951,10 +12060,10 @@ app.post('/api/telegram/unlink', (req,res)=>{
   try{ io.emit('telegram:update', { count: db.telegramLinks.length }); }catch(e){}
   res.json({ ok:true });
 });
-// Admin/HR gửi tin nhắn Telegram (giữ Zalo nguyên — đây là kênh bổ sung)
+// Admin/HR gửi tin nhắn Telegram (giữ Zalo nguyên — đây là kênh bổ sung). role: hr|employee|finance
 app.post('/api/telegram/send', authMiddleware, async (req,res)=>{
-  const { chatId, telegramId, employeeId, text } = req.body||{};
-  const cfg = getTelegramCfg();
+  const { chatId, telegramId, employeeId, text, role } = req.body||{};
+  const cfg = getTelegramCfg(['hr','employee','finance'].includes(role) ? role : 'employee');
   if(!cfg.botToken) return res.status(503).json({ error:'Chưa cấu hình Telegram Bot Token' });
   let target = chatId || telegramId;
   if(!target && employeeId){
@@ -11971,19 +12080,47 @@ app.post('/api/telegram/send', authMiddleware, async (req,res)=>{
 app.get('/api/telegram/links', authMiddleware, roleCheck(['Admin','HR','Manager']), (req,res)=>{
   res.json({ links: db.telegramLinks||[], count: (db.telegramLinks||[]).length });
 });
-// Lưu cấu hình Telegram (Admin)
+// Lưu cấu hình Telegram 3 bot (Admin)
 app.put('/api/telegram/settings', authMiddleware, roleCheck(['Admin']), (req,res)=>{
-  const { botToken, botUsername, webAppUrl, enabled, useWebhook, webhookSecret } = req.body||{};
+  const { botToken, botUsername, empBotToken, empBotUsername, finBotToken, finBotUsername, webAppUrl, enabled, useWebhook, webhookSecret } = req.body||{};
   if(!db.settings.telegram) db.settings.telegram = { ...DEFAULT_SETTINGS.telegram };
-  if(botToken !== undefined && !String(botToken).includes('•')) db.settings.telegram.botToken = String(botToken);
+  const setTok = (k,v)=>{ if(v !== undefined && !String(v).includes('•')) db.settings.telegram[k] = String(v); };
+  setTok('botToken', botToken); setTok('empBotToken', empBotToken); setTok('finBotToken', finBotToken);
   if(botUsername !== undefined) db.settings.telegram.botUsername = sanitizeString(botUsername,100);
+  if(empBotUsername !== undefined) db.settings.telegram.empBotUsername = sanitizeString(empBotUsername,100);
+  if(finBotUsername !== undefined) db.settings.telegram.finBotUsername = sanitizeString(finBotUsername,100);
   if(webAppUrl !== undefined) db.settings.telegram.webAppUrl = String(webAppUrl).slice(0,500);
   if(enabled !== undefined) db.settings.telegram.enabled = !!enabled;
   if(useWebhook !== undefined) db.settings.telegram.useWebhook = !!useWebhook;
   if(webhookSecret !== undefined) db.settings.telegram.webhookSecret = String(webhookSecret).slice(0,200);
-  audit(req.user.username,'TELEGRAM_SETTINGS','SETTINGS',null,{botUsername: db.settings.telegram.botUsername, enabled: db.settings.telegram.enabled}, req.ip);
+  audit(req.user.username,'TELEGRAM_SETTINGS','SETTINGS',null,{bots: getTelegramBotsStatus().map(b=>({role:b.role, hasToken:b.hasToken}))}, req.ip);
   saveDB();
-  res.json({ ok:true, settings: getMaskedSettings(db.settings).telegram });
+  res.json({ ok:true, settings: getMaskedSettings(db.settings).telegram, bots: getTelegramBotsStatus() });
+});
+// HR quản lý Bot: 1 chạm gắn webhook + nút Menu cho cả 3 bot (dùng token trên server, không lộ)
+app.post('/api/telegram/setup-bots', authMiddleware, roleCheck(['Admin']), async (req,res)=>{
+  const base = (db.settings.telegram?.webAppUrl || process.env.TELEGRAM_WEBAPP_URL || '').replace(/\/telegram\/?$/, '').replace(/\/tg-(hr|employee|finance)\/?$/, '');
+  if(!base) return res.status(400).json({ error:'Chưa cấu hình WebApp URL gốc (TELEGRAM_WEBAPP_URL)' });
+  const results = {};
+  for(const role of ['hr','employee','finance']){
+    const cfg = getTelegramCfg(role);
+    if(!cfg.botToken){ results[role] = { ok:false, error:'Chưa có token' }; continue; }
+    try{
+      const rolePath = role==='hr' ? '/tg-hr' : role==='employee' ? '/tg-employee' : '/tg-finance';
+      const wh = await tg.setTelegramWebhook(cfg.botToken, base + '/api/telegram/webhook/' + role);
+      const menu = await tg.setTelegramMenuButton(cfg.botToken, base + rolePath);
+      results[role] = { ok: !!(wh.ok && menu.ok), webhook: wh, menu, webAppUrl: base + rolePath, botUsername: cfg.botUsername };
+    }catch(e){ results[role] = { ok:false, error: e.message }; }
+  }
+  audit(req.user.username,'TELEGRAM_SETUP_BOTS','SETTINGS',null,results, req.ip);
+  res.json({ ok:true, results });
+});
+// HR broadcast qua Bot Nhân viên (quản lý Bot NV): text + lọc chi nhánh tùy chọn
+app.post('/api/telegram/emp-broadcast', authMiddleware, roleCheck(['Admin','HR','Manager']), async (req,res)=>{
+  const { text, branchId } = req.body||{};
+  if(!text) return res.status(400).json({ error:'Thiếu nội dung' });
+  const r = await broadcastTelegramEmployees(String(text).slice(0,4000), branchId||null, req.user.username);
+  res.json(r);
 });
 
 // Serve frontend
@@ -11992,6 +12129,9 @@ app.get('/admin', (req,res)=> res.sendFile(path.join(__dirname,'public','admin.h
 app.get('/employee', (req,res)=> res.sendFile(path.join(__dirname,'public','employee.html')));
 app.get('/finance', (req,res)=> res.sendFile(path.join(__dirname,'public','finance.html')));
 app.get('/telegram', (req,res)=> res.sendFile(path.join(__dirname,'public','telegram.html')));
+app.get('/tg-hr', (req,res)=> res.sendFile(path.join(__dirname,'public','telegram.html')));
+app.get('/tg-employee', (req,res)=> res.sendFile(path.join(__dirname,'public','telegram.html')));
+app.get('/tg-finance', (req,res)=> res.sendFile(path.join(__dirname,'public','telegram.html')));
 
 // Socket - Realtime with optional auth + heartbeat
 io.use((socket, next)=>{

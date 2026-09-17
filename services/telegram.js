@@ -90,16 +90,38 @@ async function setTelegramMenuButton(botToken, webAppUrl) {
   }
 }
 
-// ---- Bot command logic (thuần, dễ test) ----
-const HELP_TEXT = [
-  '🐮 <b>ỤM BÒ MILK — Trợ lý Telegram</b>',
-  '',
-  '/start — Mở Mini App (Admin / Nhân viên / Tài chính)',
-  '/link <code>MÃ_NV KEY</code> — Liên kết Telegram với tài khoản (VD: <code>/link CN261_UBM28082026_NV4100 KEY-WBED02RS</code>)',
-  '/unlink — Hủy liên kết',
-  '/lich — Xem lịch làm việc 7 ngày tới',
-  '/help — Hướng dẫn này',
-].join('\n');
+// ---- Bot command logic (thuần, dễ test) — 3 bot theo vai trò ----
+const BOT_ROLES = ['hr', 'employee', 'finance'];
+const HELP_TEXTS = {
+  hr: [
+    '🛡️ <b>ỤM BÒ MILK — Bot Quản trị HR</b>',
+    '',
+    '/start — Mở Mini App Quản trị',
+    '/duyet — Số phiếu chờ duyệt (thiết bị, OFF, đổi ca)',
+    '/baocao — Tóm tắt nhân sự hôm nay',
+    '/broadcast <code>nội dung</code> — Gửi Ed Mini App NV (quản lý Bot NV)',
+    '/help — Hướng dẫn này',
+  ].join('\n'),
+  employee: [
+    '🧑‍🍳 <b>ỤM BÒ MILK — Bot Nhân viên</b>',
+    '',
+    '/start — Mở Mini App Nhân viên',
+    '/link <code>MÃ_NV KEY</code> — Liên kết tài khoản (VD: <code>/link CN261_UBM28082026_NV4100 KEY-WBED02RS</code>)',
+    '/unlink — Hủy liên kết',
+    '/lich — Lịch 7 ngày tới',
+    '/diemdanh — Trạng thái chấm công hôm nay',
+    '/luong — Lương tạm tính tháng này',
+    '/help — Hướng dẫn này',
+  ].join('\n'),
+  finance: [
+    '💰 <b>ỤM BÒ MILK — Bot Kế toán</b>',
+    '',
+    '/start — Mở Mini App Tài chính',
+    '/luong — Bảng lương tổng hợp tháng này',
+    '/help — Hướng dẫn này',
+  ].join('\n'),
+};
+const HELP_TEXT = HELP_TEXTS.employee;
 
 function webAppKeyboard(webAppUrl) {
   if (!webAppUrl) return {};
@@ -164,8 +186,47 @@ async function handleTelegramUpdate(update, ctx) {
       } else {
         actions.push({ chatId, text: 'Mở Mini App để xem lịch làm việc.', extra: webAppKeyboard(webAppUrl) });
       }
+    } else if (text.startsWith('/diemdanh')) {
+      if (ctx?.getTodayStatus) {
+        const r = await ctx.getTodayStatus(String(from?.id));
+        actions.push({ chatId, text: r.text, extra: webAppKeyboard(webAppUrl) });
+      } else {
+        actions.push({ chatId, text: 'Mở Mini App để điểm danh.', extra: webAppKeyboard(webAppUrl) });
+      }
+    } else if (text.startsWith('/luong')) {
+      if (ctx?.getSalary) {
+        const r = await ctx.getSalary(String(from?.id));
+        actions.push({ chatId, text: r.text, extra: webAppKeyboard(webAppUrl) });
+      } else {
+        actions.push({ chatId, text: 'Mở Mini App Tài chính để xem lương.', extra: webAppKeyboard(webAppUrl) });
+      }
+    } else if (text.startsWith('/duyet')) {
+      if (ctx?.getPendingCounts) {
+        const r = await ctx.getPendingCounts();
+        actions.push({ chatId, text: r.text, extra: webAppKeyboard(webAppUrl) });
+      } else {
+        actions.push({ chatId, text: 'Mở Mini App Quản trị để duyệt phiếu.', extra: webAppKeyboard(webAppUrl) });
+      }
+    } else if (text.startsWith('/baocao')) {
+      if (ctx?.getDailyReport) {
+        const r = await ctx.getDailyReport();
+        actions.push({ chatId, text: r.text, extra: webAppKeyboard(webAppUrl) });
+      } else {
+        actions.push({ chatId, text: 'Mở Mini App Quản trị để xem báo cáo.', extra: webAppKeyboard(webAppUrl) });
+      }
+    } else if (text.startsWith('/broadcast')) {
+      const msg = text.replace('/broadcast', '').trim();
+      if (!msg) {
+        actions.push({ chatId, text: 'Cú pháp: /broadcast <code>nội dung gửi tới Mini App NV</code>' });
+      } else if (ctx?.broadcastToEmployees) {
+        const r = await ctx.broadcastToEmployees(String(from?.id), msg);
+        actions.push({ chatId, text: r.text });
+      } else {
+        actions.push({ chatId, text: 'Dùng Mini App Quản trị → Telegram → Broadcast để gửi.' });
+      }
     } else if (text.startsWith('/help')) {
-      actions.push({ chatId, text: HELP_TEXT, extra: webAppKeyboard(webAppUrl) });
+      const role = ctx?.role && HELP_TEXTS[ctx.role] ? ctx.role : 'employee';
+      actions.push({ chatId, text: HELP_TEXTS[role], extra: webAppKeyboard(webAppUrl) });
     } else {
       actions.push({ chatId, text: 'Nhấn nút bên dưới để mở Mini App Ụm Bò Milk 👇', extra: webAppKeyboard(webAppUrl) });
     }
@@ -184,5 +245,7 @@ module.exports = {
   setTelegramMenuButton,
   handleTelegramUpdate,
   HELP_TEXT,
+  HELP_TEXTS,
+  BOT_ROLES,
   webAppKeyboard,
 };

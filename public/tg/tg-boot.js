@@ -118,7 +118,31 @@
     }
   }
 
+  function pathRole() {
+    try {
+      const p = location.pathname;
+      if (p.indexOf('/tg-employee') === 0) return 'emp';
+      if (p.indexOf('/tg-finance') === 0) return 'fin';
+      if (p.indexOf('/tg-hr') === 0) return 'hr';
+      const q = new URLSearchParams(location.search).get('role');
+      if (q === 'emp' || q === 'hr' || q === 'fin') return q;
+    } catch (e) {}
+    return null;
+  }
   function bootTabs() {
+    const pr = pathRole();
+    if (pr === 'emp') {
+      if (T.S.emp) { empTabs(); return; }
+      T.setTabs([]); T.go('hub', {}, true); return;
+    }
+    if (pr === 'hr') {
+      if (T.S.hr) { hrTabs(); return; }
+      T.setTabs([]); T.go('hr-login'); return;
+    }
+    if (pr === 'fin') {
+      if (T.S.fin) { finTabs(); return; }
+      T.setTabs([]); T.go('fin-login'); return;
+    }
     if (T.S.emp) empTabs();
     else if (T.S.hr) hrTabs();
     else if (T.S.fin) finTabs();

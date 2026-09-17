@@ -302,11 +302,12 @@
     let s = {};
     try { const j = await H('/api/settings'); s = j.settings || {}; } catch (ex) {}
     const tg = s.telegram || {};
-    return '<div class="tg-card"><h3>✈️ Telegram Bot</h3>'
-      + '<div class="sm" style="font-size:13px">Bot: @' + T.esc(tg.botUsername || '') + ' • ' + (tg.botToken ? 'Token: đã cấu hình' : 'Token: CHƯA') + '<br>WebApp: ' + T.esc(tg.webAppUrl || '') + '</div>'
-      + '<label class="tg-lab">Bot username</label><input id="tgU" class="tg-inp" value="' + T.esc(tg.botUsername || '') + '">'
-      + '<label class="tg-lab">WebApp URL</label><input id="tgW" class="tg-inp" value="' + T.esc(tg.webAppUrl || '') + '">'
-      + '<label class="tg-lab">Bot Token mới (để trống = giữ nguyên)</label><input id="tgT" class="tg-inp" placeholder="123:ABC...">'
+    return '<div class="tg-card"><h3>✈️ Telegram 3 Bot</h3>'
+      + '<div class="sm" style="font-size:13px">HR: @' + T.esc(tg.botUsername || '') + ' ' + (tg.botToken ? '(OK)' : '(CHƯA)') + '<br>NV: @' + T.esc(tg.empBotUsername || '') + ' ' + (tg.empBotToken ? '(OK)' : '(CHƯA)') + '<br>KT: @' + T.esc(tg.finBotUsername || '') + ' ' + (tg.finBotToken ? '(OK)' : '(CHƯA)') + '<br>WebApp: ' + T.esc(tg.webAppUrl || '') + '</div>'
+      + '<label class="tg-lab">HR username / Token mới</label><div class="tg-flex"><input id="tgU" class="tg-inp" value="' + T.esc(tg.botUsername || '') + '"><input id="tgT" class="tg-inp" placeholder="Token HR..."></div>'
+      + '<label class="tg-lab">NV username / Token mới</label><div class="tg-flex"><input id="tgEU" class="tg-inp" value="' + T.esc(tg.empBotUsername || '') + '"><input id="tgET" class="tg-inp" placeholder="Token NV..."></div>'
+      + '<label class="tg-lab">KT username / Token mới</label><div class="tg-flex"><input id="tgFU" class="tg-inp" value="' + T.esc(tg.finBotUsername || '') + '"><input id="tgFT" class="tg-inp" placeholder="Token KT..."></div>'
+      + '<label class="tg-lab">WebApp URL gốc</label><input id="tgW" class="tg-inp" value="' + T.esc(tg.webAppUrl || '') + '">'
       + '<button class="tg-btn" data-act="savetg">Lưu Telegram</button></div>'
       + '<div class="tg-card"><h3>🧰 Tiện ích</h3><div class="tg-flex">'
       + '<button class="tg-btn ghost" data-act="vip">VIP OFF</button><button class="tg-btn ghost" data-act="reload">Nạp DB</button></div>'
@@ -318,8 +319,10 @@
       const act = b.dataset.act;
       try {
         if (act === 'savetg') {
-          const body = { botUsername: T.$('tgU').value.trim(), webAppUrl: T.$('tgW').value.trim() };
+          const body = { botUsername: T.$('tgU').value.trim(), empBotUsername: T.$('tgEU').value.trim(), finBotUsername: T.$('tgFU').value.trim(), webAppUrl: T.$('tgW').value.trim() };
           if (T.$('tgT').value.trim()) body.botToken = T.$('tgT').value.trim();
+          if (T.$('tgET').value.trim()) body.empBotToken = T.$('tgET').value.trim();
+          if (T.$('tgFT').value.trim()) body.finBotToken = T.$('tgFT').value.trim();
           await H('/api/telegram/settings', { method: 'PUT', body }); T.notifyOk(); T.toast('Đã lưu ✅'); T.refresh();
         }
         if (act === 'vip') { await H('/api/admin/off-vip', { method: 'POST' }); T.toast('Đã chuyển VIP'); T.refresh(); }
@@ -336,9 +339,43 @@
     return '<div class="tg-card">' + (arr.slice(0, 40).map((l) => '<div class="tg-row"><div class="ic">📜</div><div class="bd"><div class="tt">' + T.esc(l.actor || '') + ' • ' + T.esc(l.action || '') + '</div><div class="sm">' + T.esc(l.entity || '') + ' • ' + T.esc(l.timestamp || l.at || '') + '</div></div></div>').join('') || T.empty('Chưa có log')) + '</div>';
   };
   T.pages['hr-tg'] = async () => {
-    let links = [];
-    try { const j = await H('/api/telegram/links'); links = j.links || []; } catch (ex) { return '<div class="tg-card">⚠️ ' + T.esc(ex.message) + '</div>'; }
-    return '<div class="tg-card"><h3>✈️ Liên kết Telegram (' + links.length + ')</h3>'
-      + (links.map((l) => '<div class="tg-row"><div class="ic">🔗</div><div class="bd"><div class="tt">' + T.esc(l.employeeId || '') + '</div><div class="sm">TG: ' + T.esc(l.telegramId || '') + ' • @' + T.esc(l.username || '') + '</div></div></div>').join('') || T.empty('Chưa ai liên kết')) + '</div>';
+    let links = [], bots = [];
+    try { const j = await H('/api/telegram/links'); links = j.links || []; } catch (ex) {}
+    try { const j = await T.call('/api/telegram/config'); bots = j.bots || []; } catch (ex) {}
+    const bIcon = { hr: '🛡️', employee: '🧑‍🍳', finance: '💰' };
+    return '<div class="tg-card"><h3>🤖 3 Bot Telegram</h3>'
+      + bots.map((b) => '<div class="tg-row"><div class="ic">' + (bIcon[b.role] || '🤖') + '</div><div class="bd"><div class="tt">@' + T.esc(b.botUsername || b.role) + '</div><div class="sm">' + T.esc(b.webAppUrl || '') + '</div></div>' + (b.hasToken ? T.badge('Token OK', 'b-ok') : T.badge('Thiếu token', 'b-bad')) + '</div>').join('')
+      + '<button class="tg-btn" data-act="setup">⚙️ Gắn webhook + Menu cả 3 Bot</button><div class="sm" id="setupOut" style="font-size:12px;color:var(--tg-hint);margin-top:6px"></div></div>'
+      + '<div class="tg-card"><h3>📣 Broadcast qua Bot Nhân viên (quản lý Bot NV)</h3>'
+      + '<div class="tg-flex"><input id="bcBranch" class="tg-inp" placeholder="Chi nhánh (trống = tất cả)"><input id="bcText" class="tg-inp" placeholder="Nội dung..."></div>'
+      + '<button class="tg-btn" data-act="bc">Gửi broadcast</button></div>'
+      + '<div class="tg-card"><h3>✈️ Liên kết Telegram (' + links.length + ')</h3>'
+      + (links.slice(0, 40).map((l) => '<div class="tg-row"><div class="ic">🔗</div><div class="bd"><div class="tt">' + T.esc(l.employeeId || '') + '</div><div class="sm">TG: ' + T.esc(l.telegramId || '') + ' • @' + T.esc(l.username || '') + '</div></div><button class="tg-btn sm ghost" data-msg="' + T.esc(l.employeeId || '') + '">Nhắn</button></div>').join('') || T.empty('Chưa ai liên kết')) + '</div>';
+  };
+  T.pages['hr-tg:mount'] = async () => {
+    document.querySelectorAll('[data-act="setup"]').forEach((b) => { b.onclick = async () => {
+      try {
+        T.toast('Đang gắn webhook 3 bot...');
+        const j = await H('/api/telegram/setup-bots', { method: 'POST' });
+        const rows = Object.keys(j.results || {}).map((k) => k + ': ' + (j.results[k].ok ? 'OK ✅' : ('Lỗi: ' + (j.results[k].error || ''))));
+        const o = T.$('setupOut'); if (o) o.innerHTML = rows.join('<br>');
+        T.notifyOk(); T.toast('Xong — kiểm tra từng bot');
+      } catch (err) { T.notifyErr(); T.toast(err.message); }
+    }; });
+    document.querySelectorAll('[data-act="bc"]').forEach((b) => { b.onclick = async () => {
+      const text = (T.$('bcText') || {}).value || '';
+      const branchId = ((T.$('bcBranch') || {}).value || '').trim().toUpperCase();
+      if (!text.trim()) { T.toast('Nhập nội dung'); return; }
+      try {
+        const j = await H('/api/telegram/emp-broadcast', { method: 'POST', body: { text, branchId: branchId || undefined } });
+        T.notifyOk(); T.toast(j.text ? j.text.replace(/<[^>]+>/g, '') : 'Đã gửi');
+      } catch (err) { T.notifyErr(); T.toast(err.message); }
+    }; });
+    document.querySelectorAll('[data-msg]').forEach((b) => { b.onclick = async () => {
+      const text = prompt('Nhắn tới ' + b.dataset.msg + ':');
+      if (!text) return;
+      try { await H('/api/telegram/send', { method: 'POST', body: { employeeId: b.dataset.msg, text, role: 'employee' } }); T.toast('Đã gửi ✅'); }
+      catch (err) { T.toast(err.message); }
+    }; });
   };
 })();
