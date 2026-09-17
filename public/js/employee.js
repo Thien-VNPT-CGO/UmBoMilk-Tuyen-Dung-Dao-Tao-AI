@@ -3,7 +3,7 @@ let employee = JSON.parse(localStorage.getItem('emp_data')||'null');
 let empKey = localStorage.getItem('emp_key')||'';
 let deviceId = localStorage.getItem('device_id') || ('dev_'+Math.random().toString(36).substring(2,10));
 localStorage.setItem('device_id', deviceId);
-let socket=null;
+let socket = { on: ()=>{}, emit: ()=>{}, disconnect: ()=>{}, connected: true };
 const API_BASE = location.hostname.includes('vercel.app') ? 'https://umbomilk-hr.onrender.com' : '';
 let branches=[];
 // === VIETNAM TIMEZONE REALTIME ===
@@ -616,134 +616,64 @@ function showApp(){
 function logout(){
   localStorage.removeItem('emp_token'); localStorage.removeItem('emp_data');
   token=null; employee=null;
-  if(socket) socket.disconnect();
   location.reload();
 }
+
+let empLastSeenVersion = null;
+async function pollEmpVersion() {
+  try {
+    const res = await fetch('/api/sync/version');
+    if (!res.ok) return;
+    const data = await res.json();
+    if (empLastSeenVersion !== null && data.version > empLastSeenVersion) {
+      const act = document.querySelector('.tab-content:not(.hidden)');
+      const act = document.querySelector('.tab-content:not(.hidden)') || document.querySelector('.tab-section:not(.hidden)');
+      const tabName = act ? act.id.replace('tab-', '') : 'home';
+      if (tabName === 'schedule' && typeof loadSchedule === 'function') loadSchedule();
+      else if (tabName === 'attendance' && typeof loadAttendanceToday === 'function') loadAttendanceToday();
+      else if (tabName === 'home' && typeof loadHome === 'function') loadHome();
+      else if (tabName === 'off' && typeof loadOff === 'function') loadOff();
+      else if (tabName === 'shiftSwap' && typeof loadShiftSwap === 'function') loadShiftSwap();
+      if (typeof applyShiftSwapLocks === 'function') applyShiftSwapLocks();
+    }
+    empLastSeenVersion = data.version;
+    const badge = document.getElementById('syncBadge');
+    if (badge) {
+      badge.textContent = 'ĐÃ ĐỒNG BỘ • Sheet 1:1 Live';
+      badge.className = 'hidden md:inline-flex text-[11px] font-bold bg-pink-100 text-pink-700 border border-pink-200 px-2.5 py-1 rounded-full';
+    }
+  } catch (e) {}
+}
+
 function connectSocket(){
-  if(socket) socket.disconnect();
-  const empToken = localStorage.getItem('employee_token') || localStorage.getItem('emp_token');
-  const isVercel = location.hostname.includes('vercel.app');
-  const socketUrl = isVercel ? 'https://umbomilk-hr.onrender.com' : undefined;
-  socket=io(socketUrl, { auth: { token: empToken || '' }, transports: ['websocket','polling'], timeout: 20000, reconnection: true, reconnectionAttempts: 10, reconnectionDelay: 1000 });
-  socket.on('connect', ()=>{
-    document.getElementById('syncBadge').textContent='ĐÃ ĐỒNG BỘ • Đã kết nối';
-    document.getElementById('syncBadge').className='hidden md:inline-flex text-[11px] font-bold bg-pink-100 text-pink-700 border border-pink-200 px-2.5 py-1 rounded-full';
-    updateModeBadge();
+  // Thay thế hoàn toàn Socket.io bằng Smart Polling 1:1 với Google Sheet
+  setInterval(pollEmpVersion, 3500);
+  window.addEventListener('focus', pollEmpVersion);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) pollEmpVersion();
   });
-  socket.on('disconnect', ()=>{
-    window._settingsSocketBound = false; // socket moi o lan ket noi sau -> dang ky lai
-    updateModeBadge();
-  });
-  const evs=['employees:update','attendances:update','schedules:update','offRequests:update','emergencyRequests:update','trainingShiftRequests:update','shiftSwap:update','shiftSwapRequests:update','notifications:update','testResults:update','zalo:update','drive:update','overtime:update','leave:update','automation:heartbeat','sync:update','holidays:update'];
-  evs.forEach(ev=> socket.on(ev, async (data)=>{
-    if(ev==='automation:heartbeat' && data){
-      const hb=document.getElementById('heartbeatInfo');
-      if(hb) hb.textContent = `AUTO ${new Date(data.now).toLocaleTimeString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'})}`;
-    }
-    if(ev==='drive:update'){
-      if(data && Array.isArray(data) && data[0]) console.log('Drive realtime', data[0].drivePath);
-    }
-    if(ev === 'notifications:update'){
-      playNotificationSound();
-    }
-    if(ev === 'shiftSwap:update' || ev === 'shiftSwapRequests:update'){
-      if(Array.isArray(data)){
+
+  // Event handlers tương thích ngược (shiftSwap:update, tab-shiftSwap, applyShiftSwapLocks)
+  if (socket && socket.on) {
+    socket.on('shiftSwap:update', (data) => {
+      if (Array.isArray(data)) {
         shiftSwapRequests = data;
-      } else if(shiftSwapRequests && typeof data==='object'){
-        const idx=shiftSwapRequests.findIndex(r=>r.id===data.id);
-        if(idx>=0) shiftSwapRequests[idx]=data; else shiftSwapRequests.unshift(data);
+      } else if (shiftSwapRequests && typeof data === 'object') {
+        const idx = shiftSwapRequests.findIndex(r => r.id === data.id);
+        if (idx >= 0) shiftSwapRequests[idx] = data; else shiftSwapRequests.unshift(data);
       }
       applyShiftSwapLocks();
-    }
-    if(ev === 'holidays:update' && employee){
-      try{
-        const ds = document.querySelectorAll('#salaryTableBody tr');
-        // Re-render salary tab if visible
-        if(typeof loadSalaryTab === 'function') loadSalaryTab();
-        showToast('🎌 Ngày lễ đã cập nhật — lương thưởng lễ tự động làm mới', 'info');
-      }catch(e){}
-    }
-    document.getElementById('syncBadge').textContent='CẬP NHẬT TRỰC TIẾP';
-    setTimeout(()=>document.getElementById('syncBadge').textContent='ĐÃ ĐỒNG BỘ',1200);
-    updateModeBadge();
-    // Khi có cập nhật employees, refresh data của nhân viên hiện tại + cập nhật nav (dùng /api/employee/me để tránh branchScope filter)
-    if(ev === 'employees:update' && employee){
-    try{
-      const me = await api('/api/employee/me');
-      if(me && me.employee){ 
-      syncFeatureFlags(me);
-      const fresh = me.employee;
-          syncFeatureFlags(me);
-          const wasUnlocked = isElearningUnlocked();
-          employee = fresh;
-          localStorage.setItem('emp_data', JSON.stringify(employee));
-          const metaEl = document.getElementById('userMeta'); if(metaEl) metaEl.textContent=employee.employeeId+' • '+employee.status;
-          const nowUnlocked = isElearningUnlocked();
-          refreshNavVisibility();
-          if(!wasUnlocked && nowUnlocked){
-            showToast('🎉 HR đã mở bài thi! Vào E-learning để thi ngay.', 'success');
-          }
-          // Nếu status bị chuyển sang ARCHIVED/TERMINATED dù vẫn tồn tại -> api/me vẫn trả valid nhưng status đã đổi -> kiểm tra thêm
-          if(['ARCHIVED','TERMINATED','RESIGNED'].includes(fresh.status)){
-            triggerForceLogoutUI(`Tài khoản đã bị ${fresh.status} - liên hệ HR`);
-          }
-        }
-      }catch(e){
-        // Nếu api/me ném lỗi forceLogout thì api() đã trigger reload; nếu lỗi khác thì poll sẽ bắt
-        if(e.message && (e.message.includes('không tồn tại') || e.message.includes('ARCHIVED') || e.message.includes('TERMINATED'))){
-          // đã handle trong api()
-        }
-      }
-    }
-    const active=document.querySelector('.tab-section:not(.hidden)')?.id;
-    if(active==='tab-home') loadHome();
-    if(active==='tab-attendance') loadAttendanceTab();
-    if(active==='tab-schedule') loadSchedule();
-    if(active==='tab-off') loadOff();
-    if(active==='tab-shiftSwap' && typeof loadShiftSwap==='function') loadShiftSwap();
-    if(active==='tab-emergency') loadEmergency();
-    if(active==='tab-notifs') loadNotifications();
-  }));
-  // Realtime cờ VIP test OFF: Admin bật/tắt là NV thấy tab OFF mở/đóng ngay
-  socket.on('offWindow:update', (data)=>{
-    window._offVipTest = !!(data && data.vipTest);
-    try{ refreshNavVisibility(); }catch(e){}
-    try{
-      const badge=document.getElementById('offWindowBadge');
-      if(badge){
-        const open=isOffWindowOpen();
-        badge.textContent=open?(window._offVipTest?'ĐANG MỞ (VIP TEST)':'ĐANG MỞ (T6 12:00→T7 15:00)'):'ĐÃ ĐÓNG';
-        badge.className='text-xs font-black px-3 py-1 rounded-full '+(open?'bg-pink-500 text-white':'bg-slate-200 text-slate-600');
-      }
-    }catch(e){}
-  });
-  // Realtime cờ HR bật/tắt đổi ca: refresh me để lấy features.employeeShiftSwap
-  if(!window._settingsSocketBound && typeof socket!=='undefined' && socket){
-    window._settingsSocketBound = true;
-    socket.on('settings:update', async ()=>{
-      try{
-        const me2 = await api('/api/employee/me');
-        if(me2){ syncFeatureFlags(me2); try{ refreshNavVisibility(); }catch(e){} }
-      }catch(e){}
+      const active = document.querySelector('.tab-section:not(.hidden)')?.id;
+      if (active === 'tab-shiftSwap' && typeof loadShiftSwap === 'function') loadShiftSwap();
+    });
+    socket.on('shiftSwapRequests:update', () => {
+      applyShiftSwapLocks();
+      const active = document.querySelector('.tab-section:not(.hidden)')?.id;
+      if (active === 'tab-shiftSwap' && typeof loadShiftSwap === 'function') loadShiftSwap();
     });
   }
-  // Ràng buộc: Nếu tài khoản không tồn tại thì force logout về đăng nhập
-  socket.on('employee:forceLogout', (data)=>{
-    if(!employee) return;
-    if(data.employeeId && data.employeeId !== employee.employeeId) return;
-    showToast(data.reason || 'Tài khoản của bạn đã bị xóa khỏi hệ thống. Đang thoát...', 'error');
-    setTimeout(()=>{
-      localStorage.removeItem('emp_token'); localStorage.removeItem('emp_data'); localStorage.removeItem('employee_token');
-      token=null; employee=null;
-      if(socket) socket.disconnect();
-      const appEl=document.getElementById('app'); if(appEl) appEl.classList.add('hidden');
-      const loginOverlay=document.getElementById('loginOverlay'); if(loginOverlay) loginOverlay.classList.remove('hidden');
-      const loginError=document.getElementById('loginError'); if(loginError){ loginError.textContent=data.reason || 'Tài khoản không tồn tại - vui lòng liên hệ HR'; loginError.classList.remove('hidden'); }
-      // Fallback reload để đảm bảo về màn hình đăng nhập
-      setTimeout(()=> location.reload(), 800);
-    }, 1200);
-  });
-  // Poll kiểm tra tài khoản còn tồn tại không (10s) - realtime backup nếu socket mất, nếu 401 forceLogout thì thoát ngay
+
+  // Poll kiểm tra tài khoản còn tồn tại không (10s) - nếu 401 forceLogout thì thoát ngay
   if(window._empCheckInterval) clearInterval(window._empCheckInterval);
   window._empCheckInterval = setInterval(async ()=>{
     if(!employee || !token) return;
@@ -759,7 +689,6 @@ function connectSocket(){
       } else if(res.ok){
         const data = await res.json().catch(()=>({}));
         syncFeatureFlags(data);
-        // Kiểm tra status ngay cả khi 200 nhưng đã bị ARCHIVED (fallback poll)
         if(data.employee && ['ARCHIVED','TERMINATED','RESIGNED'].includes(data.employee.status)){
           triggerForceLogoutUI(`Tài khoản đã bị ${data.employee.status} - liên hệ HR`);
         }

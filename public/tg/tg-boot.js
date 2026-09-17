@@ -172,14 +172,18 @@
     else { T.setTabs([]); T.go('hub', {}, true); }
   }
 
-  // Realtime: socket cập nhật badge + toast khi có thông báo mới
-  function connectSocket() {
+  // Realtime 1:1 Smart Polling với Google Sheet & Backend (không cần socket)
+  let lastSeenVersion = null;
+  async function checkVersionPoll() {
     try {
-      if (!window.io) return;
-      const token = T.S.emp || T.S.hr || T.S.fin;
-      const s = window.io({ auth: token ? { token } : {} });
-      s.on('notifications:update', () => { try { T.haptic('light'); } catch (e) {} });
-      s.on('hr:action', (m) => { try { T.toast('🔔 ' + (m.message || m.action || 'Cập nhật mới')); } catch (e) {} });
+      const res = await fetch('/api/sync/version');
+      if (!res.ok) return;
+      const data = await res.json();
+      if (lastSeenVersion !== null && data.version > lastSeenVersion) {
+        // Có dữ liệu mới từ Google Sheet / Server -> làm mới trang hiện tại
+        if (typeof T.refresh === 'function') T.refresh();
+      }
+      lastSeenVersion = data.version;
     } catch (e) {}
   }
 
@@ -187,6 +191,12 @@
   document.addEventListener('DOMContentLoaded', () => {
     try { document.getElementById('tgUserLine'); } catch (e) {}
     bootTabs();
-    setTimeout(connectSocket, 1500);
+    setInterval(checkVersionPoll, 4000);
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+      checkVersionPoll();
+      if (typeof T.refresh === 'function') T.refresh();
+    }
   });
 })();

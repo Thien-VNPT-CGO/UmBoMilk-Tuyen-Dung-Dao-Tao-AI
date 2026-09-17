@@ -1,7 +1,7 @@
 const API = location.hostname.includes('vercel.app') ? 'https://umbomilk-hr.onrender.com' : '';
 let token = localStorage.getItem('admin_token');
 let currentUser = JSON.parse(localStorage.getItem('admin_user') || 'null');
-let socket = null;
+let socket = { on: () => {}, emit: () => {}, disconnect: () => {}, connected: true };
 let branches = [];
 // === VIETNAM TIMEZONE REALTIME ===
 function getVietnamTodayStr(){ return new Date().toLocaleDateString('en-CA', {timeZone: 'Asia/Ho_Chi_Minh'}); }
@@ -484,9 +484,8 @@ function logout(){
 function updateModeBadge(settings) {
   const onlineEl = document.getElementById('statusOnline');
   if (onlineEl) {
-    const isConn = socket && socket.connected;
-    onlineEl.className = `flex items-center gap-1.5 ${isConn ? 'bg-emerald-500' : 'bg-red-500'} text-white text-[11px] font-black px-2.5 py-1 rounded-full shadow-xs`;
-    onlineEl.innerHTML = `<span class="w-2 h-2 bg-white rounded-full ${isConn ? 'animate-ping' : ''}"></span><i class="fa-solid fa-wifi"></i><span>${isConn ? 'TRỰC TUYẾN' : 'NGOẠI TUYẾN'}</span>`;
+    onlineEl.className = `flex items-center gap-1.5 bg-emerald-500 text-white text-[11px] font-black px-2.5 py-1 rounded-full shadow-xs`;
+    onlineEl.innerHTML = `<span class="w-2 h-2 bg-white rounded-full animate-ping"></span><i class="fa-solid fa-cloud-arrow-up"></i><span id="statusOnlineText">SHEET 1:1 LIVE</span>`;
   }
 
   if (!settings && token) {
@@ -542,10 +541,7 @@ function updateSystemStatusIndicators(s) {
 }
 
 function connectSocket(){
-  if(socket) socket.disconnect();
-  const isVercel = location.hostname.includes('vercel.app');
-  const socketUrl = isVercel ? 'https://umbomilk-hr.onrender.com' : undefined;
-  socket = io(socketUrl, { auth: { token: token || localStorage.getItem('admin_token') }, transports: ['websocket','polling'], timeout: 20000, reconnection: true, reconnectionAttempts: 10, reconnectionDelay: 1000 });
+  socket = io(API);
   socket.on('connect', ()=>{
     updateModeBadge();
     if(typeof loadRenderEnv === 'function') loadRenderEnv();

@@ -234,6 +234,9 @@ let db = {
 
 // === SYSTEM RESET LOCK (Ngăn chặn background sync ghi đè/hồi sinh dữ liệu khi đang reset) ===
 let isSystemResetting = false;
+// === REALTIME GOOGLE SHEET VERSION (Smart Polling & Inbound Sync) ===
+let globalDbVersion = Date.now();
+
 
 // === SECRET ENCRYPTION HELPERS (Realtime automation needs secure storage) ===
 const SECRET_KEY = process.env.SECRET_ENCRYPTION_KEY || process.env.JWT_SECRET || 'fallback-32-bytes-key-for-dev-only!!';
@@ -447,7 +450,8 @@ function saveDB() {
         db.attendances.slice(0, Math.max(0, db.attendances.length - 50)).forEach(a=>{ if(a.checkIn?.image && a.checkIn.image.length>50000) a.checkIn.image='[pruned]'; if(a.checkOut?.image && a.checkOut.image.length>50000) a.checkOut.image='[pruned]'; });
       }
     }catch(e){}
-    io.emit('db:update', { timestamp: getVietnamISOString() });
+    globalDbVersion++;
+    io.emit('db:update', { version: globalDbVersion, timestamp: getVietnamISOString() });
   } catch (e) { console.error('Save DB error', e); }
 }
 // KHỞI TẠO RỖNG - 100% DỮ LIỆU THẬT, KHÔNG MOCK
@@ -1508,6 +1512,126 @@ app.get('/api/sync/status', authMiddleware, (req,res)=>{
     lastHeartbeat: getVietnamISOString()
   });
 });
+
+// === REALTIME GOOGLE SHEET VERSION API (Smart Polling cho Web App & Mini App không dùng socket) ===
+app.get('/api/sync/version', (req, res) => {
+  res.json({
+    version: globalDbVersion,
+    timestamp: getVietnamISOString(),
+    counts: {
+      employees: db.employees.length,
+      attendances: db.attendances.length,
+      schedules: db.schedules.length,
+      offRequests: db.offRequests.length
+    }
+  });
+});
+
+// === INBOUND WEBHOOK TỪ GOOGLE SHEET 17iXM (Chiều 2: Sheet -> Web App Realtime 1:1) ===
+app.post('/api/sync/sheet-inbound', async (req, res) => {
+  try {
+    const { secret, sheetName, rowNumber, headers, rowValues, operation } = req.body || {};
+    const expectedSecret = process.env.GOOGLE_SHEET_WEBHOOK_SECRET || db.settings?.googleSheet?.secret || DEFAULT_WEBHOOK_SECRET;
+    if (!secret || secret !== expectedSecret) {
+      return res.status(401).json({ success: false, error: 'Unauthorized Secret' });
+    }
+    if (!sheetName || !rowValues || !Array.isArray(rowValues)) {
+      return res.status(400).json({ success: false, error: 'Thiếu sheetName hoặc rowValues' });
+    }
+
+    console.log(`[SHEET INBOUND 1:1] Nhận thay đổi từ Google Sheet: ${sheetName} (Dòng ${rowNumber})`);
+    let updatedCount = 0;
+
+    if (sheetName === 'NHAN_VIEN_TRAINING' || sheetName === 'NHAN_VIEN_CHINH_THUC') {
+      const maNV = String(rowValues[1] || '').trim();
+      const phone = String(rowValues[3] || '').trim();
+      if (maNV && !isSheetHeaderCode(maNV)) {
+        let emp = db.employees.find(e => e.employeeId === maNV || (phone && e.phone === phone));
+        if (emp) {
+          if (rowValues[2]) emp.name = String(rowValues[2]).trim();
+          if (rowValues[3]) emp.phone = String(rowValues[3]).trim();
+          if (rowValues[5]) emp.branchId = String(rowValues[5]).trim();
+          if (rowValues[6]) emp.shift = String(rowValues[6]).trim();
+          if (rowValues[7]) emp.startDate = String(rowValues[7]).trim();
+          const newStatus = String(sheetName === 'NHAN_VIEN_TRAINING' ? rowValues[10] : rowValues[8] || '').trim();
+          if (newStatus && emp.status !== newStatus) {
+            console.log(`[SHEET INBOUND] Cập nhật trạng thái ${emp.employeeId}: ${emp.status} -> ${newStatus}`);
+            emp.status = newStatus;
+          }
+          emp.updated_at = getVietnamISOString();
+          emp.updated_by = 'SHEET_INBOUND';
+          emp.version = (emp.version || 1) + 1;
+          updatedCount++;
+        }
+      }
+    } else if (sheetName === 'PHIEU_OFF_HANG_TUAN') {
+      const reqId = String(rowValues[0] || '').trim();
+      const maNV = String(rowValues[1] || '').trim();
+      const offDate = String(rowValues[5] || '').trim();
+      const status = String(rowValues[7] || '').trim();
+      let reqObj = db.offRequests.find(r => r.id === reqId || (r.employeeId === maNV && (r.dates || []).includes(offDate)));
+      if (reqObj && status && reqObj.status !== status) {
+        reqObj.status = status;
+        reqObj.updated_at = getVietnamISOString();
+        updatedCount++;
+        // Gửi thông báo Telegram Bot tới nhân viên
+        try {
+          const empLink = db.telegramLinks?.find(l => l.employeeId === maNV);
+          const botToken = db.settings?.telegram?.empBotToken || db.settings?.telegram?.botToken;
+          if (empLink && botToken) {
+            const icon = status === 'APPROVED' ? '✅' : (status === 'REJECTED' ? '❌' : 'ℹ️');
+            const msg = `🌙 <b>Thông báo Phiếu Nghỉ OFF</b>\n${icon} Trạng thái: <b>${status}</b>\n📅 Ngày: ${offDate || (reqObj.dates||[]).join(', ')}\n👤 Nhân viên: ${maNV}`;
+            tg.sendTelegramMessage(botToken, empLink.chatId, msg).catch(()=>{});
+          }
+        } catch(e) {}
+      }
+    } else if (sheetName === 'PHIEU_DOI_CA_OFFICIAL' || sheetName === 'PHIEU_DOI_CA_TRAINING') {
+      const reqId = String(rowValues[0] || '').trim();
+      const maNV = String(rowValues[1] || '').trim();
+      const status = String(sheetName === 'PHIEU_DOI_CA_OFFICIAL' ? rowValues[8] : rowValues[7] || '').trim();
+      let reqObj = (sheetName === 'PHIEU_DOI_CA_OFFICIAL' ? db.shiftSwapRequests : db.trainingShiftRequests).find(r => r.id === reqId || r.employeeId === maNV);
+      if (reqObj && status && reqObj.status !== status) {
+        reqObj.status = status;
+        reqObj.updated_at = getVietnamISOString();
+        updatedCount++;
+      }
+    } else if (sheetName === 'LICH_LAM_VIEC') {
+      const maNV = String(rowValues[1] || '').trim();
+      const date = String(rowValues[5] || '').trim();
+      const shift = String(rowValues[7] || '').trim();
+      const status = String(rowValues[8] || '').trim();
+      if (maNV && date) {
+        db.schedules.forEach(sc => {
+          if (sc.employeeId === maNV && Array.isArray(sc.days)) {
+            sc.days.forEach(d => {
+              if (d.date === date) {
+                if (shift && shift !== '-') d.shift = shift;
+                if (status) d.status = status;
+                updatedCount++;
+              }
+            });
+          }
+        });
+      }
+    }
+
+    if (updatedCount > 0) {
+      saveDB();
+    }
+
+    res.json({
+      success: true,
+      sheetName,
+      rowNumber,
+      updated: updatedCount > 0,
+      version: globalDbVersion
+    });
+  } catch (err) {
+    console.error('[SHEET INBOUND ERROR]', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 
 // ============ EMPLOYEES ============
 app.get('/api/employees', authMiddleware, (req,res)=>{
@@ -3721,6 +3845,83 @@ app.get('/api/admin/sheet/inspect', authMiddleware, roleCheck(['Admin']), async 
 // Sheet là sự thật: đọc LIVE từng ô đúng tab đúng cột (thin proxy, không qua db.json).
 // Mọi JWT hợp lệ (HR hoặc NV) đều gọi được — quyền xem chi tiết do client lọc theo mã NV.
 const SHEET_LIVE_TABS = ['NHAN_VIEN_MOI','NHAN_VIEN_TRAINING','NHAN_VIEN_CHINH_THUC','LICH_LAM_VIEC','PHIEU_OFF_HANG_TUAN','PHIEU_OFF_DOT_XUAT','RECORD_DIEM_DANH'];
+// Ghi xuyên thấu 1:1 lên Sheet (sửa app -> Sheet đổi; xóa web -> mất dòng Sheet).
+// Ghi đúng header từng tab (SHEET_DEFINITIONS), tìm dòng theo cột khóa. Fire-and-forget ở route.
+async function sheetMirrorWrite(tab, keyCol, keyVal, valuesByHeader, probe) {
+  if (OUTBOUND_SYNC_DISABLED) return { ok: false, skipped: 'disabled' };
+  if (probe && isTestRecord(probe)) return { ok: false, skipped: 'test-record' };
+  try {
+    const def = SHEET_DEFINITIONS[tab];
+    if (!def) return { ok: false, skipped: 'no-tab-def' };
+    const spreadsheetId = db.settings?.googleSheet?.spreadsheetId;
+    const token = await getGoogleAccessToken();
+    if (!token || !spreadsheetId) return { ok: false, skipped: 'no-sa' };
+    const headers = def.headers;
+    const keyIdx = headers.indexOf(keyCol);
+    if (keyIdx === -1) return { ok: false, skipped: 'no-key-col' };
+    const rv = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(def.sheetName)}!A1:Z5000`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!rv.ok) return { ok: false, skipped: 'read-failed' };
+    const vals = (await rv.json().catch(() => ({}))).values || [];
+    const row = headers.map((h) => valuesByHeader[h] != null ? String(valuesByHeader[h]) : '');
+    let rowIdx = -1;
+    for (let i = 1; i < vals.length; i++) {
+      if (String(vals[i][keyIdx] || '') === String(keyVal)) { rowIdx = i + 1; break; }
+    }
+    if (rowIdx === -1) {
+      const ap = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(def.sheetName)}!A1:append?valueInputOption=USER_ENTERED`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: [row] })
+      });
+      if (!ap.ok) return { ok: false, skipped: 'append-failed' };
+    } else {
+      const lastCol = String.fromCharCode(64 + headers.length);
+      const up = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(def.sheetName)}!A${rowIdx}:${lastCol}${rowIdx}?valueInputOption=USER_ENTERED`, {
+        method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: [row] })
+      });
+      if (!up.ok) return { ok: false, skipped: 'update-failed' };
+    }
+    return { ok: true, appended: rowIdx === -1 };
+  } catch (e) { return { ok: false, skipped: 'error', reason: e.message }; }
+}
+async function sheetMirrorDelete(tab, keyCol, keyVal, probe) {
+  if (OUTBOUND_SYNC_DISABLED) return { ok: false, skipped: 'disabled' };
+  if (probe && isTestRecord(probe)) return { ok: false, skipped: 'test-record' };
+  try {
+    const def = SHEET_DEFINITIONS[tab];
+    if (!def) return { ok: false, skipped: 'no-tab-def' };
+    const spreadsheetId = db.settings?.googleSheet?.spreadsheetId;
+    const token = await getGoogleAccessToken();
+    if (!token || !spreadsheetId) return { ok: false, skipped: 'no-sa' };
+    const headers = def.headers;
+    const keyIdx = headers.indexOf(keyCol);
+    if (keyIdx === -1) return { ok: false, skipped: 'no-key-col' };
+    const meta = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties`, { headers: { Authorization: `Bearer ${token}` } });
+    const mj = await meta.json().catch(() => ({}));
+    const sh = (mj.sheets || []).find((s) => s.properties && s.properties.title === def.sheetName);
+    if (!sh || sh.properties.sheetId == null) return { ok: false, skipped: 'no-sheet' };
+    const rv = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(def.sheetName)}!A1:Z5000`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!rv.ok) return { ok: false, skipped: 'read-failed' };
+    const vals = (await rv.json().catch(() => ({}))).values || [];
+    let rowIdx = -1;
+    for (let i = 1; i < vals.length; i++) {
+      if (String(vals[i][keyIdx] || '') === String(keyVal)) { rowIdx = i + 1; break; }
+    }
+    if (rowIdx === -1) return { ok: true, missing: true };
+    const del = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
+      method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requests: [{ deleteDimension: { range: { sheetId: sh.properties.sheetId, dimension: 'ROWS', startIndex: rowIdx - 1, endIndex: rowIdx } } }] })
+    });
+    if (!del.ok) return { ok: false, skipped: 'delete-failed' };
+    return { ok: true, deletedRow: rowIdx };
+  } catch (e) { return { ok: false, skipped: 'error', reason: e.message }; }
+}
+function empSheetTab(emp) {
+  return emp && emp.type === 'OFFICIAL' ? 'NHAN_VIEN_CHINH_THUC' : 'NHAN_VIEN_TRAINING';
+}
+function empSheetRow(emp) {
+  return { 'ID': emp.id, 'Mã NV': emp.employeeId, 'Họ tên': emp.name, 'SĐT': emp.phone, 'Khóa': (db.keys || []).find((k) => k.employeeId === emp.employeeId)?.key || '', 'Chi nhánh': emp.branchId, 'Ca': emp.shift, 'Ngày bắt đầu': emp.startDate, 'Trạng thái': emp.status, 'Điểm TEST': emp.testScore, 'Kết quả TEST': emp.testResult, 'Loại': emp.type, 'Cập nhật lúc': emp.updated_at };
+}
 app.get('/api/sheet/live/:tab', authMiddleware, async (req,res)=>{
   const tab = String(req.params.tab||'').toUpperCase();
   if(!SHEET_LIVE_TABS.includes(tab)) return res.status(400).json({ ok:false, reason:'Tab không hỗ trợ đọc trực tiếp' });

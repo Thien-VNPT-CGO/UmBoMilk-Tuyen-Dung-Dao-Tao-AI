@@ -11,8 +11,8 @@
     }
   ],
   "rewrites": [
+    { "source": "/telegram", "destination": "/public/telegram.html" },
     { "source": "/api/:path*", "destination": "https://umbomilk-hr.onrender.com/api/:path*" },
-    { "source": "/socket.io/:path*", "destination": "https://umbomilk-hr.onrender.com/socket.io/:path*" },
     { "source": "/health", "destination": "https://umbomilk-hr.onrender.com/health" },
     { "source": "/(.*)", "destination": "/public/$1" }
   ]

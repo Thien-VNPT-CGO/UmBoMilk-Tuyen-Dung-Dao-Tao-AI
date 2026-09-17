@@ -763,54 +763,24 @@ function openHolidayDetail(employeeId, name, leChiTiet, luongLeThem){
 
 // Khởi tạo hệ thống & Socket realtime
 (function init(){
-  // Socket.io
-  try{
-    const isVercel = location.hostname.includes('vercel.app');
-    const socketUrl = isVercel ? 'https://umbomilk-hr.onrender.com' : undefined;
-    const s = io(socketUrl, {
-      auth: { token: financeToken || '' },
-      transports: ['websocket','polling'],
-      timeout: 20000,
-      reconnection: true
-    });
-    
-    s.on('connect', () => {
-      const b = document.getElementById('socketBadge');
-      if(b) b.innerHTML = '<span class="w-2 h-2 bg-emerald-500 rounded-full animate-ping"></span> REALTIME 1:1';
-    });
-
-    s.on('disconnect', () => {
-      const b = document.getElementById('socketBadge');
-      if(b) b.innerHTML = '<span class="w-2 h-2 bg-rose-500 rounded-full"></span> NGOẠI TUYẾN';
-    });
-
-    s.on('finance:forceLogout', (data) => {
-      if(financeKey && data.key === financeKey.key){
-        alert(data.reason || 'Khóa Tài chính đã hết hạn');
-        logout(true);
-      }
-    });
-
-    const realTimeEvents = [
-      'attendances:update',
-      'employees:update',
-      'schedules:update',
-      'finance:dongPhuc:update',
-      'finance:khamSK:update',
-      'system:reset'
-    ];
-
-    realTimeEvents.forEach(ev => {
-      s.on(ev, () => {
-        // Realtime reload tab hiện tại
+  // Realtime 1:1 Smart Polling với Google Sheet & Backend (không cần socket)
+  let finLastSeenVersion = null;
+  async function checkFinVersion() {
+    try {
+      const res = await fetch('/api/sync/version');
+      if (!res.ok) return;
+      const data = await res.json();
+      if (finLastSeenVersion !== null && data.version > finLastSeenVersion) {
         loadAll();
-      });
-    });
-
-    window._financeSocket = s;
-  }catch(e){
-    console.error('Socket init error', e);
+      }
+      finLastSeenVersion = data.version;
+      const b = document.getElementById('socketBadge');
+      if (b) b.innerHTML = '<span class="w-2 h-2 bg-emerald-500 rounded-full animate-ping"></span> SHEET 1:1 LIVE';
+    } catch(e) {}
   }
+  setInterval(checkFinVersion, 3500);
+  window.addEventListener('focus', checkFinVersion);
+
 
   // Khởi động
   if(financeToken && financeKey && financeExpires){

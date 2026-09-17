@@ -17,6 +17,90 @@
  */
 
 var WEBHOOK_SECRET = "umbomilk_secret_2026";
+// URL máy chủ Web App Ụm Bò Milk (Render / VPS / Cloudflare Tunnel / Ngrok)
+var WEBAPP_BACKEND_URL = "https://um-bo-milk-hr.onrender.com"; 
+
+// Tự động tạo menu trong Google Sheet để kích hoạt đồng bộ 2 chiều
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu('🐮 Ụm Bò Milk Realtime')
+    .addItem('⚡ Kích hoạt Tự động Gửi Thay đổi về Web App', 'setupRealtimeTrigger')
+    .addItem('⚙️ Cài đặt URL Máy chủ Web App', 'promptSetBackendUrl')
+    .addToUi();
+}
+
+function promptSetBackendUrl() {
+  var ui = SpreadsheetApp.getUi();
+  var currentUrl = PropertiesService.getScriptProperties().getProperty('WEBAPP_URL') || WEBAPP_BACKEND_URL;
+  var response = ui.prompt('Cài đặt URL Web App', 'Nhập URL hệ thống Web App (vd: https://um-bo-milk-hr.onrender.com):', ui.ButtonSet.OK_CANCEL);
+  if (response.getSelectedButton() == ui.Button.OK) {
+    var newUrl = response.getResponseText().trim().replace(/\/+$/, '');
+    if (newUrl) {
+      PropertiesService.getScriptProperties().setProperty('WEBAPP_URL', newUrl);
+      ui.alert('Thành công', 'Đã lưu URL: ' + newUrl, ui.ButtonSet.OK);
+    }
+  }
+}
+
+function setupRealtimeTrigger() {
+  var triggers = ScriptApp.getProjectTriggers();
+  var found = false;
+  for (var i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === 'onSheetEditRealtime') {
+      found = true;
+      break;
+    }
+  }
+  if (!found) {
+    ScriptApp.newTrigger('onSheetEditRealtime')
+      .forSpreadsheet(SpreadsheetApp.getActiveSpreadsheet())
+      .onEdit()
+      .create();
+    SpreadsheetApp.getUi().alert('Đã kích hoạt', 'Đã cài đặt Trigger tự động! Mọi sửa đổi trên Sheet sẽ tự động đẩy về Web App Ụm Bò Milk tức thì 1:1.', SpreadsheetApp.getUi().ButtonSet.OK);
+  } else {
+    SpreadsheetApp.getUi().alert('Thông báo', 'Trigger tự động đã được kích hoạt trước đó!', SpreadsheetApp.getUi().ButtonSet.OK);
+  }
+}
+
+// Trigger đẩy thay đổi trên Google Sheet về Web App (Chiều 2: Sheet -> Web App)
+function onSheetEditRealtime(e) {
+  try {
+    if (!e || !e.range) return;
+    var sheet = e.range.getSheet();
+    var sheetName = sheet.getName();
+    var row = e.range.getRow();
+    
+    // Bỏ qua dòng tiêu đề (hàng 1)
+    if (row <= 1) return;
+    
+    var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    var rowValues = sheet.getRange(row, 1, 1, sheet.getLastColumn()).getValues()[0];
+    
+    var backendUrl = PropertiesService.getScriptProperties().getProperty('WEBAPP_URL') || WEBAPP_BACKEND_URL;
+    if (!backendUrl) return;
+    
+    var payload = {
+      secret: WEBHOOK_SECRET,
+      sheetName: sheetName,
+      rowNumber: row,
+      headers: headers,
+      rowValues: rowValues,
+      operation: 'UPDATE',
+      timestamp: new Date().toISOString()
+    };
+    
+    UrlFetchApp.fetch(backendUrl + '/api/sync/sheet-inbound', {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    });
+  } catch (err) {
+    // Không làm gián đoạn thao tác người dùng trên Sheet nếu lỗi mạng
+    console.error('onSheetEditRealtime error: ' + err.toString());
+  }
+}
+
 
 function doPost(e) {
   try {
