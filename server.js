@@ -12241,6 +12241,24 @@ async function processTelegramUpdate(update, role){
       try{ io.emit('telegram:update', { count: db.telegramLinks.length }); }catch(e){}
       return { ok:true, label: `${emp.name} (${m[1]})` };
     },
+    linkByPhone: async (telegramId, username, phone, chatId)=>{
+      const digits = String(phone||'').replace(/\D/g,'');
+      const emp = (db.employees||[]).find(e=>{
+        const p = String(e.phone||'').replace(/\D/g,'');
+        return p === digits || (digits.length >= 9 && p.endsWith(digits.slice(-9)));
+      });
+      if(!emp) return { ok:false, error:'Không tìm thấy nhân viên có SĐT này' };
+      if(!db.telegramLinks) db.telegramLinks = [];
+      let link = findTelegramLink(telegramId);
+      if(!link){ link = { telegramId: String(telegramId), createdAt: getVietnamISOString() }; db.telegramLinks.push(link); }
+      link.employeeId = emp.employeeId;
+      link.username = username || link.username || '';
+      link.chatId = String(chatId || link.chatId || '');
+      link.linkedAt = getVietnamISOString();
+      saveDB();
+      try{ io.emit('telegram:update', { count: db.telegramLinks.length }); }catch(e){}
+      return { ok:true, label: `${emp.name} (${emp.employeeId})` };
+    },
     unlink: async (telegramId)=>{
       if(!db.telegramLinks) return;
       db.telegramLinks = db.telegramLinks.filter(l=> String(l.telegramId)!==String(telegramId));
@@ -12307,6 +12325,164 @@ async function processTelegramUpdate(update, role){
       try{ audit(link.employeeId, 'TELEGRAM_CHAT_RELAY', 'TELEGRAM', null, { intent: s.intent, ai: s.ok }, 'bot'); }catch(e){}
       if(r.ok) return { text: `✅ Đã chuyển tới HR.\n📌 Tóm tắt: ${s.summary}` };
       return { text: `✅ Đã ghi nhận tin nhắn của bạn.\n📌 Tóm tắt: ${s.summary}\n(HR sẽ phản hồi trong Mini App)` };
+    },
+    registerOffSchedule: async (telegramId, dates, username)=>{
+      let link = findTelegramLink(telegramId);
+      let emp = null;
+      if(link?.employeeId) {
+        emp = (db.employees||[]).find(e=> e.employeeId === link.employeeId);
+      }
+      if(!emp && username) {
+        emp = (db.employees||[]).find(e=> e.telegramUsername && e.telegramUsername.toLowerCase() === username.toLowerCase());
+      }
+      if(!emp) {
+        return {
+          text: '⚠️ <b>Bạn chưa liên kết tài khoản nhân viên</b>\n'
+            + 'Để đăng ký lịch OFF, vui lòng liên kết tài khoản trước:\n'
+            + '• Dùng cú pháp: /link <code>SĐT_CỦA_BẠN</code> (VD: <code>/link 0905123456</code>)\n'
+            + '• Hoặc mở Mini App bên dưới để kích hoạt tự động.'
+        };
+      }
+      if(isTestRecord(emp)) return { text: `✅ Đã ghi nhận OFF cho ${emp.name} (bản ghi test): ${dates.map(fmtDMY).join(', ')}` };
+
+      if(dates.length > 2) {
+        return {
+          text: `⚠️ Theo quy định, nhân viên chỉ được đăng ký tối đa 2 ngày OFF / tuần.\nBạn đã gửi ${dates.length} ngày: ${dates.map(fmtDMY).join(', ')}.\nVui lòng nhắn lại đúng 2 ngày nghỉ (Ví dụ: <code>18/09/2026, 22/09/2026</code>).`
+        };
+      }
+
+      // Nhóm ngày theo tuần (Thứ 2 bắt đầu tuần)
+      const weekMap = new Map();
+      dates.forEach(dStr => {
+        const parts = dStr.split('-').map(Number);
+        const dt = new Date(parts[0], parts[1] - 1, parts[2]);
+        const mon = toVietnamDateStr(getMonday(dt));
+        if(!weekMap.has(mon)) weekMap.set(mon, []);
+        weekMap.get(mon).push(dStr);
+      });
+
+      const dayNames = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+      const updatedWeeks = [];
+
+      weekMap.forEach((offDatesInWeek, weekStr) => {
+        let sched = (db.schedules||[]).find(s => s.employeeId === emp.employeeId && s.weekStart === weekStr);
+        const monParts = weekStr.split('-').map(Number);
+        const monDate = new Date(monParts[0], monParts[1] - 1, monParts[2]);
+
+        if(!sched) {
+          const days = [];
+          for(let i=0; i<7; i++){
+            const d = new Date(monDate);
+            d.setDate(monDate.getDate() + i);
+            const ds = toVietnamDateStr(d);
+            const isOff = offDatesInWeek.includes(ds);
+            days.push({
+              date: ds,
+              dayName: dayNames[i],
+              shift: isOff ? 'OFF' : (emp.shift || 'CA_SANG'),
+              status: isOff ? 'OFF' : 'WORKING',
+              substituteFor: null
+            });
+          }
+          sched = {
+            id: uuidv4(),
+            employeeId: emp.employeeId,
+            weekStart: weekStr,
+            days,
+            version: 1,
+            updated_at: getVietnamISOString(),
+            approvalStatus: 'APPROVED'
+          };
+          if(!db.schedules) db.schedules = [];
+          db.schedules.push(sched);
+          addSyncQueue('SCHEDULE', 'CREATE', sched, emp.employeeId, 'TELEGRAM_BOT');
+        } else {
+          for(let i=0; i<7; i++){
+            const d = new Date(monDate);
+            d.setDate(monDate.getDate() + i);
+            const ds = toVietnamDateStr(d);
+            const isOff = offDatesInWeek.includes(ds);
+            let dayRec = sched.days.find(x => x.date === ds);
+            if(!dayRec){
+              dayRec = {
+                date: ds,
+                dayName: dayNames[i],
+                shift: isOff ? 'OFF' : (emp.shift || 'CA_SANG'),
+                status: isOff ? 'OFF' : 'WORKING',
+                substituteFor: null
+              };
+              sched.days.push(dayRec);
+            } else {
+              dayRec.status = isOff ? 'OFF' : 'WORKING';
+              dayRec.shift = isOff ? 'OFF' : (emp.shift || 'CA_SANG');
+            }
+          }
+          sched.days.sort((a, b) => a.date.localeCompare(b.date));
+          sched.version = (sched.version || 1) + 1;
+          sched.updated_at = getVietnamISOString();
+          sched.approvalStatus = 'APPROVED';
+          addSyncQueue('SCHEDULE', 'UPDATE', sched, emp.employeeId, 'TELEGRAM_BOT');
+        }
+        updatedWeeks.push(weekStr);
+      });
+
+      // Tạo phiếu OFF
+      if(!db.offRequests) db.offRequests = [];
+      const isTest = emp.isTest || isTestRecord(emp);
+      const newOffReq = {
+        id: uuidv4(),
+        employeeId: emp.employeeId,
+        employeeName: emp.name,
+        branchId: emp.branchId || '',
+        shift: emp.shift || 'CA_SANG',
+        dates,
+        type: (emp.type === 'TRAINING' || emp.status === 'TRAINING') ? 'TRAINING_OFF' : 'WEEKLY',
+        status: 'APPROVED',
+        autoApproved: true,
+        createdAt: getVietnamISOString(),
+        message: `Telegram Bot - Đăng ký lịch OFF: ${dates.map(fmtDMY).join(', ')}`,
+        version: 1,
+        sync_status: isTest ? 'TEST_BLOCKED' : 'SYNCED'
+      };
+      db.offRequests.push(newOffReq);
+      addSyncQueue('OFF_REQUEST', 'CREATE', newOffReq, emp.employeeId, 'TELEGRAM_BOT');
+
+      saveDB();
+      try{
+        io.emit('schedules:update', db.schedules);
+        io.emit('offRequests:update', db.offRequests);
+      }catch(e){}
+
+      // Kích hoạt đồng bộ realtime tức thì sang Google Sheet 17iXM
+      if(typeof triggerRealtimeSheetSync === 'function'){
+        triggerRealtimeSheetSync('PHIEU_OFF_HANG_TUAN');
+        triggerRealtimeSheetSync('LICH_LAM_VIEC');
+      }
+
+      notifyAdminAndHR({
+        action: 'register_off_telegram',
+        employeeId: emp.employeeId,
+        employeeName: emp.name,
+        branchId: emp.branchId,
+        title: `NV ${emp.name} đăng ký OFF qua Telegram`,
+        message: `${emp.name} (${emp.employeeId}) vừa đăng ký OFF ngày ${dates.map(fmtDMY).join(', ')} qua Telegram Bot. Đã cập nhật lịch làm việc và đồng bộ Google Sheet.`,
+        type: 'info',
+        data: { employeeId: emp.employeeId, dates }
+      });
+
+      try{
+        audit(emp.employeeId, 'OFF_REGISTRATION_TELEGRAM', 'OFF_REQUEST', null, { dates, updatedWeeks }, 'telegram_bot');
+      }catch(e){}
+
+      const offFormatted = dates.map(d => `• <b>${fmtDMY(d)}</b> (Nghỉ OFF)`).join('\n');
+      return {
+        text: `✅ <b>ĐÃ ĐĂNG KÝ LỊCH OFF THÀNH CÔNG</b>\n\n`
+          + `👤 Nhân viên: <b>${emp.name}</b> (<code>${emp.employeeId}</code>)\n`
+          + `🏪 Chi nhánh: <b>${emp.branchId || '—'}</b> • Ca: <b>${emp.shift || '—'}</b>\n\n`
+          + `🏖️ <b>Ngày nghỉ OFF:</b>\n${offFormatted}\n\n`
+          + `💼 <b>Các ngày còn lại trong tuần:</b> Đã cập nhật là ngày <b>LÀM VIỆC (WORKING)</b>.\n`
+          + `📊 <b>Google Sheet:</b> Đã tự động cập nhật vào Tab <i>Lịch làm việc</i> & <i>Phiếu OFF hàng tuần</i>.`
+      };
     }
   };
   const actions = await tg.handleTelegramUpdate(update, ctx);

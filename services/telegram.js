@@ -106,8 +106,9 @@ const HELP_TEXTS = {
     '🧑‍🍳 <b>ỤM BÒ MILK — Bot Nhân viên</b>',
     '',
     '/start — Mở Mini App Nhân viên',
-    '/link <code>MÃ_NV KEY</code> — Liên kết tài khoản (VD: <code>/link CN261_UBM28082026_NV4100 KEY-WBED02RS</code>)',
+    '/link <code>MÃ_NV KEY</code> — Liên kết tài khoản (VD: <code>/link CN261_UBM28082026_NV4100 KEY-WBED02RS</code> hoặc <code>/link SĐT</code>)',
     '/unlink — Hủy liên kết',
+    '/off <code>dd/mm/yyyy, dd/mm/yyyy</code> — Đăng ký lịch OFF 2 ngày/tuần (hoặc nhắn 2 ngày nghỉ)',
     '/lich — Lịch 7 ngày tới',
     '/diemdanh — Trạng thái chấm công hôm nay',
     '/luong — Lương tạm tính tháng này',
@@ -135,6 +136,35 @@ function webAppKeyboard(webAppUrl) {
       inline_keyboard: [[{ text: '🐮 Mở Ụm Bò Milk App', web_app: { url: webAppUrl } }]],
     },
   };
+}
+
+function extractOffDates(text) {
+  if (!text) return [];
+  const regex = /\b(\d{1,2})[/\-.](\d{1,2})[/\-](\d{4})\b/g;
+  const list = [];
+  let m;
+  while ((m = regex.exec(text)) !== null) {
+    const day = parseInt(m[1], 10);
+    const month = parseInt(m[2], 10);
+    const year = parseInt(m[3], 10);
+    if (day >= 1 && day <= 31 && month >= 1 && month <= 12 && year >= 2020 && year <= 2099) {
+      const iso = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      if (!list.includes(iso)) list.push(iso);
+    }
+  }
+  return list;
+}
+
+function isOffRegistration(text) {
+  if (!text) return false;
+  const lower = text.trim().toLowerCase();
+  if (lower.startsWith('/off')) return true;
+  const dates = extractOffDates(text);
+  if (dates.length === 0) return false;
+  if (lower.includes('off') || lower.includes('nghỉ') || lower.includes('đăng ký') || lower.includes('dang ky')) return true;
+  const stripped = lower.replace(/\b\d{1,2}[/\-.]\d{1,2}[/\-]\d{4}\b/g, '').replace(/[\s,;.\-–—vàva]+/g, '').trim();
+  if (stripped.length === 0) return true;
+  return false;
 }
 
 // Xử lý 1 update Telegram -> trả về danh sách action {chatId, text, extra} để gửi.
@@ -166,8 +196,15 @@ async function handleTelegramUpdate(update, ctx) {
       }
     } else if (text.startsWith('/link')) {
       const parts = text.split(/\s+/).slice(1);
-      if (parts.length < 2) {
-        actions.push({ chatId, text: 'Cú pháp: /link <code>MÃ_NV KEY</code>' });
+      if (parts.length === 1 && ctx?.linkByPhone && /^\d{9,11}$/.test(parts[0].replace(/\D/g, ''))) {
+        const r = await ctx.linkByPhone(String(from?.id), from?.username || '', parts[0], chatId);
+        actions.push({
+          chatId,
+          text: r.ok ? `✅ Đã liên kết với <b>${r.label}</b>.` : `⚠️ ${r.error || 'Liên kết thất bại.'}`,
+          extra: r.ok ? webAppKeyboard(webAppUrl) : {},
+        });
+      } else if (parts.length < 2) {
+        actions.push({ chatId, text: 'Cú pháp: /link <code>MÃ_NV KEY</code> hoặc /link <code>SĐT</code>' });
       } else if (ctx?.linkEmployee) {
         const r = await ctx.linkEmployee(String(from?.id), from?.username || '', parts[0], parts[1], chatId);
         actions.push({
@@ -229,6 +266,20 @@ async function handleTelegramUpdate(update, ctx) {
     } else if (text.startsWith('/help')) {
       const role = ctx?.role && HELP_TEXTS[ctx.role] ? ctx.role : 'employee';
       actions.push({ chatId, text: HELP_TEXTS[role], extra: webAppKeyboard(webAppUrl) });
+    } else if (text.startsWith('/off') || isOffRegistration(text)) {
+      const dates = extractOffDates(text);
+      if (dates.length === 0) {
+        actions.push({
+          chatId,
+          text: '📅 <b>Đăng ký lịch OFF (2 ngày/tuần)</b>\nCú pháp: Nhắn đúng 2 ngày theo định dạng <code>dd/mm/yyyy</code>\nVí dụ: <code>18/09/2026, 22/09/2026</code>\n(Bot sẽ tự động ghi nhận ngày OFF và cập nhật những ngày còn lại là ngày làm việc lên Google Sheet).',
+          extra: webAppKeyboard(webAppUrl),
+        });
+      } else if (ctx?.registerOffSchedule) {
+        const r = await ctx.registerOffSchedule(String(from?.id), dates, from?.username || '');
+        actions.push({ chatId, text: r.text, extra: webAppKeyboard(webAppUrl) });
+      } else {
+        actions.push({ chatId, text: 'Mở Mini App để đăng ký lịch OFF.', extra: webAppKeyboard(webAppUrl) });
+      }
     } else {
       // Bot NV: tin nhắn tự do -> lễ tân AI đọc hiểu + chuyển Bot chủ
       if ((ctx?.role || 'employee') === 'employee' && ctx?.relayEmployeeMessage && text.length > 1) {
@@ -252,6 +303,8 @@ module.exports = {
   setTelegramWebhook,
   setTelegramMenuButton,
   handleTelegramUpdate,
+  extractOffDates,
+  isOffRegistration,
   HELP_TEXT,
   HELP_TEXTS,
   START_TEXTS,
