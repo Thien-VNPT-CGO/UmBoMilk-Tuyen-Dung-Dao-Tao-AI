@@ -26,6 +26,41 @@
     } catch (e) {}
   }
 
+  // Logo bò sữa Ụm Bò (đồng bộ mascot web) + khối chào
+  function cowSVG(size) {
+    const s = size || 96;
+    return '<svg width="' + s + '" height="' + s + '" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">'
+      + '<ellipse cx="60" cy="112" rx="30" ry="5" fill="rgba(190,24,93,0.15)"/>'
+      + '<rect x="38" y="82" width="12" height="22" rx="6" fill="#ffffff" stroke="#9d174d" stroke-width="3"/>'
+      + '<rect x="70" y="82" width="12" height="22" rx="6" fill="#ffffff" stroke="#9d174d" stroke-width="3"/>'
+      + '<ellipse cx="60" cy="78" rx="30" ry="20" fill="#ffffff" stroke="#9d174d" stroke-width="3"/>'
+      + '<ellipse cx="48" cy="76" rx="7" ry="5" fill="#9d174d"/><ellipse cx="72" cy="80" rx="6" ry="4" fill="#ec4899"/>'
+      + '<circle cx="60" cy="80" r="9" fill="#fbbf24" stroke="#b45309" stroke-width="2.5"/><rect x="57.5" y="66" width="5" height="10" fill="#b45309"/>'
+      + '<path d="M28 34C24 22 10 24 14 36C17 43 30 40 28 34Z" fill="#ffffff" stroke="#9d174d" stroke-width="3"/>'
+      + '<path d="M92 34C96 22 110 24 106 36C103 43 90 40 92 34Z" fill="#ffffff" stroke="#9d174d" stroke-width="3"/>'
+      + '<path d="M40 26C38 14 48 10 51 22" stroke="#f59e0b" stroke-width="5" stroke-linecap="round"/>'
+      + '<path d="M80 26C82 14 72 10 69 22" stroke="#f59e0b" stroke-width="5" stroke-linecap="round"/>'
+      + '<ellipse cx="60" cy="52" rx="36" ry="32" fill="#ffffff" stroke="#9d174d" stroke-width="3.5"/>'
+      + '<path d="M28 44C33 37 42 39 40 48C38 55 26 52 28 44Z" fill="#9d174d"/>'
+      + '<path d="M84 38C91 40 89 51 82 49C77 47 79 36 84 38Z" fill="#ec4899"/>'
+      + '<path d="M52 28C56 24 64 24 68 28C64 32 56 32 52 28Z" fill="#fda4af" stroke="#e11d48" stroke-width="2"/>'
+      + '<circle cx="47" cy="48" r="6.5" fill="#0f172a"/><circle cx="73" cy="48" r="6.5" fill="#0f172a"/>'
+      + '<circle cx="49" cy="46" r="2.2" fill="#ffffff"/><circle cx="75" cy="46" r="2.2" fill="#ffffff">'
+      + '<rect x="42" y="50" width="10" height="6" rx="3" fill="rgba(244,114,182,0.6)"><animate attributeName="opacity" values="0.6;1;0.6" dur="2s" repeatCount="indefinite"/></rect>'
+      + '<rect x="68" y="50" width="10" height="6" rx="3" fill="rgba(244,114,182,0.6)"><animate attributeName="opacity" values="0.6;1;0.6" dur="2s" repeatCount="indefinite"/></rect>'
+      + '<ellipse cx="60" cy="70" rx="20" ry="13" fill="#fda4af" stroke="#e11d48" stroke-width="2.5"/>'
+      + '<circle cx="53" cy="68" r="2.8" fill="#9f1239"/><circle cx="67" cy="68" r="2.8" fill="#9f1239"/>'
+      + '<path d="M54 74Q60 79 66 74" stroke="#9f1239" stroke-width="2.5" stroke-linecap="round" fill="none">'
+      + '<animate attributeName="d" values="M54 74Q60 79 66 74;M54 74Q60 82 66 74;M54 74Q60 79 66 74" dur="3s" repeatCount="indefinite"/></path>'
+      + '<g><rect x="46" y="86" width="28" height="13" rx="6.5" fill="#ec4899"/>'
+      + '<text x="60" y="96" text-anchor="middle" font-size="9" font-weight="900" fill="#ffffff" font-family="sans-serif">ỤM BÒ</text></g>'
+      + '</svg>';
+  }
+  function heroHTML(sub) {
+    return '<div class="umb-hero"><div class="umb-cow">' + cowSVG(104) + '</div>'
+      + '<div class="umb-brand">Ụm Bò Milk - Xin Chào!</div>'
+      + '<div class="umb-sub">' + esc(sub || 'Mini App nhân sự') + '</div></div>';
+  }
   function haptic(kind) { try { WA && WA.HapticFeedback && WA.HapticFeedback.impactOccurred(kind || 'light'); } catch (e) {} }
   function notifyOk() { try { WA && WA.HapticFeedback && WA.HapticFeedback.notificationOccurred('success'); } catch (e) {} }
   function notifyErr() { try { WA && WA.HapticFeedback && WA.HapticFeedback.notificationOccurred('error'); } catch (e) {} }
@@ -195,10 +230,16 @@
 
   window.TG = {
     WA, $, store, S, call, empApi, hrApi, finApi,
-    toast, confirmDlg, mainBtn, hideMainBtn, haptic, notifyOk, notifyErr,
+    toast, confirmDlg, mainBtn, hideMainBtn, haptic, notifyOk, notifyErr, cowSVG, heroHTML,
     vnToday, fmtDMY, fmtMoney, esc, badge, statusBadge, shiftVi, loading, empty,
     pages, go, back, refresh, setTabs, renderTabs, getGPS, applyTheme,
     _tab: 0,
   };
-  document.addEventListener('DOMContentLoaded', applyTheme);
+  document.addEventListener('DOMContentLoaded', () => {
+    applyTheme();
+    try {
+      const logo = document.querySelector('.tg-top .logo');
+      if (logo && !logo.dataset.cow) { logo.dataset.cow = '1'; logo.innerHTML = cowSVG(28); logo.style.background = '#fff'; }
+    } catch (e) {}
+  });
 })();

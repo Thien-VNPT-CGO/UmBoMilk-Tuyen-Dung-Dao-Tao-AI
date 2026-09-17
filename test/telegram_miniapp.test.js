@@ -90,9 +90,12 @@ describe('Telegram Mini App — tích hợp (giữ nguyên chức năng cũ)', (
     assert.ok(html.includes('/tg/tg-core.js') && html.includes('/tg/tg-boot.js'), 'telegram.html phải nạp app native');
     assert.ok(!html.includes('<iframe'), 'Mini App thực thụ không dùng iframe');
     const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'tg', 'tg.css'), 'utf8');
-    for (const m of ['--umb-grad', '.ripple', 'page-enter', '@keyframes', '@media (min-width:1100px)', '.tg-toast.show']) {
+    for (const m of ['--umb-grad', '.ripple', 'page-enter', '@keyframes', '@media (min-width:1100px)', '.tg-toast.show', '.umb-hero', '.umb-brand', 'cowFloat']) {
       assert.ok(css.includes(m), 'theme hồng thiếu hiệu ứng: ' + m);
     }
+    const core = fs.readFileSync(path.join(__dirname, '..', 'public', 'tg', 'tg-core.js'), 'utf8');
+    assert.ok(core.includes('Ụm Bò Milk - Xin Chào!'), 'thiếu lời chào chuẩn');
+    assert.ok(core.includes('cowSVG'), 'thiếu logo bò sữa');
   });
 
   it('7. Settings masked có telegram.botToken (không lộ secret)', async () => {

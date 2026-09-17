@@ -20,9 +20,7 @@
     const hasEmp = !!T.S.emp, hasHr = !!T.S.hr, hasFin = !!T.S.fin;
     let tgUser = '';
     try { const u = T.WA && T.WA.initDataUnsafe && T.WA.initDataUnsafe.user; if (u) tgUser = (u.first_name || '') + (u.username ? ' (@' + u.username + ')' : ''); } catch (e) {}
-    return '<div class="tg-card" style="text-align:center;padding:20px 14px"><div style="font-size:44px">🐮</div>'
-      + '<div style="font-weight:900;font-size:18px">ỤM BÒ MILK</div>'
-      + '<div class="sm" style="font-size:12px;color:var(--tg-hint)">' + (T.esc(tgUser) || 'Mini App nhân sự nội bộ') + '</div></div>'
+    return T.heroHTML(tgUser || 'Mini App nhân sự nội bộ')
       + '<div class="tg-sec">Chọn cổng làm việc</div>'
       + '<div class="tg-card">'
       + '<button class="tg-menu" data-role="emp" style="margin-bottom:8px"><span class="mi">🧑‍🍳</span>Nhân viên' + (hasEmp ? ' ✅' : '') + '</button>'
@@ -106,9 +104,7 @@
   T.pages['emp-link'] = async () => {
     let tgName = '';
     try { const u = T.WA && T.WA.initDataUnsafe && T.WA.initDataUnsafe.user; if (u) tgName = (u.first_name || '') + (u.username ? ' (@' + u.username + ')' : ''); } catch (e) {}
-    return '<div class="tg-card" style="text-align:center;padding:20px 14px"><div style="font-size:44px">🧑‍🍳</div>'
-      + '<div style="font-weight:900;font-size:18px">Mini App Nhân viên</div>'
-      + '<div class="sm" style="font-size:12px;color:var(--tg-hint)">' + (T.esc(tgName) || 'Liên kết 1 lần, lần sau vào thẳng') + '</div></div>'
+    return T.heroHTML((tgName ? tgName + ' • ' : '') + 'Mini App Nhân viên')
       + '<div class="tg-card"><h3>🔗 Liên kết tài khoản nhân viên</h3>'
       + '<label class="tg-lab">Mã NV (HR cấp)</label><input id="lkEmp" class="tg-inp" placeholder="CN261_..._NV...">'
       + '<label class="tg-lab">KEY kích hoạt</label><input id="lkKey" class="tg-inp" placeholder="KEY-...">'
