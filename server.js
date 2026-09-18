@@ -9788,6 +9788,44 @@ app.post('/api/courses/:id/submit', (req,res)=>{
     data: { score: rounded, correct, total: 25, result }
   });
 
+  // Gửi thông báo kết quả bài thi qua Telegram Bot NV & Bot HR
+  try {
+    const cfgNv = getTelegramCfg('employee');
+    const link = findTelegramLink(employeeId) || (db.telegramLinks||[]).find(l => l.employeeId === employeeId);
+    
+    let evalText = '';
+    let evalStatus = '';
+    if (rounded < 5) {
+      evalText = '❌ <b>ĐÁNH GIÁ: LOẠI (&lt; 5 điểm)</b>\nBạn chưa đạt yêu cầu tối thiểu. Hệ thống đã báo cáo tới HR để hỗ trợ.';
+      evalStatus = 'LOẠI (< 5 điểm)';
+    } else if (rounded < 8) {
+      evalText = '⚠️ <b>ĐÁNH GIÁ: THI LẠI (5 – dưới 8 điểm)</b>\nBạn cần ôn tập thêm và thi lại. HR sẽ sắp xếp và gửi lịch thi lại sớm nhất!';
+      evalStatus = 'THI LẠI (5 đến < 8 điểm)';
+    } else {
+      evalText = '🎆 <b>ĐÁNH GIÁ: ĐẠT XUẤT SẮC (≥ 8 điểm)</b>\nChúc mừng bạn đã hoàn thành xuất sắc bài kiểm tra trắc nghiệm Ụm Bò Milk!';
+      evalStatus = 'ĐẠT XUẤT SẮC (≥ 8 điểm) 🎆';
+    }
+
+    if (link && link.chatId && cfgNv.botToken) {
+      const msgNv = `📝 <b>KẾT QUẢ BÀI THI TRẮC NGHIỆM ĐÀO TẠO</b>\n\n`
+        + `👤 Nhân viên: <b>${emp.name}</b> (<code>${emp.employeeId}</code>)\n`
+        + `📊 Điểm số: <b>${rounded}/10 điểm</b> (${correct}/25 câu đúng)\n`
+        + `⏱️ Thời gian quy định: <b>8 phút</b>\n\n`
+        + `${evalText}`;
+      tg.sendTelegramMessage(cfgNv.botToken, link.chatId, msgNv).catch(() => {});
+    }
+
+    const msgHr = `📝 <b>KẾT QUẢ BÀI THI TRẮC NGHIỆM NHÂN VIÊN</b>\n\n`
+      + `👤 Nhân viên: <b>${emp.name}</b> (<code>${emp.employeeId}</code>)\n`
+      + `🏪 Chi nhánh: <b>${emp.branchId || 'Chưa gán'}</b>\n`
+      + `📊 Điểm thi: <b>${rounded}/10 điểm</b> (${correct}/25 câu đúng)\n`
+      + `📌 Xếp loại: <b>${evalStatus}</b>\n`
+      + `⏱️ Thời gian nộp: <b>${getVietnamDateTimeStr()}</b>`;
+    notifyHRMaster('quiz', msgHr, emp).catch(() => {});
+  } catch (e) {
+    console.error('[QUIZ_TG_ALERT_ERROR]', e.message);
+  }
+
   res.json({ success: true, testResult: testRes, employee: emp, passed: result==='DAT', score: rounded });
 });
 
@@ -12163,7 +12201,7 @@ async function summarizeEmployeeMessage(emp, text) {
 }
 // Bot chủ HR thu thập tin từ Bot NV: gửi tin sự kiện NV tới mọi chat HR đã /start Bot HR.
 // settings.telegram.notify {checkin, checkout, off, swap} làm công tắc từng loại.
-async function notifyHRMaster(kind, text, probe) {
+async function notifyHRMaster(kind, text, probe, extra = {}) {
   try {
     if (OUTBOUND_SYNC_DISABLED) return { ok: false, skipped: 'disabled' };
     if (probe && isTestRecord(probe)) return { ok: false, skipped: 'test-record' };
@@ -12176,7 +12214,7 @@ async function notifyHRMaster(kind, text, probe) {
     let sent = 0;
     for (const c of chats) {
       try {
-        const r = await tg.sendTelegramMessage(cfg.botToken, c.chatId, text);
+        const r = await tg.sendTelegramMessage(cfg.botToken, c.chatId, text, extra || {});
         logTelegram('OUT', c.chatId, text, r.ok ? 'SENT' : 'FAILED');
         if (r.ok) sent++;
       } catch (e) { logTelegram('OUT', c.chatId, text, 'FAILED: ' + e.message); }
@@ -13056,6 +13094,505 @@ async function checkAutoShiftAttendance() {
   }
 }
 
+function hrChangeUserPassword(session, username, oldPass, newPass) {
+  if (!session) return { text: '⛔ Bạn chưa đăng nhập tài khoản HR.' };
+  if (!username || !oldPass || !newPass) {
+    return {
+      text: '🔑 <b>CÚ PHÁP ĐỔI MẬT KHẨU TÀI KHOẢN:</b>\n\n'
+        + '👉 <code>/doi_mat_khau <tên_đăng_nhập> <mật_khẩu_cũ> <mật_khẩu_mới></code>\n\n'
+        + '<i>Ví dụ:</i> <code>/doi_mat_khau admin Master@@2027 UbmNewPass@@2028</code>'
+    };
+  }
+  const u = (db.users || []).find(x => x.username.toLowerCase() === username.trim().toLowerCase());
+  if (!u) return { text: `⚠️ Không tìm thấy người dùng: <code>${username}</code>` };
+
+  const isSelf = session.username.toLowerCase() === u.username.toLowerCase();
+  const isAdmin = String(session.role).toUpperCase() === 'ADMIN';
+  if (!isSelf && !isAdmin) {
+    return { text: '⛔ Bạn chỉ được phép đổi mật khẩu cho chính tài khoản của mình.' };
+  }
+
+  if (!bcrypt.compareSync(oldPass.trim(), u.password)) {
+    return { text: '❌ <b>Mật khẩu cũ không chính xác!</b> Vui lòng kiểm tra lại.' };
+  }
+  if (newPass.trim().length < 6) {
+    return { text: '⚠️ Mật khẩu mới phải có tối thiểu 6 ký tự.' };
+  }
+
+  u.password = bcrypt.hashSync(newPass.trim(), 10);
+  u.updatedAt = getVietnamISOString();
+  saveDB();
+  try { audit(session.username, 'CHANGE_PASSWORD', 'USER', null, { target: u.username }, 'telegram_bot'); } catch (e) {}
+
+  return { text: `✅ <b>ĐÃ ĐỔI MẬT KHẨU THÀNH CÔNG!</b>\nTài khoản <b>${u.username}</b> đã được cập nhật mật khẩu mới.` };
+}
+
+function hrGetEmployeeProfile(session, empQuery) {
+  if (!session) return { text: '⛔ Bạn chưa đăng nhập tài khoản HR.' };
+  if (!empQuery) {
+    return {
+      text: '👉 <b>CÚ PHÁP TRA CỨU HỒ SƠ NHÂN VIÊN:</b>\n\n'
+        + '<code>/hoso_nhanvien: <MÃ_NV></code> hoặc <code>/hoso_nhanvien <MÃ_NV></code>\n\n'
+        + '• <i>Hỗ trợ mã ngắn:</i> <code>NV1288</code> hoặc <code>1288</code>\n'
+        + '• <i>Ví dụ:</i> <code>/hoso_nhanvien: NV1288</code>'
+    };
+  }
+  const emp = findEmployeeByShortOrFullId(empQuery);
+  if (!emp) {
+    return {
+      text: `⚠️ <b>Không tìm thấy hồ sơ nhân viên:</b> <code>${empQuery}</code>\nVui lòng kiểm tra lại mã nhân viên (VD: NV1288, 1288) hoặc số điện thoại.`
+    };
+  }
+
+  if (session && session.branchScope && Array.isArray(session.branchScope) && session.branchScope.length > 0 && String(session.role).toUpperCase() !== 'ADMIN') {
+    if (emp.branchId && !session.branchScope.includes(emp.branchId)) {
+      return {
+        text: `⛔ <b>Không có quyền truy cập:</b> Nhân viên <b>${emp.name}</b> (${emp.branchId}) nằm ngoài phạm vi quản lý của bạn.`
+      };
+    }
+  }
+
+  const isOffice = emp.department === 'OFFICE' || emp.role === 'OFFICE' || (emp.branchId && String(emp.branchId).toUpperCase().includes('VP'));
+  const officialSalary = isOffice
+    ? `${Number(emp.baseSalary || 7500000).toLocaleString('vi-VN')}đ / tháng (Lương cố định)`
+    : `${Number(emp.officialSalary || emp.hourlyRate || (emp.type === 'OFFICIAL' ? 25500 : 21000)).toLocaleString('vi-VN')}đ / giờ (${emp.type === 'OFFICIAL' ? 'Chính thức' : 'Thử việc/Training'})`;
+
+  const profileText = `👤 <b>HỒ SƠ NHÂN VIÊN — ỤM BÒ MILK</b>\n`
+    + `━━━━━━━━━━━━━━━━━━━━━\n`
+    + `👤 <b>Tên nhân viên:</b> ${emp.name}\n`
+    + `📞 <b>Số điện thoại:</b> ${emp.phone || 'Chưa cập nhật'}\n`
+    + `🆔 <b>Mã nhân viên:</b> <code>${emp.employeeId}</code>\n`
+    + `📅 <b>Ngày bắt đầu tham gia:</b> ${fmtDMY(emp.startDate || emp.createdAt || emp.joinedAt || '—')}\n`
+    + `🏪 <b>Chi nhánh & Ca làm:</b> ${emp.branchId || 'Chưa gán'} • ${emp.shift || 'Chưa gán'}\n`
+    + `💵 <b>Lương chính thức:</b> ${officialSalary}\n`
+    + `━━━━━━━━━━━━━━━━━━━━━\n`
+    + `📌 <i>Dữ liệu trích xuất từ cơ sở dữ liệu nhân sự Ụm Bò Milk.</i>`;
+
+  return { text: profileText, employee: emp };
+}
+
+async function hrApproveAndSendPayslips(session, branchArg) {
+  if (!session) return { text: '⛔ Bạn chưa đăng nhập tài khoản Quản trị.' };
+  const roleUpper = String(session.role || '').toUpperCase();
+  if (!['ADMIN', 'HR', 'QL', 'MANAGER'].includes(roleUpper)) {
+    return { text: '⛔ Cú pháp duyệt phiếu lương chỉ dành cho HR, Admin hoặc Quản lý cửa hàng (QL).' };
+  }
+
+  let emps = (db.employees || []).filter(e => !['ARCHIVED', 'TERMINATED', 'RESIGNED'].includes(e.status));
+  if (branchArg) {
+    const bClean = branchArg.trim().toUpperCase();
+    emps = emps.filter(e => String(e.branchId || '').toUpperCase() === bClean || String(e.branchId || '').toUpperCase().includes(bClean));
+  }
+  if (session.branchScope && Array.isArray(session.branchScope) && session.branchScope.length > 0 && roleUpper !== 'ADMIN') {
+    emps = emps.filter(e => session.branchScope.includes(e.branchId));
+  }
+
+  if (emps.length === 0) {
+    return { text: `⚠️ Không tìm thấy nhân viên nào phù hợp để gửi phiếu lương${branchArg ? ` tại chi nhánh ${branchArg}` : ''}.` };
+  }
+
+  const cfgNv = getTelegramCfg('employee');
+  const monthStr = getVietnamTodayStr().slice(0, 7);
+  const monthFmt = monthStr.split('-').reverse().join('/');
+
+  let sentCount = 0;
+  let unlinkedCount = 0;
+  const progressLogs = [];
+
+  for (let i = 0; i < emps.length; i++) {
+    const emp = emps[i];
+    const isOffice = emp.department === 'OFFICE' || emp.role === 'OFFICE' || (emp.branchId && String(emp.branchId).toUpperCase().includes('VP'));
+    let payslipMsg = '';
+
+    if (isOffice) {
+      // 9 items cho Nhân viên Văn phòng
+      const baseSalary = Number(emp.baseSalary || 7500000);
+      const allowance = Number(emp.allowance || 500000);
+      const bonus = Number(emp.bonus || 500000);
+      const gross = baseSalary + allowance + bonus;
+      const kpiDeduction = Number(emp.kpiDeduction || 0);
+      const advance = Number(emp.salaryAdvance || 0);
+      const net = gross - kpiDeduction - advance;
+
+      payslipMsg = `💳 <b>PHIẾU LƯƠNG THÁNG ${monthFmt} — ỤM BÒ MILK</b>\n`
+        + `🏢 <b>Bộ phận:</b> Văn phòng\n`
+        + `━━━━━━━━━━━━━━━━━━━━━\n`
+        + `🆔 <b>Mã nhân viên:</b> <code>${emp.employeeId}</code>\n`
+        + `👤 <b>Tên nhân viên:</b> ${emp.name}\n`
+        + `💵 <b>Lương cơ bản:</b> ${baseSalary.toLocaleString('vi-VN')}đ\n`
+        + `🎁 <b>Phụ cấp:</b> ${allowance.toLocaleString('vi-VN')}đ\n`
+        + `🌟 <b>Bonus (OT, Lễ):</b> ${bonus.toLocaleString('vi-VN')}đ\n`
+        + `💰 <b>Tổng lương:</b> ${gross.toLocaleString('vi-VN')}đ\n`
+        + `➖ <b>Trừ KPI:</b> ${kpiDeduction > 0 ? '-' : ''}${kpiDeduction.toLocaleString('vi-VN')}đ\n`
+        + `💳 <b>Ứng lương:</b> ${advance > 0 ? '-' : ''}${advance.toLocaleString('vi-VN')}đ\n`
+        + `━━━━━━━━━━━━━━━━━━━━━\n`
+        + `💵 <b>CÒN LÃNH:</b> <b>${net.toLocaleString('vi-VN')}đ</b>\n`
+        + `━━━━━━━━━━━━━━━━━━━━━\n`
+        + `📌 <i>Hotline giải đáp: 0909.903.609 - 0333.137.633</i>`;
+    } else {
+      // 11 items cho Nhân viên Cửa hàng làm theo ca
+      const hoursWorked = Number(emp.workedHours || 135);
+      const hourlyRate = Number(emp.hourlyRate || (emp.type === 'OFFICIAL' ? 25500 : 21000));
+      const mainPay = hoursWorked * hourlyRate;
+      const otPay = Number(emp.otPay || 0);
+      const allowance = Number(emp.allowance || 300000);
+      const bonus = Number(emp.bonus || 200000);
+      const gross = mainPay + otPay + allowance + bonus;
+      const kpiDeduction = Number(emp.kpiDeduction || 0);
+      const advance = Number(emp.salaryAdvance || 0);
+      const net = gross - kpiDeduction - advance;
+
+      payslipMsg = `💳 <b>PHIẾU LƯƠNG THÁNG ${monthFmt} — ỤM BÒ MILK</b>\n`
+        + `🏪 <b>Chi nhánh:</b> ${emp.branchId || 'Cửa hàng'}\n`
+        + `━━━━━━━━━━━━━━━━━━━━━\n`
+        + `🆔 <b>Mã nhân viên:</b> <code>${emp.employeeId}</code>\n`
+        + `👤 <b>Tên nhân viên:</b> ${emp.name}\n`
+        + `⏱️ <b>Ngày công chính (giờ):</b> ${hoursWorked} giờ\n`
+        + `⏱️ <b>Lương giờ:</b> ${hourlyRate.toLocaleString('vi-VN')}đ / giờ\n`
+        + `➕ <b>Lương thêm giờ:</b> ${otPay.toLocaleString('vi-VN')}đ\n`
+        + `🎁 <b>Phụ cấp:</b> ${allowance.toLocaleString('vi-VN')}đ\n`
+        + `🌟 <b>Bonus (OT, Lễ):</b> ${bonus.toLocaleString('vi-VN')}đ\n`
+        + `💰 <b>Tổng lương:</b> ${gross.toLocaleString('vi-VN')}đ\n`
+        + `➖ <b>Trừ KPI:</b> ${kpiDeduction > 0 ? '-' : ''}${kpiDeduction.toLocaleString('vi-VN')}đ\n`
+        + `💳 <b>Ứng lương:</b> ${advance > 0 ? '-' : ''}${advance.toLocaleString('vi-VN')}đ\n`
+        + `━━━━━━━━━━━━━━━━━━━━━\n`
+        + `💵 <b>CÒN LÃNH:</b> <b>${net.toLocaleString('vi-VN')}đ</b>\n`
+        + `━━━━━━━━━━━━━━━━━━━━━\n`
+        + `📌 <i>Hotline giải đáp: 0909.903.609 - 0333.137.633</i>`;
+    }
+
+    const link = (db.telegramLinks || []).find(l => l.employeeId === emp.employeeId && l.chatId);
+    if (link && cfgNv.botToken) {
+      try {
+        await tg.sendTelegramMessage(cfgNv.botToken, link.chatId, payslipMsg);
+        sentCount++;
+        progressLogs.push(`[${i + 1}/${emps.length}] ✅ Đã gửi tới <b>${emp.name}</b> (<code>${emp.employeeId}</code>)`);
+      } catch (e) {
+        progressLogs.push(`[${i + 1}/${emps.length}] ❌ Lỗi gửi tới <b>${emp.name}</b>: ${e.message}`);
+      }
+    } else {
+      unlinkedCount++;
+      progressLogs.push(`[${i + 1}/${emps.length}] ⚠️ <b>${emp.name}</b> (<code>${emp.employeeId}</code>) chưa liên kết Bot (đã lưu phiếu)`);
+    }
+  }
+
+  try {
+    audit(session.username, 'APPROVE_SEND_PAYSLIPS', 'PAYROLL', null, { sentCount, unlinkedCount, total: emps.length }, 'telegram_bot');
+  } catch (e) {}
+
+  const summary = `🎉 <b>HOÀN TẤT DUYỆT & PHÁT PHIẾU LƯƠNG THÁNG ${monthFmt}</b>\n\n`
+    + `• Người duyệt: <b>${session.displayName || session.username}</b> (<code>${session.role}</code>)\n`
+    + `• Tổng nhân sự: <b>${emps.length} nhân viên</b>\n`
+    + `• Đã gửi thành công qua Telegram: <b>${sentCount}</b>\n`
+    + `• Chưa liên kết Telegram: <b>${unlinkedCount}</b>\n\n`
+    + `<b>TIẾN ĐỘ CHI TIẾT:</b>\n`
+    + progressLogs.slice(0, 15).join('\n')
+    + (progressLogs.length > 15 ? `\n... và ${progressLogs.length - 15} nhân viên khác.` : '');
+
+  return { text: summary, sentCount, unlinkedCount, total: emps.length };
+}
+
+function parseShiftCode(str) {
+  if (!str) return 'CA_SANG';
+  const s = String(str).toLowerCase().replace(/[\s_-]+/g, '');
+  if (s.includes('chieu') || s.includes('trua') || s === 'c2') return 'CA_CHIEU';
+  if (s.includes('toi') || s === 'c3') return 'CA_TOI';
+  if (s.includes('off') || s.includes('nghi')) return 'OFF';
+  return 'CA_SANG';
+}
+
+function parseShiftDate(str) {
+  if (!str) return null;
+  const m = str.match(/\b(\d{1,2})[/\-.](\d{1,2})(?:[/\-](\d{4}))?\b/);
+  if (!m) return null;
+  const day = parseInt(m[1], 10);
+  const month = parseInt(m[2], 10);
+  const year = m[3] ? parseInt(m[3], 10) : 2026;
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+async function handleRequestShiftSwap(telegramId, rawSwap, chatId) {
+  const link = findTelegramLink(telegramId);
+  if (!link || !link.employeeId) {
+    return { text: '⚠️ Bạn chưa liên kết tài khoản nhân viên. Vui lòng gửi số điện thoại của bạn để liên kết trước nhé.' };
+  }
+  const empA = (db.employees || []).find(e => e.employeeId === link.employeeId);
+  if (!empA) return { text: 'Tài khoản nhân viên không còn tồn tại.' };
+
+  const parts = rawSwap.split(/\s+sang\s+/i);
+  if (parts.length < 2) {
+    return {
+      text: '✍️ <b>CÚ PHÁP ĐỔI CA LÀM VIỆC:</b>\n\n'
+        + '👉 <code>/doica &lt;ngày_A&gt; &lt;ca_A&gt; sang &lt;Tên/Mã_NV_B&gt; &lt;ngày_B&gt; &lt;ca_B&gt;</code>\n\n'
+        + '• <i>Ví dụ:</i> <code>/doica 20/09 Ca Sáng sang Lan 20/09 Ca Tối</code>\n'
+        + '• <i>Ví dụ:</i> <code>/doica 21/09 Ca Chiều sang NV1289 21/09 Ca Sáng</code>'
+    };
+  }
+
+  const partA = parts[0].trim();
+  const partB = parts[1].trim();
+
+  const dateA = parseShiftDate(partA) || getVietnamTodayStr();
+  const shiftA = parseShiftCode(partA) || empA.shift || 'CA_SANG';
+  const dateB = parseShiftDate(partB) || dateA;
+  const shiftB = parseShiftCode(partB) || 'CA_TOI';
+
+  const wordsB = partB.split(/\s+/);
+  let empB = null;
+  for (const w of wordsB) {
+    empB = findEmployeeByShortOrFullId(w);
+    if (empB) break;
+  }
+  if (!empB) {
+    const bName = wordsB[0].toLowerCase();
+    empB = (db.employees || []).find(e => e.branchId === empA.branchId && e.employeeId !== empA.employeeId && e.name.toLowerCase().includes(bName));
+  }
+
+  if (!empB) {
+    return {
+      text: `⚠️ Không tìm thấy đồng nghiệp với thông tin: <code>${partB}</code>.\nVui lòng nhập đúng Tên hoặc Mã NV (VD: Lan, NV1289).`
+    };
+  }
+
+  if (empB.employeeId === empA.employeeId) {
+    return { text: '⚠️ Bạn không thể tự đổi ca với chính mình!' };
+  }
+
+  if (empA.branchId && empB.branchId && empA.branchId !== empB.branchId) {
+    return {
+      text: `⛔ <b>Không cùng chi nhánh:</b> Bạn đang ở chi nhánh <b>${empA.branchId}</b>, bạn <b>${empB.name}</b> ở chi nhánh <b>${empB.branchId}</b>. Theo quy định chỉ được đổi ca giữa các nhân viên cùng một chi nhánh.`
+    };
+  }
+
+  if (!db.shiftSwapRequests) db.shiftSwapRequests = [];
+  const swapId = uuidv4();
+  const swapReq = {
+    id: swapId,
+    fromEmployeeId: empA.employeeId,
+    fromEmployeeName: empA.name,
+    toEmployeeId: empB.employeeId,
+    toEmployeeName: empB.name,
+    branchId: empA.branchId || empB.branchId || '',
+    fromDate: dateA,
+    fromShift: shiftA,
+    toDate: dateB,
+    toShift: shiftB,
+    status: 'PENDING_PEER',
+    requesterTelegramId: String(telegramId),
+    requesterChatId: String(chatId || telegramId),
+    createdAt: getVietnamISOString(),
+    version: 1
+  };
+  db.shiftSwapRequests.unshift(swapReq);
+  saveDB();
+
+  const cfgNv = getTelegramCfg('employee');
+  const linkB = (db.telegramLinks || []).find(l => l.employeeId === empB.employeeId && l.chatId);
+  const shiftNames = { CA_SANG: 'Ca Sáng (07:00-12:00)', CA_CHIEU: 'Ca Chiều (12:00-18:00)', CA_TOI: 'Ca Tối (18:00-23:00)', OFF: 'Nghỉ OFF' };
+
+  if (linkB && cfgNv.botToken) {
+    const peerMsg = `🔄 <b>YÊU CẦU ĐỔI CA LÀM VIỆC TỪ ĐỒNG NGHIỆP</b>\n\n`
+      + `👤 Đồng nghiệp: <b>${empA.name}</b> (<code>${empA.employeeId}</code>)\n`
+      + `🏪 Chi nhánh: <b>${empA.branchId || 'Ụm Bò Milk'}</b>\n\n`
+      + `• Ca của ${empA.name}: <b>${fmtDMY(dateA)}</b> (${shiftNames[shiftA] || shiftA})\n`
+      + `• Đổi sang ca của bạn: <b>${fmtDMY(dateB)}</b> (${shiftNames[shiftB] || shiftB})\n\n`
+      + `Bạn có đồng ý nhận đổi ca làm việc này không?`;
+
+    const extraKeyboard = {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: '✅ ĐỒNG Ý ĐỔI CA', callback_data: `swappeer:accept:${swapId}` },
+            { text: '❌ TỪ CHỐI', callback_data: `swappeer:reject:${swapId}` }
+          ]
+        ]
+      }
+    };
+    tg.sendTelegramMessage(cfgNv.botToken, linkB.chatId, peerMsg, extraKeyboard).catch(() => {});
+  }
+
+  return {
+    text: `🔄 <b>ĐÃ GỬI YÊU CẦU ĐỔI CA LÀM VIỆC</b>\n\n`
+      + `👤 Người đổi: <b>${empA.name}</b> ➔ <b>${empB.name}</b>\n`
+      + `📅 Chi tiết: Ngày ${fmtDMY(dateA)} (${shiftNames[shiftA] || shiftA}) 🔄 Ngày ${fmtDMY(dateB)} (${shiftNames[shiftB] || shiftB})\n\n`
+      + `📌 <i>Hệ thống đã gửi thông báo đến Bot Telegram của bạn <b>${empB.name}</b>. Khi bạn ấy bấm xác nhận [ĐỒNG Ý], yêu cầu sẽ được chuyển ngay tới HR để phê duyệt!</i>`
+  };
+}
+
+async function handlePeerConfirmShiftSwap(swapId, isAccepted, peerTelegramId) {
+  if (!db.shiftSwapRequests) db.shiftSwapRequests = [];
+  const swap = db.shiftSwapRequests.find(s => s.id === swapId);
+  if (!swap) return { text: '⚠️ Phiếu đổi ca không tồn tại.' };
+  if (swap.status !== 'PENDING_PEER') {
+    return { text: `⚠️ Phiếu đổi ca này đã được xử lý trước đó (Trạng thái: <code>${swap.status}</code>).` };
+  }
+
+  const cfgNv = getTelegramCfg('employee');
+  const shiftNames = { CA_SANG: 'Ca Sáng', CA_CHIEU: 'Ca Chiều', CA_TOI: 'Ca Tối', OFF: 'Nghỉ OFF' };
+
+  if (!isAccepted) {
+    swap.status = 'REJECTED_PEER';
+    swap.peerRespondedAt = getVietnamISOString();
+    saveDB();
+
+    if (swap.requesterChatId && cfgNv.botToken) {
+      const msgA = `❌ <b>YÊU CẦU ĐỔI CA BỊ TỪ CHỐI</b>\n\n`
+        + `Đồng nghiệp <b>${swap.toEmployeeName}</b> đã từ chối yêu cầu đổi ca ngày ${fmtDMY(swap.fromDate)}.\n`
+        + `Lịch làm việc của bạn giữ nguyên như cũ.`;
+      tg.sendTelegramMessage(cfgNv.botToken, swap.requesterChatId, msgA).catch(() => {});
+    }
+
+    return { text: `❌ Bạn đã từ chối yêu cầu đổi ca của <b>${swap.fromEmployeeName}</b>.` };
+  }
+
+  swap.status = 'PENDING_HR';
+  swap.peerRespondedAt = getVietnamISOString();
+  saveDB();
+
+  if (swap.requesterChatId && cfgNv.botToken) {
+    const msgA = `✅ <b>ĐỒNG NGHIỆP ĐÃ ĐỒNG Ý ĐỔI CA!</b>\n\n`
+      + `Bạn <b>${swap.toEmployeeName}</b> đã xác nhận đồng ý đổi ca ngày ${fmtDMY(swap.fromDate)}.\n`
+      + `Yêu cầu đã được chuyển tới HR & Quản lý để phê duyệt chính thức.`;
+    tg.sendTelegramMessage(cfgNv.botToken, swap.requesterChatId, msgA).catch(() => {});
+  }
+
+  const hrAlertText = `🔄 <b>YÊU CẦU ĐỔI CA CHỜ HR DUYỆT</b>\n\n`
+    + `🏪 Chi nhánh: <b>${swap.branchId || 'Chưa gán'}</b>\n`
+    + `👤 <b>${swap.fromEmployeeName}</b>: ${fmtDMY(swap.fromDate)} (${shiftNames[swap.fromShift] || swap.fromShift})\n`
+    + `🔄 <b>${swap.toEmployeeName}</b>: ${fmtDMY(swap.toDate)} (${shiftNames[swap.toShift] || swap.toShift})\n\n`
+    + `📌 <i>Cả 2 nhân viên đã đồng thuận. HR / Quản lý vui lòng chọn phê duyệt bên dưới:</i>`;
+
+  const hrKeyboard = {
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: '✅ DUYỆT ĐỔI CA', callback_data: `swaphr:approve:${swapId}` },
+          { text: '❌ TỪ CHỐI', callback_data: `swaphr:reject:${swapId}` }
+        ]
+      ]
+    }
+  };
+
+  const cfgHr = getTelegramCfg('hr');
+  if (cfgHr.botToken && !OUTBOUND_SYNC_DISABLED) {
+    const chats = (db.hrBotChats || []).filter(c => c.chatId);
+    for (const c of chats) {
+      tg.sendTelegramMessage(cfgHr.botToken, c.chatId, hrAlertText, hrKeyboard).catch(() => {});
+    }
+  }
+
+  return { text: `✅ Bạn đã đồng ý nhận ca! Yêu cầu đang được gửi tới Quản lý & HR để phê duyệt.` };
+}
+
+async function handleHrApproveShiftSwap(swapId, isApproved, hrSession) {
+  if (!db.shiftSwapRequests) db.shiftSwapRequests = [];
+  const swap = db.shiftSwapRequests.find(s => s.id === swapId);
+  if (!swap) return { text: '⚠️ Phiếu đổi ca không tồn tại.' };
+  if (swap.status !== 'PENDING_HR' && swap.status !== 'PENDING') {
+    return { text: `⚠️ Phiếu này đã được xử lý trước đó (Trạng thái: <code>${swap.status}</code>).` };
+  }
+
+  const cfgNv = getTelegramCfg('employee');
+
+  if (!isApproved) {
+    swap.status = 'REJECTED';
+    swap.hrRespondedAt = getVietnamISOString();
+    swap.hrUser = hrSession?.username || 'HR';
+    saveDB();
+
+    const rejectMsg = `❌ <b>YÊU CẦU ĐỔI CA KHÔNG ĐƯỢC DUYỆT</b>\n\n`
+      + `Yêu cầu đổi ca ngày ${fmtDMY(swap.fromDate)} giữa <b>${swap.fromEmployeeName}</b> và <b>${swap.toEmployeeName}</b> đã bị HR / Quản lý từ chối.\n`
+      + `Lịch làm việc của hai bạn giữ nguyên theo lịch cũ.`;
+
+    for (const empId of [swap.fromEmployeeId, swap.toEmployeeId]) {
+      const l = (db.telegramLinks || []).find(x => x.employeeId === empId && x.chatId);
+      if (l && cfgNv.botToken) {
+        tg.sendTelegramMessage(cfgNv.botToken, l.chatId, rejectMsg).catch(() => {});
+      }
+    }
+
+    return { text: `❌ Đã từ chối duyệt phiếu đổi ca giữa <b>${swap.fromEmployeeName}</b> và <b>${swap.toEmployeeName}</b>.` };
+  }
+
+  swap.status = 'APPROVED';
+  swap.hrRespondedAt = getVietnamISOString();
+  swap.hrUser = hrSession?.username || 'HR';
+
+  function applyScheduleShift(employeeId, dateStr, newShift) {
+    const ws = toVietnamDateStr(getMonday(new Date(dateStr)));
+    let sc = (db.schedules || []).find(s => s.employeeId === employeeId && s.weekStart === ws);
+    const dayNames = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+    if (!sc) {
+      const monDate = new Date(ws);
+      const days = [];
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(monDate);
+        d.setDate(monDate.getDate() + i);
+        const ds = toVietnamDateStr(d);
+        days.push({
+          date: ds,
+          dayName: dayNames[i],
+          shift: ds === dateStr ? newShift : 'CA_SANG',
+          status: (ds === dateStr && newShift === 'OFF') ? 'OFF' : 'WORKING'
+        });
+      }
+      sc = {
+        id: uuidv4(),
+        employeeId,
+        weekStart: ws,
+        days,
+        version: 1,
+        approvalStatus: 'APPROVED',
+        updated_at: getVietnamISOString()
+      };
+      if (!db.schedules) db.schedules = [];
+      db.schedules.push(sc);
+    } else {
+      let day = sc.days.find(d => d.date === dateStr);
+      if (day) {
+        day.shift = newShift;
+        day.status = newShift === 'OFF' ? 'OFF' : 'WORKING';
+      } else {
+        sc.days.push({
+          date: dateStr,
+          dayName: 'T' + (new Date(dateStr).getDay() + 1),
+          shift: newShift,
+          status: newShift === 'OFF' ? 'OFF' : 'WORKING'
+        });
+      }
+      sc.version = (sc.version || 1) + 1;
+      sc.updated_at = getVietnamISOString();
+    }
+  }
+
+  applyScheduleShift(swap.fromEmployeeId, swap.fromDate, swap.toShift);
+  applyScheduleShift(swap.toEmployeeId, swap.toDate, swap.fromShift);
+
+  saveDB();
+
+  try {
+    io.emit('schedules:update', db.schedules);
+    io.emit('shiftSwapRequests:update', db.shiftSwapRequests);
+  } catch (e) {}
+
+  if (typeof triggerRealtimeSheetSync === 'function') {
+    triggerRealtimeSheetSync('LICH_LAM_VIEC');
+  }
+
+  const successMsg = `🎉 <b>PHIẾU ĐỔI CA ĐÃ ĐƯỢC PHÊ DUYỆT!</b>\n\n`
+    + `HR / Quản lý đã duyệt yêu cầu đổi ca giữa <b>${swap.fromEmployeeName}</b> và <b>${swap.toEmployeeName}</b>.\n`
+    + `Lịch làm việc mới đã được cập nhật thành công trên hệ thống và đồng bộ tới Google Sheet!`;
+
+  for (const empId of [swap.fromEmployeeId, swap.toEmployeeId]) {
+    const l = (db.telegramLinks || []).find(x => x.employeeId === empId && x.chatId);
+    if (l && cfgNv.botToken) {
+      tg.sendTelegramMessage(cfgNv.botToken, l.chatId, successMsg).catch(() => {});
+    }
+  }
+
+  return { text: `✅ Đã phê duyệt và cập nhật lịch đổi ca thành công cho <b>${swap.fromEmployeeName}</b> và <b>${swap.toEmployeeName}</b>.` };
+}
+
 async function processTelegramUpdate(update, role){
   role = ['hr','employee','finance'].includes(role) ? role : 'hr';
   const cfg = getTelegramCfg(role);
@@ -13084,7 +13621,16 @@ async function processTelegramUpdate(update, role){
     },
     getHrSession: async (chatId) => {
       const c = (db.hrBotChats||[]).find(x => String(x.chatId) === String(chatId));
-      return c?.auth || null;
+      if (!c || !c.auth) return null;
+      if (c.auth.loggedInAt) {
+        const loginTime = new Date(c.auth.loggedInAt).getTime();
+        if (Date.now() - loginTime > 24 * 60 * 60 * 1000) {
+          delete c.auth;
+          saveDB();
+          return null;
+        }
+      }
+      return c.auth;
     },
     hrLogin: async (chatId, username, password) => {
       if(!chatId || !username || !password) return { ok:false, error:'Thiếu thông tin đăng nhập' };
@@ -13112,6 +13658,24 @@ async function processTelegramUpdate(update, role){
       const c = (db.hrBotChats||[]).find(x => String(x.chatId) === String(chatId));
       if(c){ delete c.auth; saveDB(); }
       return { ok:true };
+    },
+    hrChangePassword: async (session, username, oldPass, newPass) => {
+      return hrChangeUserPassword(session, username, oldPass, newPass);
+    },
+    hrGetEmployeeProfile: async (session, empQuery) => {
+      return hrGetEmployeeProfile(session, empQuery);
+    },
+    hrApproveAndSendPayslips: async (session, branchArg) => {
+      return hrApproveAndSendPayslips(session, branchArg);
+    },
+    requestShiftSwap: async (telegramId, rawSwap, chatId) => {
+      return handleRequestShiftSwap(telegramId, rawSwap, chatId);
+    },
+    peerConfirmShiftSwap: async (swapId, isAccepted, peerTelegramId) => {
+      return handlePeerConfirmShiftSwap(swapId, isAccepted, peerTelegramId);
+    },
+    hrApproveShiftSwap: async (swapId, isApproved, hrSession) => {
+      return handleHrApproveShiftSwap(swapId, isApproved, hrSession);
     },
     checkOffWindow: () => checkOffWindowStatus(),
     getScheduleMatrix: async (weekStr, session) => getWeeklyScheduleMatrix(weekStr, session),
@@ -13744,8 +14308,14 @@ app.post('/api/telegram/setup-bots', authMiddleware, roleCheck(['Admin']), async
     try{
       const rolePath = role==='hr' ? '/tg-hr' : role==='employee' ? '/tg-employee' : '/tg-finance';
       const wh = await tg.setTelegramWebhook(cfg.botToken, base + '/api/telegram/webhook/' + role);
-      const menu = await tg.setTelegramMenuButton(cfg.botToken, base + rolePath);
-      results[role] = { ok: !!(wh.ok && menu.ok), webhook: wh, menu, webAppUrl: base + rolePath, botUsername: cfg.botUsername };
+      let menu;
+      if (role === 'employee') {
+        menu = await tg.setTelegramMenuButton(cfg.botToken, base + rolePath);
+      } else {
+        menu = await tg.removeTelegramMenuButton(cfg.botToken);
+      }
+      const cmds = await tg.setTelegramCommands(cfg.botToken, role);
+      results[role] = { ok: !!(wh.ok && menu.ok), webhook: wh, menu, commands: cmds, webAppUrl: role === 'employee' ? base + rolePath : null, botUsername: cfg.botUsername };
     }catch(e){ results[role] = { ok:false, error: e.message }; }
   }
   audit(req.user.username,'TELEGRAM_SETUP_BOTS','SETTINGS',null,results, req.ip);
@@ -13814,7 +14384,12 @@ async function autoSetupTelegramBots(){
       const rolePath = role==='hr' ? '/tg-hr' : role==='employee' ? '/tg-employee' : '/tg-finance';
       const whUrl = base + '/api/telegram/webhook/' + role;
       const wh = await tg.setTelegramWebhook(cfg.botToken, whUrl);
-      const menu = await tg.setTelegramMenuButton(cfg.botToken, base + rolePath);
+      let menu;
+      if (role === 'employee') {
+        menu = await tg.setTelegramMenuButton(cfg.botToken, base + rolePath);
+      } else {
+        menu = await tg.removeTelegramMenuButton(cfg.botToken);
+      }
       const cmds = await tg.setTelegramCommands(cfg.botToken, role);
       console.log(`[TELEGRAM] ✅ Bot ${role} (@${cfg.botUsername}): Webhook OK=${wh.ok}, Menu OK=${menu.ok}, Commands OK=${cmds.ok}`);
     }catch(e){

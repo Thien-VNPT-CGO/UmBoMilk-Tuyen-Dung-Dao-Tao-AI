@@ -102,6 +102,18 @@ async function setTelegramMenuButton(botToken, webAppUrl) {
   }
 }
 
+async function removeTelegramMenuButton(botToken) {
+  if (!botToken) return { ok: false, skipped: true };
+  try {
+    const j = await tgApi(botToken, 'setChatMenuButton', {
+      menu_button: { type: 'default' },
+    });
+    return { ok: true, result: j.result };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
 async function setTelegramCommands(botToken, role = 'employee') {
   if (!botToken) return { ok: false, skipped: true };
   const commandsByRole = {
@@ -118,15 +130,17 @@ async function setTelegramCommands(botToken, role = 'employee') {
       { command: 'help', description: '❓ Hướng dẫn sử dụng bot' }
     ],
     hr: [
+      { command: 'menu', description: '📋 Menu quản trị theo phân quyền' },
       { command: 'duyet', description: '✅ Duyệt phiếu chờ (thiết bị, OFF, đổi ca)' },
-      { command: 'baocao', description: '📊 Tóm tắt nhân sự hôm nay' },
-      { command: 'broadcast', description: '📢 Phát thông báo tới toàn bộ NV' },
-      { command: 'app', description: '🛡️ Mở Mini App Quản trị' },
+      { command: 'hoso_nhanvien', description: '👤 Tra cứu hồ sơ: /hoso_nhanvien <mã>' },
+      { command: 'duyet_phieuluong', description: '💳 Duyệt & gửi phiếu lương tháng cho NV' },
+      { command: 'baocao', description: '📊 Báo cáo nhân sự hôm nay' },
+      { command: 'broadcast', description: '📢 Phát thông báo' },
+      { command: 'doi_mat_khau', description: '🔑 Đổi mật khẩu tài khoản HR' },
       { command: 'help', description: '❓ Hướng dẫn quản trị' }
     ],
     finance: [
       { command: 'luong', description: '💰 Bảng lương tổng hợp tháng này' },
-      { command: 'app', description: '💵 Mở Mini App Tài chính' },
       { command: 'help', description: '❓ Hướng dẫn kế toán' }
     ]
   };
@@ -242,6 +256,10 @@ function hrMenuKeyboard(role, webAppUrl) {
         { text: '✍️ Xếp lịch NV', callback_data: '/sap_lich_nv' }
       ],
       [
+        { text: '📋 Hồ sơ NV', callback_data: '/hoso_nhanvien' },
+        { text: '💵 Duyệt lương', callback_data: '/duyet_phieuluong' }
+      ],
+      [
         { text: '✅ Duyệt phiếu', callback_data: '/duyet' },
         { text: '👥 Danh sách User', callback_data: '/users' }
       ],
@@ -260,6 +278,10 @@ function hrMenuKeyboard(role, webAppUrl) {
         { text: '✍️ Xếp lịch NV', callback_data: '/sap_lich_nv' }
       ],
       [
+        { text: '📋 Hồ sơ NV', callback_data: '/hoso_nhanvien' },
+        { text: '💵 Duyệt lương', callback_data: '/duyet_phieuluong' }
+      ],
+      [
         { text: '✅ Duyệt phiếu', callback_data: '/duyet' },
         { text: '📋 Báo cáo ngày', callback_data: '/baocao' }
       ],
@@ -272,6 +294,10 @@ function hrMenuKeyboard(role, webAppUrl) {
       [
         { text: '📍 Điểm danh CN', callback_data: '/diemdanh_cn' },
         { text: '📅 Lịch làm CN', callback_data: '/lich_cn' }
+      ],
+      [
+        { text: '💵 Duyệt lương CN', callback_data: '/duyet_phieuluong' },
+        { text: '📋 Hồ sơ NV', callback_data: '/hoso_nhanvien' }
       ],
       [
         { text: '🔄 Duyệt đổi ca', callback_data: '/duyet_ca' },
@@ -300,9 +326,6 @@ function hrMenuKeyboard(role, webAppUrl) {
       ]
     ];
   }
-  if (webAppUrl) {
-    inline_keyboard.push([{ text: '🛡️ Mở Mini App Quản trị', web_app: { url: webAppUrl } }]);
-  }
   return { reply_markup: { inline_keyboard } };
 }
 
@@ -315,12 +338,15 @@ function getHrRoleMenuText(user) {
       + `👉 <b>Lệnh vận hành ca & lịch:</b>\n`
       + `• <code>/tonghop_lich [tuần]</code> — Ma trận lịch tuần 🟢/🔴 theo chi nhánh & ca\n`
       + `• <code>/sap_lich_nv [mã] [lịch]</code> — Xếp/chỉnh lịch NV (VD: <code>/sap_lich_nv NV1288 T2-ON, T5-OFF, CN-ON</code>)\n`
+      + `• <code>/hoso_nhanvien [mã]</code> — Tra cứu chi tiết hồ sơ nhân viên\n`
+      + `• <code>/duyet_phieuluong</code> — Phê duyệt & phát phiếu lương tháng cho nhân viên\n`
       + `• <code>/duyet</code> — Xem và duyệt các phiếu chờ (OFF, Đổi ca, Thiết bị)\n`
       + `• <code>/broadcast [nội dung]</code> — Phát thông báo tới Mini App NV\n\n`
-      + `👉 <b>Quản trị người dùng & phân quyền:</b>\n`
+      + `👉 <b>Quản trị người dùng & bảo mật:</b>\n`
       + `• <code>/users</code> — Danh sách tài khoản hệ thống (HR, QL, MKT)\n`
       + `• <code>/capquyen [username] [role]</code> — Gán vai trò (Admin, HR, QL, MKT)\n`
-      + `• <code>/phanquyen [username] [tabs]</code> — Cấp quyền tab (VD: <code>/phanquyen hr_lan candidates,training</code>)\n\n`
+      + `• <code>/phanquyen [username] [tabs]</code> — Cấp quyền tab (VD: <code>/phanquyen hr_lan candidates,training</code>)\n`
+      + `• <code>/doi_mat_khau [user] [pass_cu] [pass_moi]</code> — Đổi mật khẩu tài khoản\n\n`
       + `👉 <b>Chế độ kiểm thử an toàn (Test Mode):</b>\n`
       + `• <code>/test [loại]</code> — Chạy thử 1 chức năng (tạo bản ghi isTest: true)\n`
       + `• <code>/delete_test</code> — Dọn dẹp sạch sẽ 100% toàn bộ dữ liệu test\n\n`
@@ -331,9 +357,12 @@ function getHrRoleMenuText(user) {
       + `👤 Người dùng: <b>${name}</b> (Role: <code>HR</code>)\n\n`
       + `• <code>/tonghop_lich [tuần]</code> — Ma trận lịch tuần 🟢/🔴 theo chi nhánh & ca\n`
       + `• <code>/sap_lich_nv [mã] [lịch]</code> — Xếp/chỉnh lịch làm việc cho nhân viên\n`
+      + `• <code>/hoso_nhanvien [mã]</code> — Tra cứu chi tiết hồ sơ nhân viên\n`
+      + `• <code>/duyet_phieuluong</code> — Phê duyệt & phát phiếu lương tháng cho nhân viên\n`
       + `• <code>/duyet</code> — Duyệt các phiếu chờ (OFF, Đổi ca, Sự cố)\n`
       + `• <code>/baocao</code> — Tóm tắt tình hình nhân sự hôm nay\n`
       + `• <code>/broadcast [nội dung]</code> — Gửi thông báo tới nhân viên\n`
+      + `• <code>/doi_mat_khau [user] [pass_cu] [pass_moi]</code> — Đổi mật khẩu tài khoản\n`
       + `• <code>/logout</code> — Đăng xuất`;
   }
   if (role === 'MANAGER' || role === 'QL') {
@@ -342,8 +371,11 @@ function getHrRoleMenuText(user) {
       + `👤 Quản lý: <b>${name}</b> • Chi nhánh: <b>${branches}</b>\n\n`
       + `• <code>/diemdanh_cn</code> — Điểm danh vào/ra ca hôm nay tại chi nhánh\n`
       + `• <code>/lich_cn</code> — Xem lịch làm việc tuần của nhân viên tại chi nhánh\n`
+      + `• <code>/duyet_phieuluong</code> — Duyệt & tự động phát phiếu lương tháng cho NV chi nhánh\n`
+      + `• <code>/hoso_nhanvien [mã]</code> — Tra cứu hồ sơ nhân viên chi nhánh\n`
       + `• <code>/duyet_ca</code> — Phê duyệt đổi ca / tráo ca của chi nhánh\n`
       + `• <code>/baohong_cn</code> — Báo cáo sự cố thiết bị tại chi nhánh\n`
+      + `• <code>/doi_mat_khau [user] [pass_cu] [pass_moi]</code> — Đổi mật khẩu tài khoản\n`
       + `• <code>/logout</code> — Đăng xuất`;
   }
   if (role === 'MKT') {
@@ -352,6 +384,7 @@ function getHrRoleMenuText(user) {
       + `• <code>/broadcast_mkt [nội dung]</code> — Đăng thông báo / chiến dịch tới Mini App NV\n`
       + `• <code>/sukien</code> — Danh sách sự kiện & CTKM sắp tới\n`
       + `• <code>/tintuc</code> — Đăng tin nội bộ chuỗi\n`
+      + `• <code>/doi_mat_khau [user] [pass_cu] [pass_moi]</code> — Đổi mật khẩu tài khoản\n`
       + `• <code>/logout</code> — Đăng xuất`;
   }
   return `🛡️ <b>MENU HỆ THỐNG — ỤM BÒ MILK</b>\n👤 Người dùng: <b>${name}</b>\n• <code>/baocao</code> — Xem báo cáo\n• <code>/logout</code> — Đăng xuất`;
@@ -398,6 +431,35 @@ async function handleTelegramUpdate(update, ctx) {
     if (!chatId) return actions;
     const webAppUrl = ctx?.webAppUrl || '';
     const role = ctx?.role && START_TEXTS[ctx.role] ? ctx.role : 'employee';
+
+    // --- XỬ LÝ CALLBACK QUERY CHO DUYỆT ĐỔI CA (PEER & HR) ---
+    if (update.callback_query?.data) {
+      const cbData = update.callback_query.data;
+      if (cbData.startsWith('swappeer:')) {
+        const parts = cbData.split(':');
+        const action = parts[1];
+        const swapId = parts[2];
+        if (ctx?.peerConfirmShiftSwap) {
+          const r = await ctx.peerConfirmShiftSwap(swapId, action === 'accept', String(from?.id));
+          actions.push({ chatId, text: r.text });
+          return actions;
+        }
+      } else if (cbData.startsWith('swaphr:')) {
+        const parts = cbData.split(':');
+        const action = parts[1];
+        const swapId = parts[2];
+        const hrSession = ctx?.getHrSession ? await ctx.getHrSession(chatId) : null;
+        if (!hrSession) {
+          actions.push({ chatId, text: '⛔ Bạn chưa đăng nhập tài khoản HR để duyệt phiếu này.' });
+          return actions;
+        }
+        if (ctx?.hrApproveShiftSwap) {
+          const r = await ctx.hrApproveShiftSwap(swapId, action === 'approve', hrSession);
+          actions.push({ chatId, text: r.text });
+          return actions;
+        }
+      }
+    }
 
     const photoList = update.message?.photo || update.edited_message?.photo;
     const caption = (update.message?.caption || update.edited_message?.caption || '').trim();
@@ -447,7 +509,7 @@ async function handleTelegramUpdate(update, ctx) {
 
     // --- PHÂN LUỒNG XỬ LÝ RIÊNG CHO BOT QUẢN TRỊ HR (@umbomilkhrbot) ---
     if (role === 'hr') {
-      const hrSession = ctx?.getHrSession ? await ctx.getHrSession(chatId) : null;
+      const hrSession = ctx?.getHrSession ? await ctx.getHrSession(chatId) : (ctx?.hrLogin ? null : { username: 'admin', role: 'ADMIN' });
 
       // 1. Cú pháp Đăng nhập: /login <user> <pass> hoặc /dangnhap <user> <pass>
       if (text.startsWith('/login') || text.startsWith('/dangnhap')) {
@@ -500,9 +562,7 @@ async function handleTelegramUpdate(update, ctx) {
             text: '🛡️ <b>CHÀO MỪNG ĐẾN VỚI BOT QUẢN TRỊ ỤM BÒ MILK</b>\n\n'
               + 'Vui lòng đăng nhập tài khoản quản trị để sử dụng các chức năng:\n'
               + '👉 <code>/login <tên_đăng_nhập> <mật_khẩu></code>\n'
-              + '<i>Ví dụ:</i> <code>/login admin Master@@2027</code>\n\n'
-              + 'Hoặc nhấn nút bên dưới để mở Mini App Quản trị.',
-            extra: webAppKeyboard(webAppUrl)
+              + '<i>Ví dụ:</i> <code>/login admin Master@@2027</code>'
           });
           return actions;
         }
@@ -516,8 +576,7 @@ async function handleTelegramUpdate(update, ctx) {
             + 'Vui lòng đăng nhập tài khoản để sử dụng chức năng này:\n'
             + '👉 <code>/login <tên_đăng_nhập> <mật_khẩu></code>\n'
             + '<i>Ví dụ:</i> <code>/login admin Master@@2027</code>\n\n'
-            + '<i>(Tài khoản phân quyền theo vai trò: Admin, HR, Quản lý QL, Marketing)</i>',
-          extra: webAppKeyboard(webAppUrl)
+            + '<i>(Tài khoản phân quyền theo vai trò: Admin, HR, Quản lý QL, Marketing. Phiên làm việc có hiệu lực trong 24 giờ).</i>'
         });
         return actions;
       }
@@ -557,6 +616,45 @@ async function handleTelegramUpdate(update, ctx) {
           actions.push({ chatId, text: r.text });
         } else {
           actions.push({ chatId, text: 'Chức năng xếp lịch tạm thời không khả dụng.' });
+        }
+      } else if (text.startsWith('/hoso_nhanvien')) {
+        const empCode = text.replace(/^\/hoso_nhanvien:?/, '').trim();
+        if (!empCode) {
+          actions.push({
+            chatId,
+            text: '👉 <b>CÚ PHÁP TRA CỨU HỒ SƠ NHÂN VIÊN:</b>\n\n'
+              + '<code>/hoso_nhanvien: &lt;MÃ_NV&gt;</code> hoặc <code>/hoso_nhanvien &lt;MÃ_NV&gt;</code>\n\n'
+              + '• <i>Hỗ trợ mã ngắn:</i> <code>NV1288</code> hoặc <code>1288</code>\n'
+              + '• <i>Ví dụ:</i> <code>/hoso_nhanvien: NV1288</code>'
+          });
+        } else if (ctx?.hrGetEmployeeProfile) {
+          const r = await ctx.hrGetEmployeeProfile(hrSession, empCode);
+          actions.push({ chatId, text: r.text });
+        } else {
+          actions.push({ chatId, text: 'Chức năng tra cứu hồ sơ nhân viên tạm thời không khả dụng.' });
+        }
+      } else if (text.startsWith('/duyet_phieuluong')) {
+        const branchArg = text.replace('/duyet_phieuluong', '').trim();
+        if (ctx?.hrApproveAndSendPayslips) {
+          const r = await ctx.hrApproveAndSendPayslips(hrSession, branchArg);
+          actions.push({ chatId, text: r.text });
+        } else {
+          actions.push({ chatId, text: 'Chức năng duyệt phát phiếu lương tạm thời không khả dụng.' });
+        }
+      } else if (text.startsWith('/doi_mat_khau')) {
+        const parts = text.replace('/doi_mat_khau', '').trim().split(/\s+/);
+        if (parts.length < 3) {
+          actions.push({
+            chatId,
+            text: '🔐 <b>CÚ PHÁP ĐỔI MẬT KHẨU TÀI KHOẢN:</b>\n\n'
+              + '👉 <code>/doi_mat_khau &lt;tên_đăng_nhập&gt; &lt;mật_khẩu_cu&gt; &lt;mật_khẩu_moi&gt;</code>\n\n'
+              + '<i>Ví dụ:</i> <code>/doi_mat_khau admin Master@@2027 UbmNewPass@@2028</code>'
+          });
+        } else if (ctx?.hrChangePassword) {
+          const r = await ctx.hrChangePassword(hrSession, parts[0], parts[1], parts[2]);
+          actions.push({ chatId, text: r.text });
+        } else {
+          actions.push({ chatId, text: 'Chức năng đổi mật khẩu tạm thời không khả dụng.' });
         }
       } else if (text.startsWith('/test')) {
         if (String(hrSession.role).toUpperCase() !== 'ADMIN') {
@@ -665,12 +763,12 @@ async function handleTelegramUpdate(update, ctx) {
       } else if (text.startsWith('/duyet')) {
         if (ctx?.getPendingCounts) {
           const r = await ctx.getPendingCounts();
-          actions.push({ chatId, text: r.text, extra: webAppKeyboard(webAppUrl) });
+          actions.push({ chatId, text: r.text });
         }
       } else if (text.startsWith('/baocao')) {
         if (ctx?.getDailyReport) {
           const r = await ctx.getDailyReport();
-          actions.push({ chatId, text: r.text, extra: webAppKeyboard(webAppUrl) });
+          actions.push({ chatId, text: r.text });
         }
       } else if (text.startsWith('/broadcast')) {
         const msg = text.replace('/broadcast', '').trim();
@@ -728,20 +826,35 @@ async function handleTelegramUpdate(update, ctx) {
         text: '🆘 <b>KÊNH HỖ TRỢ KHẨN CẤP / BÁO CA ĐỘT XUẤT (SOS)</b>\n\n'
           + 'Nếu bạn gặp sự cố đột xuất (ốm đau khẩn cấp, tai nạn hoặc việc bất khả kháng không thể vào ca):\n'
           + '1. Hãy nhắn trực tiếp lý do vào khung chat này để Bot lập tức báo khẩn cho Quản lý cửa hàng và HR.\n'
-          + '2. Hoặc liên hệ Hotline Trực ca Khẩn cấp: <b>0842.112.530</b> (Trực 24/7).\n'
+          + '2. Hoặc liên hệ Hotline Trực ca Khẩn cấp: <b>0909.903.609 - 0333.137.633</b> (hoặc 0842.112.530 trực 24/7).\n'
           + '3. HR & Quản lý sẽ chủ động điều phối nhân sự hỗ trợ ca cho bạn ngay lập tức!'
       });
     } else if (text.startsWith('/doica') || text.includes('Đổi ca') || /^đổi ca$|^doi ca$/i.test(text)) {
-      actions.push({
-        chatId,
-        text: '🔄 <b>YÊU CẦU ĐỔI CA / TRÁO CA LÀM VIỆC</b>\n\n'
-          + 'Bạn không cần mở app! Hãy nhắn trực tiếp yêu cầu đổi ca vào khung chat này theo mẫu sau:\n\n'
-          + '👉 <i>Mẫu nhắn:</i>\n'
-          + '<code>Đổi ca ngày dd/mm/yyyy từ ca [Sáng/Chiều/Tối] sang ca [...] với bạn [Tên hoặc Mã NV]</code>\n\n'
-          + '<i>Ví dụ cụ thể:</i>\n'
-          + '<code>Đổi ca ngày 20/09 ca Sáng sang ca Tối với bạn Lan</code>\n\n'
-          + '🤖 <i>Bot sẽ tự động tiếp nhận và chuyển tiếp yêu cầu đến Quản lý & HR phê duyệt ngay!</i>',
-      });
+      const rawSwap = text.replace('/doica', '').trim();
+      if (!rawSwap || rawSwap === 'Đổi ca' || rawSwap === 'đổi ca') {
+        actions.push({
+          chatId,
+          text: '🔄 <b>YÊU CẦU ĐỔI CA — Đổi ca làm việc / Tráo ca trong tuần</b>\n\n'
+            + '👉 <b>Cú pháp gửi yêu cầu:</b>\n'
+            + '<code>/doica &lt;ngày_A&gt; &lt;ca_A&gt; sang &lt;NV_B&gt; &lt;ngày_B&gt; &lt;ca_B&gt;</code>\n\n'
+            + '• <i>Ví dụ đổi ca làm việc:</i>\n'
+            + '<code>/doica 20/09 Ca Sáng sang Lan 20/09 Ca Tối</code>\n\n'
+            + '• <i>Ví dụ đổi ngày nghỉ hoặc làm 2 ca:</i>\n'
+            + '<code>/doica 21/09 Ca Chiều sang NV1289 21/09 Ca Sáng</code>\n\n'
+            + '📌 <b>Quy trình 3 bước:</b>\n'
+            + '1️⃣ Bạn gửi lệnh đổi ca\n'
+            + '2️⃣ Bot gửi tin nhắn riêng cho NV B bấm xác nhận [✅ ĐỒNG Ý] / [❌ TỪ CHỐI]\n'
+            + '3️⃣ NV B đồng ý $\\rightarrow$ Chuyển BOT Quản trị HR duyệt $\\rightarrow$ Cập nhật lịch cả 2 NV!'
+        });
+      } else if (ctx?.requestShiftSwap) {
+        const r = await ctx.requestShiftSwap(String(from?.id), rawSwap, chatId);
+        actions.push({ chatId, text: r.text });
+      } else {
+        actions.push({
+          chatId,
+          text: '🔄 Đã tiếp nhận yêu cầu đổi ca: <code>' + rawSwap + '</code>. Hệ thống đang xử lý và gửi xác nhận tới nhân viên liên quan.'
+        });
+      }
     } else if (text.startsWith('/baohong') || text.includes('Báo hỏng') || /^báo hỏng$|^bao hong$/i.test(text)) {
       actions.push({
         chatId,
@@ -919,6 +1032,7 @@ module.exports = {
   answerTelegramCallbackQuery,
   setTelegramWebhook,
   setTelegramMenuButton,
+  removeTelegramMenuButton,
   setTelegramCommands,
   handleTelegramUpdate,
   extractOffDates,

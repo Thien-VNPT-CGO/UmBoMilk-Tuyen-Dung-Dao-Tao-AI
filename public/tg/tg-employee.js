@@ -84,18 +84,54 @@
     const rec = arr[0] || {};
     const hasIn = !!(rec.checkIn || rec.checkInAt || rec.checkin);
     const hasOut = !!(rec.checkOut || rec.checkOutAt || rec.checkout);
+
+    const shiftCodes = {
+      CA_SANG: { name: 'Ca Sáng (07:00 - 12:00)', end: '12:00', endMinutes: 12 * 60 },
+      CA_CHIEU: { name: 'Ca Chiều (12:00 - 18:00)', end: '18:00', endMinutes: 18 * 60 },
+      CA_TRUA: { name: 'Ca Chiều (12:00 - 18:00)', end: '18:00', endMinutes: 18 * 60 },
+      CA_TOI: { name: 'Ca Tối (18:00 - 23:00)', end: '23:00', endMinutes: 23 * 60 }
+    };
+    const sInfo = shiftCodes[e.shift] || shiftCodes.CA_SANG;
+    let isEarlyCheckout = false;
+    let curTimeStr = '';
+    try {
+      const now = new Date();
+      curTimeStr = now.toLocaleTimeString('en-US', { timeZone: 'Asia/Ho_Chi_Minh', hour12: false });
+      const [curH, curM] = curTimeStr.split(':').map(Number);
+      const curMinutes = (curH || 0) * 60 + (curM || 0);
+      isEarlyCheckout = curMinutes < sInfo.endMinutes;
+    } catch (err) { isEarlyCheckout = false; }
+
+    const earlyAlertHtml = (hasIn && !hasOut && isEarlyCheckout)
+      ? '<div style="background:#fef2f2;border:1px solid #ef4444;color:#991b1b;padding:12px;border-radius:12px;margin:10px 0;font-size:13px;line-height:1.4">'
+        + '⛔ <b>CẢNH BÁO CHƯA ĐẾN GIỜ CHECK-OUT!</b><br>'
+        + 'Ca làm việc của bạn: <b>' + sInfo.name + '</b> (kết thúc lúc <b>' + sInfo.end + '</b>).<br>'
+        + 'Hiện tại: <b>' + curTimeStr.slice(0, 5) + '</b>. Vui lòng hoàn thành đủ giờ ca trước khi bấm Ra ca.'
+        + '</div>'
+      : '';
+
+    const canOut = hasIn && !hasOut && !isEarlyCheckout;
+
     let hist = [];
     try { hist = await T.empApi('/api/attendances?employeeId=' + encodeURIComponent(e.employeeId)); } catch (ex) {}
     const harr = (Array.isArray(hist) ? hist : (hist.attendances || hist.data || [])).slice(0, 10);
     return ''
-      + '<div class="tg-card"><h3>📍 Điểm danh ' + T.fmtDMY(today) + ' — ' + T.shiftVi(e.shift) + '</h3>'
+      + '<div class="tg-card"><h3>📍 Điểm danh GPS & Camera trực diện</h3>'
+      + '<div style="font-size:13px;color:var(--tg-hint);margin-bottom:8px">' + T.fmtDMY(today) + ' — <b>' + T.shiftVi(e.shift) + '</b></div>'
       + '<div class="tg-flex"><div>' + T.badge(hasIn ? 'Đã Check-in' : 'Chưa Check-in', hasIn ? 'b-ok' : 'b-warn') + '</div><div>' + T.badge(hasOut ? 'Đã Check-out' : 'Chưa Check-out', hasOut ? 'b-ok' : 'b-warn') + '</div></div>'
-      + '<video id="tgCam" class="tg-cam" style="margin-top:10px" playsinline muted></video>'
+      + earlyAlertHtml
+      + '<div style="background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;padding:10px 14px;border-radius:12px;margin:10px 0;font-size:12px;line-height:1.4">'
+      + '📸 <b>Yêu cầu chụp ảnh 3 yếu tố trực diện:</b><br>'
+      + '1️⃣ Khuôn mặt chính diện rõ nét.<br>'
+      + '2️⃣ Áo đồng phục Ụm Bò Milk.<br>'
+      + '3️⃣ Thẻ nhân viên đeo ngay ngắn trước ngực.'
+      + '</div>'
+      + '<video id="tgCam" class="tg-cam" style="margin-top:6px" playsinline muted></video>'
       + '<div class="tg-flex" style="margin-top:8px"><button class="tg-btn ghost" id="btnCam">📷 Mở camera</button><button class="tg-btn ghost" id="btnSnap">📸 Chụp</button></div>'
-      + '<div id="capPrev" class="sm" style="font-size:12px;color:var(--tg-hint);margin-top:6px">Chưa có ảnh. Ảnh chụp trực tiếp, kèm GPS.</div>'
+      + '<div id="capPrev" class="sm" style="font-size:12px;color:var(--tg-hint);margin-top:6px">Chưa có ảnh. Ảnh chụp trực tiếp kèm toạ độ GPS.</div>'
       + '<div class="tg-flex" style="margin-top:8px"><button class="tg-btn ok" id="btnIn" ' + (hasIn ? 'disabled style="opacity:.5"' : '') + '>Vào ca</button>'
-      + '<button class="tg-btn" id="btnOut" ' + (!hasIn || hasOut ? 'disabled style="opacity:.5"' : '') + '>Ra ca</button></div></div>'
-      + '<div class="tg-sec">Lịch sử gần đây</div><div class="tg-card">'
+      + '<button class="tg-btn" id="btnOut" ' + (!canOut ? 'disabled style="opacity:.5;cursor:not-allowed"' : '') + '>Ra ca</button></div></div>'
+      + '<div class="tg-sec">Lịch sử chấm công gần đây</div><div class="tg-card">'
       + (harr.map((a) => {
         const d = a.date || a.workDate || '';
         const ci = a.checkIn || a.checkInAt || a.checkin || ''; const co = a.checkOut || a.checkOutAt || a.checkout || '';
@@ -110,14 +146,23 @@
     if (T.$('btnCam')) T.$('btnCam').onclick = () => startCam();
     if (T.$('btnSnap')) T.$('btnSnap').onclick = () => { img = snap(); if (img) { T.notifyOk(); prev(); } };
     async function submit(kind) {
-      if (!img) { T.toast('Chụp ảnh trước đã'); return; }
-      T.toast('Đang lấy GPS...');
+      if (!img) { T.toast('Vui lòng chụp ảnh khuôn mặt + áo + thẻ'); return; }
+      T.toast('Đang xác thực toạ độ GPS...');
       const g = await T.getGPS();
       const body = { employeeId: e.employeeId, gps: g.lat != null ? (g.lat + ',' + g.lng) : '', address: '', image: img, shift: e.shift, isCameraCapture: true };
       try {
         await T.empApi(kind === 'in' ? '/api/attendance/checkin' : '/api/attendance/checkout', { method: 'POST', body });
-        T.notifyOk(); T.toast(kind === 'in' ? 'Check-in thành công ✅' : 'Check-out thành công ✅');
-        stopCam(); T.refresh();
+        T.notifyOk();
+        T.toast(kind === 'in' ? 'Check-in thành công ✅ Đang đóng app...' : 'Check-out thành công ✅ Đang đóng app...');
+        stopCam();
+        T.refresh();
+        setTimeout(() => {
+          try {
+            if (window.Telegram && window.Telegram.WebApp && typeof window.Telegram.WebApp.close === 'function') {
+              window.Telegram.WebApp.close();
+            }
+          } catch(e) {}
+        }, 1200);
       } catch (err) { T.notifyErr(); T.toast(err.message || 'Gửi thất bại'); }
     }
     if (T.$('btnIn')) T.$('btnIn').onclick = () => submit('in');

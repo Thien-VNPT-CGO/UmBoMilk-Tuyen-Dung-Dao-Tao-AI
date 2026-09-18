@@ -1,63 +1,81 @@
-# 📋 KẾ HOẠCH TRIỂN KHAI & ĐẶC TẢ TÍNH NĂNG HỆ THỐNG TELEGRAM BOT ỤM BÒ MILK
+# 📋 KẾ HOẠCH TRIỂN KHAI & ĐẶC TẢ TÍNH NĂNG HỆ THỐNG TELEGRAM BOT ỤM BÒ MILK (V4.3)
 
-> **Phiên bản:** 2.0 (Cập nhật ngày 18/09/2026)  
-> **Đơn vị áp dụng:** Toàn bộ hệ thống cửa hàng & khối văn phòng Ụm Bò Milk  
-> **Mô hình kiến trúc:** Tam giác 3 Bot Telegram chuyên biệt + Telegram Mini App + Realtime Web App Dashboard & Google Sheet 17iXM (Đồng bộ ngầm 100%)
+> **Phiên bản:** 4.3 (Cập nhật toàn diện ngày 18/09/2026)  
+> **Đơn vị áp dụng:** Toàn bộ hệ thống chuỗi cửa hàng & khối văn phòng Ụm Bò Milk  
+> **Mô hình kiến trúc:** Tam giác 3 Bot Telegram chuyên biệt + Telegram Mini App tối giản + Realtime Web App Dashboard & Google Sheet 17iXM + Google Sheet Phiếu Lương (Đồng bộ ngầm 100%)
 
 ---
 
 ## MỤC LỤC
-1. [TỔNG QUAN KIẾN TRÚC HỆ THỐNG 3 BOT](#1-tổng-quan-kiến-trúc-hệ-thống-3-bot)
-2. [CẤU HÌNH CA LÀM VIỆC & CHI NHÁNH](#2-cấu-hình-ca-làm-việc--chi-nhánh)
-3. [BOT NHÂN VIÊN (@umbomilknvbot)](#3-bot-nhân-viên-umbomilknvbot)
-   - [3.1. Liên kết tài khoản](#31-liên-kết-tài-khoản)
-   - [3.2. Đăng ký lịch OFF 2 ngày/tuần](#32-đăng-ký-lịch-off-2-ngàytuần)
-   - [3.3. Quy trình Điểm danh tự động 2 bước (GPS + Ảnh 3 yếu tố)](#33-quy-trình-điểm-danh-tự-động-2-bước-gps--ảnh-3-yếu-tố)
-   - [3.4. Chế tài phạt đi trễ & Khóa Check-out sớm](#34-chế-tài-phạt-đi-trễ--khóa-check-out-sớm)
-   - [3.5. Nhắc nhở ca tự động (Background Job)](#35-nhắc-nhở-ca-tự-động-background-job)
-   - [3.6. Tiện ích nhanh, Lễ tân AI & Kênh SOS 24/7](#36-tiện-ích-nhanh-lễ-tân-ai--kênh-sos-247)
-4. [BOT QUẢN TRỊ HR (@umbomilkhrbot)](#4-bot-quản-trị-hr-umbomilkhrbot)
-   - [4.1. Đăng nhập bảo mật & Phân quyền 4 vai trò](#41-đăng-nhập-bảo-mật--phân-quyền-4-vai-trò)
-   - [4.2. Ma trận Lịch tuần 🟢/🔴 & Kiểm tra luật AI](#42-ma-trận-lịch-tuần--kiểm-tra-luật-ai)
-   - [4.3. Điều chỉnh lịch nhân viên trực tiếp (/sap_lich_nv)](#43-điều-chỉnh-lịch-nhân-viên-trực-tiếp-sap_lich_nv)
-   - [4.4. Trung tâm thu nhận cảnh báo thời gian thực](#44-trung-tâm-thu-nhận-cảnh-báo-thời-gian-thực)
-   - [4.5. Chế độ kiểm thử an toàn cho Admin (/test & /delete_test)](#45-chế-độ-kiểm-thử-an-toàn-cho-admin-test--delete_test)
-5. [BOT KẾ TOÁN TÀI CHÍNH (@umbomilkketoanbot)](#5-bot-kế-toán-tài-chính-umbomilkketoanbot)
-6. [BẢO MẬT & BẢO VỆ DỮ LIỆU SẢN XUẤT](#6-bảo-mật--bảo-vệ-dữ-liệu-sản-xuất)
-7. [DANH MỤC THAM SỐ CÓ THỂ ĐIỀU CHỈNH](#7-danh-mục-tham-số-có-thể-điều-chỉnh)
+1. [TỔNG QUAN KIẾN TRÚC HỆ THỐNG](#1-tổng-quan-kiến-trúc-hệ-thống)
+2. [CẤU HÌNH CA LÀM VIỆC & HOTLINE TRỰC 24/7](#2-cấu-hình-ca-làm-việc--hotline-trực-247)
+3. [BOT NHÂN VIÊN (@umbomilknvbot) & MINI APP TỐI GIẢN](#3-bot-nhân-viên-umbomilknvbot--mini-app-tối-giản)
+   - [3.1. Cấu trúc Mini App tối giản: Điểm danh & Khóa học](#31-cấu-trúc-mini-app-tối-giản-điểm-danh--khóa-học)
+   - [3.2. Điểm danh 2 bước (GPS $\le$ 300m + Ảnh 3 yếu tố) & Tự động đóng app](#32-điểm-danh-2-bước-gps--300m--ảnh-3-yếu-tố--tự-động-đóng-app)
+   - [3.3. Chế tài phạt đi trễ & Khóa nghiêm ngặt Check-out sớm](#33-chế-tài-phạt-đi-trễ--khóa-nghiêm-ngặt-check-out-sớm)
+   - [3.4. Đăng ký lịch OFF 2 ngày/tuần](#34-đăng-ký-lịch-off-2-ngàytuần)
+   - [3.5. Chức năng Khóa học / Bài thi trắc nghiệm (25 câu - 8 phút - 3 mức đánh giá)](#35-chức-năng-khóa-học--bài-thi-trắc-nghiệm-25-câu---8-phút---3-mức-đánh-giá)
+4. [QUY TRÌNH ĐỔI CA LÀM VIỆC TRONG TUẦN (SHIFT SWAP)](#4-quy-trình-đổi-ca-làm-việc-trong-tuần-shift-swap)
+   - [4.1. Điều kiện áp dụng trong tuần](#41-điều-kiện-áp-dụng-trong-tuần)
+   - [4.2. Năm trường hợp đổi ca được hỗ trợ](#42-năm-trường-hợp-đổi-ca-được-hỗ-trợ)
+   - [4.3. Quy trình 3 bước phê duyệt: NV A $\rightarrow$ NV B $\rightarrow$ Bot Quản trị HR](#43-quy-trình-3-bước-phê-duyệt-nv-a-rightarrow-nv-b-rightarrow-bot-quản-trị-hr)
+5. [BOT QUẢN TRỊ HR (@umbomilkhrbot)](#5-bot-quản-trị-hr-umbomilkhrbot)
+   - [5.1. Bắt buộc đăng nhập & Thời hạn phiên 24 tiếng](#51-bắt-buộc-đăng-nhập--thời-hạn-phiên-24-tiếng)
+   - [5.2. Lệnh đổi mật khẩu (/doi_mat_khau)](#52-lệnh-đổi-mật-khẩu-doi_mat_khau)
+   - [5.3. Bảng phân quyền 4 vai trò (Admin, HR, QL, MKT)](#53-bảng-phân-quyền-4-vai-trò-admin-hr-ql-mkt)
+   - [5.4. Tra cứu Hồ sơ nhân viên (/hoso_nhanvien)](#54-tra-cứu-hồ-sơ-nhân-viên-hoso_nhanvien)
+   - [5.5. Quy trình Quản lý duyệt và phát 2 dạng Phiếu lương (/duyet_phieuluong)](#55-quy-trình-quản-lý-duyệt-và-phát-2-dạng-phiếu-lương-duyet_phieuluong)
+6. [BOT KẾ TOÁN TÀI CHÍNH (@umbomilkketoanbot)](#6-bot-kế-toán-tài-chính-umbomilkketoanbot)
+7. [KỊCH BẢN DEMO TRỰC QUAN TOÀN DIỆN](#7-kịch-bản-demo-trực-quan-toàn-diện)
+   - [🎬 DEMO 1: Mini App Tối Giản & Điểm Danh Tự Đóng](#-demo-1-mini-app-tối-giản--điểm-danh-tự-đóng)
+   - [🎬 DEMO 2: Khóa Học & Bài Thi Trắc Nghiệm 25 Câu](#-demo-2-khóa-học--bài-thi-trắc-nghiệm-25-câu)
+   - [🎬 DEMO 3: Quy Trình Đổi Ca Làm Việc 3 Bước](#-demo-3-quy-trình-đổi-ca-làm-việc-3-bước)
+   - [🎬 DEMO 4: Phiên 24h & Đổi Mật Khẩu Bot HR](#-demo-4-phiên-24h--đổi-mật-khẩu-bot-hr)
+   - [🎬 DEMO 5: Tra Cứu Hồ Sơ Nhân Viên (/hoso_nhanvien)](#-demo-5-tra-cứu-hồ-sơ-nhân-viên-hoso_nhanvien)
+   - [🎬 DEMO 6A: Phiếu Lương Nhân Viên Cửa Hàng (Theo Ca)](#-demo-6a-phiếu-lương-nhân-viên-cửa-hàng-theo-ca)
+   - [🎬 DEMO 6B: Phiếu Lương Nhân Viên Văn Phòng (Lương Cơ Bản)](#-demo-6b-phiếu-lương-nhân-viên-văn-phòng-lương-cơ-bản)
 
 ---
 
-## 1. TỔNG QUAN KIẾN TRÚC HỆ THỐNG 3 BOT
+## 1. TỔNG QUAN KIẾN TRÚC HỆ THỐNG
 
 ```mermaid
 graph TD
-    A[Nhân viên cửa hàng] -->|Thao tác hàng ngày: OFF, Điểm danh, Đổi ca, Lương| NVBot["Bot Nhân Viên (@umbomilknvbot)"]
-    NVBot -->|Bắn cảnh báo: Đăng ký OFF, Vào ca, Trễ, Check-out sớm| HRBot["Bot Quản Trị (@umbomilkhrbot)"]
-    HRBot -->|Admin, HR, Quản lý chi nhánh, Marketing| B[Ban Quản trị & Điều hành]
+    NV[Nhân viên cửa hàng & Văn phòng] -->|Điểm danh, Đổi ca, Thi trắc nghiệm, Nhận phiếu lương| NVBot["Bot Nhân Viên (@umbomilknvbot)"]
+    NVBot -->|Mở Mini App tối giản| MiniApp["Telegram Mini App (2 Khối: Điểm danh + Thi trắc nghiệm)"]
+    NVBot -->|Bắn yêu cầu đổi ca| NV_B[Nhân viên B nhận xác nhận]
+    NV_B -->|Bấm Đồng ý| HRBot["Bot Quản Trị (@umbomilkhrbot)"]
+    NVBot -->|Báo cáo kết quả thi, Trễ, Check-out sớm| HRBot
+    HRBot -->|Admin, HR, Quản lý cửa hàng (QL), Marketing| B[Ban Quản trị & Điều hành]
+    HRBot -->|Nhắc hẹn phát lương ngày 1-7 -> QL gõ /duyet_phieuluong| PayrollEngine[Bộ máy xử lý Phiếu Lương Phân Loại 2 Dạng]
+    PayrollEngine -->|Đọc bảng lương| SheetPayroll[(Google Sheet Phiếu Lương 1YynMAx...)]
+    PayrollEngine -->|Tự động gửi phiếu lương theo dạng NV Cửa hàng hoặc Văn phòng| NVBot
     NVBot -->|Chấm công, Số giờ, Tiền phạt| FinBot["Bot Tài Chính (@umbomilkketoanbot)"]
     FinBot -->|Đối soát công, Lương, Phạt, Hoàn cọc| C[Kế toán / Tài chính]
     NVBot -.->|Đồng bộ ngầm 100%| DB[(Database & Google Sheet 17iXM)]
     HRBot -.->|Đồng bộ ngầm 100%| DB
 ```
 
-* **Bot Nhân viên (`@umbomilknvbot`)**: Kênh tương tác chính của toàn bộ nhân viên. Đăng ký OFF, điểm danh 2 bước GPS + Camera, xem lịch, tra cứu lương, đổi ca, báo hỏng thiết bị, kênh khẩn cấp SOS.
-* **Bot Quản trị HR (`@umbomilkhrbot`)**: Kênh điều hành của Admin, HR, Quản lý cửa hàng (QL), Marketing (MKT). Có phân quyền nghiêm ngặt, hiển thị ma trận lịch tuần 🟢/🔴, điều chỉnh lịch, nhận cảnh báo vi phạm đi trễ / check-out sớm.
-* **Bot Tài chính (`@umbomilkketoanbot`)**: Kênh đối soát lương, khấu trừ tiền phạt, tính công, hoàn cọc đồng phục và tiền khám sức khỏe.
-* **Telegram Mini App**: Ứng dụng giao diện web mở trực tiếp trong khung chat Telegram không cần cài đặt thêm.
+* **Bot Nhân viên (`@umbomilknvbot`) + Mini App tối giản**: Điểm danh 2 bước (GPS + Ảnh camera 3 yếu tố), tự động đóng app khi xong, khóa check-out sớm, đăng ký OFF, đổi ca làm việc trong tuần, thi trắc nghiệm E-learning 25 câu, **nhận phiếu lương bảo mật định kỳ ngày 1–7 (tự động phân loại NV Cửa hàng hoặc NV Văn phòng)**.
+* **Bot Quản trị HR (`@umbomilkhrbot`)**: Tương tác 100% qua chat Telegram (đã bỏ Mini App), bắt buộc đăng nhập, phiên 24h tự động đăng xuất, hỗ trợ đổi mật khẩu, duyệt phiếu đổi ca 3 bước, nhận báo cáo kết quả thi trắc nghiệm theo 3 thang điểm, **tra cứu hồ sơ nhân viên (`/hoso_nhanvien`)**, **nhắc hẹn Quản lý (QL) duyệt phát phiếu lương từ ngày 1–7 hàng tháng (`/duyet_phieuluong`)**.
+* **Bot Kế toán (`@umbomilkketoanbot`)**: Tương tác 100% qua chat Telegram (đã bỏ Mini App), tra cứu lương, đối soát chấm công, phạt đi trễ, hoàn tiền cọc.
 
 ---
 
-## 2. CẤU HÌNH CA LÀM VIỆC & CHI NHÁNH
+## 2. CẤU HÌNH CA LÀM VIỆC & HOTLINE TRỰC 24/7
 
 ### 2.1. Ba ca làm việc cố định (Chuẩn giờ Việt Nam UTC+7)
-| Tên ca | Khung giờ | Thời lượng | Đơn giá Thử việc | Đơn giá Chính thức | Tổng lương ca (Chính thức) |
+| Ca làm việc | Khung giờ | Thời lượng | Đơn giá Thử việc | Đơn giá Chính thức | Lương chuẩn / ca (Chính thức) |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| **Ca Sáng** | `07:00 – 12:00` | 5 giờ | 21.000đ / h | 25.500đ / h | 127.500đ |
-| **Ca Chiều** | `12:00 – 18:00` | 6 giờ | 21.000đ / h | 25.500đ / h | 153.000đ |
-| **Ca Tối** | `18:00 – 23:00` | 5 giờ | 21.000đ / h | 25.500đ / h | 127.500đ |
+| **Ca Sáng** | `07:00 – 12:00` | 5 giờ | 21.000đ / h | 25.500đ / h | **127.500đ** |
+| **Ca Chiều** | `12:00 – 18:00` | 6 giờ | 21.000đ / h | 25.500đ / h | **153.000đ** |
+| **Ca Tối** | `18:00 – 23:00` | 5 giờ | 21.000đ / h | 25.500đ / h | **127.500đ** |
 
-### 2.2. Tọa độ GPS 4 Chi nhánh (Bán kính hợp lệ $\le$ 300m)
+### 2.2. Kênh khẩn cấp & Hotline hỗ trợ trực ca 24/7
+* 📞 **Hotline trực ca khẩn cấp 24/7**: **0909.903.609** — **0333.137.633**
+* 🆘 Cú pháp bot: `/sos` hiển thị số điện thoại hotline và quy trình báo sự cố đột xuất.
+
+### 2.3. Tọa độ GPS 4 Chi nhánh (Bán kính hợp lệ $\le$ 300m)
 * **CN1** (130 Vạn Kiếp, P.3, Q. Bình Thạnh): `10.79815, 106.69145`
 * **CN2** (261 Tô Hiến Thành, P.12, Q.10): `10.77885, 106.66425`
 * **CN3** (120 Hoàng Diệu 2, P. Linh Trung, TP. Thủ Đức): `10.85240, 106.77120`
@@ -65,185 +83,353 @@ graph TD
 
 ---
 
-## 3. BOT NHÂN VIÊN (@umbomilknvbot)
+## 3. BOT NHÂN VIÊN (@umbomilknvbot) & MINI APP TỐI GIẢN
 
-### 3.1. Liên kết tài khoản
-* **Phương thức**:
-  1. Nhắn SĐT đã đăng ký hồ sơ (VD: `0842112530` hoặc `/link 0842112530`).
-  2. Dùng Mã NV và Key (`/link CN130_UBM... KEY-WBED02RS`).
-  3. Mở Mini App bằng nút dưới góc trái khung chat $\rightarrow$ Tự động liên kết qua Start Payload.
-
----
-
-### 3.2. Đăng ký lịch OFF 2 ngày/tuần
-* **Khung giờ mở cổng**: **12h00 Thứ 6 đến 15h00 Thứ 7** hàng tuần (Giờ Việt Nam).
-* **Ràng buộc trạng thái theo thời gian**:
-  * **Trước 12h00 Thứ 6**: Bot từ chối và phản hồi:  
-    `⏳ CHƯA ĐẾN KHUNG GIỜ ĐĂNG KÝ LỊCH OFF` (Cổng mở lúc 12h00 Thứ 6 hàng tuần).
-  * **Trong khung giờ**:
-    * Nhắc nhở định kỳ mỗi 2 tiếng nếu nhân viên chưa đăng ký.
-    * Nhắc nhở khẩn cấp trước hạn 30 phút (lúc 14h30 Thứ 7).
-    * Cú pháp gửi: Gõ tự nhiên `18/09/2026, 22/09/2026` hoặc `/off 18/09/2026, 22/09/2026`.
-  * **Sau 15h00 Thứ 7**: Bot từ chối và phản hồi:  
-    `🔒 ĐÃ HẾT HẠN KHUNG GIỜ ĐĂNG KÝ LỊCH OFF` (Trạng thái: *Chờ Nhân sự cập nhật lịch... Nếu có việc khẩn cấp dùng /sos*).
-* **Luồng xử lý tự động**:
-  * Ghi nhận đúng 2 ngày `status: 'OFF'`, tự động cập nhật 5 ngày còn lại thành `status: 'WORKING'`.
-  * Phản hồi xác nhận thành công hiển thị rõ 2 ngày đăng ký cho nhân viên.
-  * **Bắn thông báo tức thì sang Bot Quản trị `@umbomilkhrbot`**:
-    ```
-    🏖️ THÔNG BÁO ĐĂNG KÝ LỊCH OFF MỚI
-    👤 Nhân viên: Nguyễn Văn A (CN130_NV1288)
-    🏪 Chi nhánh: CN1 - 130 Vạn Kiếp • Ca: Ca Sáng
-    📅 Ngày xin nghỉ OFF: 18/09/2026, 22/09/2026
-    ⏱️ Thời gian gửi: 13:45 18/09/2026 (Giờ VN)
-    ```
-  * **Bảo mật**: Tuyệt đối không nhắc từ khóa "Google Sheet" trong bất kỳ tin nhắn nào gửi nhân viên.
+### 3.1. Cấu trúc Mini App tối giản: Điểm danh & Khóa học
+* **Cơ chế Login thông minh**:
+  * Giữ nguyên màn hình đăng nhập (SĐT / Mã NV).
+  * **Tự động bỏ qua màn login** nếu tài khoản Telegram chat đã liên kết trước đó (và ngược lại: đăng nhập trên Mini App tự động liên kết tài khoản chat của bot).
+* **Giao diện bên trong tối giản 100%**:
+  * Bỏ toàn bộ các tab phụ (Lịch, Thêm, Trang chủ, Lương...).
+  * Chỉ hiển thị duy nhất **2 khối chức năng**:
+    1. **Khối 1: Điểm danh theo ca** (GPS $\le$ 300m + Camera trực diện 3 yếu tố).
+    2. **Khối 2: Khóa học / Bài thi trắc nghiệm E-learning** (25 câu - 8 phút).
 
 ---
 
-### 3.3. Quy trình Điểm danh tự động 2 bước (GPS + Ảnh 3 yếu tố)
-
-#### Màn 1 — Nhắc nhở vào ca trước 30 phút:
-* **Khung giờ kích hoạt**: **06:30** (Ca Sáng), **11:30** (Ca Chiều), **17:30** (Ca Tối).
-* Bot tự động gửi tin nhắn kèm nút bấm nổi:
-  `[📍 BƯỚC 1: GỬI VỊ TRÍ GPS HIỆN TẠI]`
-
-#### Bước 1 — Xác thực vị trí GPS Telegram:
-* Nhân viên bấm nút gửi vị trí Telegram (`request_location: true`).
-* Bot tính toán khoảng cách Haversine tới chi nhánh đã gán:
-  * **Nếu khoảng cách $\le$ 300m**: Hợp lệ $\rightarrow$ Chuyển sang Bước 2.
-  * **Nếu khoảng cách > 300m**: Từ chối ngay:  
-    `❌ VỊ TRÍ KHÔNG HỢP LỆ (QUÁ XA CỬA HÀNG) - Hiện tại: {distance}m (Giới hạn: 300m)`.
-
-#### Bước 2 — Chụp ảnh camera trực diện đạt chuẩn 3 yếu tố:
-* Bot hiển thị bàn phím: `[📸 BƯỚC 2: CHỤP ẢNH XÁC THỰC (CAMERA)]`.
-* Nhân viên mở camera chụp ảnh tại quầy làm việc.
-* **3 Yếu tố bắt buộc 100%**:
-  1. **Khuôn mặt** rõ ràng của nhân viên.
-  2. **Mặc đúng đồng phục** Ụm Bò Milk.
-  3. **Đeo bảng tên** nhân viên.
-* **Kiểm tra**: Nếu thiếu 1 trong 3 yếu tố, bot lập tức từ chối và thông báo rõ yếu tố còn thiếu để chụp lại.
+### 3.2. Điểm danh 2 bước (GPS $\le$ 300m + Ảnh 3 yếu tố) & Tự động đóng app
+* **Nhắc vào ca trước 30 phút**: Kích hoạt lúc **06:30** (Ca Sáng), **11:30** (Ca Chiều), **17:30** (Ca Tối).
+* **Bước 1 — Vị trí GPS Telegram**:
+  * Nhân viên ấn nút lấy vị trí trên Telegram/Mini App.
+  * Bot tính khoảng cách Haversine tới chi nhánh gán cho nhân viên:
+    * $\le$ 300m: Hợp lệ $\rightarrow$ Chuyển Bước 2.
+    * \> 300m: Báo lỗi vị trí quá xa và từ chối.
+* **Bước 2 — Chụp ảnh camera trực diện đạt chuẩn 3 yếu tố**:
+  * 1️⃣ Rõ khuôn mặt nhân viên.
+  * 2️⃣ Mặc đúng đồng phục Ụm Bò Milk.
+  * 3️⃣ Đeo bảng tên nhân viên.
+* **Tự động đóng Mini App**:
+  * Sau khi chụp ảnh và hệ thống xác thực thành công $\rightarrow$ Tự động gọi `Telegram.WebApp.close()` thoát app ngay.
+  * Bot trong khung chat gửi tin nhắn xác nhận chi tiết vào ca / ra ca.
 
 ---
 
-### 3.4. Chế tài phạt đi trễ & Khóa Check-out sớm
-
-#### Chế tài đi trễ:
-* **Đúng giờ (trễ $\le$ 5 phút)**: Phạt `0đ`, trạng thái `ON_TIME`.
-* **Trễ 5+ đến 30 phút**:
-  * Phạt cố định **30.000đ**, trạng thái `LATE`.
-  * Tự động ghi vào sổ phạt `db.penalties`.
-  * Gửi thông báo phạt về `@umbomilkhrbot`.
-* **Trễ > 30 phút**:
-  * Phạt **50% lương ca** (`63.750đ` cho ca 5h; `76.500đ` cho ca 6h), trạng thái `VERY_LATE`.
-  * Tự động ghi vào sổ phạt `db.penalties`.
-  * Kích hoạt **BÁO ĐỘNG KHẨN CẤP** tới Quản lý và HR trên `@umbomilkhrbot`.
-
-#### Khóa nghiêm ngặt Check-out sớm:
-* **Quy tắc tuyệt đối**: Không được check-out trước giờ kết thúc ca (trước 12:00 Ca Sáng, trước 18:00 Ca Chiều, trước 23:00 Ca Tối).
-* **Xử lý vi phạm**: Nếu nhân viên bấm check-out sớm:
-  * Bot từ chối lệnh: `🚫 KHÔNG THỂ CHECK-OUT SỚM HƠN GIỜ KẾT THÚC CA! Còn {earlyMins} phút nữa`.
-  * Tự động gửi **Cảnh báo vi phạm** về `@umbomilkhrbot`: `🚨 CẢNH BÁO VI PHẠM: NHÂN VIÊN CỐ TÌNH CHECK-OUT SỚM!`.
-* **Check-out đúng giờ**: Nhân viên thực hiện đủ 2 bước (GPS + Ảnh) sau giờ ca $\rightarrow$ Bot tính đúng số giờ làm và tiền ca thực nhận (đã trừ tiền phạt trễ nếu có).
+### 3.3. Chế tài phạt đi trễ & Khóa nghiêm ngặt Check-out sớm
+* **Chế tài xử phạt đi trễ**:
+  * Trễ $\le$ 5 phút: 0đ (Đúng giờ).
+  * Trễ 5–30 phút: Phạt **30.000đ**, tự động ghi `db.penalties` và thông báo về Bot HR.
+  * Trễ > 30 phút: Phạt **50% lương ca** (`63.750đ` ca 5h, `76.500đ` ca 6h), kích hoạt báo động khẩn về Bot HR.
+* **Khóa nghiêm ngặt Check-out sớm**:
+  * Tuyệt đối không cho phép check-out trước giờ kết thúc ca (trước 12:00, 18:00, 23:00).
+  * Nếu nhân viên mở Mini App khi chưa hết giờ ca:
+    * Mini App hiển thị **hộp cảnh báo đỏ vi phạm**.
+    * **Khóa hoàn toàn nút check-out** (disabled).
+    * Gửi cảnh báo vi phạm về Bot Quản trị HR nếu nhân viên cố tình gõ lệnh check-out sớm.
 
 ---
 
-### 3.5. Nhắc nhở ca tự động (Background Job mỗi 1 phút)
-1. **Trước ca 30 phút**: Nhắc vào ca kèm nút gửi GPS (06:30, 11:30, 17:30).
-2. **Sau khi bắt đầu ca 10 phút**: Cảnh báo trễ ca phạt 30.000đ nếu chưa điểm danh.
-3. **Sau khi bắt đầu ca 30 phút**: Báo động khẩn cấp phạt 50% lương ca tới cả nhân viên và HR.
-4. **Trước khi kết thúc ca 10 phút**: Nhắc nhở chuẩn bị check-out (11:50, 17:50, 22:50).
+### 3.4. Đăng ký lịch OFF 2 ngày/tuần
+* **Khung giờ mở cổng**: **12h00 Thứ 6 đến 15h00 Thứ 7** hàng tuần (Giờ VN).
+* Cú pháp: Nhắn tự nhiên `18/09/2026, 22/09/2026` hoặc `/off 18/09/2026, 22/09/2026`.
+* Ghi nhận 2 ngày OFF, 5 ngày còn lại thành WORKING, bắn thông báo ngay sang `@umbomilkhrbot`.
+* Tuyệt đối không nhắc từ khóa "Google Sheet" trong tin nhắn gửi nhân viên.
 
 ---
 
-### 3.6. Tiện ích nhanh, Lễ tân AI & Kênh SOS 24/7
-* `/menu`: Mở bảng chức năng nhanh dạng nút bấm tương tác.
-* `/lich`: Xem lịch làm việc 7 ngày tới.
-* `/luong`: Tra cứu lương tạm tính tháng hiện tại.
-* `/doica`: Hướng dẫn mẫu cú pháp xin đổi/tráo ca.
-* `/baohong`: Báo sự cố thiết bị tại quán (cho phép gửi kèm ảnh hỏng).
-* `/sos`: Hướng dẫn báo ca khẩn cấp, sự cố bất khả kháng & Hotline 24/7: **0842.112.530**.
-* **AI Chat Relay**: Nhân viên nhắn tin tự do bất kỳ $\rightarrow$ AI đọc hiểu, tóm tắt ý chính và chuyển tiếp trực tiếp sang Bot Quản trị HR.
+### 3.5. Chức năng Khóa học / Bài thi trắc nghiệm (25 câu - 8 phút - 3 mức đánh giá)
+* **Quy cách đề thi**:
+  * HR có quyền chỉ định kiểm tra bất kỳ nhân viên nào hoặc kiểm tra định kỳ.
+  * Đề thi gồm **25 câu trắc nghiệm = 10 điểm** (0.4 điểm/câu).
+  * Thời gian làm bài: **8 phút** (480 giây), có đồng hồ đếm ngược, tự động nộp bài khi hết giờ.
+* **Quy tắc chấm điểm & đánh giá (3 mức chuẩn)**:
+  1. **Điểm < 5 điểm**: **KHÔNG ĐẠT**  
+     $\rightarrow$ Bot thông báo đánh giá nhân viên (cần đào tạo lại quy trình) + Gửi báo cáo kết quả sang Bot Admin/HR.
+  2. **5 đến dưới 8 điểm**: **THI LẠI**  
+     $\rightarrow$ Bot thông báo đánh giá nhân viên (chưa đạt chuẩn kiến thức) + Gửi báo cáo sang Bot Admin/HR để HR xếp lịch thi lại.
+  3. **$\ge$ 8 điểm**: **ĐẠT 🎆**  
+     $\rightarrow$ Bot chúc mừng và đánh giá xuất sắc + Gửi báo cáo thành tích sang Bot Admin/HR.
 
 ---
 
-## 4. BOT QUẢN TRỊ HR (@umbomilkhrbot)
+## 4. QUY TRÌNH ĐỔI CA LÀM VIỆC TRONG TUẦN (SHIFT SWAP)
 
-### 4.1. Đăng nhập bảo mật & Phân quyền 4 vai trò
-* Cú pháp bắt buộc: `/login <tên_đăng_nhập> <mật_khẩu>` (VD: `/login admin Master@@2027`).
-* Menu và quyền hạn tự động cấp theo vai trò:
+### 4.1. Điều kiện áp dụng trong tuần
+1. **Lịch đã duyệt**: Chỉ áp dụng khi đã có lịch làm việc chính thức do HR phê duyệt (`approvalStatus: 'APPROVED'`).
+2. **Chỉ áp dụng trong tuần đó**: Yêu cầu đổi ca chỉ có hiệu lực từ Thứ 2 đến Chủ nhật của tuần hiện tại, không đổi vượt sang tuần sau.
+3. **Cùng chi nhánh**: Cả 2 nhân viên A và B phải cùng làm việc tại 1 chi nhánh.
 
-| Vai trò | Phân quyền & Mô tả | Danh mục lệnh |
+---
+
+### 4.2. Năm trường hợp đổi ca được hỗ trợ
+
+```mermaid
+graph TD
+    SwapTypes["5 Trường Hợp Đổi Ca Làm Việc Trong Tuần"]
+    SwapTypes --> T1["1. Cùng chi nhánh + Cùng ca:<br/>Ca làm A ⟷ Ca làm B"]
+    SwapTypes --> T2["2. Cùng chi nhánh + Cùng ca:<br/>Ngày nghỉ A ⟷ Ca làm B"]
+    SwapTypes --> T3["3. Cùng chi nhánh + Khác ca:<br/>Ca làm A ⟷ Ca làm B"]
+    SwapTypes --> T4["4. Cùng chi nhánh + Khác ca:<br/>Ngày nghỉ A ⟷ Ca làm B"]
+    SwapTypes --> T5["5. Làm 2 ca / Nhường ca:<br/>1 người làm 2 ca, 1 người thành ngày OFF"]
+```
+
+1. **Trường hợp 1 (Cùng chi nhánh + Cùng ca làm việc)**:
+   * Nhân viên A đổi ca làm việc của mình $\leftrightarrow$ ca làm việc của nhân viên B.
+2. **Trường hợp 2 (Cùng chi nhánh + Cùng ca làm việc)**:
+   * Nhân viên A đổi ngày nghỉ của mình $\leftrightarrow$ ca làm việc của nhân viên B.
+3. **Trường hợp 3 (Cùng chi nhánh + Khác ca làm việc)**:
+   * Nhân viên A đổi ca làm việc của mình $\leftrightarrow$ ca làm việc của nhân viên B.
+4. **Trường hợp 4 (Cùng chi nhánh + Khác ca làm việc)**:
+   * Nhân viên A đổi ngày nghỉ của mình $\leftrightarrow$ ca làm việc của nhân viên B khác ca.
+5. **Trường hợp 5 (Làm 2 ca / Nhường ca)**:
+   * Nhân viên A hoặc nhân viên B có thể làm 2 ca làm việc trong cùng 1 ngày nếu nhân viên còn lại đồng ý nhường ca.
+   * *Cơ chế sắp lịch*: Hệ thống sắp nhân viên nhận ca ngày đó làm **2 ca** (VD: Ca Sáng + Ca Chiều), nhân viên nhường ca sẽ chuyển thành **ngày OFF** (và ngược lại).
+
+---
+
+### 4.3. Quy trình 3 bước phê duyệt: NV A $\rightarrow$ NV B $\rightarrow$ Bot Quản trị HR
+* **Bước 1**: NV A gửi yêu cầu: `/doica <ngày_A> <ca_A> sang <NV_B> <ngày_B> <ca_B>`.
+* **Bước 2**: NV B nhận tin nhắn riêng kèm 2 nút: `[✅ ĐỒNG Ý ĐỔI CA]` | `[❌ TỪ CHỐI]`.
+* **Bước 3**: NV B đồng ý $\rightarrow$ Phiếu chuyển tới BOT Admin/HR kèm 2 nút: `[✅ DUYỆT ĐỔI CA]` | `[❌ TỪ CHỐI]` $\rightarrow$ Cập nhật lịch cả 2 NV, đồng bộ ngầm Google Sheet.
+
+---
+
+## 5. BOT QUẢN TRỊ HR (@umbomilkhrbot)
+
+### 5.1. Bắt buộc đăng nhập & Thời hạn phiên 24 tiếng
+* Mọi tương tác yêu cầu phải đăng nhập: `/login <tên_đăng_nhập> <mật_khẩu>`.
+* **Thời hạn phiên đúng 24 tiếng** (`24 * 60 * 60 * 1000` ms): Hết 24 giờ phiên tự hủy, yêu cầu đăng nhập lại.
+
+### 5.2. Lệnh đổi mật khẩu (/doi_mat_khau)
+* Cú pháp: `/doi_mat_khau <tên_đăng_nhập> <mật_khẩu_cu> <mật_khẩu_moi>`.
+* Áp dụng cho: **Admin, HR, QL (Quản lý), MKT (Marketing)**.
+
+### 5.3. Bảng phân quyền 4 vai trò (Admin, HR, QL, MKT)
+| Vai trò | Quyền hạn nghiệp vụ | Danh mục lệnh trên Telegram |
 | :--- | :--- | :--- |
-| 👑 **Admin** | Toàn quyền hệ thống, cấp quyền người dùng, chạy test an toàn | `/tonghop_lich`, `/sap_lich_nv`, `/duyet`, `/users`, `/capquyen`, `/phanquyen`, `/broadcast`, `/test`, `/delete_test`, `/logout` |
-| 🛡️ **HR (Nhân sự)** | Quản lý lịch tuần toàn bộ NV, duyệt phiếu, phát thông báo | `/tonghop_lich`, `/sap_lich_nv`, `/duyet`, `/baocao`, `/broadcast`, `/logout` |
-| 🏪 **QL (Quản lý cửa hàng)** | Giới hạn đúng chi nhánh phụ trách (`branchScope`) | `/diemdanh_cn`, `/lich_cn`, `/duyet_ca`, `/baohong_cn`, `/logout` |
-| 📢 **MKT (Marketing)** | Đăng tin tức, sự kiện, phát khuyến mãi tới Mini App NV | `/broadcast_mkt`, `/sukien`, `/tintuc`, `/logout` |
+| 👑 **Admin** | Toàn quyền hệ thống, cấp quyền, chạy test, đổi mật khẩu, tra hồ sơ | `/tonghop_lich`, `/sap_lich_nv`, `/duyet`, `/users`, `/capquyen`, `/phanquyen`, `/broadcast`, `/test`, `/delete_test`, `/doi_mat_khau`, `/hoso_nhanvien`, `/duyet_phieuluong`, `/logout` |
+| 🛡️ **HR** | Quản lý lịch tuần toàn bộ NV, duyệt phiếu đổi ca, báo cáo, gửi đề thi, tra hồ sơ | `/tonghop_lich`, `/sap_lich_nv`, `/duyet`, `/baocao`, `/broadcast`, `/gui_de_thi`, `/doi_mat_khau`, `/hoso_nhanvien`, `/duyet_phieuluong`, `/logout` |
+| 🏪 **QL** | Giới hạn đúng chi nhánh phụ trách (`branchScope`), duyệt & phát phiếu lương | `/diemdanh_cn`, `/lich_cn`, `/duyet_ca`, `/baohong_cn`, `/doi_mat_khau`, `/duyet_phieuluong`, `/logout` |
+| 📢 **MKT** | Đăng tin tức, sự kiện, phát khuyến mãi tới nhân viên | `/broadcast_mkt`, `/sukien`, `/tintuc`, `/doi_mat_khau`, `/logout` |
 
 ---
 
-### 4.2. Ma trận Lịch tuần 🟢/🔴 & Kiểm tra luật AI
-* Cú pháp: `/tonghop_lich` (hoặc `/tonghop_lich YYYY-MM-DD`).
-* Phân nhóm theo **Chi nhánh + Ca làm việc**.
-* Trực quan Thứ 2 $\rightarrow$ Chủ nhật: ngày làm việc `🟢`, ngày nghỉ `🔴`.
-* **Hệ thống AI tự động phát hiện**:
-  * ⚠️ **Trùng ca**: 2 nhân viên cùng 1 ca tại cùng chi nhánh cùng đi làm một ngày.
-  * ⚠️ **Tải ca thấp**: Nhân viên có `< 2 ca/tuần`.
+### 5.4. Tra cứu Hồ sơ nhân viên (/hoso_nhanvien)
+* **Quy định bảo mật**: Chức năng tra cứu hồ sơ nhân viên **chỉ thông báo và hiển thị duy nhất trên BOT Quản trị Admin/HR**.
+* **Cú pháp thực hiện**: `/hoso_nhanvien: <mã_nhân_viên>` hoặc `/hoso_nhanvien <mã_nhân_viên>`.
+* **Nội dung hồ sơ gửi lên gồm 6 thông tin chuẩn hóa**:
+  1. 👤 **Tên nhân viên**
+  2. 📱 **Số điện thoại**
+  3. 🆔 **Mã nhân viên**
+  4. 📅 **Ngày bắt đầu tham gia**
+  5. 🏪 **Chi nhánh + Ca làm việc**
+  6. 💰 **Lương chính thức**
 
 ---
 
-### 4.3. Điều chỉnh lịch nhân viên trực tiếp (/sap_lich_nv)
-* Hỗ trợ **Mã nhân viên ngắn** (chỉ cần gõ `NV1288` hoặc `1288`).
-* Cú pháp: `/sap_lich_nv NV1288 T2-ON, T3-ON, T4-OFF, T5-ON, T6-ON, T7-OFF, CN-ON`.
-* Cập nhật tức thì vào cơ sở dữ liệu, đồng bộ ngầm Google Sheet, gửi thông báo trực tiếp tới Telegram của NV.
+### 5.5. Quy trình Quản lý duyệt và phát 2 dạng Phiếu lương (/duyet_phieuluong)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Admin as Bot Quản Trị Hệ Thống
+    actor QL as Quản lý Chi nhánh (QL)
+    participant Engine as Bộ Máy Phát Lương
+    participant Sheet as Google Sheet Bảng Lương
+    actor NV_Store as Nhân viên Cửa Hàng (Theo Ca)
+    actor NV_Office as Nhân viên Văn Phòng (Lương Cứng)
+
+    Note over Admin,QL: Từ ngày 1 - 7 hàng tháng (hoặc trước ngày 1)
+    Admin->>QL: ⏰ NHẮC HẸN: Đã đến kỳ duyệt & phát phiếu lương tháng cho nhân viên!
+    QL->>Admin: Gửi lệnh: /duyet_phieuluong
+    Admin->>Engine: Kích hoạt tiến trình phát phiếu lương
+    Engine->>Sheet: Đọc dữ liệu từ Google Sheet 1YynMAx...
+    Sheet-->>Engine: Trả về danh sách chi tiết công lương
+
+    alt Nhân viên Cửa Hàng (Làm theo ca)
+        Engine->>NV_Store: 📩 Gửi Phiếu lương Dạng 1: Giờ công, Lương giờ, Lương thêm giờ...
+    else Nhân viên Văn Phòng (Lương cứng)
+        Engine->>NV_Office: 📩 Gửi Phiếu lương Dạng 2: Lương cơ bản, Phụ cấp, Bonus...
+    end
+
+    Engine->>QL: 🔄 Cập nhật tiến độ thời gian thực từng nhân viên thành công ✅
+    Engine->>QL: 🎉 HOÀN THÀNH: Đã phát toàn bộ phiếu lương thành công!
+```
+
+* **Nguồn dữ liệu đối soát Google Sheet**:
+  * Link Sheet: `https://docs.google.com/spreadsheets/d/1YynMAxLgf005ghoIYPvtMrKTMr6QqmUtsuB9MkLf__k/edit?usp=sharing`
+  * Sheet ID: `1YynMAxLgf005ghoIYPvtMrKTMr6QqmUtsuB9MkLf__k`
+* **Lịch trình và Nhắc hẹn**:
+  * Chu kỳ phát lương: **Từ ngày 1 đến ngày 7 hàng tháng**.
+  * Trước khung ngày này (hoặc sáng ngày 1): BOT Admin tự động thông báo đến tài khoản QL nhắc hẹn phát lương.
+* **Cơ chế phân loại 2 dạng Phiếu lương**:
+
+#### 🏪 Dạng 1: Phiếu lương dành cho Nhân viên Cửa hàng (Làm việc theo ca)
+*Đặc thù: Tính theo giờ công thực tế, lương theo giờ và phụ trội thêm giờ; KHÔNG có mục Lương cơ bản.*
+Gồm chính xác **11 mục thông tin**:
+1. 🆔 **Mã nhân viên**
+2. 👤 **Tên nhân viên**
+3. ⏱️ **Ngày công chính (giờ)**
+4. ⏱️ **Lương giờ**
+5. ➕ **Lương thêm giờ**
+6. 🎁 **Phụ cấp**
+7. 🌟 **Bonus (OT, Lễ)**
+8. 💰 **Tổng lương**
+9. ➖ **Trừ KPI**
+10. 💳 **Ứng lương**
+11. 💵 **CÒN LÃNH**
+
+#### 🏢 Dạng 2: Phiếu lương dành cho Nhân viên Văn phòng
+*Đặc thù: Hưởng lương cứng theo tháng; KHÔNG hiển thị ngày công giờ hay lương giờ.*
+Gồm chính xác **9 mục thông tin**:
+1. 🆔 **Mã nhân viên**
+2. 👤 **Tên nhân viên**
+3. 💵 **Lương cơ bản**
+4. 🎁 **Phụ cấp**
+5. 🌟 **Bonus (OT, Lễ)**
+6. 💰 **Tổng lương**
+7. ➖ **Trừ KPI**
+8. 💳 **Ứng lương**
+9. 💵 **CÒN LÃNH**
 
 ---
 
-### 4.4. Trung tâm thu nhận cảnh báo thời gian thực
-Bot Quản trị HR tự động nhận thông báo tức thì khi:
-1. Có nhân viên đăng ký OFF.
-2. Có nhân viên vào ca (Check-in).
-3. Nhân viên đi trễ ca (phạt 30.000đ).
-4. **Báo động khẩn cấp**: Nhân viên trễ > 30 phút (phạt 50% lương ca).
-5. **Cảnh báo vi phạm**: Nhân viên cố tình bấm check-out sớm hơn giờ quy định.
-6. Nhân viên ra ca (Check-out) thành công kèm số giờ và tiền lương ca.
-7. Tin nhắn chuyển tiếp từ nhân viên qua AI Chat Relay.
+## 6. BOT KẾ TOÁN TÀI CHÍNH (@umbomilkketoanbot)
+* Tương tác qua lệnh chat native:
+  * `/luong`: Tra cứu tức thì bảng chấm công tổng hợp, tổng giờ làm, khấu trừ phạt trễ, thực nhận.
+  * `/hoancoc`: Tra cứu danh sách hoàn cọc đồng phục và tiền khám sức khỏe.
+* Bỏ Mini App, tinh gọn tối đa giao diện.
 
 ---
 
-### 4.5. Chế độ kiểm thử an toàn cho Admin (/test & /delete_test)
-* `/test <loại>` (`off`, `schedule`, `attendance`, `notification`): Sinh bản ghi test gắn cờ `isTest: true`, hoàn toàn cô lập, không bao giờ ghi đè hoặc rò rỉ vào Google Sheet thật.
-* `/delete_test`: Quét và xóa sạch 100% bản ghi test, trả cơ sở dữ liệu về trạng thái sản xuất nguyên vẹn.
+## 7. KỊCH BẢN DEMO TRỰC QUAN TOÀN DIỆN
+
+### 🎬 DEMO 1: MINI APP TỐI GIẢN & ĐIỂM DANH TỰ ĐÓNG
+```
+┌──────────────────────────────────────────────┐
+│  🐮 ỤM BÒ MILK — NHÂN VIÊN CỬA HÀNG          │
+│  Xin chào: Nguyễn Văn A (CN130_NV1288)       │
+├──────────────────────────────────────────────┤
+│  📍 KHỐI 1: ĐIỂM DANH THEO CA                │
+│  [ Bước 1: Vị trí GPS (Đã đạt: Cách 45m) ✅ ] │
+│  [ Bước 2: Camera 3 yếu tố (Mặt+Áo+Thẻ) 📸 ] │
+│  [ 🚀 HOÀN THÀNH ĐIỂM DANH (TỰ ĐÓNG APP) ]   │
+├──────────────────────────────────────────────┤
+│  🎓 KHỐI 2: KHÓA HỌC & BÀI THI TRẮC NGHIỆM  │
+│  Bài thi: Quy trình Vận hành & Pha chế       │
+│  [ 📝 BẮT ĐẦU LÀM BÀI THI (8 PHÚT) ]         │
+└──────────────────────────────────────────────┘
+```
 
 ---
 
-## 5. BOT KẾ TOÁN TÀI CHÍNH (@umbomilkketoanbot)
-* `/luong`: Tra cứu tức thì báo cáo tổng hợp chấm công, tổng số giờ làm việc, tiền phạt trễ đã trừ, số tiền thực nhận.
-* `/app`: Mở Mini App Tài chính với bảng ma trận 1–31 ngày, hoàn cọc đồng phục và tiền khám sức khỏe.
+### 🎬 DEMO 2: KHÓA HỌC & BÀI THI TRẮC NGHIỆM 25 CÂU
+* *3 Mức đánh giá chuẩn:*
+  * $\ge 8$: **ĐẠT 🎆** $\rightarrow$ Báo nhân viên xuất sắc + Gửi kết quả sang Bot Admin.
+  * $5 \le \text{Điểm} < 8$: **THI LẠI** $\rightarrow$ Báo nhân viên + Gửi Bot Admin để HR gửi lịch thi lại.
+  * $< 5$: **KHÔNG ĐẠT** $\rightarrow$ Báo nhân viên đào tạo lại + Gửi Bot Admin.
 
 ---
 
-## 6. BẢO MẬT & BẢO VỆ DỮ LIỆU SẢN XUẤT
-1. **Zero Regression**: Đảm bảo 100% bài kiểm thử tự động (28/28 test) luôn PASS trước và sau mọi chỉnh sửa.
-2. **Ẩn tích hợp Google Sheet với NV**: Tuyệt đối không xuất hiện chữ "Google Sheet" trong các tin nhắn gửi đến nhân viên. Việc đồng bộ thực hiện hoàn toàn ngầm.
-3. **Thiết bị & Phiên làm việc**: Tự động vô hiệu hóa phiên làm việc khi nhân viên bị xóa hoặc nghỉ việc.
+### 🎬 DEMO 3: QUY TRÌNH ĐỔI CA LÀM VIỆC 3 BƯỚC
+* *NV A gửi `/doica` $\rightarrow$ NV B nhận tin kèm `[✅ ĐỒNG Ý]` / `[❌ TỪ CHỐI]` $\rightarrow$ HR nhận tin kèm `[✅ DUYỆT]` / `[❌ TỪ CHỐI]` $\rightarrow$ Hệ thống đổi lịch tự động.*
 
 ---
 
-## 7. DANH MỤC THAM SỐ CÓ THỂ ĐIỀU CHỈNH
-
-| Nhóm tham số | Giá trị hiện tại | Phạm vi điều chỉnh có thể yêu cầu |
-| :--- | :--- | :--- |
-| **Khung giờ đăng ký OFF** | 12h00 Thứ 6 đến 15h00 Thứ 7 | Có thể đổi ngày mở/đóng hoặc giờ mở/đóng |
-| **Số ngày OFF tối đa** | 2 ngày / tuần | Có thể tăng/giảm theo tuần đặc biệt |
-| **Nhắc vào ca trước** | **30 phút** (06:30, 11:30, 17:30) | Có thể chỉnh 15, 20, 45 phút... |
-| **Bán kính GPS hợp lệ** | **$\le$ 300 mét** | Có thể chỉnh tăng/giảm theo từng chi nhánh |
-| **3 Yếu tố ảnh chụp** | Mặt + Đồng phục + Bảng tên | Có thể bổ sung thêm yếu tố (quầy bar, máy POS...) |
-| **Mức phạt trễ 5–30 phút** | **30.000đ** | Có thể đổi mức phạt cố định |
-| **Mức phạt trễ > 30 phút** | **50% lương ca** | Có thể đổi thành 100% lương ca hoặc số tiền cố định |
-| **Khóa check-out sớm** | Chặn 100% trước giờ ca | Có thể cho phép check-out sớm kèm lý do/phạt |
-| **Đơn giá giờ làm việc** | 25.500đ (Chính thức) / 21.000đ (Thử việc) | Có thể điều chỉnh theo quyết định ban giám đốc |
+### 🎬 DEMO 4: PHIÊN 24H & ĐỔI MẬT KHẨU BOT HR
+* *Hết 24h tự động khóa phiên an toàn $\rightarrow$ Yêu cầu `/login`.*
+* *Đổi mật khẩu: `/doi_mat_khau <user> <pass_cu> <pass_moi>`.*
 
 ---
 
-*Tài liệu này là căn cứ kỹ thuật và nghiệp vụ chính thức của dự án Telegram Bot Ụm Bò Milk.*
+### 🎬 DEMO 5: TRA CỨU HỒ SƠ NHÂN VIÊN (/hoso_nhanvien)
+
+#### HR gửi lệnh trên `@umbomilkhrbot`:
+`/hoso_nhanvien: NV1288`
+
+#### BOT Quản trị HR phản hồi:
+```html
+📋 <b>HỒ SƠ NHÂN VIÊN — ỤM BÒ MILK</b>
+<i>(Dữ liệu nhân sự nội bộ bảo mật)</i>
+
+👤 <b>Tên nhân viên:</b> Nguyễn Văn A
+📱 <b>Số điện thoại:</b> <code>0908.123.456</code>
+🆔 <b>Mã nhân viên:</b> <code>CN130_NV1288</code>
+📅 <b>Ngày bắt đầu tham gia:</b> 15/03/2026
+🏪 <b>Chi nhánh:</b> CN1 - 130 Vạn Kiếp (P.3, Q. Bình Thạnh)
+⏰ <b>Ca làm việc:</b> Ca Sáng (07:00 – 12:00)
+💰 <b>Lương chính thức:</b> <b>25.500đ / giờ</b> (127.500đ / ca)
+📊 <b>Trạng thái:</b> 🟢 Đang làm việc chính thức (OFFICIAL)
+```
+
+---
+
+### 🎬 DEMO 6A: PHIẾU LƯƠNG NHÂN VIÊN CỬA HÀNG (THEO CA)
+
+#### 1. Quản lý duyệt và phát:
+QL gửi lệnh: `/duyet_phieuluong` trên Bot HR.  
+Bot hiển thị tiến độ:
+```html
+🚀 <b>ĐANG TIẾN HÀNH PHÁT PHIẾU LƯƠNG CHI NHÁNH CN1...</b>
+
+• [1/3] <b>Nguyễn Văn A</b> (<code>CN130_NV1288</code>) — Đã gửi thành công ✅
+• [2/3] <b>Trần Thị Lan</b> (<code>CN130_NV1289</code>) — Đã gửi thành công ✅
+• [3/3] <b>Lê Hoàng Nam</b> (<code>CN130_NV1290</code>) — Đã gửi thành công ✅
+
+🎉 <b>TỔNG KẾT: ĐÃ GỬI THÀNH CÔNG 3/3 PHIẾU LƯƠNG NHÂN VIÊN!</b>
+```
+
+#### 2. Nhân viên Cửa hàng nhận tin nhắn riêng tư trên `@umbomilknvbot`:
+```html
+💵 <b>PHIẾU LƯƠNG THÁNG 09/2026 — ỤM BÒ MILK</b>
+<i>Kính gửi bạn Nguyễn Văn A (Nhân viên Cửa hàng), chi tiết thu nhập của bạn:</i>
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+🆔 <b>Mã nhân viên:</b> <code>CN130_NV1288</code>
+👤 <b>Tên nhân viên:</b> Nguyễn Văn A
+⏱️ <b>Ngày công chính (giờ):</b> 132.0 giờ (26 ca làm việc)
+⏱️ <b>Lương giờ:</b> 25.500đ / giờ
+➕ <b>Lương thêm giờ:</b> 255.000đ (10 giờ phụ trội)
+🎁 <b>Phụ cấp:</b> 300.000đ (Chuyên cần & Trách nhiệm)
+🌟 <b>Bonus (OT, Lễ):</b> 500.000đ (Thưởng Lễ 2/9)
+──────────────────────────
+💰 <b>TỔNG LƯƠNG:</b> <b>4.421.000đ</b>
+──────────────────────────
+➖ <b>Trừ KPI:</b> 0đ (Không có vi phạm)
+💳 <b>Ứng lương:</b> 500.000đ (Tạm ứng giữa tháng)
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+💵 <b>CÒN LÃNH:</b> <b>3.921.000đ</b>
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+<i>Mọi thắc mắc về bảng lương, vui lòng liên hệ Quản lý cửa hàng hoặc Kế toán chuỗi để được hỗ trợ trong vòng 48 giờ.</i>
+```
+
+---
+
+### 🎬 DEMO 6B: PHIẾU LƯƠNG NHÂN VIÊN VĂN PHÒNG (LƯƠNG CƠ BẢN)
+
+#### Nhân viên Văn phòng nhận tin nhắn riêng tư trên `@umbomilknvbot`:
+```html
+💵 <b>PHIẾU LƯƠNG THÁNG 09/2026 — ỤM BÒ MILK</b>
+<i>Kính gửi bạn Lê Thị Thu Thảo (Khối Văn phòng), chi tiết thu nhập của bạn:</i>
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+🆔 <b>Mã nhân viên:</b> <code>VP_HR002</code>
+👤 <b>Tên nhân viên:</b> Lê Thị Thu Thảo
+💵 <b>Lương cơ bản:</b> 9.500.000đ
+🎁 <b>Phụ cấp:</b> 1.000.000đ (Ăn trưa & Điện thoại)
+🌟 <b>Bonus (OT, Lễ):</b> 1.500.000đ (Thưởng KPI & Lễ 2/9)
+──────────────────────────
+💰 <b>TỔNG LƯƠNG:</b> <b>12.000.000đ</b>
+──────────────────────────
+➖ <b>Trừ KPI:</b> 0đ
+💳 <b>Ứng lương:</b> 2.000.000đ (Tạm ứng ngày 15)
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+💵 <b>CÒN LÃNH:</b> <b>10.000.000đ</b>
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+<i>Mọi thắc mắc về bảng lương, vui lòng liên hệ Phòng Nhân sự / Kế toán để được giải đáp trong vòng 48 giờ.</i>
+```
+
+---
+
+*Tài liệu này là căn cứ kỹ thuật và nghiệp vụ chính thức được cập nhật toàn diện theo yêu cầu mới nhất của Bạn.*

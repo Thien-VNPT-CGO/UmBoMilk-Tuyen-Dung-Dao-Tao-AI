@@ -53,33 +53,21 @@
   function empTabs() {
     T._tab = 0;
     T.setTabs([
-      { icon: '🏠', label: 'Trang chủ', page: 'emp-home' },
       { icon: '📍', label: 'Điểm danh', page: 'emp-att' },
-      { icon: '📅', label: 'Lịch', page: 'emp-sched' },
-      { icon: '➕', label: 'Thêm', page: 'emp-more' },
+      { icon: '🎓', label: 'Khóa học', page: 'emp-learn' },
     ]);
-    T.go('emp-home', {}, true);
+    T.go('emp-att', {}, true);
   }
   function hrTabs() {
-    T._tab = 0;
-    T.setTabs([
-      { icon: '📊', label: 'Tổng quan', page: 'hr-home' },
-      { icon: '✅', label: 'Duyệt', page: 'hr-approve' },
-      { icon: '👥', label: 'Nhân sự', page: 'hr-staff' },
-      { icon: '👤', label: 'Tôi', page: 'hr-me' },
-    ]);
-    T.go('hr-home', {}, true);
+    T.setTabs([]);
+    T.go('hr-direct', {}, true);
   }
   function finTabs() {
-    T._tab = 0;
-    T.setTabs([
-      { icon: '🧮', label: 'Chấm công', page: 'fin-home' },
-      { icon: '💵', label: 'Lương', page: 'fin-pay' },
-      { icon: '👕', label: 'Đồng phục', page: 'fin-dp' },
-      { icon: '💸', label: 'Thêm', page: 'fin-more' },
-    ]);
-    T.go('fin-home', {}, true);
+    T.setTabs([]);
+    T.go('fin-direct', {}, true);
   }
+  T.pages['hr-direct'] = async () => '<div class="tg-card" style="text-align:center;padding:30px 14px"><div style="font-size:48px">🛡️</div><h3>Bot Quản trị Ụm Bò Milk</h3><p style="font-size:13px;color:var(--tg-hint);margin:12px 0;line-height:1.5">Hệ thống Quản trị & HR hiện hoạt động 100% qua tương tác trực tiếp trên khung chat Telegram Bot (<b>@umbomilkhrbot</b>).<br><br>Vui lòng quay lại khung chat và gõ <code>/menu</code> để sử dụng.</p><button class="tg-btn" onclick="if(window.Telegram&&window.Telegram.WebApp&&typeof window.Telegram.WebApp.close===\'function\')window.Telegram.WebApp.close();">Quay lại khung chat Bot</button></div>';
+  T.pages['fin-direct'] = async () => '<div class="tg-card" style="text-align:center;padding:30px 14px"><div style="font-size:48px">💰</div><h3>Bot Kế toán Ụm Bò Milk</h3><p style="font-size:13px;color:var(--tg-hint);margin:12px 0;line-height:1.5">Hệ thống Tài chính & Kế toán hiện hoạt động 100% qua tương tác trực tiếp trên khung chat Telegram Bot (<b>@umbomilkketoanbot</b>).<br><br>Vui lòng quay lại khung chat và gõ <code>/luong</code> để sử dụng.</p><button class="tg-btn" onclick="if(window.Telegram&&window.Telegram.WebApp&&typeof window.Telegram.WebApp.close===\'function\')window.Telegram.WebApp.close();">Quay lại khung chat Bot</button></div>';
   T.pages['hr-me'] = async () => {
     const u = T.store.get('hr_user', {});
     return '<div class="tg-card"><div class="tg-row"><div class="ic">🛡️</div><div class="bd"><div class="tt">' + T.esc(u.displayName || u.username || '') + '</div><div class="sm">' + T.esc(u.role || '') + ' • ' + T.esc((u.branchScope || []).join(',')) + '</div></div></div></div>'
@@ -209,17 +197,13 @@
       T.setTabs([]); T.go('emp-link', {}, true); return;
     }
     if (pr === 'hr') {
-      if (T.S.hr) { hrTabs(); return; }
-      T.setTabs([]); T.go('hr-login'); return;
+      hrTabs(); return;
     }
     if (pr === 'fin') {
-      if (T.S.fin) { finTabs(); return; }
-      T.setTabs([]); T.go('fin-login'); return;
+      finTabs(); return;
     }
     if (T.S.emp) empTabs();
-    else if (T.S.hr) hrTabs();
-    else if (T.S.fin) finTabs();
-    else { T.setTabs([]); T.go('hub', {}, true); }
+    else { T.setTabs([]); T.go('emp-link', {}, true); }
   }
 
   // Realtime 1:1 Smart Polling với Google Sheet & Backend (không cần socket)
