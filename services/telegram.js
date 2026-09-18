@@ -68,6 +68,19 @@ async function sendTelegramMessage(botToken, chatId, text, extra = {}) {
   }
 }
 
+async function deleteTelegramMessage(botToken, chatId, messageId) {
+  if (!botToken || !chatId || !messageId) return { ok: false, skipped: true };
+  try {
+    const j = await tgApi(botToken, 'deleteMessage', {
+      chat_id: chatId,
+      message_id: Number(messageId)
+    });
+    return { ok: true, result: j.result };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
 async function answerTelegramCallbackQuery(botToken, callbackQueryId, text = '') {
   if (!botToken || !callbackQueryId) return { ok: false, skipped: true };
   try {
@@ -133,6 +146,14 @@ async function setTelegramCommands(botToken, role = 'employee') {
       { command: 'menu', description: '📋 Menu quản trị theo phân quyền' },
       { command: 'duyet', description: '✅ Duyệt phiếu chờ (thiết bị, OFF, đổi ca)' },
       { command: 'hoso_nhanvien', description: '👤 Tra cứu hồ sơ: /hoso_nhanvien <mã>' },
+      { command: 'tim_nv', description: '🔎 Tìm NV theo tên/SĐT: /tim_nv <từ khoá>' },
+      { command: 'chamcong', description: '📍 Chấm công NV: /chamcong <mã> [ngày]' },
+      { command: 'lich_nv', description: '📅 Lịch 1 NV: /lich_nv <mã>' },
+      { command: 'off_cn', description: '🏖️ Ai OFF hôm nay: /off_cn <CN>' },
+      { command: 'tre_cn', description: '⏰ Ai trễ/sớm hôm nay: /tre_cn [CN]' },
+      { command: 'luong_nv', description: '💰 Lương 1 NV: /luong_nv <mã>' },
+      { command: 'ds_cn', description: '👥 Danh sách CN: /ds_cn <CN> [ca]' },
+      { command: 'don_dep_trung', description: '🧹 Dọn tin trùng: /don_dep_trung [mã]' },
       { command: 'duyet_phieuluong', description: '💳 Duyệt & gửi phiếu lương tháng cho NV' },
       { command: 'baocao', description: '📊 Báo cáo nhân sự hôm nay' },
       { command: 'broadcast', description: '📢 Phát thông báo' },
@@ -162,6 +183,15 @@ const HELP_TEXTS = {
     '/start — Mở Mini App Quản trị',
     '/duyet — Số phiếu chờ duyệt (thiết bị, OFF, đổi ca)',
     '/baocao — Tóm tắt nhân sự hôm nay',
+    '/hoso_nhanvien <code>mã</code> — Hồ sơ chi tiết 1 NV',
+    '/tim_nv <code>từ khoá</code> — Tìm NV theo tên/SĐT/mã',
+    '/chamcong <code>mã [ngày]</code> — Giờ in/out + vi phạm',
+    '/lich_nv <code>mã</code> — Lịch 2 tuần của 1 NV',
+    '/off_cn <code>CN</code> — Ai OFF hôm nay theo CN',
+    '/tre_cn <code>[CN]</code> — Ai trễ/về sớm hôm nay',
+    '/luong_nv <code>mã</code> — Lương tạm tính 1 NV',
+    '/ds_cn <code>CN [ca]</code> — Danh sách NV theo CN/ca',
+    '/don_dep_trung <code>[mã]</code> — Xoá tin trùng trên chat',
     '/broadcast <code>nội dung</code> — Gửi Ed Mini App NV (quản lý Bot NV)',
     '/help — Hướng dẫn này',
   ].join('\n'),
@@ -353,6 +383,14 @@ function getHrRoleMenuText(user) {
       + `• <code>/tonghop_lich [tuần]</code> — Ma trận lịch tuần 🟢/🔴 theo chi nhánh & ca\n`
       + `• <code>/sap_lich_nv [mã] [lịch]</code> — Xếp/chỉnh lịch NV (VD: <code>/sap_lich_nv NV1288 T2-ON, T5-OFF, CN-ON</code>)\n`
       + `• <code>/hoso_nhanvien [mã]</code> — Tra cứu chi tiết hồ sơ nhân viên\n`
+      + `• <code>/tim_nv &lt;tên/SĐT/mã&gt;</code> — Tìm nhanh NV (VD: <code>/tim_nv Ngân</code>)\n`
+      + `• <code>/chamcong &lt;mã&gt; [ngày]</code> — Giờ in/out + vi phạm (VD: <code>/chamcong NV8365 18/09/2026</code>)\n`
+      + `• <code>/lich_nv &lt;mã&gt;</code> — Lịch 2 tuần của 1 NV\n`
+      + `• <code>/off_cn &lt;CN&gt;</code> — Ai OFF hôm nay (VD: <code>/off_cn CN4</code>)\n`
+      + `• <code>/tre_cn [CN]</code> — Ai trễ/về sớm hôm nay\n`
+      + `• <code>/luong_nv &lt;mã&gt;</code> — Lương tạm tính 1 NV\n`
+      + `• <code>/ds_cn &lt;CN&gt; [ca]</code> — Danh sách NV theo CN/ca\n`
+      + `• <code>/don_dep_trung [mã_NV]</code> — Xoá tin trùng trên chat, giữ bản mới nhất\n`
       + `• <code>/sua_thongtin_nhanvien: [mã] [ca_cũ] sang [ca_mới], [CN_cũ] sang [CN_mới]</code> — Sửa thông tin NV & đồng bộ Google Sheet\n`
       + `• <code>/xoa_nhanvien &lt;Mã_NV&gt;</code> — Xoá vĩnh viễn nhân viên trên Google Sheet 17iXM & Hệ thống\n`
       + `• <code>/xoa_off &lt;Mã_NV&gt;</code> — Xoá lịch OFF 2 ngày/tuần, dọn thông báo trùng & nhắc NV đăng ký lại\n`
@@ -377,6 +415,14 @@ function getHrRoleMenuText(user) {
       + `• <code>/tonghop_lich [tuần]</code> — Ma trận lịch tuần 🟢/🔴 theo chi nhánh & ca\n`
       + `• <code>/sap_lich_nv [mã] [lịch]</code> — Xếp/chỉnh lịch làm việc cho nhân viên\n`
       + `• <code>/hoso_nhanvien [mã]</code> — Tra cứu chi tiết hồ sơ nhân viên\n`
+      + `• <code>/tim_nv &lt;tên/SĐT/mã&gt;</code> — Tìm nhanh NV\n`
+      + `• <code>/chamcong &lt;mã&gt; [ngày]</code> — Giờ in/out + vi phạm\n`
+      + `• <code>/lich_nv &lt;mã&gt;</code> — Lịch 2 tuần của 1 NV\n`
+      + `• <code>/off_cn &lt;CN&gt;</code> — Ai OFF hôm nay\n`
+      + `• <code>/tre_cn [CN]</code> — Ai trễ/về sớm hôm nay\n`
+      + `• <code>/luong_nv &lt;mã&gt;</code> — Lương tạm tính 1 NV\n`
+      + `• <code>/ds_cn &lt;CN&gt; [ca]</code> — Danh sách NV theo CN/ca\n`
+      + `• <code>/don_dep_trung [mã_NV]</code> — Xoá tin trùng trên chat\n`
       + `• <code>/sua_thongtin_nhanvien: [mã] [ca_cũ] sang [ca_mới], [CN_cũ] sang [CN_mới]</code> — Sửa thông tin NV & đồng bộ Google Sheet\n`
       + `• <code>/xoa_nhanvien &lt;Mã_NV&gt;</code> — Xoá vĩnh viễn nhân viên trên Google Sheet 17iXM & Hệ thống\n`
       + `• <code>/xoa_off &lt;Mã_NV&gt;</code> — Xoá lịch OFF 2 ngày/tuần, dọn thông báo trùng & nhắc NV đăng ký lại\n`
@@ -394,6 +440,10 @@ function getHrRoleMenuText(user) {
       + `• <code>/lich_cn</code> — Xem lịch làm việc tuần của nhân viên tại chi nhánh\n`
       + `• <code>/duyet_phieuluong</code> — Duyệt & tự động phát phiếu lương tháng cho NV chi nhánh\n`
       + `• <code>/hoso_nhanvien [mã]</code> — Tra cứu hồ sơ nhân viên chi nhánh\n`
+      + `• <code>/tim_nv &lt;tên/SĐT&gt;</code> — Tìm nhanh NV chi nhánh\n`
+      + `• <code>/chamcong &lt;mã&gt; [ngày]</code> — Chấm công 1 NV\n`
+      + `• <code>/off_cn</code> — Ai OFF hôm nay tại CN\n`
+      + `• <code>/tre_cn</code> — Ai trễ/về sớm hôm nay\n`
       + `• <code>/duyet_ca</code> — Phê duyệt đổi ca / tráo ca của chi nhánh\n`
       + `• <code>/baohong_cn</code> — Báo cáo sự cố thiết bị tại chi nhánh\n`
       + `• <code>/doi_mat_khau [user] [pass_cu] [pass_moi]</code> — Đổi mật khẩu tài khoản\n`
@@ -667,6 +717,70 @@ async function handleTelegramUpdate(update, ctx) {
           actions.push({ chatId, text: r.text });
         } else {
           actions.push({ chatId, text: 'Chức năng tra cứu hồ sơ nhân viên tạm thời không khả dụng.' });
+        }
+      } else if (text.startsWith('/tim_nv')) {
+        const kw = text.replace(/^\/tim_nv:?/, '').trim();
+        if (ctx?.hrSearchEmployee) {
+          const r = await ctx.hrSearchEmployee(hrSession, kw);
+          actions.push({ chatId, text: r.text });
+        } else {
+          actions.push({ chatId, text: '🔎 Chức năng tìm nhân viên tạm thời không khả dụng.' });
+        }
+      } else if (text.startsWith('/chamcong')) {
+        const args = text.replace(/^\/chamcong:?/, '').trim().split(/\s+/).filter(Boolean);
+        if (ctx?.hrGetAttendance) {
+          const r = await ctx.hrGetAttendance(hrSession, args[0] || '', args.slice(1).join(' '));
+          actions.push({ chatId, text: r.text });
+        } else {
+          actions.push({ chatId, text: '📍 Chức năng chấm công tạm thời không khả dụng.' });
+        }
+      } else if (text.startsWith('/lich_nv')) {
+        const code = text.replace(/^\/lich_nv:?/, '').trim();
+        if (ctx?.hrGetEmployeeSchedule) {
+          const r = await ctx.hrGetEmployeeSchedule(hrSession, code);
+          actions.push({ chatId, text: r.text });
+        } else {
+          actions.push({ chatId, text: '📅 Chức năng lịch NV tạm thời không khả dụng.' });
+        }
+      } else if (text.startsWith('/off_cn')) {
+        const branch = text.replace(/^\/off_cn:?/, '').trim();
+        if (ctx?.hrGetOffByBranch) {
+          const r = await ctx.hrGetOffByBranch(hrSession, branch);
+          actions.push({ chatId, text: r.text });
+        } else {
+          actions.push({ chatId, text: '🏖️ Chức năng OFF chi nhánh tạm thời không khả dụng.' });
+        }
+      } else if (text.startsWith('/tre_cn')) {
+        const branch = text.replace(/^\/tre_cn:?/, '').trim();
+        if (ctx?.hrGetLateByBranch) {
+          const r = await ctx.hrGetLateByBranch(hrSession, branch);
+          actions.push({ chatId, text: r.text });
+        } else {
+          actions.push({ chatId, text: '⏰ Chức năng vi phạm giờ giấc tạm thời không khả dụng.' });
+        }
+      } else if (text.startsWith('/luong_nv')) {
+        const args = text.replace(/^\/luong_nv:?/, '').trim().split(/\s+/).filter(Boolean);
+        if (ctx?.hrGetSalaryByEmployee) {
+          const r = await ctx.hrGetSalaryByEmployee(hrSession, args[0] || '', args[1] || '');
+          actions.push({ chatId, text: r.text });
+        } else {
+          actions.push({ chatId, text: '💰 Chức năng lương NV tạm thời không khả dụng.' });
+        }
+      } else if (text.startsWith('/ds_cn')) {
+        const args = text.replace(/^\/ds_cn:?/, '').trim().split(/\s+/).filter(Boolean);
+        if (ctx?.hrGetListByBranch) {
+          const r = await ctx.hrGetListByBranch(hrSession, args[0] || '', args[1] || '');
+          actions.push({ chatId, text: r.text });
+        } else {
+          actions.push({ chatId, text: '👥 Chức năng danh sách CN tạm thời không khả dụng.' });
+        }
+      } else if (text.startsWith('/don_dep_trung')) {
+        const code = text.replace(/^\/don_dep_trung:?/, '').trim();
+        if (ctx?.hrCleanChatDuplicates) {
+          const r = await ctx.hrCleanChatDuplicates(hrSession, code);
+          actions.push({ chatId, text: r.text });
+        } else {
+          actions.push({ chatId, text: '🧹 Chức năng dọn tin trùng tạm thời không khả dụng.' });
         }
       } else if (text.startsWith('/them_nv_chinhthuc')) {
         const rawArgs = text.replace(/^\/them_nv_chinhthuc:?/, '').trim();
@@ -1284,6 +1398,7 @@ module.exports = {
   verifyTelegramInitData,
   tgApi,
   sendTelegramMessage,
+  deleteTelegramMessage,
   answerTelegramCallbackQuery,
   setTelegramWebhook,
   setTelegramMenuButton,

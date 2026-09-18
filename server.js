@@ -12437,9 +12437,7 @@ async function notifyHRMaster(kind, text, probe, extra = {}) {
     if (!db.adminNotificationQueue) db.adminNotificationQueue = [];
 
     const dedupeKey = extra?.dedupeKey || null;
-    if (dedupeKey && db.sentAdminNotifKeys.includes(dedupeKey)) {
-      return { ok: false, skipped: 'duplicate' };
-    }
+    const empIdEarly = extra?.employeeId || probe?.employeeId || probe?.id || null;
 
     if (OUTBOUND_SYNC_DISABLED) {
       if (dedupeKey) {
@@ -12450,6 +12448,28 @@ async function notifyHRMaster(kind, text, probe, extra = {}) {
     }
 
     const cfg = getTelegramCfg('hr');
+    const nowEarly = Date.now();
+    const activeHrChatsEarly = (db.hrBotChats || []).filter((c) => {
+      if (!c.chatId) return false;
+      if (c.auth && c.auth.loggedInAt) {
+        const loginTime = new Date(c.auth.loggedInAt).getTime();
+        if (nowEarly - loginTime > 24 * 60 * 60 * 1000) return false;
+      }
+      return !!c.auth;
+    });
+    const isOnline = !!(cfg.botToken && activeHrChatsEarly.length);
+    const isDupKey = !!(dedupeKey && db.sentAdminNotifKeys.includes(dedupeKey));
+    // Chế độ "Xoá bản cũ, giữ bản mới": khi HR đang online và tin gắn với NV cụ thể
+    // thì KHÔNG chặn tin trùng dedupeKey — tiến hành xoá bản cũ trên chat rồi gửi bản mới.
+    // Chỉ chặn trùng khi HR offline (tránh spam hàng đợi) hoặc tin không gắn NV.
+    if (isDupKey && (!isOnline || !empIdEarly)) {
+      return { ok: false, skipped: 'duplicate' };
+    }
+    // HR offline + đã có cùng dedupeKey trong hàng đợi -> bỏ qua để khỏi spam lúc login
+    if (dedupeKey && !isOnline && db.adminNotificationQueue.some(n => n.dedupeKey === dedupeKey)) {
+      return { ok: false, skipped: 'duplicate-queued' };
+    }
+
     if (!cfg.botToken) {
       db.adminNotificationQueue.push({
         id: 'notif_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
@@ -12494,20 +12514,62 @@ async function notifyHRMaster(kind, text, probe, extra = {}) {
       return { ok: true, queued: true, text: 'Đã lưu hàng đợi thông báo cho HR' };
     }
 
+    const empId = extra?.employeeId || probe?.employeeId || probe?.id || null;
+    if (!db.lastAdminNotifMessages) db.lastAdminNotifMessages = {};
+
     let sent = 0;
+    let needSave = false;
     for (const c of activeHrChats) {
       try {
+        // Tự động xoá tin nhắn cũ / trùng lặp của nhân viên này trên chat Telegram Quản trị
+        // (Xoá bản cũ, giữ bản mới): xoá TẤT CẢ messageId đã lưu trước đó, tương thích bản ghi cũ 1 id.
+        if (empId) {
+          const chatMsgKey = `${c.chatId}_${kind}_${empId}`;
+          const lastMsg = db.lastAdminNotifMessages[chatMsgKey];
+          const oldIds = [];
+          if (lastMsg) {
+            if (Array.isArray(lastMsg.ids)) oldIds.push(...lastMsg.ids);
+            if (lastMsg.messageId) oldIds.push(lastMsg.messageId);
+            if (Array.isArray(lastMsg.messageIds)) oldIds.push(...lastMsg.messageIds);
+          }
+          for (const mid of [...new Set(oldIds)].filter(Boolean)) {
+            try {
+              await tg.deleteTelegramMessage(cfg.botToken, c.chatId, mid);
+            } catch (err) {}
+          }
+          if (oldIds.length) needSave = true;
+        }
+
         const r = await tg.sendTelegramMessage(cfg.botToken, c.chatId, text, extra || {});
         logTelegram('OUT', c.chatId, text, r.ok ? 'SENT' : 'FAILED');
-        if (r.ok) sent++;
+        if (r.ok) {
+          sent++;
+          if (empId && r.result?.message_id) {
+            const chatMsgKey = `${c.chatId}_${kind}_${empId}`;
+            const prev = db.lastAdminNotifMessages[chatMsgKey];
+            const prevIds = [];
+            if (prev) {
+              if (Array.isArray(prev.ids)) prevIds.push(...prev.ids);
+              if (prev.messageId) prevIds.push(prev.messageId);
+            }
+            const allIds = [...prevIds, r.result.message_id].slice(-5);
+            db.lastAdminNotifMessages[chatMsgKey] = {
+              messageId: r.result.message_id,
+              ids: allIds,
+              sentAt: getVietnamISOString()
+            };
+          }
+          needSave = true;
+        }
       } catch (e) { logTelegram('OUT', c.chatId, text, 'FAILED: ' + e.message); }
     }
 
-    if (sent > 0 && dedupeKey) {
+    if (dedupeKey && !db.sentAdminNotifKeys.includes(dedupeKey)) {
       db.sentAdminNotifKeys.push(dedupeKey);
       if (db.sentAdminNotifKeys.length > 1000) db.sentAdminNotifKeys = db.sentAdminNotifKeys.slice(-1000);
-      saveDB();
+      needSave = true;
     }
+    if (needSave) { try { saveDB(); } catch (e) {} }
 
     return { ok: sent > 0, sent };
   } catch (e) { return { ok: false, skipped: 'error' }; }
@@ -13461,6 +13523,142 @@ function hrGetEmployeeProfile(session, empQuery) {
   return { text: profileText, employee: emp };
 }
 
+function hrScopeFilter(session, list) {
+  const role = String(session?.role || '').toUpperCase();
+  if (role === 'ADMIN' || role === 'HR') return list;
+  const scope = session?.branchScope;
+  if (!Array.isArray(scope) || !scope.length) return list;
+  return list.filter(e => !e.branchId || scope.includes(e.branchId));
+}
+function hrParseDateArg(s) {
+  const t = String(s || '').trim();
+  if (!t) return getVietnamTodayStr();
+  let m = t.match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?$/);
+  if (m) {
+    const y = m[3] || String(new Date().getFullYear());
+    return `${y}-${String(m[2]).padStart(2, '0')}-${String(m[1]).padStart(2, '0')}`;
+  }
+  m = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) return `${m[1]}-${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}`;
+  return getVietnamTodayStr();
+}
+// /tim_nv <từ khoá> — tìm theo tên / SĐT / mã NV (tối đa 5)
+function hrSearchEmployee(session, keyword) {
+  if (!session) return { text: '⛔ Bạn chưa đăng nhập tài khoản Quản trị.' };
+  const kw = String(keyword || '').trim().toLowerCase();
+  if (!kw) return { text: '🔎 <b>CÚ PHÁP TÌM NHÂN VIÊN:</b>\n👉 <code>/tim_nv &lt;tên / SĐT / mã NV&gt;</code>\n<i>VD:</i> <code>/tim_nv Ngân</code> • <code>/tim_nv 0905</code> • <code>/tim_nv NV8365</code>' };
+  const digits = kw.replace(/\D/g, '');
+  let list = (db.employees || []).filter(e => {
+    if (['ARCHIVED', 'TERMINATED', 'RESIGNED'].includes(e.status)) return false;
+    const name = String(e.name || '').toLowerCase();
+    const eid = String(e.employeeId || '').toLowerCase();
+    const phone = String(e.phone || '');
+    return name.includes(kw) || eid.includes(kw) || (digits.length >= 3 && phone.includes(digits));
+  });
+  list = hrScopeFilter(session, list).slice(0, 5);
+  if (!list.length) return { text: `⚠️ Không tìm thấy NV khớp: <code>${keyword}</code>` };
+  return { text: `🔎 <b>TÌM NV (${list.length}):</b>\n` + list.map(e => `• <b>${e.name}</b> (<code>${e.employeeId}</code>) • ${e.branchId || '?'} • ${e.shift || '?'} • ${e.phone || '—'}`).join('\n') };
+}
+// /chamcong <mã> [ngày] — chi tiết in/out, GPS, vi phạm
+function hrGetAttendance(session, empQuery, dateArg) {
+  if (!session) return { text: '⛔ Bạn chưa đăng nhập tài khoản Quản trị.' };
+  if (!empQuery) return { text: '📍 <b>CÚ PHÁP CHẤM CÔNG:</b>\n👉 <code>/chamcong &lt;mã_NV&gt; [ngày]</code>\n<i>VD:</i> <code>/chamcong NV8365</code> • <code>/chamcong NV8365 18/09/2026</code>' };
+  const emp = findEmployeeByShortOrFullId(empQuery);
+  if (!emp) return { text: `⚠️ Không tìm thấy NV: <code>${empQuery}</code>` };
+  const role = String(session.role || '').toUpperCase();
+  if (role !== 'ADMIN' && role !== 'HR' && Array.isArray(session.branchScope) && session.branchScope.length && emp.branchId && !session.branchScope.includes(emp.branchId)) {
+    return { text: `⛔ NV <b>${emp.name}</b> (${emp.branchId}) ngoài phạm vi của bạn.` };
+  }
+  const d = hrParseDateArg(dateArg);
+  const rec = (db.attendances || []).find(a => a.employeeId === emp.employeeId && String(a.date || '').split('T')[0] === d);
+  if (!rec) return { text: `📍 <b>CHẤM CÔNG ${fmtDMY(d)}</b>\n👤 <b>${emp.name}</b> (<code>${emp.employeeId}</code>)\n⚪ Chưa có bản ghi điểm danh.` };
+  const ci = rec.checkIn?.time || rec.checkInAt || '—';
+  const co = rec.checkOut?.time || rec.checkOutAt || '—';
+  return { text: `📍 <b>CHẤM CÔNG ${fmtDMY(d)}</b>\n👤 <b>${emp.name}</b> (<code>${emp.employeeId}</code> • ${emp.branchId || ''} • ${rec.shift || emp.shift || ''})\n• Vào ca: <b>${ci}</b>\n• Ra ca: <b>${co}</b>\n• Trạng thái: <b>${rec.status || '—'}</b>\n• Vi phạm: <b>${(rec.violations && rec.violations.length) ? rec.violations.join(', ') : 'Không'}</b>` };
+}
+// /lich_nv <mã> — lịch 2 tuần gần nhất của 1 NV
+function hrGetEmployeeSchedule(session, empQuery) {
+  if (!session) return { text: '⛔ Bạn chưa đăng nhập tài khoản Quản trị.' };
+  if (!empQuery) return { text: '📅 <b>CÚ PHÁP XEM LỊCH NV:</b>\n👉 <code>/lich_nv &lt;mã_NV&gt;</code>\n<i>VD:</i> <code>/lich_nv NV8365</code>' };
+  const emp = findEmployeeByShortOrFullId(empQuery);
+  if (!emp) return { text: `⚠️ Không tìm thấy NV: <code>${empQuery}</code>` };
+  const scheds = (db.schedules || []).filter(s => s.employeeId === emp.employeeId).sort((a, b) => String(a.weekStart).localeCompare(String(b.weekStart))).slice(-2);
+  if (!scheds.length) return { text: `📅 <b>${emp.name}</b> (<code>${emp.employeeId}</code>): chưa có lịch tuần nào.` };
+  const lines = scheds.map(s => {
+    const days = (s.days || []).map(d => `${d.dayName || d.date.slice(8, 10)}:${d.status === 'OFF' ? 'OFF' : (d.shift || '').replace('CA_', '')}`).join(' ');
+    return `• Tuần <b>${fmtDMY(s.weekStart)}</b>: ${days}`;
+  });
+  return { text: `📅 <b>LỊCH ${emp.name}</b> (<code>${emp.employeeId}</code> • ${emp.branchId || ''})\n` + lines.join('\n') };
+}
+// /off_cn <CN> — ai OFF hôm nay
+function hrGetOffByBranch(session, branchArg) {
+  if (!session) return { text: '⛔ Bạn chưa đăng nhập tài khoản Quản trị.' };
+  const b = String(branchArg || '').trim().toUpperCase();
+  const today = getVietnamTodayStr();
+  let emps = (db.employees || []).filter(e => !['ARCHIVED', 'TERMINATED', 'RESIGNED'].includes(e.status));
+  emps = hrScopeFilter(session, emps);
+  if (b) emps = emps.filter(e => String(e.branchId || '').toUpperCase() === b);
+  const offEmps = emps.filter(e => {
+    const s = (db.schedules || []).find(x => x.employeeId === e.employeeId && Array.isArray(x.days) && x.days.some(d => d.date === today && (d.status === 'OFF' || d.shift === 'OFF')));
+    if (s) return true;
+    return (db.offRequests || []).some(r => r.employeeId === e.employeeId && r.status !== 'REJECTED' && Array.isArray(r.dates) && r.dates.includes(today));
+  });
+  const label = b || 'toàn hệ thống';
+  if (!offEmps.length) return { text: `🏖️ Hôm nay ${fmtDMY(today)} — <b>${label}</b>: không có NV OFF.` };
+  return { text: `🏖️ <b>OFF HÔM NAY ${fmtDMY(today)} — ${label} (${offEmps.length}):</b>\n` + offEmps.slice(0, 20).map(e => `• <b>${e.name}</b> (<code>${e.employeeId}</code> • ${e.shift || ''})`).join('\n') };
+}
+// /tre_cn [CN] — ai đi trễ / về sớm hôm nay
+function hrGetLateByBranch(session, branchArg) {
+  if (!session) return { text: '⛔ Bạn chưa đăng nhập tài khoản Quản trị.' };
+  const b = String(branchArg || '').trim().toUpperCase();
+  const today = getVietnamTodayStr();
+  let atts = (db.attendances || []).filter(a => String(a.date || '').split('T')[0] === today && Array.isArray(a.violations) && a.violations.length);
+  if (b) atts = atts.filter(a => {
+    const e = (db.employees || []).find(x => x.employeeId === a.employeeId);
+    return String(e?.branchId || a.branchId || '').toUpperCase() === b;
+  });
+  const role = String(session.role || '').toUpperCase();
+  if (role !== 'ADMIN' && role !== 'HR' && Array.isArray(session.branchScope) && session.branchScope.length) {
+    atts = atts.filter(a => {
+      const e = (db.employees || []).find(x => x.employeeId === a.employeeId);
+      return session.branchScope.includes(e?.branchId || a.branchId);
+    });
+  }
+  const label = b || 'toàn hệ thống';
+  if (!atts.length) return { text: `✅ Hôm nay ${fmtDMY(today)} — <b>${label}</b>: không có vi phạm giờ giấc.` };
+  return { text: `⏰ <b>VI PHẠM GIỜ GIẤC ${fmtDMY(today)} — ${label} (${atts.length}):</b>\n` + atts.slice(0, 20).map(a => {
+    const e = (db.employees || []).find(x => x.employeeId === a.employeeId);
+    return `• <b>${e?.name || a.employeeId}</b> (<code>${a.employeeId}</code>): ${a.violations.join(', ')}`;
+  }).join('\n') };
+}
+// /luong_nv <mã> [tháng YYYY-MM] — lương tạm tính
+function hrGetSalaryByEmployee(session, empQuery, monthArg) {
+  if (!session) return { text: '⛔ Bạn chưa đăng nhập tài khoản Quản trị.' };
+  if (!empQuery) return { text: '💰 <b>CÚ PHÁP LƯƠNG NV:</b>\n👉 <code>/luong_nv &lt;mã_NV&gt; [YYYY-MM]</code>\n<i>VD:</i> <code>/luong_nv NV8365</code> • <code>/luong_nv NV8365 2026-09</code>' };
+  const emp = findEmployeeByShortOrFullId(empQuery);
+  if (!emp) return { text: `⚠️ Không tìm thấy NV: <code>${empQuery}</code>` };
+  const m = (/^\d{4}-\d{2}$/.test(String(monthArg || '').trim())) ? String(monthArg).trim() : getVietnamTodayStr().slice(0, 7);
+  const rate = emp.type === 'OFFICIAL' ? 25500 : 21000;
+  const hours = { CA_SANG: 5, CA_CHIEU: 6, CA_TRUA: 6, CA_TOI: 5 };
+  let shifts = 0, total = 0;
+  (db.attendances || []).filter(a => a.employeeId === emp.employeeId && String(a.date || '').startsWith(m)).forEach(a => {
+    if ((a.checkIn || a.checkInAt) && (a.checkOut || a.checkOutAt)) { shifts++; total += (hours[a.shift] || 5) * rate; }
+  });
+  return { text: `💰 <b>LƯƠNG TẠM TÍNH ${m.split('-').reverse().join('/')}</b>\n👤 <b>${emp.name}</b> (<code>${emp.employeeId}</code>)\n• Mức: <b>${rate.toLocaleString('vi-VN')}đ/giờ</b> (${emp.type === 'OFFICIAL' ? 'Chính thức' : 'Training'})\n• Số ca hợp lệ: <b>${shifts}</b>\n• Tạm tính: <b>${Number(total).toLocaleString('vi-VN')}đ</b>` };
+}
+// /ds_cn <CN> [ca] — danh sách NV theo chi nhánh + ca
+function hrGetListByBranch(session, branchArg, shiftArg) {
+  if (!session) return { text: '⛔ Bạn chưa đăng nhập tài khoản Quản trị.' };
+  if (!branchArg) return { text: '👥 <b>CÚ PHÁP DANH SÁCH CN:</b>\n👉 <code>/ds_cn &lt;CN&gt; [ca]</code>\n<i>VD:</i> <code>/ds_cn CN4</code> • <code>/ds_cn CN4 CA_TOI</code>' };
+  const b = String(branchArg).trim().toUpperCase();
+  const sh = String(shiftArg || '').trim().toUpperCase();
+  let emps = (db.employees || []).filter(e => !['ARCHIVED', 'TERMINATED', 'RESIGNED'].includes(e.status) && String(e.branchId || '').toUpperCase() === b);
+  if (sh) emps = emps.filter(e => String(e.shift || '').toUpperCase() === sh);
+  emps = hrScopeFilter(session, emps);
+  if (!emps.length) return { text: `👥 <b>${b}${sh ? ' • ' + sh : ''}</b>: chưa có nhân viên.` };
+  return { text: `👥 <b>${b}${sh ? ' • ' + sh : ''} (${emps.length}):</b>\n` + emps.slice(0, 25).map(e => `• <b>${e.name}</b> (<code>${e.employeeId}</code> • ${e.shift || ''} • ${e.type || ''})`).join('\n') + (emps.length > 25 ? `\n<i>…và ${emps.length - 25} NV khác</i>` : '') };
+}
+
 async function hrApproveAndSendPayslips(session, branchArg) {
   if (!session) return { text: '⛔ Bạn chưa đăng nhập tài khoản Quản trị.' };
   const roleUpper = String(session.role || '').toUpperCase();
@@ -14004,6 +14202,75 @@ function cleanDuplicateNotifications(targetEmployeeId = null) {
     cleanedCount += (before - db.notifications.length);
   }
   return cleanedCount;
+}
+
+// Dọn tin trùng trên chat HR: xoá bản cũ đã lưu messageId, chỉ giữ bản mới nhất.
+// /don_dep_trung [mã_NV] — không mã: dọn hàng đợi trùng; có mã: xoá thêm tin cũ của NV đó trên mọi chat HR.
+async function hrCleanChatDuplicates(session, empQuery) {
+  if (!session) return { text: '⛔ Bạn chưa đăng nhập tài khoản Quản trị.' };
+  const q = String(empQuery || '').trim();
+  let queueCleaned = 0;
+  try {
+    const seen = new Set();
+    const before = (db.adminNotificationQueue || []).length;
+    db.adminNotificationQueue = (db.adminNotificationQueue || []).filter(n => {
+      const k = n.dedupeKey || n.id;
+      if (!k) return true;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+    queueCleaned = before - db.adminNotificationQueue.length;
+  } catch (e) {}
+  let deletedMsgs = 0;
+  let keptMsgs = 0;
+  if (q) {
+    const emp = findEmployeeByShortOrFullId(q);
+    if (!emp) return { text: `⚠️ Không tìm thấy nhân viên với mã: <code>${q}</code>` };
+    const empId = emp.employeeId;
+    const cfg = getTelegramCfg('hr');
+    if (!db.lastAdminNotifMessages) db.lastAdminNotifMessages = {};
+    for (const key of Object.keys(db.lastAdminNotifMessages)) {
+      if (!key.endsWith('_' + empId)) continue;
+      const parts = key.split('_');
+      const chatId = parts[0];
+      const entry = db.lastAdminNotifMessages[key];
+      const ids = [];
+      if (entry) {
+        if (Array.isArray(entry.ids)) ids.push(...entry.ids);
+        if (entry.messageId) ids.push(entry.messageId);
+      }
+      const uniq = [...new Set(ids)].filter(Boolean);
+      if (uniq.length <= 1) { keptMsgs++; continue; }
+      const keepId = uniq[uniq.length - 1];
+      for (const mid of uniq.slice(0, -1)) {
+        try {
+          if (!OUTBOUND_SYNC_DISABLED && cfg.botToken) {
+            await tg.deleteTelegramMessage(cfg.botToken, chatId, mid);
+          }
+          deletedMsgs++;
+        } catch (e) {}
+      }
+      db.lastAdminNotifMessages[key] = { messageId: keepId, ids: [keepId], sentAt: getVietnamISOString() };
+      keptMsgs++;
+    }
+    try { saveDB(); } catch (e) {}
+    try { audit(session.username, 'CLEAN_CHAT_DUPLICATES', 'TELEGRAM', empId, { deletedMsgs, queueCleaned }, 'telegram_bot'); } catch (e) {}
+    return {
+      text: `🧹 <b>DỌN TIN TRÙNG TRÊN CHAT HR</b>\n\n`
+        + `👤 Nhân viên: <b>${emp.name}</b> (<code>${empId}</code>)\n`
+        + `• Đã xoá <b>${deletedMsgs}</b> bản cũ trùng trên chat (giữ lại bản mới nhất mỗi loại tin)\n`
+        + `• Đã lọc <b>${queueCleaned}</b> thông báo trùng trong hàng đợi\n`
+        + `📌 <i>Từ nay BOT tự động xoá bản cũ khi có tin mới cùng NV (chế độ Xoá bản cũ, giữ bản mới).</i>`
+    };
+  }
+  try { saveDB(); } catch (e) {}
+  return {
+    text: `🧹 <b>DỌN TIN TRÙNG TRÊN CHAT HR</b>\n\n`
+      + `• Đã lọc <b>${queueCleaned}</b> thông báo trùng trong hàng đợi\n`
+      + `• Muốn xoá tin cũ của 1 NV cụ thể, gõ: <code>/don_dep_trung &lt;mã_NV&gt;</code> (VD: <code>/don_dep_trung NV8365</code>)\n`
+      + `📌 <i>Từ nay BOT tự động xoá bản cũ khi có tin mới cùng NV.</i>`
+  };
 }
 
 // BOT telegram tự động xoá các thông báo trùng và các lịch đăng ký OFF 2 ngày /tuần và gửi thông báo yêu cầu nhân viên đó đăng ký lại lịch OFF 2 ngày/tuần
@@ -14555,6 +14822,14 @@ async function processTelegramUpdate(update, role){
     hrGetEmployeeProfile: async (session, empQuery) => {
       return hrGetEmployeeProfile(session, empQuery);
     },
+    hrSearchEmployee: async (session, keyword) => hrSearchEmployee(session, keyword),
+    hrGetAttendance: async (session, empQuery, dateArg) => hrGetAttendance(session, empQuery, dateArg),
+    hrGetEmployeeSchedule: async (session, empQuery) => hrGetEmployeeSchedule(session, empQuery),
+    hrGetOffByBranch: async (session, branchArg) => hrGetOffByBranch(session, branchArg),
+    hrGetLateByBranch: async (session, branchArg) => hrGetLateByBranch(session, branchArg),
+    hrGetSalaryByEmployee: async (session, empQuery, monthArg) => hrGetSalaryByEmployee(session, empQuery, monthArg),
+    hrGetListByBranch: async (session, branchArg, shiftArg) => hrGetListByBranch(session, branchArg, shiftArg),
+    hrCleanChatDuplicates: async (session, empQuery) => hrCleanChatDuplicates(session, empQuery),
     hrApproveAndSendPayslips: async (session, branchArg) => {
       return hrApproveAndSendPayslips(session, branchArg);
     },
@@ -15886,8 +16161,8 @@ async function processTelegramUpdate(update, role){
           + `⏰ Ca làm việc: <b>${emp.shift || 'Chưa gán'}</b>\n`
           + `📅 Ngày xin nghỉ OFF (2 ngày):\n${dates.map(d => `• <b>${fmtDMY(d)}</b> (Nghỉ)`).join('\n')}\n`
           + `⏱️ Thời gian gửi: <b>${getVietnamDateTimeStr()}</b> (Giờ VN)\n`
-          + `📌 Trạng thái: Đã cập nhật lịch làm việc tuần & sẵn sàng đối soát`;
-        await notifyHRMaster('off', hrAlert, emp);
+        const offDedupeKey = `off_${emp.employeeId}_${dates.slice().sort().join('_')}`;
+        await notifyHRMaster('off', hrAlert, emp, { dedupeKey: offDedupeKey, employeeId: emp.employeeId });
       } catch(e) {}
 
       const offFormatted = dates.map(d => `• <b>${fmtDMY(d)}</b> (Nghỉ OFF)`).join('\n');
