@@ -277,8 +277,8 @@ graph TD
 
 | Vai trò | Quyền hạn nghiệp vụ | Danh mục lệnh Telegram chuẩn |
 | :--- | :--- | :--- |
-| 👑 **Admin** | Toàn quyền hệ thống, cấp/phân quyền, chạy test, reset dữ liệu Google Sheet, xóa nhân viên | `/tonghop_lich`, `/sap_lich_nv`, `/sua_thongtin_nhanvien`, `/xoa_nhanvien`, `/duyet`, `/users`, `/capquyen`, `/phanquyen`, `/broadcast`, `/test`, `/delete_test`, `/doi_mat_khau`, `/hoso_nhanvien`, `/reset_hethong`, `/logout` |
-| 🛡️ **HR** | Quản lý lịch tuần NV, sửa thông tin NV, xóa NV, duyệt đổi ca, báo cáo, tra hồ sơ | `/tonghop_lich`, `/sap_lich_nv`, `/sua_thongtin_nhanvien`, `/xoa_nhanvien`, `/duyet`, `/baocao`, `/broadcast`, `/gui_de_thi`, `/doi_mat_khau`, `/hoso_nhanvien`, `/logout` |
+| 👑 **Admin** | Toàn quyền hệ thống, cấp/phân quyền, chạy test, reset dữ liệu Google Sheet, xóa nhân viên, xóa lịch OFF | `/tonghop_lich`, `/sap_lich_nv`, `/sua_thongtin_nhanvien`, `/xoa_nhanvien`, `/xoa_off`, `/duyet`, `/users`, `/capquyen`, `/phanquyen`, `/broadcast`, `/test`, `/delete_test`, `/doi_mat_khau`, `/hoso_nhanvien`, `/reset_hethong`, `/logout` |
+| 🛡️ **HR** | Quản lý lịch tuần NV, sửa thông tin NV, xóa NV, xóa lịch OFF, duyệt đổi ca, báo cáo, tra hồ sơ | `/tonghop_lich`, `/sap_lich_nv`, `/sua_thongtin_nhanvien`, `/xoa_nhanvien`, `/xoa_off`, `/duyet`, `/baocao`, `/broadcast`, `/gui_de_thi`, `/doi_mat_khau`, `/hoso_nhanvien`, `/logout` |
 | 🏪 **QL** | Giới hạn chi nhánh phụ trách (`branchScope`), **DUYỆT & PHÁT PHIẾU LƯƠNG THÁNG** | `/diemdanh_cn`, `/lich_cn`, `/duyet_ca`, `/baohong_cn`, `/doi_mat_khau`, `/duyet_phieuluong`, `/hoso_nhanvien`, `/logout` |
 | 📢 **MKT** | Đăng tin tức, sự kiện, phát khuyến mãi tới nhân viên | `/broadcast_mkt`, `/sukien`, `/tintuc`, `/doi_mat_khau`, `/logout` |
 
@@ -345,6 +345,43 @@ graph TD
   2. **Hệ thống Web App / Database**: Cascade xóa sạch sẽ toàn bộ dữ liệu gồm: Hồ sơ (`db.employees`), Chìa khóa (`db.keys`), Lịch làm việc (`db.schedules`), Chấm công (`db.attendances`), Phiếu OFF (`db.offRequests`), Phiếu đổi ca (`db.shiftSwapRequests`), Sự cố thiết bị (`db.deviceRequests`), Phiếu training (`db.trainingShiftRequests`), Bài test (`db.testResults`), Liên kết Bot (`db.telegramLinks`), và Hộp thư thông báo.
   3. **Thu hồi phiên làm việc tức thì (Force Logout)**: Ngay lập tức phát sự kiện `employee:forceLogout` qua WebSocket và hủy phiên đăng nhập của nhân viên trên mọi thiết bị.
   4. Bot gửi báo cáo tổng kết chi tiết số lượng dữ liệu đã dọn dẹp trên Web App và danh sách các tab Google Sheet đã xóa dòng thành công.
+
+---
+
+### 5.6C. Tự động xoá thông báo trùng, xoá lịch đăng ký OFF 2 ngày/tuần & Yêu cầu NV đăng ký lại (/xoa_off & /dangky_lai_off)
+> [!NOTE]
+> **Mục đích nghiệp vụ**:
+> Giúp giải quyết triệt để tình trạng thông báo bị trùng lặp trên hàng đợi Admin/HR và hỗ trợ đặt lại lịch đăng ký OFF 2 ngày/tuần của nhân viên, đồng thời tự động gửi thông báo trực tiếp qua Bot Telegram của nhân viên đó yêu cầu gửi lại 2 ngày nghỉ mới.
+
+* **1. Lệnh Quản trị trên Bot Quản trị HR (`@umbomilkhrbot`)**:
+  * **Quyền hạn**: Chỉ tài khoản **Admin (👑)** hoặc **HR (🛡️)** mới có quyền thực thi.
+  * **Cú pháp thực hiện**:
+    * `/xoa_off <Mã_NV>` hoặc `/xoa_off: <Mã_NV>` (hỗ trợ cả `/huy_off`, `/reset_off`).
+    * *Ví dụ:* `/xoa_off NV1288` hoặc `/xoa_off: 1288`
+  * **Hành vi xử lý tự động**:
+    1. **Dọn sạch thông báo trùng lặp (Zero Duplicate)**: Lọc bỏ toàn bộ các thông báo trùng lặp trong hàng đợi `db.adminNotificationQueue`, danh sách `db.notifications` và làm mới các khóa gửi `db.sentAdminNotifKeys`.
+    2. **Xóa phiếu đăng ký OFF 2 ngày/tuần**: Xóa bỏ các phiếu OFF cũ của nhân viên trong `db.offRequests`.
+    3. **Hoàn trả ngày công trong lịch tuần**: Quét lịch làm việc trong `db.schedules`, tự động chuyển các ngày có trạng thái `OFF` trở về ngày làm việc bình thường (`WORKING` theo ca mặc định của nhân viên) để bảo toàn công.
+    4. **Đồng bộ Google Sheet 17iXM**: Kích hoạt cập nhật tức thì tab `PHIEU_OFF_HANG_TUAN` và `LICH_LAM_VIEC`.
+    5. **Tự động gửi thông báo tới nhân viên qua Telegram**: Gửi tin nhắn đến tài khoản Telegram của nhân viên qua Bot Nhân viên (`@umbomilknvbot`):
+       ```
+       🔔 YÊU CẦU ĐĂNG KÝ LẠI LỊCH NGHỈ OFF (2 NGÀY/TUẦN)
+       
+       Chào bạn [Tên NV] ([Mã NV]),
+       Hệ thống đã tự động dọn dẹp các thông báo trùng lặp và làm mới lịch đăng ký OFF 2 ngày/tuần của bạn tại chi nhánh [Tên CN].
+       
+       👉 Vui lòng gửi lại 2 ngày bạn muốn đăng ký nghỉ OFF trong tuần:
+       dd/mm/yyyy, dd/mm/yyyy
+       
+       • Ví dụ: 20/09/2026, 24/09/2026
+       • Hoặc: 20/09, 24/09
+       ```
+    6. **Lưu thông báo Web App**: Tạo thông báo loại `warning` trong hộp thư Web App của nhân viên.
+    7. **Báo cáo kết quả về HR**: Trả về số phiếu đã xóa, số ngày công đã hoàn trả và trạng thái gửi tin tới nhân viên.
+
+* **2. Lệnh tự phục vụ trên Bot Nhân viên (`@umbomilknvbot`)**:
+  * **Cú pháp thực hiện**: `/dangky_lai_off` hoặc `/huy_off` (hoặc `/reset_off`).
+  * **Hành vi**: Tự động dọn dẹp phiếu OFF cũ và thông báo trùng của chính nhân viên đó, sau đó hướng dẫn gửi lại 2 ngày nghỉ mới ngay lập tức.
 
 ---
 

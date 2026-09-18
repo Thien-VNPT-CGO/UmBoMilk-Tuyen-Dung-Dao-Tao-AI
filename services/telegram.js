@@ -261,14 +261,17 @@ function hrMenuKeyboard(role, webAppUrl) {
       ],
       [
         { text: '🗑️ Xóa NV', callback_data: '/xoa_nhanvien' },
-        { text: '👥 Danh sách User', callback_data: '/users' }
+        { text: '🏖️ Xóa OFF', callback_data: '/xoa_off' }
       ],
       [
-        { text: '✅ Duyệt phiếu', callback_data: '/duyet' },
-        { text: '🗑️ Reset Sheet', callback_data: '/reset_hethong' }
+        { text: '👥 Danh sách User', callback_data: '/users' },
+        { text: '✅ Duyệt phiếu', callback_data: '/duyet' }
       ],
       [
-        { text: '🧪 Chạy Test', callback_data: '/test' },
+        { text: '🗑️ Reset Sheet', callback_data: '/reset_hethong' },
+        { text: '🧪 Chạy Test', callback_data: '/test' }
+      ],
+      [
         { text: '🚪 Đăng xuất', callback_data: '/logout' }
       ]
     ];
@@ -284,10 +287,13 @@ function hrMenuKeyboard(role, webAppUrl) {
       ],
       [
         { text: '🗑️ Xóa NV', callback_data: '/xoa_nhanvien' },
-        { text: '✅ Duyệt phiếu', callback_data: '/duyet' }
+        { text: '🏖️ Xóa OFF', callback_data: '/xoa_off' }
       ],
       [
-        { text: '📋 Báo cáo ngày', callback_data: '/baocao' },
+        { text: '✅ Duyệt phiếu', callback_data: '/duyet' },
+        { text: '📋 Báo cáo ngày', callback_data: '/baocao' }
+      ],
+      [
         { text: '🚪 Đăng xuất', callback_data: '/logout' }
       ]
     ];
@@ -295,15 +301,11 @@ function hrMenuKeyboard(role, webAppUrl) {
     inline_keyboard = [
       [
         { text: '📍 Điểm danh CN', callback_data: '/diemdanh_cn' },
-        { text: '📅 Lịch làm CN', callback_data: '/lich_cn' }
+        { text: '📅 Lịch CN', callback_data: '/lich_cn' }
       ],
       [
-        { text: '💵 Duyệt lương CN', callback_data: '/duyet_phieuluong' },
+        { text: '💳 Duyệt lương', callback_data: '/duyet_phieuluong' },
         { text: '📋 Hồ sơ NV', callback_data: '/hoso_nhanvien' }
-      ],
-      [
-        { text: '🔄 Duyệt đổi ca', callback_data: '/duyet_ca' },
-        { text: '🛠️ Báo hỏng CN', callback_data: '/baohong_cn' }
       ],
       [
         { text: '🚪 Đăng xuất', callback_data: '/logout' }
@@ -343,6 +345,7 @@ function getHrRoleMenuText(user) {
       + `• <code>/hoso_nhanvien [mã]</code> — Tra cứu chi tiết hồ sơ nhân viên\n`
       + `• <code>/sua_thongtin_nhanvien: [mã] [ca_cũ] sang [ca_mới], [CN_cũ] sang [CN_mới]</code> — Sửa thông tin NV & đồng bộ Google Sheet\n`
       + `• <code>/xoa_nhanvien &lt;Mã_NV&gt;</code> — Xoá vĩnh viễn nhân viên trên Google Sheet 17iXM & Hệ thống\n`
+      + `• <code>/xoa_off &lt;Mã_NV&gt;</code> — Xoá lịch OFF 2 ngày/tuần, dọn thông báo trùng & nhắc NV đăng ký lại\n`
       + `• <code>/duyet</code> — Xem và duyệt các phiếu chờ (OFF, Đổi ca, Thiết bị)\n`
       + `• <code>/broadcast [nội dung]</code> — Phát thông báo tới Mini App NV\n\n`
       + `👉 <b>Quản trị người dùng & hệ thống:</b>\n`
@@ -364,6 +367,7 @@ function getHrRoleMenuText(user) {
       + `• <code>/hoso_nhanvien [mã]</code> — Tra cứu chi tiết hồ sơ nhân viên\n`
       + `• <code>/sua_thongtin_nhanvien: [mã] [ca_cũ] sang [ca_mới], [CN_cũ] sang [CN_mới]</code> — Sửa thông tin NV & đồng bộ Google Sheet\n`
       + `• <code>/xoa_nhanvien &lt;Mã_NV&gt;</code> — Xoá vĩnh viễn nhân viên trên Google Sheet 17iXM & Hệ thống\n`
+      + `• <code>/xoa_off &lt;Mã_NV&gt;</code> — Xoá lịch OFF 2 ngày/tuần, dọn thông báo trùng & nhắc NV đăng ký lại\n`
       + `• <code>/duyet</code> — Duyệt các phiếu chờ (OFF, Đổi ca, Sự cố)\n`
       + `• <code>/baocao</code> — Tóm tắt tình hình nhân sự hôm nay\n`
       + `• <code>/broadcast [nội dung]</code> — Gửi thông báo tới nhân viên\n`
@@ -681,6 +685,33 @@ async function handleTelegramUpdate(update, ctx) {
           actions.push({ chatId, text: r.text });
         } else {
           actions.push({ chatId, text: 'Chức năng xóa nhân viên tạm thời không khả dụng.' });
+        }
+      } else if (text.startsWith('/xoa_off') || text.startsWith('/huy_off') || text.startsWith('/reset_off')) {
+        const rawCode = text.replace(/^(\/xoa_off|\/huy_off|\/reset_off):?/, '').trim();
+        const roleStr = String(hrSession.role || '').toUpperCase();
+        if (roleStr !== 'ADMIN' && roleStr !== 'HR') {
+          actions.push({
+            chatId,
+            text: '⛔ <b>TỪ CHỐI TRUY CẬP:</b> Bạn không có quyền thực hiện thao tác này.\nLệnh xóa lịch OFF chỉ dành cho 👑 <b>Admin</b> hoặc 🛡️ <b>HR</b>.'
+          });
+        } else if (!rawCode) {
+          actions.push({
+            chatId,
+            text: '🏖️ <b>CÚ PHÁP XÓA LỊCH OFF & YÊU CẦU ĐĂNG KÝ LẠI:</b>\n\n'
+              + '👉 <code>/xoa_off &lt;Mã_NV&gt;</code>\n'
+              + '<i>Hoặc:</i> <code>/huy_off &lt;Mã_NV&gt;</code> (hoặc <code>/reset_off &lt;Mã_NV&gt;</code>)\n\n'
+              + '• <i>Hỗ trợ mã ngắn:</i> <code>NV1288</code> hoặc <code>1288</code>\n'
+              + '• <i>Ví dụ:</i> <code>/xoa_off NV1288</code>\n\n'
+              + '🤖 <b>Cơ chế tự động:</b>\n'
+              + '1. Tự động xóa sạch các thông báo trùng lặp trong hàng đợi.\n'
+              + '2. Xóa các phiếu OFF 2 ngày/tuần và hoàn trả ngày làm việc về ca bình thường.\n'
+              + '3. Tự động gửi tin nhắn Telegram tới nhân viên yêu cầu đăng ký lại 2 ngày OFF tuần này!'
+          });
+        } else if (ctx?.hrResetEmployeeOff) {
+          const r = await ctx.hrResetEmployeeOff(hrSession, rawCode);
+          actions.push({ chatId, text: r.text });
+        } else {
+          actions.push({ chatId, text: 'Chức năng xóa lịch OFF tạm thời không khả dụng.' });
         }
       } else if (text.startsWith('/reset_hethong')) {
         if (String(hrSession.role || '').toUpperCase() !== 'ADMIN') {
@@ -1060,6 +1091,13 @@ async function handleTelegramUpdate(update, ctx) {
             + '🤖 <i>Bot Telegram sẽ tự động ghi nhận 2 ngày OFF này và cập nhật các ngày còn lại trong tuần là ngày LÀM VIỆC (WORKING) để chuyển HR phê duyệt lịch tuần cho bạn!</i>',
         });
       }
+    } else if (text === '/dangky_lai_off' || text === '/huy_off' || text === '/reset_off' || text === '/xoa_off' || text.startsWith('/dangky_lai_off') || text.startsWith('/huy_off') || text.startsWith('/reset_off') || text.startsWith('/xoa_off')) {
+      if (ctx?.employeeResetOff) {
+        const r = await ctx.employeeResetOff(String(from?.id));
+        actions.push({ chatId, text: r.text });
+      } else {
+        actions.push({ chatId, text: 'Chức năng làm mới lịch OFF tạm thời không khả dụng.' });
+      }
     } else if (isOffRegistration(text)) {
       const dates = extractOffDates(text);
       if (dates.length === 0) {
@@ -1076,9 +1114,10 @@ async function handleTelegramUpdate(update, ctx) {
             + `• <b>2 ngày OFF đã ghi nhận:</b> <code>${existing.dates.join(', ')}</code>\n`
             + `• <b>Trạng thái:</b> ⏳ Đang chờ HR phê duyệt lịch tuần\n\n`
             + `📌 <b>Quy định công ty:</b> Mỗi nhân viên chỉ được đăng ký tối đa 2 ngày OFF trong 1 tuần làm việc. Hệ thống không cho phép tự ý ghi đè.\n`
-            + `👉 <i>Nếu bạn có nhu cầu thay đổi, vui lòng:\n`
-            + `1. Liên hệ trực tiếp Quản lý cửa hàng hoặc HR để được hỗ trợ.\n`
-            + `2. Hoặc dùng chức năng <b>"🔄 Đổi ca"</b> để hoán đổi ngày làm việc với đồng nghiệp cùng chi nhánh.</i>`
+            + `👉 <b>Nếu bạn muốn đăng ký lại hoặc đổi sang 2 ngày khác:</b>\n`
+            + `Vui lòng gõ lệnh: <code>/dangky_lai_off</code> (hoặc <code>/huy_off</code>).\n`
+            + `(Bot sẽ tự động dọn dẹp thông báo trùng, xóa lịch OFF cũ và cho phép bạn gửi lại 2 ngày mới ngay lập tức!).\n\n`
+            + `• Hoặc dùng chức năng <b>"🔄 Đổi ca"</b> (<code>/doica</code>) để đổi ca với đồng nghiệp cùng chi nhánh.`
         });
       } else if (ctx?.checkColleagueOffConflict && (await ctx.checkColleagueOffConflict(String(from?.id), dates))?.hasConflict) {
         const conflict = await ctx.checkColleagueOffConflict(String(from?.id), dates);
@@ -1119,7 +1158,7 @@ async function handleTelegramUpdate(update, ctx) {
       } else {
         actions.push({
           chatId,
-          text: '🤖 <b>Trợ lý Bot Ụm Bò Milk</b>\n\nBạn có thể nhắn trực tiếp với Bot:\n• <code>/diemdanh</code> — Xem trạng thái vào/ra ca hôm nay\n• <code>/lich</code> — Xem lịch 7 ngày tới\n• <code>18/09/2026, 22/09/2026</code> — Đăng ký 2 ngày OFF\n• <code>/luong</code> — Xem tạm tính lương\n• <code>/doica</code> — Hướng dẫn đổi ca\n• <code>/baohong</code> — Báo hỏng thiết bị\n• <code>/sos</code> — Báo ca khẩn cấp\n\nHoặc nhắn bất kỳ câu hỏi/yêu cầu nào để Bot chuyển tới HR hỗ trợ bạn nhé!',
+          text: '🤖 <b>Trợ lý Bot Ụm Bò Milk</b>\n\nBạn có thể nhắn trực tiếp với Bot:\n• <code>/diemdanh</code> — Xem trạng thái vào/ra ca hôm nay\n• <code>/lich</code> — Xem lịch 7 ngày tới\n• <code>18/09/2026, 22/09/2026</code> — Đăng ký 2 ngày OFF\n• <code>/dangky_lai_off</code> — Làm mới lịch & đăng ký lại 2 ngày OFF\n• <code>/luong</code> — Xem tạm tính lương\n• <code>/doica</code> — Hướng dẫn đổi ca\n• <code>/baohong</code> — Báo hỏng thiết bị\n• <code>/sos</code> — Báo ca khẩn cấp\n\nHoặc nhắn bất kỳ câu hỏi/yêu cầu nào để Bot chuyển tới HR hỗ trợ bạn nhé!',
           extra: employeeMenuKeyboard(webAppUrl),
         });
       }

@@ -13883,6 +13883,185 @@ async function handleHrApproveShiftSwap(swapId, isApproved, hrSession) {
   return { text: `✅ Đã phê duyệt và cập nhật lịch đổi ca thành công cho <b>${swap.fromEmployeeName}</b> và <b>${swap.toEmployeeName}</b>.` };
 }
 
+// Tự động dọn dẹp các thông báo trùng lặp trong hàng đợi adminNotificationQueue và notifications
+function cleanDuplicateNotifications(targetEmployeeId = null) {
+  let cleanedCount = 0;
+  if (db.adminNotificationQueue && db.adminNotificationQueue.length > 0) {
+    const seen = new Set();
+    const before = db.adminNotificationQueue.length;
+    db.adminNotificationQueue = db.adminNotificationQueue.filter(n => {
+      if (targetEmployeeId && (n.employeeId === targetEmployeeId || n.data?.employeeId === targetEmployeeId)) {
+        return false;
+      }
+      const k = n.dedupeKey || n.id || `${n.action || ''}_${n.employeeId || ''}_${n.title || ''}`;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+    cleanedCount += (before - db.adminNotificationQueue.length);
+  }
+
+  if (db.sentAdminNotifKeys && targetEmployeeId) {
+    const before = db.sentAdminNotifKeys.length;
+    db.sentAdminNotifKeys = (db.sentAdminNotifKeys || []).filter(k => !String(k).includes(targetEmployeeId));
+    cleanedCount += (before - db.sentAdminNotifKeys.length);
+  }
+
+  if (db.notifications && db.notifications.length > 0) {
+    const seenNotif = new Set();
+    const before = db.notifications.length;
+    db.notifications = db.notifications.filter(n => {
+      if (targetEmployeeId && (n.employeeId === targetEmployeeId || n.data?.employeeId === targetEmployeeId) && (n.title?.toLowerCase().includes('off') || n.message?.toLowerCase().includes('off'))) {
+        return false;
+      }
+      const k = `${n.employeeId || ''}_${n.title || ''}_${n.message || ''}`;
+      if (seenNotif.has(k)) return false;
+      seenNotif.add(k);
+      return true;
+    });
+    cleanedCount += (before - db.notifications.length);
+  }
+  return cleanedCount;
+}
+
+// BOT telegram tự động xoá các thông báo trùng và các lịch đăng ký OFF 2 ngày /tuần và gửi thông báo yêu cầu nhân viên đó đăng ký lại lịch OFF 2 ngày/tuần
+async function autoCleanDuplicatesAndResetOff(empQuery, reason = 'Hệ thống tự động làm mới lịch') {
+  let emp = null;
+  if (typeof empQuery === 'string') {
+    emp = findEmployeeByShortOrFullId(empQuery);
+    if (!emp && db.applicants) {
+      const qUpper = empQuery.trim().toUpperCase();
+      const qDigits = empQuery.replace(/\D/g, '');
+      emp = db.applicants.find(a => (a.id && a.id.toUpperCase() === qUpper) || (a.phone && qDigits && qDigits.length >= 8 && a.phone.includes(qDigits)));
+    }
+  } else if (empQuery && typeof empQuery === 'object') {
+    emp = empQuery;
+  }
+
+  if (!emp) {
+    return { ok: false, text: `⚠️ Không tìm thấy nhân viên với thông tin: <code>${empQuery || ''}</code>` };
+  }
+
+  const empId = emp.employeeId || emp.convertedEmployeeId || emp.id;
+  const empName = emp.name || 'Nhân viên';
+  const targetId = emp.id;
+
+  // 1. Dọn dẹp thông báo trùng
+  const cleanedNotifs = cleanDuplicateNotifications(empId);
+
+  // 2. Xóa các phiếu đăng ký OFF 2 ngày/tuần
+  let removedOffCount = 0;
+  if (db.offRequests) {
+    const before = db.offRequests.length;
+    db.offRequests = db.offRequests.filter(o => o.employeeId !== empId && o.employeeId !== targetId);
+    removedOffCount = before - db.offRequests.length;
+  }
+
+  // 3. Khôi phục các ngày OFF trong schedules về ca làm việc mặc định
+  let resetDaysCount = 0;
+  if (db.schedules) {
+    db.schedules.forEach(s => {
+      if (s.employeeId === empId || s.employeeId === targetId) {
+        if (Array.isArray(s.days)) {
+          s.days.forEach(d => {
+            if (d.status === 'OFF' || d.shift === 'OFF') {
+              d.status = 'WORKING';
+              d.shift = emp.shift || 'CA_SANG';
+              resetDaysCount++;
+            }
+          });
+        }
+        s.version = (s.version || 1) + 1;
+        s.updated_at = getVietnamISOString();
+        addSyncQueue('SCHEDULE', 'UPDATE', s, empId, 'TELEGRAM_BOT');
+      }
+    });
+  }
+
+  // 4. Lưu DB & emit socket
+  saveDB();
+  try {
+    io.emit('schedules:update', db.schedules);
+    io.emit('offRequests:update', db.offRequests);
+    io.emit('notifications:update', db.notifications);
+  } catch (e) {}
+
+  // 5. Kích hoạt đồng bộ Google Sheet ngầm (17iXM)
+  if (typeof triggerRealtimeSheetSync === 'function') {
+    triggerRealtimeSheetSync('PHIEU_OFF_HANG_TUAN');
+    triggerRealtimeSheetSync('LICH_LAM_VIEC');
+  }
+
+  // 6. Tự động gửi tin nhắn Telegram tới Bot NV của bạn đó yêu cầu đăng ký lại lịch OFF 2 ngày/tuần
+  const cfgNv = getTelegramCfg('employee');
+  const link = (db.telegramLinks || []).find(l => (l.employeeId === empId || l.employeeId === targetId) && l.chatId);
+  let telegramSent = false;
+
+  const empPromptMsg = `🔔 <b>YÊU CẦU ĐĂNG KÝ LẠI LỊCH NGHỈ OFF (2 NGÀY/TUẦN)</b>\n\n`
+    + `Chào bạn <b>${empName}</b> (<code>${empId}</code>),\n`
+    + `Hệ thống đã tự động dọn dẹp các thông báo trùng lặp và làm mới lịch đăng ký OFF 2 ngày/tuần của bạn tại chi nhánh <b>${emp.branchId || 'Ụm Bò Milk'}</b>.\n\n`
+    + `👉 <b>Vui lòng gửi lại 2 ngày bạn muốn đăng ký nghỉ OFF trong tuần:</b>\n`
+    + `<code>dd/mm/yyyy, dd/mm/yyyy</code>\n\n`
+    + `• <i>Ví dụ:</i> <code>20/09/2026, 24/09/2026</code>\n`
+    + `• <i>Hoặc:</i> <code>20/09, 24/09</code>\n\n`
+    + `📱 <i>(Hoặc bạn có thể bấm mở Mini App bên dưới để chọn lịch OFF trực tiếp).</i>`;
+
+  if (link && cfgNv.botToken) {
+    try {
+      await tg.sendTelegramMessage(cfgNv.botToken, link.chatId, empPromptMsg);
+      telegramSent = true;
+    } catch (e) {
+      console.error(`[AUTO_RESET_OFF] Gửi Telegram tới ${empName} (${link.chatId}) lỗi:`, e.message);
+    }
+  }
+
+  // Lưu thông báo Web App vào notifications
+  if (!db.notifications) db.notifications = [];
+  db.notifications.unshift({
+    id: uuidv4(),
+    employeeId: empId,
+    type: 'warning',
+    title: 'Yêu cầu đăng ký lại lịch OFF (2 ngày/tuần)',
+    message: `Chào ${empName}, hệ thống đã làm mới lịch OFF và dọn dẹp thông báo trùng. Vui lòng đăng ký lại 2 ngày nghỉ OFF trong tuần qua Telegram Bot hoặc Web App.`,
+    createdAt: getVietnamISOString(),
+    read: false
+  });
+
+  try {
+    audit(empId, 'RESET_OFF_CLEAN_DUPLICATES', 'OFF_SCHEDULE', null, {
+      empId,
+      empName,
+      cleanedNotifs,
+      removedOffCount,
+      resetDaysCount,
+      telegramSent,
+      reason
+    }, 'telegram_bot');
+  } catch (e) {}
+
+  const resultText = `✅ <b>ĐÃ XÓA LỊCH OFF & DỌN DẸP THÔNG BÁO TRÙNG THÀNH CÔNG</b>\n\n`
+    + `👤 Nhân viên: <b>${empName}</b> (<code>${empId}</code>)\n`
+    + `🏪 Chi nhánh: <b>${emp.branchId || 'Chưa gán'}</b> • Ca: <b>${emp.shift || 'Chưa gán'}</b>\n\n`
+    + `• <b>Phiếu OFF đã xóa:</b> ${removedOffCount} phiếu\n`
+    + `• <b>Ngày công hoàn trả:</b> ${resetDaysCount} ngày (trở về ca <b>${emp.shift || 'CA_SANG'}</b>)\n`
+    + `• <b>Thông báo trùng:</b> Đã dọn dẹp sạch sẽ (${cleanedNotifs} thông báo thừa)\n`
+    + `• <b>Thông báo gửi đi:</b> ${telegramSent ? `✅ Đã gửi tin nhắn tới Telegram của bạn ${empName}` : `⚠️ Đã lưu thông báo hệ thống (NV chưa liên kết bot)`}\n\n`
+    + `📊 <i>Dữ liệu đã được cập nhật đồng bộ sang Google Sheet 17iXM!</i>`;
+
+  return {
+    ok: true,
+    emp,
+    empId,
+    empName,
+    cleanedNotifs,
+    removedOffCount,
+    resetDaysCount,
+    telegramSent,
+    empPromptMsg,
+    text: resultText
+  };
+}
+
 async function processTelegramUpdate(update, role){
   role = ['hr','employee','finance'].includes(role) ? role : 'hr';
   const cfg = getTelegramCfg(role);
@@ -14342,6 +14521,38 @@ async function processTelegramUpdate(update, role){
           + sheetMsg
           + `\n\n⚡ <i>Nhân viên đã bị thu hồi phiên đăng nhập ngay lập tức trên toàn hệ thống!</i>`
       };
+    },
+    hrResetEmployeeOff: async (session, rawCode) => {
+      if (!session) return { text: '⛔ Bạn chưa đăng nhập tài khoản Quản trị.' };
+      const roleStr = String(session.role || '').toUpperCase();
+      if (roleStr !== 'ADMIN' && roleStr !== 'HR') {
+        return { text: '⛔ <b>TỪ CHỐI TRUY CẬP:</b> Lệnh xóa lịch OFF chỉ dành cho 👑 <b>Admin</b> hoặc 🛡️ <b>HR</b>.' };
+      }
+      const empCode = String(rawCode || '').trim();
+      if (!empCode) {
+        return {
+          text: '🏖️ <b>CÚ PHÁP XÓA LỊCH OFF & YÊU CẦU ĐĂNG KÝ LẠI:</b>\n\n'
+            + '👉 <code>/xoa_off &lt;Mã_NV&gt;</code>\n'
+            + '<i>Hoặc:</i> <code>/huy_off &lt;Mã_NV&gt;</code> (hoặc <code>/reset_off &lt;Mã_NV&gt;</code>)\n\n'
+            + '• <i>Hỗ trợ mã ngắn:</i> <code>NV1288</code> hoặc <code>1288</code>\n'
+            + '• <i>Ví dụ:</i> <code>/xoa_off NV1288</code>\n\n'
+            + '🤖 <b>Cơ chế tự động:</b>\n'
+            + '1. Tự động xóa sạch các thông báo trùng lặp trong hàng đợi.\n'
+            + '2. Xóa các phiếu OFF 2 ngày/tuần và hoàn trả ngày làm việc về ca bình thường.\n'
+            + '3. Tự động gửi tin nhắn Telegram tới nhân viên yêu cầu đăng ký lại 2 ngày OFF tuần này!'
+        };
+      }
+      const emp = findEmployeeByShortOrFullId(empCode);
+      if (!emp) return { text: `⚠️ Không tìm thấy nhân viên với mã: <code>${empCode}</code>` };
+
+      if (session.branchScope && Array.isArray(session.branchScope) && session.branchScope.length > 0 && roleStr !== 'ADMIN') {
+        if (emp.branchId && !session.branchScope.includes(emp.branchId)) {
+          return { text: `⛔ <b>Không có quyền:</b> Nhân viên <b>${emp.name}</b> (${emp.branchId}) nằm ngoài chi nhánh quản lý của bạn.` };
+        }
+      }
+
+      const res = await autoCleanDuplicatesAndResetOff(emp, `HR ${session.username} yêu cầu xóa OFF`);
+      return { text: res.text, ...res };
     },
     adminGetUsers: async (session) => {
       const uList = (db.users||[]).map(u => `• <b>${u.username}</b> (<code>${u.role}</code>) — ${u.displayName||''} [${(u.branchScope||[]).join(',')||'Toàn bộ'}]`).join('\n');
@@ -15046,7 +15257,29 @@ async function processTelegramUpdate(update, role){
           + colleagueNote
           + `\n\n📌 <b>Trạng thái:</b> Đã ghi nhận thành công, đang chờ HR duyệt và chốt lịch tuần!`
       };
-    }
+    },
+    employeeResetOff: async (telegramId) => {
+      const link = findTelegramLink(telegramId);
+      if (!link || !link.employeeId) {
+        return { text: '⚠️ Bạn chưa liên kết tài khoản nhân viên. Vui lòng gửi số điện thoại của bạn (hoặc cú pháp: <code>/link SĐT</code>) để liên kết trước nhé.' };
+      }
+      const emp = (db.employees || []).find(e => e.employeeId === link.employeeId);
+      if (!emp) return { text: 'Tài khoản nhân viên không còn tồn tại trên hệ thống.' };
+
+      const res = await autoCleanDuplicatesAndResetOff(emp, 'Nhân viên tự yêu cầu làm mới lịch OFF qua bot');
+      return {
+        ok: true,
+        text: `🔄 <b>ĐÃ LÀM MỚI LỊCH ĐĂNG KÝ OFF & DỌN DẸP THÔNG BÁO TRÙNG</b>\n\n`
+          + `Chào bạn <b>${emp.name}</b> (<code>${emp.employeeId}</code>),\n`
+          + `Lịch đăng ký OFF cũ và các thông báo trùng lặp của bạn đã được xóa sạch.\n\n`
+          + `👉 <b>Vui lòng gửi lại 2 ngày bạn muốn đăng ký nghỉ OFF (2 ngày/tuần):</b>\n`
+          + `<code>dd/mm/yyyy, dd/mm/yyyy</code>\n\n`
+          + `• <i>Ví dụ:</i> <code>20/09/2026, 24/09/2026</code>\n`
+          + `• <i>Hoặc:</i> <code>20/09, 24/09</code>`
+      };
+    },
+    cleanDuplicateNotifications: (empId) => cleanDuplicateNotifications(empId),
+    autoCleanDuplicatesAndResetOff: (empQuery, reason) => autoCleanDuplicatesAndResetOff(empQuery, reason)
   };
   if (update.callback_query?.id && cfg.botToken) {
     try { await tg.answerTelegramCallbackQuery(cfg.botToken, update.callback_query.id); } catch(e) {}
@@ -15418,6 +15651,8 @@ module.exports = {
   pendingAttendance,
   checkAutoShiftAttendance,
   processTelegramUpdate,
+  cleanDuplicateNotifications,
+  autoCleanDuplicatesAndResetOff,
   DEFAULT_BRANCHES,
   DEFAULT_SHIFTS
 };

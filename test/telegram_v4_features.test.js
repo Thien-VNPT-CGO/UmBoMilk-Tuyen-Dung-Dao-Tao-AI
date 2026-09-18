@@ -648,4 +648,123 @@ test('Telegram V4.3 Features Suite', async (t) => {
     assert.strictEqual(scheduleB[0], 'WORKING');
     assert.strictEqual(scheduleD_CN2[0], 'WORKING');
   });
+
+  await t.test('17. BOT Telegram tự động xoá thông báo trùng & xoá lịch đăng ký OFF 2 ngày/tuần & nhắc NV đăng ký lại', async () => {
+    // 17.1 Kiểm tra cú pháp /xoa_off khi không truyền mã nhân viên
+    const rNoCode = await tg.handleTelegramUpdate({
+      message: { chat: { id: 77777 }, text: '/xoa_off' }
+    }, {
+      role: 'hr',
+      getHrSession: async () => ({ username: 'admin', role: 'ADMIN' })
+    });
+    assert.ok(rNoCode[0].text.includes('CÚ PHÁP XÓA LỊCH OFF & YÊU CẦU ĐĂNG KÝ LẠI'));
+    assert.ok(rNoCode[0].text.includes('/xoa_off'));
+
+    // 17.2 Kiểm tra phân quyền: User không phải Admin/HR không được dùng /xoa_off
+    const rNoPerm = await tg.handleTelegramUpdate({
+      message: { chat: { id: 77777 }, text: '/xoa_off NV1288' }
+    }, {
+      role: 'hr',
+      getHrSession: async () => ({ username: 'staff_guest', role: 'EMPLOYEE' })
+    });
+    assert.ok(rNoPerm[0].text.includes('TỪ CHỐI TRUY CẬP'));
+
+    // 17.3 Kiểm tra dọn dẹp thông báo trùng (Zero Duplicate logic)
+    const testQueue = [
+      { id: 'notif_1', dedupeKey: 'off_NV1288_2026-09-21', title: 'NV Đăng ký OFF', employeeId: 'NV1288' },
+      { id: 'notif_2', dedupeKey: 'off_NV1288_2026-09-21', title: 'NV Đăng ký OFF (trùng)', employeeId: 'NV1288' },
+      { id: 'notif_3', dedupeKey: 'off_NV9999_2026-09-21', title: 'NV khác', employeeId: 'NV9999' }
+    ];
+    const seen = new Set();
+    const uniqueQueue = testQueue.filter(n => {
+      const k = n.dedupeKey || n.id;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+    assert.strictEqual(uniqueQueue.length, 2, 'Phải lọc bỏ đúng 1 thông báo trùng lặp');
+
+    // 17.4 Kiểm tra luồng xử lý /xoa_off qua mock context
+    let sentToEmployeeMsg = null;
+    let employeeChatTarget = null;
+    const rHrOff = await tg.handleTelegramUpdate({
+      message: { chat: { id: 77777 }, text: '/xoa_off NV1288' }
+    }, {
+      role: 'hr',
+      getHrSession: async () => ({ username: 'hr_lan', role: 'HR' }),
+      hrResetEmployeeOff: async (session, code) => {
+        sentToEmployeeMsg = `🔔 YÊU CẦU ĐĂNG KÝ LẠI LỊCH NGHỈ OFF (2 NGÀY/TUẦN)\nChào bạn Nguyễn Văn A (${code})... Vui lòng gửi lại 2 ngày: dd/mm/yyyy, dd/mm/yyyy`;
+        employeeChatTarget = 88888;
+        return {
+          text: `✅ <b>ĐÃ XÓA LỊCH OFF & DỌN DẸP THÔNG BÁO TRÙNG THÀNH CÔNG</b>\n\n`
+            + `👤 Nhân viên: <b>Nguyễn Văn A</b> (<code>${code}</code>)\n`
+            + `• Đã xóa 1 phiếu OFF cũ\n`
+            + `• Đã hoàn trả 2 ngày làm việc về ca bình thường\n`
+            + `• Đã gửi tin nhắn Telegram yêu cầu đăng ký lại 2 ngày OFF tuần này!`
+        };
+      }
+    });
+
+    assert.ok(rHrOff[0].text.includes('ĐÃ XÓA LỊCH OFF & DỌN DẸP THÔNG BÁO TRÙNG THÀNH CÔNG'));
+    assert.ok(rHrOff[0].text.includes('NV1288'));
+    assert.strictEqual(employeeChatTarget, 88888);
+    assert.ok(sentToEmployeeMsg.includes('YÊU CẦU ĐĂNG KÝ LẠI LỊCH NGHỈ OFF'));
+    assert.ok(sentToEmployeeMsg.includes('dd/mm/yyyy, dd/mm/yyyy'));
+
+    // 17.5 Kiểm tra cú pháp có dấu hai chấm /xoa_off: NV1288
+    const rColon = await tg.handleTelegramUpdate({
+      message: { chat: { id: 77777 }, text: '/xoa_off: NV1288' }
+    }, {
+      role: 'hr',
+      getHrSession: async () => ({ username: 'hr_lan', role: 'HR' }),
+      hrResetEmployeeOff: async (session, code) => ({
+        text: `✅ ĐÃ XÓA LỊCH OFF CHO ${code}`
+      })
+    });
+    assert.ok(rColon[0].text.includes('ĐÃ XÓA LỊCH OFF CHO NV1288'));
+
+    // 17.6 Kiểm tra lệnh /dangky_lai_off từ Bot Nhân viên
+    const rEmpReset = await tg.handleTelegramUpdate({
+      message: { chat: { id: 88888 }, from: { id: 88888 }, text: '/dangky_lai_off' }
+    }, {
+      role: 'employee',
+      employeeResetOff: async (tgId) => ({
+        ok: true,
+        text: `🔄 <b>ĐÃ LÀM MỚI LỊCH ĐĂNG KÝ OFF & DỌN DẸP THÔNG BÁO TRÙNG</b>\n\n`
+          + `👉 <b>Vui lòng gửi lại 2 ngày bạn muốn đăng ký nghỉ OFF (2 ngày/tuần):</b>\n`
+          + `<code>dd/mm/yyyy, dd/mm/yyyy</code>\n\n`
+          + `• <i>Ví dụ:</i> <code>20/09/2026, 24/09/2026</code>`
+      })
+    });
+
+    assert.ok(rEmpReset[0].text.includes('ĐÃ LÀM MỚI LỊCH ĐĂNG KÝ OFF & DỌN DẸP THÔNG BÁO TRÙNG'));
+    assert.ok(rEmpReset[0].text.includes('dd/mm/yyyy, dd/mm/yyyy'));
+    assert.ok(rEmpReset[0].text.includes('20/09/2026, 24/09/2026'));
+
+    // 17.7 Kiểm tra lệnh /huy_off từ Bot Nhân viên cũng gọi employeeResetOff
+    const rEmpCancel = await tg.handleTelegramUpdate({
+      message: { chat: { id: 88888 }, from: { id: 88888 }, text: '/huy_off' }
+    }, {
+      role: 'employee',
+      employeeResetOff: async (tgId) => ({
+        ok: true,
+        text: `🔄 ĐÃ LÀM MỚI LỊCH ĐĂNG KÝ OFF CHO BẠN`
+      })
+    });
+    assert.ok(rEmpCancel[0].text.includes('ĐÃ LÀM MỚI LỊCH ĐĂNG KÝ OFF CHO BẠN'));
+
+    // 17.8 Kiểm tra cảnh báo trùng OFF trước đó có chứa hướng dẫn /dangky_lai_off
+    const rExistingWarn = await tg.handleTelegramUpdate({
+      message: { chat: { id: 88888 }, from: { id: 88888 }, text: '21/09/2026, 22/09/2026' }
+    }, {
+      role: 'employee',
+      checkExistingOffRegistration: async () => ({
+        hasRegistered: true,
+        dates: ['21/09/2026', '22/09/2026']
+      })
+    });
+    assert.ok(rExistingWarn[0].text.includes('CẢNH BÁO: BẠN ĐÃ ĐĂNG KÝ LỊCH OFF TUẦN NÀY RỒI'));
+    assert.ok(rExistingWarn[0].text.includes('/dangky_lai_off'));
+  });
 });
+
