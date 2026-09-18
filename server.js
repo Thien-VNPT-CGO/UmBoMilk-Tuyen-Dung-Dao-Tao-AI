@@ -4184,6 +4184,150 @@ async function deleteRowFromSpreadsheet(spreadsheetId, accessToken, applicant) {
   }
 }
 
+async function deleteEmployeeFromGoogleSheet(emp) {
+  if (!emp) return { deletedRows: 0, details: [] };
+  const targetSpreadsheetIds = [...new Set([
+    db.settings?.googleSheet?.targetDatabaseSpreadsheetId || '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w',
+    db.settings?.googleSheet?.spreadsheetId || '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w'
+  ])].filter(Boolean);
+
+  const empId = String(emp.employeeId || emp.convertedEmployeeId || emp.id || '').trim();
+  const targetId = String(emp.id || '').trim();
+  const shortMatch = empId.match(/NV\d+/i) || targetId.match(/NV\d+/i);
+  const shortId = shortMatch ? shortMatch[0].toUpperCase() : '';
+  const normPhone = normalizePhone(emp.phone);
+
+  const details = [];
+  let totalDeleted = 0;
+
+  // Channel 1: Outbound Webhook Push (nếu có cấu hình)
+  const webhookUrl = db.settings?.googleSheet?.targetWebhookUrl;
+  if (webhookUrl && !webhookUrl.includes('AKfycbz_umbomilk_apps_script')) {
+    try {
+      await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'DELETE_EMPLOYEE',
+          employeeId: empId,
+          targetId: targetId,
+          phone: emp.phone,
+          name: emp.name,
+          secret: db.settings?.googleSheet?.webhookSecret || DEFAULT_WEBHOOK_SECRET
+        })
+      });
+    } catch (e) {
+      console.warn('[DELETE_EMP_SHEET] Webhook push warning:', e.message);
+    }
+  }
+
+  // Channel 2: Service Account API v4 (Xóa trực tiếp các dòng trên các tab Google Sheet)
+  let token = null;
+  try {
+    token = await getGoogleAccessToken();
+  } catch (e) {
+    console.warn('[DELETE_EMP_SHEET] getGoogleAccessToken failed:', e.message);
+  }
+
+  if (token && !OUTBOUND_SYNC_DISABLED) {
+    for (const spreadsheetId of targetSpreadsheetIds) {
+      try {
+        const metaRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!metaRes.ok) continue;
+        const metaData = await metaRes.json();
+        const sheets = metaData.sheets || [];
+
+        for (const s of sheets) {
+          const title = s.properties?.title;
+          const sheetId = s.properties?.sheetId;
+          if (!title || sheetId === undefined) continue;
+
+          try {
+            const getRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(title)}!A1:Z2000`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!getRes.ok) continue;
+            const getData = await getRes.json();
+            const rows = getData.values || [];
+            if (rows.length <= 1) continue;
+
+            const matchingIndices = [];
+            for (let i = 1; i < rows.length; i++) {
+              const r = rows[i];
+              if (!r || r.length === 0) continue;
+
+              let isMatch = false;
+              for (const cell of r) {
+                const cellStr = String(cell || '').trim();
+                if (!cellStr) continue;
+
+                if (empId && cellStr.toUpperCase() === empId.toUpperCase()) {
+                  isMatch = true; break;
+                }
+                if (targetId && cellStr.toUpperCase() === targetId.toUpperCase()) {
+                  isMatch = true; break;
+                }
+                if (shortId && (cellStr.toUpperCase() === shortId || cellStr.toUpperCase().includes(shortId))) {
+                  isMatch = true; break;
+                }
+                if (normPhone && normPhone.length >= 8) {
+                  const cellNorm = normalizePhone(cellStr);
+                  if (cellNorm === normPhone) {
+                    isMatch = true; break;
+                  }
+                }
+              }
+
+              if (isMatch) {
+                matchingIndices.push(i);
+              }
+            }
+
+            if (matchingIndices.length > 0) {
+              matchingIndices.sort((a, b) => b - a);
+              const requests = matchingIndices.map(idx => ({
+                deleteDimension: {
+                  range: {
+                    sheetId: sheetId,
+                    dimension: 'ROWS',
+                    startIndex: idx,
+                    endIndex: idx + 1
+                  }
+                }
+              }));
+
+              const batchRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${token}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ requests })
+              });
+
+              if (batchRes.ok) {
+                totalDeleted += matchingIndices.length;
+                details.push(`${title} (${matchingIndices.length} dòng)`);
+                console.log(`[DELETE_EMP_SHEET] Successfully deleted ${matchingIndices.length} rows in tab "${title}" on Sheet ${spreadsheetId} for ${empId}`);
+              } else {
+                console.warn(`[DELETE_EMP_SHEET] batchUpdate returned status ${batchRes.status} on tab "${title}"`);
+              }
+            }
+          } catch (tabErr) {
+            console.warn(`[DELETE_EMP_SHEET] Error on tab "${title}":`, tabErr.message);
+          }
+        }
+      } catch (sheetErr) {
+        console.warn(`[DELETE_EMP_SHEET] Error on spreadsheet "${spreadsheetId}":`, sheetErr.message);
+      }
+    }
+  }
+
+  return { deletedRows: totalDeleted, details };
+}
+
 async function deleteOutboundFromMasterDatabaseSheet(applicant) {
   if (!applicant) return;
   // RÀNG BUỘC TUYỆT ĐỐI: hàm xóa Sheet đã bị vô hiệu hóa - Google Sheet giữ dữ liệu vĩnh viễn dù web đã xóa.
@@ -13977,6 +14121,226 @@ async function processTelegramUpdate(update, role){
           + `👤 Nhân viên: <b>${emp.name}</b> (<code>${emp.employeeId}</code>)\n`
           + updateLogs.join('\n')
           + `\n\n📊 <i>Dữ liệu đã được lưu vào hệ thống và đồng bộ tức thì lên Google Sheet 17iXM!</i>`
+      };
+    },
+    hrDeleteEmployee: async (session, rawCode) => {
+      if (!session) return { text: '⛔ Bạn chưa đăng nhập tài khoản Quản trị.' };
+      const roleStr = String(session.role || '').toUpperCase();
+      if (roleStr !== 'ADMIN' && roleStr !== 'HR') {
+        return { text: '⛔ <b>TỪ CHỐI TRUY CẬP:</b> Lệnh xóa nhân viên chỉ dành cho Admin hoặc HR.' };
+      }
+      const empCode = String(rawCode || '').trim();
+      if (!empCode) {
+        return {
+          text: '🗑️ <b>CÚ PHÁP XÓA VĨNH VIỄN NHÂN VIÊN:</b>\n\n'
+            + '👉 <code>/xoa_nhanvien &lt;Mã_NV&gt;</code>\n'
+            + '<i>Hoặc:</i> <code>/xoa_nhanvien: &lt;Mã_NV&gt;</code>\n\n'
+            + '• <i>Hỗ trợ mã ngắn:</i> <code>NV1288</code> hoặc <code>1288</code>\n'
+            + '• <i>Ví dụ:</i> <code>/xoa_nhanvien NV1288</code>\n\n'
+            + '⚠️ <b>LƯU Ý QUAN TRỌNG:</b>\n'
+            + 'Lệnh này sẽ <b>lập tức xóa sạch 100% dữ liệu</b> của nhân viên trên cả <b>Google Sheet (17iXM)</b> và <b>Hệ thống (Web App)</b>, đồng thời hủy bỏ phiên làm việc ngay lập tức (Force Logout)!'
+        };
+      }
+
+      let emp = findEmployeeByShortOrFullId(empCode);
+      if (!emp && db.applicants) {
+        const qUpper = empCode.toUpperCase();
+        const qDigits = empCode.replace(/\D/g, '');
+        emp = db.applicants.find(a => {
+          if (a.id && a.id.toUpperCase() === qUpper) return true;
+          if (a.phone && qDigits && qDigits.length >= 8 && a.phone.includes(qDigits)) return true;
+          return false;
+        });
+      }
+
+      if (!emp) {
+        return { text: `⚠️ Không tìm thấy nhân viên với mã: <code>${empCode}</code>` };
+      }
+
+      if (session.branchScope && Array.isArray(session.branchScope) && session.branchScope.length > 0 && roleStr !== 'ADMIN') {
+        if (emp.branchId && !session.branchScope.includes(emp.branchId)) {
+          return { text: `⛔ <b>Không có quyền:</b> Nhân viên <b>${emp.name}</b> (${emp.branchId}) nằm ngoài chi nhánh quản lý của bạn.` };
+        }
+      }
+
+      const empId = emp.employeeId || emp.convertedEmployeeId || emp.id;
+      const empName = emp.name || 'Nhân viên';
+      const targetId = emp.id;
+      const normPhone = normalizePhone(emp.phone);
+
+      console.log(`[BOT DELETE EMPLOYEE] Triggered by ${session.username} (${session.role}) for ${empName} (${empId})...`);
+
+      // 1. Delete on Google Sheets (17iXM)
+      let sheetResult = { deletedRows: 0, details: [] };
+      try {
+        sheetResult = await deleteEmployeeFromGoogleSheet(emp);
+      } catch (sheetErr) {
+        console.error('[BOT DELETE EMPLOYEE] Sheet delete error:', sheetErr.message);
+      }
+
+      // 2. Cascade delete on local system (Web App & DB)
+      let countEmployees = 0;
+      let countKeys = 0;
+      let countSchedules = 0;
+      let countAttendances = 0;
+      let countOffRequests = 0;
+      let countShiftSwaps = 0;
+      let countEmergency = 0;
+      let countDevice = 0;
+      let countTrainingShift = 0;
+      let countTest = 0;
+      let countTgLinks = 0;
+
+      if (db.employees) {
+        const before = db.employees.length;
+        db.employees = db.employees.filter(e => {
+          if (targetId && e.id === targetId) return false;
+          if (empId && (e.employeeId === empId || e.id === empId)) return false;
+          if (normPhone && normalizePhone(e.phone) === normPhone) return false;
+          return true;
+        });
+        countEmployees = before - db.employees.length;
+        io.emit('employees:update', db.employees);
+      }
+
+      if (db.keys && empId) {
+        const before = db.keys.length;
+        db.keys = db.keys.filter(k => k.employeeId !== empId && k.employeeId !== targetId);
+        countKeys = before - db.keys.length;
+        io.emit('keys:update', db.keys);
+      }
+
+      if (db.schedules && empId) {
+        const before = db.schedules.length;
+        db.schedules = db.schedules.filter(s => s.employeeId !== empId && s.employeeId !== targetId);
+        countSchedules = before - db.schedules.length;
+        io.emit('schedules:update', db.schedules);
+      }
+
+      if (db.attendances && empId) {
+        const before = db.attendances.length;
+        db.attendances = db.attendances.filter(a => a.employeeId !== empId && a.employeeId !== targetId);
+        countAttendances = before - db.attendances.length;
+        io.emit('attendances:update', db.attendances);
+      }
+
+      if (db.offRequests && empId) {
+        const before = db.offRequests.length;
+        db.offRequests = db.offRequests.filter(o => o.employeeId !== empId && o.employeeId !== targetId);
+        countOffRequests = before - db.offRequests.length;
+        io.emit('offRequests:update', db.offRequests);
+      }
+
+      if (db.shiftSwapRequests && empId) {
+        const before = db.shiftSwapRequests.length;
+        db.shiftSwapRequests = db.shiftSwapRequests.filter(s =>
+          s.requesterId !== empId && s.requesterId !== targetId &&
+          s.targetId !== empId && s.targetId !== targetId &&
+          s.fromEmployeeId !== empId && s.toEmployeeId !== empId
+        );
+        countShiftSwaps = before - db.shiftSwapRequests.length;
+        io.emit('shiftSwapRequests:update', db.shiftSwapRequests);
+      }
+
+      if (db.emergencyRequests && empId) {
+        const before = db.emergencyRequests.length;
+        db.emergencyRequests = db.emergencyRequests.filter(e => e.employeeId !== empId && e.employeeId !== targetId);
+        countEmergency = before - db.emergencyRequests.length;
+        io.emit('emergencyRequests:update', db.emergencyRequests);
+      }
+
+      if (db.deviceRequests && empId) {
+        const before = db.deviceRequests.length;
+        db.deviceRequests = db.deviceRequests.filter(d => d.employeeId !== empId && d.employeeId !== targetId);
+        countDevice = before - db.deviceRequests.length;
+        io.emit('deviceRequests:update', db.deviceRequests);
+      }
+
+      if (db.trainingShiftRequests && empId) {
+        const before = db.trainingShiftRequests.length;
+        db.trainingShiftRequests = db.trainingShiftRequests.filter(t => t.employeeId !== empId && t.employeeId !== targetId);
+        countTrainingShift = before - db.trainingShiftRequests.length;
+        io.emit('trainingShiftRequests:update', db.trainingShiftRequests);
+      }
+
+      if (db.testResults && empId) {
+        const before = db.testResults.length;
+        db.testResults = db.testResults.filter(t => t.employeeId !== empId && t.employeeId !== targetId);
+        countTest = before - db.testResults.length;
+        io.emit('testResults:update', db.testResults);
+      }
+
+      if (db.telegramLinks) {
+        const before = db.telegramLinks.length;
+        db.telegramLinks = db.telegramLinks.filter(t =>
+          t.employeeId !== empId && t.employeeId !== targetId &&
+          (!normPhone || normalizePhone(t.phone) !== normPhone)
+        );
+        countTgLinks = before - db.telegramLinks.length;
+        io.emit('telegram:update', db.telegramLinks);
+      }
+
+      if (db.applicants) {
+        db.applicants = db.applicants.filter(a => {
+          if (targetId && a.id === targetId) return false;
+          if (normPhone && normalizePhone(a.phone) === normPhone) return false;
+          return true;
+        });
+        io.emit('applicants:update', db.applicants);
+      }
+
+      if (db.interviews) {
+        db.interviews = db.interviews.filter(i => {
+          if (targetId && i.applicantId === targetId) return false;
+          if (normPhone && normalizePhone(i.applicantPhone) === normPhone) return false;
+          return true;
+        });
+        io.emit('interviews:update', db.interviews);
+      }
+
+      if (db.notifications && empId) {
+        db.notifications = db.notifications.filter(n => n.employeeId !== empId && n.employeeId !== targetId);
+        io.emit('notifications:update', db.notifications);
+      }
+
+      // 3. Force logout
+      if (empId) {
+        emitForceLogout(empId, 'Tài khoản của bạn đã bị xóa khỏi hệ thống. Vui lòng liên hệ Quản trị.');
+      }
+
+      // 4. Save DB & Audit
+      saveDB();
+      try {
+        audit(session.username, 'DELETE_EMPLOYEE_BOT', 'EMPLOYEE', empId, {
+          name: empName,
+          localCounts: { countEmployees, countKeys, countSchedules, countAttendances, countOffRequests },
+          sheetDeleted: sheetResult.details
+        }, 'telegram_bot');
+      } catch (_) {}
+
+      const sheetMsg = sheetResult.details && sheetResult.details.length > 0
+        ? sheetResult.details.map(d => `  • Tab: <code>${d}</code>`).join('\n')
+        : (sheetResult.deletedRows > 0 ? `  • Đã xóa ${sheetResult.deletedRows} dòng trên Google Sheet.` : '  • Đã kiểm tra các Tab Google Sheet (không có dòng phát sinh thừa).');
+
+      return {
+        text: `🗑️ <b>ĐÃ XOÁ VĨNH VIỄN NHÂN VIÊN THÀNH CÔNG!</b>\n\n`
+          + `👤 Nhân viên: <b>${empName}</b>\n`
+          + `🆔 Mã NV: <code>${empId}</code>\n`
+          + `📞 Số điện thoại: <code>${emp.phone || 'Chưa rõ'}</code>\n`
+          + `🏪 Chi nhánh: <code>${emp.branchId || 'Chưa gán'}</code>\n\n`
+          + `📌 <b>Dữ liệu đã dọn sạch trên Hệ thống (Web App):</b>\n`
+          + `  • Hồ sơ nhân viên & tài khoản (Force Logout tức thì)\n`
+          + `  • Quản lý chìa khóa Key (${countKeys})\n`
+          + `  • Lịch làm việc & Ca trực (${countSchedules})\n`
+          + `  • Dữ liệu chấm công (${countAttendances})\n`
+          + `  • Phiếu xin nghỉ OFF (${countOffRequests})\n`
+          + `  • Phiếu đổi ca / Phiếu thiết bị (${countShiftSwaps + countDevice})\n`
+          + `  • Phiếu ca training (${countTrainingShift})\n`
+          + `  • Kết quả bài test đào tạo (${countTest})\n`
+          + `  • Liên kết Telegram Bot (${countTgLinks})\n\n`
+          + `📊 <b>Dữ liệu đã xoá trên Google Sheet 17iXM:</b>\n`
+          + sheetMsg
+          + `\n\n⚡ <i>Nhân viên đã bị thu hồi phiên đăng nhập ngay lập tức trên toàn hệ thống!</i>`
       };
     },
     adminGetUsers: async (session) => {

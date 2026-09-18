@@ -510,4 +510,72 @@ test('Telegram V4.3 Features Suite', async (t) => {
     assert.ok(rPending[0].text.includes('ĐÃ LỌC BỎ THÔNG BÁO TRÙNG LẶP'));
     assert.ok(rPending[0].text.includes('Nguyễn Thị Tuyển Dụng'));
   });
+
+  await t.test('15. Xóa vĩnh viễn nhân viên /xoa_nhanvien trên Google Sheet 17iXM & Hệ thống', async () => {
+    // 15.1 Thiếu mã NV -> Hướng dẫn cú pháp
+    const rNoCode = await tg.handleTelegramUpdate({
+      message: { chat: { id: 77777 }, text: '/xoa_nhanvien' }
+    }, {
+      role: 'hr',
+      getHrSession: async () => hrSession
+    });
+    assert.ok(rNoCode[0].text.includes('CÚ PHÁP XÓA VĨNH VIỄN NHÂN VIÊN'));
+    assert.ok(rNoCode[0].text.includes('/xoa_nhanvien'));
+    assert.ok(rNoCode[0].text.includes('NV1288'));
+
+    // 15.2 Tài khoản không có quyền (QL / MKT) bị từ chối
+    const qlSession = { username: 'ql_user', role: 'QL' };
+    const rForbidden = await tg.handleTelegramUpdate({
+      message: { chat: { id: 77777 }, text: '/xoa_nhanvien NV1288' }
+    }, {
+      role: 'hr',
+      getHrSession: async () => qlSession
+    });
+    assert.ok(rForbidden[0].text.includes('TỪ CHỐI TRUY CẬP'));
+
+    // 15.3 Thực hiện xóa nhân viên hợp lệ (Admin / HR)
+    let deletedCodeArg = null;
+    const rDelete = await tg.handleTelegramUpdate({
+      message: { chat: { id: 77777 }, text: '/xoa_nhanvien NV1288' }
+    }, {
+      role: 'hr',
+      getHrSession: async () => hrSession,
+      hrDeleteEmployee: async (sess, code) => {
+        deletedCodeArg = code;
+        return {
+          text: `🗑️ <b>ĐÃ XOÁ VĨNH VIỄN NHÂN VIÊN THÀNH CÔNG!</b>\n\n`
+            + `👤 Nhân viên: <b>Nguyễn Văn Test</b>\n`
+            + `🆔 Mã NV: <code>CN130_UBM18092026_NV1288</code>\n\n`
+            + `📌 <b>Dữ liệu đã dọn sạch trên Hệ thống (Web App):</b>\n`
+            + `  • Hồ sơ nhân viên & tài khoản (Force Logout tức thì)\n`
+            + `  • Quản lý chìa khóa Key (1)\n`
+            + `  • Lịch làm việc & Ca trực (2)\n\n`
+            + `📊 <b>Dữ liệu đã xoá trên Google Sheet 17iXM:</b>\n`
+            + `  • Tab: <code>NHAN_VIEN_CHINH_THUC (1 dòng)</code>\n`
+            + `  • Tab: <code>LICH_LAM_VIEC (2 dòng)</code>\n\n`
+            + `⚡ <i>Nhân viên đã bị thu hồi phiên đăng nhập ngay lập tức trên toàn hệ thống!</i>`
+        };
+      }
+    });
+
+    assert.strictEqual(deletedCodeArg, 'NV1288');
+    assert.ok(rDelete[0].text.includes('ĐÃ XOÁ VĨNH VIỄN NHÂN VIÊN THÀNH CÔNG'));
+    assert.ok(rDelete[0].text.includes('Google Sheet 17iXM'));
+    assert.ok(rDelete[0].text.includes('NHAN_VIEN_CHINH_THUC'));
+    assert.ok(rDelete[0].text.includes('Force Logout tức thì'));
+
+    // 15.4 Kiểm tra cú pháp có dấu hai chấm /xoa_nhanvien: NV1288
+    let deletedColonCode = null;
+    await tg.handleTelegramUpdate({
+      message: { chat: { id: 77777 }, text: '/xoa_nhanvien: NV1288' }
+    }, {
+      role: 'hr',
+      getHrSession: async () => hrSession,
+      hrDeleteEmployee: async (sess, code) => {
+        deletedColonCode = code;
+        return { text: 'OK' };
+      }
+    });
+    assert.strictEqual(deletedColonCode, 'NV1288');
+  });
 });

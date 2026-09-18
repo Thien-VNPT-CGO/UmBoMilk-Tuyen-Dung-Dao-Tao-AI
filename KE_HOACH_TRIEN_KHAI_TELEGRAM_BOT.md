@@ -272,8 +272,8 @@ graph TD
 
 | Vai trò | Quyền hạn nghiệp vụ | Danh mục lệnh Telegram chuẩn |
 | :--- | :--- | :--- |
-| 👑 **Admin** | Toàn quyền hệ thống, cấp/phân quyền, chạy test, reset dữ liệu Google Sheet | `/tonghop_lich`, `/sap_lich_nv`, `/sua_thongtin_nhanvien`, `/duyet`, `/users`, `/capquyen`, `/phanquyen`, `/broadcast`, `/test`, `/delete_test`, `/doi_mat_khau`, `/hoso_nhanvien`, `/reset_hethong`, `/logout` |
-| 🛡️ **HR** | Quản lý lịch tuần NV, sửa thông tin NV, duyệt đổi ca, báo cáo, gửi đề thi, tra hồ sơ | `/tonghop_lich`, `/sap_lich_nv`, `/sua_thongtin_nhanvien`, `/duyet`, `/baocao`, `/broadcast`, `/gui_de_thi`, `/doi_mat_khau`, `/hoso_nhanvien`, `/logout` |
+| 👑 **Admin** | Toàn quyền hệ thống, cấp/phân quyền, chạy test, reset dữ liệu Google Sheet, xóa nhân viên | `/tonghop_lich`, `/sap_lich_nv`, `/sua_thongtin_nhanvien`, `/xoa_nhanvien`, `/duyet`, `/users`, `/capquyen`, `/phanquyen`, `/broadcast`, `/test`, `/delete_test`, `/doi_mat_khau`, `/hoso_nhanvien`, `/reset_hethong`, `/logout` |
+| 🛡️ **HR** | Quản lý lịch tuần NV, sửa thông tin NV, xóa NV, duyệt đổi ca, báo cáo, tra hồ sơ | `/tonghop_lich`, `/sap_lich_nv`, `/sua_thongtin_nhanvien`, `/xoa_nhanvien`, `/duyet`, `/baocao`, `/broadcast`, `/gui_de_thi`, `/doi_mat_khau`, `/hoso_nhanvien`, `/logout` |
 | 🏪 **QL** | Giới hạn chi nhánh phụ trách (`branchScope`), **DUYỆT & PHÁT PHIẾU LƯƠNG THÁNG** | `/diemdanh_cn`, `/lich_cn`, `/duyet_ca`, `/baohong_cn`, `/doi_mat_khau`, `/duyet_phieuluong`, `/hoso_nhanvien`, `/logout` |
 | 📢 **MKT** | Đăng tin tức, sự kiện, phát khuyến mãi tới nhân viên | `/broadcast_mkt`, `/sukien`, `/tintuc`, `/doi_mat_khau`, `/logout` |
 
@@ -322,6 +322,24 @@ graph TD
   2. Xóa sạch toàn bộ các dòng dữ liệu từ dòng 2 trở đi (`!A2:Z`) của tab sheet chỉ định, **bảo toàn nguyên vẹn dòng tiêu đề (header row 1)**.
   3. Tùy chọn làm sạch bản ghi tương ứng trong cơ sở dữ liệu để đồng bộ 100%.
   4. Bot phản hồi thông báo xác nhận số dòng đã dọn dẹp sạch sẽ.
+
+---
+
+### 5.6B. Xóa vĩnh viễn nhân viên (/xoa_nhanvien - Google Sheet 17iXM & Hệ thống)
+> [!WARNING]
+> **Quy định bảo mật & Quyền hạn**:
+> * Lệnh `/xoa_nhanvien` **CHỈ CHO PHÉP THỰC THI BỞI TÀI KHOẢN ADMIN (👑) VÀ HR (🛡️)**.
+> * Các tài khoản QL và MKT bị từ chối truy cập 100%.
+> * Nếu HR có cấu hình giới hạn chi nhánh (`branchScope`), chỉ được xóa nhân viên thuộc chi nhánh quản lý của mình.
+
+* **Cú pháp thực hiện**:
+  * `/xoa_nhanvien <Mã_NV>` hoặc `/xoa_nhanvien: <Mã_NV>`
+  * *Ví dụ:* `/xoa_nhanvien NV1288` hoặc `/xoa_nhanvien: 1288`
+* **Hành vi xử lý tức thì (Dual Delete & Realtime Revocation)**:
+  1. **Google Sheet 17iXM**: Quét toàn bộ các tab của bảng tính (`NHAN_VIEN_TRAINING`, `NHAN_VIEN_CHINH_THUC`, `NHAN_VIEN_MOI`, `LICH_LAM_VIEC`, `PHIEU_OFF_HANG_TUAN`, v.v.) và thực hiện xóa sạch toàn bộ dòng dữ liệu của nhân viên thông qua Google Sheets API v4 (`deleteDimension` batchUpdate) và Webhook Push. Dòng tiêu đề (headers) giữ nguyên vẹn 100%.
+  2. **Hệ thống Web App / Database**: Cascade xóa sạch sẽ toàn bộ dữ liệu gồm: Hồ sơ (`db.employees`), Chìa khóa (`db.keys`), Lịch làm việc (`db.schedules`), Chấm công (`db.attendances`), Phiếu OFF (`db.offRequests`), Phiếu đổi ca (`db.shiftSwapRequests`), Sự cố thiết bị (`db.deviceRequests`), Phiếu training (`db.trainingShiftRequests`), Bài test (`db.testResults`), Liên kết Bot (`db.telegramLinks`), và Hộp thư thông báo.
+  3. **Thu hồi phiên làm việc tức thì (Force Logout)**: Ngay lập tức phát sự kiện `employee:forceLogout` qua WebSocket và hủy phiên đăng nhập của nhân viên trên mọi thiết bị.
+  4. Bot gửi báo cáo tổng kết chi tiết số lượng dữ liệu đã dọn dẹp trên Web App và danh sách các tab Google Sheet đã xóa dòng thành công.
 
 ---
 

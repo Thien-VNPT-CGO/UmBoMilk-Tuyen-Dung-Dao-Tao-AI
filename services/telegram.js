@@ -260,14 +260,15 @@ function hrMenuKeyboard(role, webAppUrl) {
         { text: '✏️ Sửa NV', callback_data: '/sua_thongtin_nhanvien' }
       ],
       [
-        { text: '✅ Duyệt phiếu', callback_data: '/duyet' },
+        { text: '🗑️ Xóa NV', callback_data: '/xoa_nhanvien' },
         { text: '👥 Danh sách User', callback_data: '/users' }
       ],
       [
-        { text: '🗑️ Reset Sheet', callback_data: '/reset_hethong' },
-        { text: '🧪 Chạy Test', callback_data: '/test' }
+        { text: '✅ Duyệt phiếu', callback_data: '/duyet' },
+        { text: '🗑️ Reset Sheet', callback_data: '/reset_hethong' }
       ],
       [
+        { text: '🧪 Chạy Test', callback_data: '/test' },
         { text: '🚪 Đăng xuất', callback_data: '/logout' }
       ]
     ];
@@ -282,10 +283,11 @@ function hrMenuKeyboard(role, webAppUrl) {
         { text: '✏️ Sửa NV', callback_data: '/sua_thongtin_nhanvien' }
       ],
       [
-        { text: '✅ Duyệt phiếu', callback_data: '/duyet' },
-        { text: '📋 Báo cáo ngày', callback_data: '/baocao' }
+        { text: '🗑️ Xóa NV', callback_data: '/xoa_nhanvien' },
+        { text: '✅ Duyệt phiếu', callback_data: '/duyet' }
       ],
       [
+        { text: '📋 Báo cáo ngày', callback_data: '/baocao' },
         { text: '🚪 Đăng xuất', callback_data: '/logout' }
       ]
     ];
@@ -340,6 +342,7 @@ function getHrRoleMenuText(user) {
       + `• <code>/sap_lich_nv [mã] [lịch]</code> — Xếp/chỉnh lịch NV (VD: <code>/sap_lich_nv NV1288 T2-ON, T5-OFF, CN-ON</code>)\n`
       + `• <code>/hoso_nhanvien [mã]</code> — Tra cứu chi tiết hồ sơ nhân viên\n`
       + `• <code>/sua_thongtin_nhanvien: [mã] [ca_cũ] sang [ca_mới], [CN_cũ] sang [CN_mới]</code> — Sửa thông tin NV & đồng bộ Google Sheet\n`
+      + `• <code>/xoa_nhanvien &lt;Mã_NV&gt;</code> — Xoá vĩnh viễn nhân viên trên Google Sheet 17iXM & Hệ thống\n`
       + `• <code>/duyet</code> — Xem và duyệt các phiếu chờ (OFF, Đổi ca, Thiết bị)\n`
       + `• <code>/broadcast [nội dung]</code> — Phát thông báo tới Mini App NV\n\n`
       + `👉 <b>Quản trị người dùng & hệ thống:</b>\n`
@@ -360,6 +363,7 @@ function getHrRoleMenuText(user) {
       + `• <code>/sap_lich_nv [mã] [lịch]</code> — Xếp/chỉnh lịch làm việc cho nhân viên\n`
       + `• <code>/hoso_nhanvien [mã]</code> — Tra cứu chi tiết hồ sơ nhân viên\n`
       + `• <code>/sua_thongtin_nhanvien: [mã] [ca_cũ] sang [ca_mới], [CN_cũ] sang [CN_mới]</code> — Sửa thông tin NV & đồng bộ Google Sheet\n`
+      + `• <code>/xoa_nhanvien &lt;Mã_NV&gt;</code> — Xoá vĩnh viễn nhân viên trên Google Sheet 17iXM & Hệ thống\n`
       + `• <code>/duyet</code> — Duyệt các phiếu chờ (OFF, Đổi ca, Sự cố)\n`
       + `• <code>/baocao</code> — Tóm tắt tình hình nhân sự hôm nay\n`
       + `• <code>/broadcast [nội dung]</code> — Gửi thông báo tới nhân viên\n`
@@ -652,6 +656,31 @@ async function handleTelegramUpdate(update, ctx) {
           actions.push({ chatId, text: r.text });
         } else {
           actions.push({ chatId, text: 'Chức năng sửa thông tin nhân viên tạm thời không khả dụng.' });
+        }
+      } else if (text.startsWith('/xoa_nhanvien')) {
+        const rawCode = text.replace(/^\/xoa_nhanvien:?/, '').trim();
+        const roleStr = String(hrSession.role || '').toUpperCase();
+        if (roleStr !== 'ADMIN' && roleStr !== 'HR') {
+          actions.push({
+            chatId,
+            text: '⛔ <b>TỪ CHỐI TRUY CẬP:</b> Bạn không có quyền thực hiện thao tác này.\nLệnh xóa nhân viên chỉ dành cho 👑 <b>Admin</b> hoặc 🛡️ <b>HR</b>.'
+          });
+        } else if (!rawCode) {
+          actions.push({
+            chatId,
+            text: '🗑️ <b>CÚ PHÁP XÓA VĨNH VIỄN NHÂN VIÊN:</b>\n\n'
+              + '👉 <code>/xoa_nhanvien &lt;Mã_NV&gt;</code>\n'
+              + '<i>Hoặc:</i> <code>/xoa_nhanvien: &lt;Mã_NV&gt;</code>\n\n'
+              + '• <i>Hỗ trợ mã ngắn:</i> <code>NV1288</code> hoặc <code>1288</code>\n'
+              + '• <i>Ví dụ:</i> <code>/xoa_nhanvien NV1288</code>\n\n'
+              + '⚠️ <b>LƯU Ý QUAN TRỌNG:</b>\n'
+              + 'Lệnh này sẽ <b>lập tức xóa sạch 100% dữ liệu</b> của nhân viên trên cả <b>Google Sheet (17iXM)</b> và <b>Hệ thống (Web App)</b>, đồng thời hủy bỏ phiên làm việc ngay lập tức (Force Logout)!'
+          });
+        } else if (ctx?.hrDeleteEmployee) {
+          const r = await ctx.hrDeleteEmployee(hrSession, rawCode);
+          actions.push({ chatId, text: r.text });
+        } else {
+          actions.push({ chatId, text: 'Chức năng xóa nhân viên tạm thời không khả dụng.' });
         }
       } else if (text.startsWith('/reset_hethong')) {
         if (String(hrSession.role || '').toUpperCase() !== 'ADMIN') {
