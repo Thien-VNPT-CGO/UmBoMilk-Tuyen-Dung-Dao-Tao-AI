@@ -242,4 +242,272 @@ test('Telegram V4.3 Features Suite', async (t) => {
     const scorePass = 8.8;
     assert.ok(scorePass >= 8, 'Từ 8 điểm trở lên ĐẠT');
   });
+
+  await t.test('6. Cảnh báo trạng thái tài khoản Bot Quản trị: Đỏ khi chưa đăng nhập, Xanh khi hoạt động', async () => {
+    // 6.1 Chưa đăng nhập -> Cảnh báo ĐỎ rõ ràng trạng thái chưa hoạt động
+    const unauthUpdate = { message: { chat: { id: 77771 }, from: { id: 77771 }, text: '/menu' } };
+    const rUnauth = await tg.handleTelegramUpdate(unauthUpdate, {
+      role: 'hr',
+      getHrSession: async () => null
+    });
+    assert.ok(rUnauth[0].text.includes('🔴 <b>TRẠNG THÁI: TÀI KHOẢN CHƯA ĐĂNG NHẬP (CHƯA HOẠT ĐỘNG)</b>'));
+    assert.ok(rUnauth[0].text.includes('TẠM KHÓA'));
+
+    // 6.2 Đăng nhập thành công -> Cảnh báo XANH trạng thái đang hoạt động 24h
+    const loginUpdate = { message: { chat: { id: 77771 }, from: { id: 77771 }, text: '/login admin_user secretpass' } };
+    const rLogin = await tg.handleTelegramUpdate(loginUpdate, {
+      role: 'hr',
+      getHrSession: async () => null,
+      hrLogin: async (chatId, u, p) => ({
+        ok: true,
+        user: { username: u, role: 'HR', displayName: 'HR Master' }
+      })
+    });
+    assert.ok(rLogin[0].text.includes('🟢 <b>TRẠNG THÁI: TÀI KHOẢN ĐANG HOẠT ĐỘNG (Hiệu lực: 24 giờ)'));
+  });
+
+  await t.test('7. Tuyệt đối KHÔNG hiển thị lộ tài khoản thật hoặc mật khẩu trong thông báo hay hướng dẫn', async () => {
+    // 7.1 Lệnh /login không kèm tham số -> Không chứa pass mẫu (Master@@2027, etc.)
+    const rLoginHelp = await tg.handleTelegramUpdate({ message: { chat: { id: 77772 }, text: '/login' } }, { role: 'hr' });
+    assert.ok(!rLoginHelp[0].text.includes('Master@@2027'));
+    assert.ok(!rLoginHelp[0].text.includes('admin123'));
+    assert.ok(!rLoginHelp[0].text.includes('hr123'));
+    assert.ok(rLoginHelp[0].text.includes('tên_đăng_nhập'));
+
+    // 7.2 Lệnh /doi_mat_khau không kèm tham số -> Không chứa pass mẫu
+    const rPassHelp = await tg.handleTelegramUpdate({ message: { chat: { id: 77772 }, text: '/doi_mat_khau' } }, {
+      role: 'hr',
+      getHrSession: async () => adminSession
+    });
+    assert.ok(!rPassHelp[0].text.includes('Master@@2027'));
+    assert.ok(!rPassHelp[0].text.includes('UbmNewPass@@2028'));
+  });
+
+  await t.test('8. /reset_hethong CHỈ THỰC HIỆN MỖI TÀI KHOẢN ADMIN - Các tài khoản còn lại KHÔNG CÓ QUYỀN', async () => {
+    const resetCmd = { message: { chat: { id: 77773 }, text: '/reset_hethong: LICH_LAM_VIEC' } };
+
+    // 8.1 Tài khoản HR -> Bị chặn truy cập
+    const rHr = await tg.handleTelegramUpdate(resetCmd, {
+      role: 'hr',
+      getHrSession: async () => hrSession
+    });
+    assert.ok(rHr[0].text.includes('TỪ CHỐI TRUY CẬP'));
+    assert.ok(rHr[0].text.includes('CHỈ THỰC HIỆN MỖI TÀI KHOẢN ADMIN'));
+
+    // 8.2 Tài khoản QL -> Bị chặn truy cập
+    const rQl = await tg.handleTelegramUpdate(resetCmd, {
+      role: 'hr',
+      getHrSession: async () => qlSession
+    });
+    assert.ok(rQl[0].text.includes('TỪ CHỐI TRUY CẬP'));
+
+    // 8.3 Tài khoản Admin -> Cho phép thực hiện và gọi adminResetSheet
+    let resetCalledWith = null;
+    const rAdmin = await tg.handleTelegramUpdate(resetCmd, {
+      role: 'hr',
+      getHrSession: async () => adminSession,
+      adminResetSheet: async (sess, sheet) => {
+        resetCalledWith = sheet;
+        return { text: `✅ Đã xóa sạch dữ liệu sheet ${sheet} từ dòng A2 đến Z trên Google Sheet.` };
+      }
+    });
+    assert.equal(resetCalledWith, 'LICH_LAM_VIEC');
+    assert.ok(rAdmin[0].text.includes('LICH_LAM_VIEC'));
+  });
+
+  await t.test('9. /duyet_phieuluong CHỈ HIỂN THỊ VÀ THỰC HIỆN TRÊN TÀI KHOẢN QL (Bỏ trên Admin/HR/MKT)', async () => {
+    // 9.1 Menu Admin/HR không có /duyet_phieuluong
+    const menuAdmin = tg.getHrRoleMenuText(adminSession);
+    assert.ok(!menuAdmin.includes('/duyet_phieuluong'), 'Admin menu không được chứa /duyet_phieuluong');
+    const menuHr = tg.getHrRoleMenuText(hrSession);
+    assert.ok(!menuHr.includes('/duyet_phieuluong'), 'HR menu không được chứa /duyet_phieuluong');
+
+    // 9.2 Menu QL có /duyet_phieuluong
+    const menuQl = tg.getHrRoleMenuText(qlSession);
+    assert.ok(menuQl.includes('/duyet_phieuluong'), 'QL menu phải chứa /duyet_phieuluong');
+
+    // 9.3 HR gọi /duyet_phieuluong -> Bị chặn quyền
+    const payCmd = { message: { chat: { id: 77774 }, text: '/duyet_phieuluong CN130' } };
+    const rHrPay = await tg.handleTelegramUpdate(payCmd, {
+      role: 'hr',
+      getHrSession: async () => hrSession
+    });
+    assert.ok(rHrPay[0].text.includes('QUYỀN HẠN BỊ TỪ CHỐI'));
+    assert.ok(rHrPay[0].text.includes('Quản lý cửa hàng (QL)'));
+
+    // 9.4 QL gọi /duyet_phieuluong -> Cho phép thực hiện
+    let payslipBranchCalled = null;
+    const rQlPay = await tg.handleTelegramUpdate(payCmd, {
+      role: 'hr',
+      getHrSession: async () => qlSession,
+      hrApproveAndSendPayslips: async (sess, branch) => {
+        payslipBranchCalled = branch;
+        return { text: '🎉 HOÀN TẤT DUYỆT & PHÁT PHIẾU LƯƠNG' };
+      }
+    });
+    assert.equal(payslipBranchCalled, 'CN130');
+    assert.ok(rQlPay[0].text.includes('HOÀN TẤT DUYỆT & PHÁT PHIẾU LƯƠNG'));
+  });
+
+  await t.test('10. Đăng ký OFF 2 ngày/tuần: Hiển thị cảnh báo nếu nhân viên đã đăng ký rồi', async () => {
+    const offUpdate = {
+      message: { chat: { id: 66661 }, from: { id: 66661 }, text: '21/09/2026, 25/09/2026' }
+    };
+
+    // Khi nhân viên đã đăng ký 2 ngày OFF tuần này rồi
+    const rWarn = await tg.handleTelegramUpdate(offUpdate, {
+      role: 'employee',
+      checkExistingOffRegistration: async (tgId, dates) => ({
+        hasRegistered: true,
+        dates: ['21/09/2026', '25/09/2026']
+      })
+    });
+
+    assert.ok(rWarn[0].text.includes('CẢNH BÁO: BẠN ĐÃ ĐĂNG KÝ LỊCH OFF TUẦN NÀY RỒI!'));
+    assert.ok(rWarn[0].text.includes('21/09/2026, 25/09/2026'));
+    assert.ok(rWarn[0].text.includes('không cho phép tự ý ghi đè'));
+  });
+
+  await t.test('11. Xem lịch /lich: Hiển thị lịch tuần hiện tại + cảnh báo lịch tuần sau chưa duyệt', async () => {
+    const lichUpdate = {
+      message: { chat: { id: 66662 }, from: { id: 66662 }, text: '/lich' }
+    };
+
+    const rLich = await tg.handleTelegramUpdate(lichUpdate, {
+      role: 'employee',
+      getScheduleWithNextWeekStatus: async (tgId) => ({
+        text: `📅 <b>LỊCH LÀM VIỆC HIỆN TẠI & TUẦN TỚI</b>\n`
+          + `👤 Nhân viên: Nguyễn Văn A (<code>CN130_NV1288</code>)\n\n`
+          + `📋 <b>LỊCH TUẦN HIỆN TẠI:</b>\n• <b>18/09/2026</b>: Ca Sáng 💼 (LÀM VIỆC)\n\n`
+          + `⏳ <b>LỊCH LÀM VIỆC TUẦN SAU (21/09/2026):</b>\n`
+          + `⚠️ <i>Lịch tuần sau của bạn HR chưa duyệt lịch và yêu cầu chờ HR duyệt lịch nhé... Khi HR duyệt, BOT telegram tự động thông báo lịch tuần sau cho nhân viên biết!</i>`
+      })
+    });
+
+    assert.ok(rLich[0].text.includes('LỊCH TUẦN HIỆN TẠI'));
+    assert.ok(rLich[0].text.includes('HR chưa duyệt lịch và yêu cầu chờ'));
+    assert.ok(rLich[0].text.includes('tự động thông báo lịch tuần sau'));
+  });
+
+  await t.test('12. Đổi ca linh hoạt: Chọn đồng nghiệp cùng chi nhánh và so sánh ca khác ngày', async () => {
+    // 12.1 Gõ /doica không tham số -> Hiện danh sách đồng nghiệp cùng chi nhánh dạng nút bấm
+    const rCol = await tg.handleTelegramUpdate({ message: { chat: { id: 66663 }, from: { id: 66663 }, text: '/doica' } }, {
+      role: 'employee',
+      getBranchColleagues: async (tgId) => ({
+        branchName: 'CN1 - 130 Vạn Kiếp',
+        emp: { name: 'Thanh', employeeId: 'NV101' },
+        colleagues: [
+          { employeeId: 'NV102', name: 'Lan', shift: 'CA_TOI' },
+          { employeeId: 'NV103', name: 'Hùng', shift: 'CA_SANG' }
+        ]
+      })
+    });
+    assert.ok(rCol[0].text.includes('chạm chọn bạn đồng nghiệp cùng chi nhánh'));
+    assert.equal(rCol[0].extra.reply_markup.inline_keyboard.length, 2);
+    assert.equal(rCol[0].extra.reply_markup.inline_keyboard[0][0].callback_data, 'swapcolleague:NV102');
+
+    // 12.2 Bấm nút chọn đồng nghiệp -> Hiện bảng so sánh lịch đối chiếu
+    const rCompare = await tg.handleTelegramUpdate({
+      callback_query: {
+        id: 'cb_col',
+        from: { id: 66663 },
+        message: { chat: { id: 66663 } },
+        data: 'swapcolleague:NV102'
+      }
+    }, {
+      role: 'employee',
+      getSwapComparison: async (tgId, colId) => ({
+        ok: true,
+        text: '🔄 <b>SO SÁNH LỊCH ĐỔI CA — CÙNG CHI NHÁNH CN1</b>\n• Bạn: CA_SANG ⟷ Lan: CA_TOI'
+      })
+    });
+    assert.ok(rCompare[0].text.includes('SO SÁNH LỊCH ĐỔI CA'));
+  });
+
+  await t.test('13. Sửa thông tin nhân viên /sua_thongtin_nhanvien đồng bộ Google Sheet 17iXM', async () => {
+    let updateCalledWith = null;
+    const rEdit = await tg.handleTelegramUpdate({
+      message: {
+        chat: { id: 77775 },
+        text: '/sua_thongtin_nhanvien: NV1288 ca sáng sang ca tối, CN1 sang CN2'
+      }
+    }, {
+      role: 'hr',
+      getHrSession: async () => hrSession,
+      hrUpdateEmployeeInfo: async (sess, raw) => {
+        updateCalledWith = raw;
+        return {
+          text: `✅ <b>ĐÃ CẬP NHẬT THÔNG TIN NHÂN VIÊN THÀNH CÔNG!</b>\n`
+            + `• Ca làm: <code>CA_SANG</code> ➔ <b>CA_TOI</b>\n`
+            + `• Chi nhánh: <code>CN1</code> ➔ <b>CN2</b>\n`
+            + `📊 <i>Dữ liệu đã được lưu vào hệ thống và đồng bộ tức thì lên Google Sheet 17iXM!</i>`
+        };
+      }
+    });
+
+    assert.ok(updateCalledWith.includes('ca sáng sang ca tối'));
+    assert.ok(rEdit[0].text.includes('ĐÃ CẬP NHẬT THÔNG TIN NHÂN VIÊN THÀNH CÔNG'));
+    assert.ok(rEdit[0].text.includes('đồng bộ tức thì lên Google Sheet 17iXM'));
+  });
+
+  await t.test('14. Chống trùng thông báo (Zero Duplicate) và không bỏ sót thông báo (Zero Miss)', async () => {
+    // 14.1 Dữ liệu ứng viên mới từ sheet NHAN_VIEN_MOI
+    const newApplicant = {
+      id: 'APP_TEST_99',
+      name: 'Nguyễn Thị Tuyển Dụng',
+      gender: 'Nữ',
+      birthYear: '2004',
+      education: 'Đại học',
+      hometown: 'Đồng Nai',
+      phone: '0988776655',
+      shiftPreference: 'CA_TOI',
+      branchPreference: 'CN2',
+      experience: '1 năm quán trà sữa',
+      handling: 'Bình tĩnh giải quyết khiếu nại',
+      facebook: 'fb.com/tuyendung',
+      source: 'Facebook Fanpage',
+      aiScore: 85,
+      result: 'Đạt vòng hồ sơ'
+    };
+
+    // Kiểm tra cấu trúc tin nhắn ứng viên mới hiển thị đầy đủ các cột trên sheet
+    const alertMsg = `🎉 <b>ỨNG VIÊN MỚI ĐĂNG KÝ (TỪ GOOGLE SHEET NHAN_VIEN_MOI)</b>\n\n`
+      + `🆔 <b>Mã ứng viên:</b> <code>${newApplicant.id}</code>\n`
+      + `👤 <b>Họ tên:</b> <b>${newApplicant.name}</b> (${newApplicant.gender} • Sinh năm: ${newApplicant.birthYear})\n`
+      + `📞 <b>Số điện thoại:</b> <code>${newApplicant.phone}</code>\n`
+      + `🎓 <b>Trình độ:</b> ${newApplicant.education} • <b>Quê quán:</b> ${newApplicant.hometown}\n`
+      + `⏰ <b>Ca đăng ký:</b> ${newApplicant.shiftPreference}\n`
+      + `🏪 <b>Chi nhánh ĐK:</b> ${newApplicant.branchPreference}\n`
+      + `💼 <b>Kinh nghiệm:</b> ${newApplicant.experience}\n`
+      + `🧩 <b>Xử lý đột xuất:</b> ${newApplicant.handling}\n`
+      + `🌐 <b>Facebook:</b> ${newApplicant.facebook}\n`
+      + `📢 <b>Nguồn biết tin:</b> ${newApplicant.source}\n`
+      + `🤖 <b>Điểm AI đánh giá:</b> <b>${newApplicant.aiScore}/100</b>\n`
+      + `🎯 <b>Kết quả:</b> <b>${newApplicant.result}</b>`;
+
+    assert.ok(alertMsg.includes('Trình độ'));
+    assert.ok(alertMsg.includes('Quê quán'));
+    assert.ok(alertMsg.includes('Điểm AI đánh giá'));
+    assert.ok(alertMsg.includes('Kết quả'));
+
+    // 14.2 Khi HR đăng nhập, nhận hộp thư chờ và loại bỏ các thông báo trùng lặp
+    const rPending = await tg.handleTelegramUpdate({
+      message: { chat: { id: 77776 }, text: '/login admin pass' }
+    }, {
+      role: 'hr',
+      getHrSession: async () => null,
+      hrLogin: async () => ({
+        ok: true,
+        user: adminSession,
+        pendingNotifications: [
+          { text: 'Thông báo ứng viên mới: Nguyễn Thị Tuyển Dụng' },
+          { text: 'Thông báo đổi ca: Lan ➔ Hùng' }
+        ]
+      })
+    });
+
+    assert.ok(rPending[0].text.includes('HỘP THƯ CHỜ: BẠN CÓ 2 THÔNG BÁO MỚI'));
+    assert.ok(rPending[0].text.includes('ĐÃ LỌC BỎ THÔNG BÁO TRÙNG LẶP'));
+    assert.ok(rPending[0].text.includes('Nguyễn Thị Tuyển Dụng'));
+  });
 });

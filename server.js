@@ -831,7 +831,7 @@ async function bootPullFromMasterSheet(manualBy){
             const bPref = typeof mapBranchText === 'function' ? mapBranchText(bText) : 'CN2';
             let app = db.applicants.find(a=>a.id===id);
             if(!app){
-              db.applicants.push({
+              const newApp = {
                 id, name: (row[iName]||'').toString().trim()||id, gender: (row[iGender]||'').toString().trim(),
                 birthYear: (row[iBirth]||'').toString().trim(), education: (row[iEdu]||'').toString().trim(),
                 hometown: (row[iHome]||'').toString().trim(), phone,
@@ -841,12 +841,20 @@ async function bootPullFromMasterSheet(manualBy){
                 facebook: (row[iFb]||'').toString().trim(), source: (row[iSrc]||'').toString().trim()||'Google Sheet',
                 aiScore: row[iAi]===''||row[iAi]===undefined ? null : Number(String(row[iAi]).replace(',','.'))||null,
                 aiBreakdown: [], status: (row[iStatus]||'').toString().trim()||'NEW_APPLICANT',
+                result: (row[ci('Kết quả', 15)]||'').toString().trim()||'Đạt vòng hồ sơ',
                 source_id: (row[iSrcId]||'').toString().trim()||('sheet_pull_'+id),
                 createdAt: (row[iCreated]||'').toString().trim()||getVietnamISOString(),
                 version: 1, updated_at: sheetUpd||getVietnamISOString(),
                 updated_by: manualBy||'BOOT_PULL', sync_status:'SYNCED'
-              });
+              };
+              db.applicants.push(newApp);
               out.pulledApplicants = (out.pulledApplicants||0)+1;
+
+              // Bắn thông báo thời gian thực cho Bot Quản trị HR (@umbomilkhrbot) theo quy tắc Không Miss & Chống Trùng
+              try {
+                const notifText = formatNewApplicantTelegramAlert(newApp);
+                notifyHRMaster('applicant', notifText, null, { dedupeKey: 'applicant:' + id, applicantId: id }).catch(()=>{});
+              } catch(e) {}
             } else {
               const localTime = app.updated_at ? new Date(app.updated_at).getTime() : 0;
               if(sheetTime>0 && sheetTime>localTime){
@@ -908,6 +916,47 @@ function emitForceLogout(employeeId, reason='Tài khoản không tồn tại'){
   try{ io.to(`employee:${employeeId}`).emit('employee:forceLogout', payload); }catch(e){}
   io.emit('employee:forceLogout', payload);
   console.log(`[FORCE_LOGOUT] ${employeeId} reason: ${reason}`);
+}
+
+// Định dạng thông báo ứng viên/nhân viên mới đăng ký từ Sheet NHAN_VIEN_MOI cho Bot Quản trị
+function formatNewApplicantTelegramAlert(app){
+  const id = app.id || ('UV_' + Date.now());
+  const createdDate = app.createdAt ? (fmtDMY(String(app.createdAt).split('T')[0]) + ' ' + (String(app.createdAt).split('T')[1]||'').slice(0, 8)).trim() : getVietnamDateTimeStr();
+  const name = app.name || 'Chưa rõ';
+  const gender = app.gender || '—';
+  const birthYear = app.birthYear || '—';
+  const education = app.education || '—';
+  const hometown = app.hometown || '—';
+  const phone = app.phone || '—';
+  const shift = app.shiftText || (DEFAULT_SHIFTS[app.shiftPreference]?.name || app.shiftPreference) || '—';
+  const branch = app.branchText || app.branchPreference || '—';
+  const exp = app.experience || 'Chưa có';
+  const handling = app.handling || '—';
+  const fb = app.facebook || '—';
+  const src = app.source || 'Form Tuyển Dụng';
+  const score = app.aiScore !== null && app.aiScore !== undefined ? app.aiScore + ' / 10' : 'Đang chấm';
+  const res = app.result || (app.status === 'NEW_APPLICANT' ? 'Đạt vòng hồ sơ' : app.status || 'Đạt vòng hồ sơ');
+
+  return `🆕 <b>THÔNG BÁO: CÓ ỨNG VIÊN / NHÂN VIÊN MỚI ĐĂNG KÝ!</b>\n`
+    + `📊 <b>Nguồn:</b> Google Sheet <code>NHAN_VIEN_MOI</code> (Form Tuyển Dụng)\n\n`
+    + `━━━━━━━━━━━━━━━━━━━━━━━━━━\n`
+    + `🆔 <b>Mã ứng viên:</b> <code>${id}</code>\n`
+    + `📅 <b>Ngày đăng ký:</b> ${createdDate}\n`
+    + `👤 <b>Họ và tên:</b> ${name}\n`
+    + `🚻 <b>Giới tính:</b> ${gender}  |  🎂 <b>Năm sinh:</b> ${birthYear}\n`
+    + `🎓 <b>Trình độ:</b> ${education}\n`
+    + `🏡 <b>Quê quán:</b> ${hometown}\n`
+    + `📱 <b>Số điện thoại:</b> <code>${phone}</code>\n`
+    + `⏰ <b>Ca đăng ký:</b> ${shift}\n`
+    + `🏪 <b>Chi nhánh ĐK:</b> ${branch}\n`
+    + `💼 <b>Kinh nghiệm:</b> ${exp}\n`
+    + `⚡ <b>Xử lý đột xuất:</b> ${handling}\n`
+    + `🌐 <b>Facebook:</b> ${fb}\n`
+    + `📣 <b>Nguồn biết tin:</b> ${src}\n`
+    + `🤖 <b>Điểm AI đánh giá:</b> <b>${score}</b>\n`
+    + `🎯 <b>Kết quả sơ tuyển:</b> ${res} ✅\n`
+    + `━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`
+    + `👉 <i>Nhân sự / Quản lý vui lòng liên hệ ứng viên để hẹn lịch phỏng vấn trực tiếp tại chi nhánh.</i>`;
 }
 
 // Thông báo Realtime cho Admin và HR khi nhân viên thao tác
@@ -2602,6 +2651,13 @@ app.post('/api/recruitment/form-submit', async (req,res)=>{
   const zr = { id: uuidv4(), sent_at: getVietnamISOString(), receiver: mapped.phone, type:'NEW_APPLICANT', content:`[FORM] ${mapped.name} - ${mapped.phone} - ${branchId} (AI: ${applicant.aiScore} điểm)`, status:'SENT', error:'' };
   db.zaloRecords.unshift(zr);
   io.emit('zalo:update', db.zaloRecords);
+
+  // Bắn thông báo thời gian thực cho Bot Quản trị HR (@umbomilkhrbot) theo quy tắc Không Miss & Chống Trùng
+  try {
+    const notifText = formatNewApplicantTelegramAlert(applicant);
+    notifyHRMaster('applicant', notifText, null, { dedupeKey: 'applicant:' + applicant.id, applicantId: applicant.id }).catch(()=>{});
+  } catch(e) {}
+
   res.json({success:true, applicant});
 });
 app.post('/api/applicants/:id/score', authMiddleware, (req,res)=>{
@@ -8418,6 +8474,30 @@ app.get('/api/schedules/next-week', authMiddleware, (req,res)=>{
   res.json({ weekStart: nextWeekStart, nextWeekDates, drafts, offRequests: offForNextWeek, checks, needApproval: drafts.length>0 });
 });
 
+function broadcastTelegramScheduleApproved(drafts, weekStart) {
+  try {
+    const cfgNv = getTelegramCfg('employee');
+    if (!cfgNv.botToken || OUTBOUND_SYNC_DISABLED) return;
+    for (const d of (drafts || [])) {
+      const link = (db.telegramLinks || []).find(l => l.employeeId === d.employeeId && l.chatId);
+      if (!link) continue;
+      const emp = (db.employees || []).find(e => e.employeeId === d.employeeId);
+      const lines = (d.days || []).map(day => {
+        const isOff = day.status === 'OFF' || day.shift === 'OFF';
+        return `• <b>${fmtDMY(day.date)} (${day.dayName || ''})</b>: ${day.shift || 'Ca làm'} ${isOff ? '🏖️ (NGHỈ OFF)' : '💼 (LÀM VIỆC)'}`;
+      });
+      const msg = `🎉 <b>LỊCH LÀM VIỆC TUẦN SAU ĐÃ ĐƯỢC HR PHÊ DUYỆT!</b>\n\n`
+        + `👤 <b>${emp ? emp.name : d.employeeId}</b> (<code>${d.employeeId}</code>)\n`
+        + `📅 Tuần bắt đầu: <b>${fmtDMY(weekStart)}</b>\n\n`
+        + lines.join('\n')
+        + `\n\n📌 <i>Lịch làm việc đã chính thức có hiệu lực. Nếu cần đổi ca, bạn vui lòng sử dụng tính năng <b>/doica</b> nhé!</i>`;
+      tg.sendTelegramMessage(cfgNv.botToken, link.chatId, msg).catch(() => {});
+    }
+  } catch (e) {
+    console.error('[BROADCAST_SCHEDULE_APPROVED] Error:', e.message);
+  }
+}
+
 // API: HR/Admin bấm duyệt lịch tuần sau -> cập nhật chính thức và gửi đến NV
 app.post('/api/schedules/approve-next-week', authMiddleware, roleCheck(['Admin','HR']), (req,res)=>{
   const nextWeekStart = getNextWeekStartStr();
@@ -8437,8 +8517,6 @@ app.post('/api/schedules/approve-next-week', authMiddleware, roleCheck(['Admin',
   if(violations.length>0){
     warning = `Cảnh báo: ${violations.length} NV chưa đạt min 12 ngày/tháng (cần thêm ${violations.map(v=> v.need).join(', ')} ngày) - vẫn cho duyệt, HR cần theo dõi`;
     console.warn(`[APPROVE] Min12 warning:`, violations);
-    // Nếu HR không force và muốn chặn thì có thể return 400, nhưng hiện cho phép duyệt với warning để linh hoạt tuần đầu tháng
-    // if(!req.body.force) return res.status(400).json({ error:'Chưa đạt min 12', violations, hint:'Dùng force:true để duyệt' });
   }
   // Duyệt: chuyển PENDING -> APPROVED, xóa draft cũ nếu có, gửi thông báo
   drafts.forEach(d=>{
@@ -8462,6 +8540,8 @@ app.post('/api/schedules/approve-next-week', authMiddleware, roleCheck(['Admin',
   io.emit('schedules:approved', { weekStart: nextWeekStart, count: drafts.length });
   io.emit('notifications:update', db.notifications);
   audit(req.user.username,'APPROVE_NEXT_WEEK_SCHEDULE','SCHEDULE', { weekStart: nextWeekStart, drafts: drafts.length }, { approved: drafts.length, warning }, req.ip);
+  // Tự động bắn thông báo lịch tuần sau tới BOT Telegram của từng nhân viên
+  broadcastTelegramScheduleApproved(drafts, nextWeekStart);
   res.json({ success:true, weekStart: nextWeekStart, approved: drafts.length, warning, violations, message:`Đã duyệt lịch tuần sau ${nextWeekStart} cho ${drafts.length} NV và gửi đến Web App Nhân viên${warning ? ' - ' + warning : ''}` });
 });
 
@@ -8599,6 +8679,8 @@ app.post('/api/schedules/approve-test-week', authMiddleware, roleCheck(['Admin',
   io.emit('schedules:update', db.schedules);
   io.emit('schedules:approved', { weekStart: nextWeekStart, count: drafts.length });
   io.emit('notifications:update', db.notifications);
+  // Tự động bắn thông báo lịch tuần sau tới BOT Telegram của từng nhân viên
+  broadcastTelegramScheduleApproved(drafts, nextWeekStart);
   res.json({ success:true, weekStart: nextWeekStart, approved: drafts.length, generated, locked:true, vipTestMode: vip, warning, violations, message:`Đã duyệt lịch tuần sau ${nextWeekStart} cho ${drafts.length} NV${generated?' (AI vừa tự sắp lịch)':''}, khóa đợt đăng ký OFF & đồng bộ Sheet${warning ? ' - ' + warning : ''}` });
 });
 
@@ -12203,22 +12285,86 @@ async function summarizeEmployeeMessage(emp, text) {
 // settings.telegram.notify {checkin, checkout, off, swap} làm công tắc từng loại.
 async function notifyHRMaster(kind, text, probe, extra = {}) {
   try {
-    if (OUTBOUND_SYNC_DISABLED) return { ok: false, skipped: 'disabled' };
     if (probe && isTestRecord(probe)) return { ok: false, skipped: 'test-record' };
     const nz = (db.settings && db.settings.telegram && db.settings.telegram.notify) || {};
     if (nz[kind] === false) return { ok: false, skipped: 'muted' };
+
+    if (!db.sentAdminNotifKeys) db.sentAdminNotifKeys = [];
+    if (!db.adminNotificationQueue) db.adminNotificationQueue = [];
+
+    const dedupeKey = extra?.dedupeKey || null;
+    if (dedupeKey && db.sentAdminNotifKeys.includes(dedupeKey)) {
+      return { ok: false, skipped: 'duplicate' };
+    }
+
+    if (OUTBOUND_SYNC_DISABLED) {
+      if (dedupeKey) {
+        db.sentAdminNotifKeys.push(dedupeKey);
+        if (db.sentAdminNotifKeys.length > 1000) db.sentAdminNotifKeys = db.sentAdminNotifKeys.slice(-1000);
+      }
+      return { ok: false, skipped: 'disabled' };
+    }
+
     const cfg = getTelegramCfg('hr');
-    if (!cfg.botToken) return { ok: false, skipped: 'no-token' };
-    const chats = (db.hrBotChats || []).filter((c) => c.chatId);
-    if (!chats.length) return { ok: false, skipped: 'no-subscriber' };
+    if (!cfg.botToken) {
+      db.adminNotificationQueue.push({
+        id: 'notif_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+        kind, text, extra, dedupeKey,
+        createdAt: getVietnamISOString()
+      });
+      if (db.adminNotificationQueue.length > 500) db.adminNotificationQueue = db.adminNotificationQueue.slice(-500);
+      if (dedupeKey) {
+        db.sentAdminNotifKeys.push(dedupeKey);
+        if (db.sentAdminNotifKeys.length > 1000) db.sentAdminNotifKeys = db.sentAdminNotifKeys.slice(-1000);
+      }
+      saveDB();
+      return { ok: true, queued: true };
+    }
+
+    const now = Date.now();
+    const activeHrChats = (db.hrBotChats || []).filter((c) => {
+      if (!c.chatId) return false;
+      if (c.auth && c.auth.loggedInAt) {
+        const loginTime = new Date(c.auth.loggedInAt).getTime();
+        if (now - loginTime > 24 * 60 * 60 * 1000) {
+          delete c.auth;
+          return false;
+        }
+      }
+      return !!c.auth;
+    });
+
+    if (!activeHrChats.length) {
+      // Zero Miss: lưu hàng đợi thông báo cho HR khi offline/chưa đăng nhập
+      db.adminNotificationQueue.push({
+        id: 'notif_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+        kind, text, extra, dedupeKey,
+        createdAt: getVietnamISOString()
+      });
+      if (db.adminNotificationQueue.length > 500) db.adminNotificationQueue = db.adminNotificationQueue.slice(-500);
+      if (dedupeKey) {
+        db.sentAdminNotifKeys.push(dedupeKey);
+        if (db.sentAdminNotifKeys.length > 1000) db.sentAdminNotifKeys = db.sentAdminNotifKeys.slice(-1000);
+      }
+      saveDB();
+      return { ok: true, queued: true, text: 'Đã lưu hàng đợi thông báo cho HR' };
+    }
+
     let sent = 0;
-    for (const c of chats) {
+    for (const c of activeHrChats) {
       try {
         const r = await tg.sendTelegramMessage(cfg.botToken, c.chatId, text, extra || {});
         logTelegram('OUT', c.chatId, text, r.ok ? 'SENT' : 'FAILED');
         if (r.ok) sent++;
       } catch (e) { logTelegram('OUT', c.chatId, text, 'FAILED: ' + e.message); }
     }
+
+    if (sent > 0 && dedupeKey) {
+      db.sentAdminNotifKeys.push(dedupeKey);
+      if (db.sentAdminNotifKeys.length > 1000) db.sentAdminNotifKeys = db.sentAdminNotifKeys.slice(-1000);
+      saveDB();
+    }
+
     return { ok: sent > 0, sent };
   } catch (e) { return { ok: false, skipped: 'error' }; }
 }
@@ -13099,8 +13245,8 @@ function hrChangeUserPassword(session, username, oldPass, newPass) {
   if (!username || !oldPass || !newPass) {
     return {
       text: '🔑 <b>CÚ PHÁP ĐỔI MẬT KHẨU TÀI KHOẢN:</b>\n\n'
-        + '👉 <code>/doi_mat_khau <tên_đăng_nhập> <mật_khẩu_cũ> <mật_khẩu_mới></code>\n\n'
-        + '<i>Ví dụ:</i> <code>/doi_mat_khau admin Master@@2027 UbmNewPass@@2028</code>'
+        + '👉 <code>/doi_mat_khau &lt;tên_đăng_nhập&gt; &lt;mật_khẩu_cũ&gt; &lt;mật_khẩu_mới&gt;</code>\n\n'
+        + '📌 <i>Lưu ý bảo mật: Tuyệt đối không chia sẻ mật khẩu cho người khác.</i>'
     };
   }
   const u = (db.users || []).find(x => x.username.toLowerCase() === username.trim().toLowerCase());
@@ -13651,8 +13797,23 @@ async function processTelegramUpdate(update, role){
         allowedTabs: user.allowedTabs || [],
         loggedInAt: getVietnamISOString()
       };
+
+      if (!db.adminNotificationQueue) db.adminNotificationQueue = [];
+      if (!db.sentAdminNotifKeys) db.sentAdminNotifKeys = [];
+
+      // Drain queue và lọc bỏ thông báo trùng lặp (Zero Duplicate & Zero Miss)
+      const seenKeys = new Set();
+      const uniquePending = [];
+      for (const notif of db.adminNotificationQueue) {
+        const k = notif.dedupeKey || notif.id;
+        if (!seenKeys.has(k)) {
+          seenKeys.add(k);
+          uniquePending.push(notif);
+        }
+      }
+      db.adminNotificationQueue = [];
       saveDB();
-      return { ok:true, user: c.auth };
+      return { ok:true, user: c.auth, pendingNotifications: uniquePending };
     },
     hrLogout: async (chatId) => {
       const c = (db.hrBotChats||[]).find(x => String(x.chatId) === String(chatId));
@@ -13682,6 +13843,142 @@ async function processTelegramUpdate(update, role){
     hrReschedule: async (session, empQuery, spec) => hrRescheduleEmployee(session, empQuery, spec),
     adminRunTest: async (type, session) => adminRunTest(type, session),
     adminDeleteTest: async (session) => adminDeleteTest(session),
+    adminResetSheet: async (session, sheetName) => {
+      if (!session || String(session.role).toUpperCase() !== 'ADMIN') {
+        return {
+          text: '⛔ <b>TỪ CHỐI TRUY CẬP: QUYỀN HẠN BỊ KHÓA!</b>\n\nLệnh <code>/reset_hethong</code> <b>CHỈ THỰC HIỆN MỖI TÀI KHOẢN ADMIN</b>.\nCác tài khoản còn lại (HR, QL, MKT) <b>TUYỆT ĐỐI KHÔNG CÓ QUYỀN</b> thực hiện hành động này.'
+        };
+      }
+      const cleanName = String(sheetName || '').trim();
+      if (!cleanName) {
+        return {
+          text: '⚠️ <b>CÚ PHÁP RESET GOOGLE SHEET (ADMIN ONLY):</b>\n\n👉 <code>/reset_hethong: &lt;tên_sheet&gt;</code>\n<i>Ví dụ:</i> <code>/reset_hethong: LICH_LAM_VIEC</code>'
+        };
+      }
+      const spreadsheetId = db.settings?.googleSheet?.spreadsheetId || '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w';
+      try {
+        const token = await getGoogleAccessToken();
+        if (token && spreadsheetId && !OUTBOUND_SYNC_DISABLED) {
+          const clearUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(cleanName)}!A2:Z5000:clear`;
+          await fetch(clearUrl, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+        }
+      } catch (e) {
+        console.error('[ADMIN_RESET_SHEET] Clear sheet error:', e.message);
+      }
+
+      if (cleanName === 'LICH_LAM_VIEC') {
+        db.schedules = [];
+        saveDB();
+        io.emit('schedules:update', db.schedules);
+      }
+      try {
+        audit(session.username, 'RESET_GOOGLE_SHEET', 'GOOGLE_SHEET', null, { sheetName: cleanName, spreadsheetId }, 'telegram_bot');
+      } catch (e) {}
+
+      return {
+        text: `⚠️ <b>XÁC NHẬN DỌN DẸP DỮ LIỆU GOOGLE SHEET</b>\nSheet mục tiêu: <code>${cleanName}</code>\nQuyền thực thi: 👑 <b>Quản trị viên tối cao (ADMIN)</b>\n\n✅ <b>KẾT QUẢ:</b> Đã xóa sạch dữ liệu từ dòng A2 đến Z trên Google Sheet!\n📌 Dòng tiêu đề (Headers hàng 1) được bảo vệ nguyên vẹn 100%.`
+      };
+    },
+    hrUpdateEmployeeInfo: async (session, rawArgs) => {
+      if (!session) return { text: '⛔ Bạn chưa đăng nhập tài khoản Quản trị.' };
+      if (!rawArgs || !rawArgs.trim()) {
+        return {
+          text: '✏️ <b>CÚ PHÁP SỬA THÔNG TIN NHÂN VIÊN (ĐỒNG BỘ GOOGLE SHEET):</b>\n\n👉 <code>/sua_thongtin_nhanvien: &lt;Mã_NV&gt; &lt;ca_cũ&gt; sang &lt;ca_mới&gt;, &lt;CN_cũ&gt; sang &lt;CN_mới&gt;</code>\n\n<i>Ví dụ:</i> <code>/sua_thongtin_nhanvien: NV1288 ca sáng sang ca tối, CN1 sang CN2</code>'
+        };
+      }
+      const trimmed = rawArgs.trim();
+      const firstSpaceIdx = trimmed.search(/\s/);
+      if (firstSpaceIdx === -1) {
+        return { text: '⚠️ Thiếu thông tin cần sửa. Cú pháp: <code>/sua_thongtin_nhanvien: &lt;Mã_NV&gt; &lt;ca_cũ&gt; sang &lt;ca_mới&gt;, &lt;CN_cũ&gt; sang &lt;CN_mới&gt;</code>' };
+      }
+      const empCode = trimmed.slice(0, firstSpaceIdx).replace(/[,:]/g, '').trim();
+      const changesPart = trimmed.slice(firstSpaceIdx).trim();
+
+      const emp = findEmployeeByShortOrFullId(empCode);
+      if (!emp) {
+        return { text: `⚠️ Không tìm thấy nhân viên với mã: <code>${empCode}</code>` };
+      }
+
+      if (session.branchScope && Array.isArray(session.branchScope) && session.branchScope.length > 0 && String(session.role).toUpperCase() !== 'ADMIN') {
+        if (emp.branchId && !session.branchScope.includes(emp.branchId)) {
+          return { text: `⛔ <b>Không có quyền:</b> Nhân viên <b>${emp.name}</b> (${emp.branchId}) nằm ngoài chi nhánh quản lý của bạn.` };
+        }
+      }
+
+      let newShift = null;
+      let newBranch = null;
+      const clauses = changesPart.split(/[,;\n]+/);
+      for (const clause of clauses) {
+        const m = clause.split(/\s+sang\s+/i);
+        if (m.length === 2) {
+          const left = m[0].trim().toLowerCase();
+          const right = m[1].trim().toLowerCase();
+          if (left.includes('ca') || ['sang', 'chieu', 'toi', 'trua', 'off'].some(s => left.includes(s))) {
+            newShift = parseShiftCode(right);
+          } else if (left.includes('cn') || ['cn1', 'cn2', 'cn3', 'cn4'].some(c => left.includes(c))) {
+            const bFound = (db.branches || []).find(b => b.id.toLowerCase() === right.replace(/\s+/g, '') || right.includes(b.id.toLowerCase()));
+            if (bFound) newBranch = bFound.id;
+            else {
+              const upper = right.toUpperCase().replace(/\s+/g, '');
+              if (['CN1', 'CN2', 'CN3', 'CN4'].includes(upper)) newBranch = upper;
+            }
+          } else {
+            const testShift = parseShiftCode(right);
+            if (right.includes('sang') || right.includes('chieu') || right.includes('toi')) {
+              newShift = testShift;
+            } else {
+              const upper = right.toUpperCase().replace(/\s+/g, '');
+              if (['CN1', 'CN2', 'CN3', 'CN4'].includes(upper)) newBranch = upper;
+            }
+          }
+        }
+      }
+
+      if (!newShift && !newBranch) {
+        return { text: '⚠️ Không nhận diện được thông tin ca làm hoặc chi nhánh mới cần đổi. Vui lòng kiểm tra cú pháp <code>&lt;cũ&gt; sang &lt;mới&gt;</code>.' };
+      }
+
+      const updateLogs = [];
+      if (newShift && newShift !== emp.shift) {
+        updateLogs.push(`• Ca làm: <code>${emp.shift || 'Chưa gán'}</code> ➔ <b>${newShift}</b>`);
+        emp.shift = newShift;
+      }
+      if (newBranch && newBranch !== emp.branchId) {
+        updateLogs.push(`• Chi nhánh: <code>${emp.branchId || 'Chưa gán'}</code> ➔ <b>${newBranch}</b>`);
+        emp.branchId = newBranch;
+      }
+
+      if (updateLogs.length === 0) {
+        return { text: `ℹ️ Thông tin của nhân viên <b>${emp.name}</b> (${emp.employeeId}) đã trùng khớp với yêu cầu, không cần cập nhật.` };
+      }
+
+      emp.version = (emp.version || 1) + 1;
+      emp.updated_at = getVietnamISOString();
+      emp.updated_by = session.username || 'HR_BOT';
+      emp.sync_status = 'SYNCED';
+
+      saveDB();
+      io.emit('employees:update', db.employees);
+
+      try {
+        addSyncQueue('EMPLOYEE', 'UPDATE', emp, session.username, 'TELEGRAM_BOT');
+        if (typeof triggerRealtimeSheetSync === 'function') {
+          triggerRealtimeSheetSync('NHAN_VIEN_CHINH_THUC');
+          triggerRealtimeSheetSync('NHAN_VIEN_TRAINING');
+        }
+      } catch (e) {}
+
+      try {
+        audit(session.username, 'UPDATE_EMPLOYEE_INFO', 'EMPLOYEE', emp.employeeId, { newShift, newBranch }, 'telegram_bot');
+      } catch (e) {}
+
+      return {
+        text: `✅ <b>ĐÃ CẬP NHẬT THÔNG TIN NHÂN VIÊN THÀNH CÔNG!</b>\n\n`
+          + `👤 Nhân viên: <b>${emp.name}</b> (<code>${emp.employeeId}</code>)\n`
+          + updateLogs.join('\n')
+          + `\n\n📊 <i>Dữ liệu đã được lưu vào hệ thống và đồng bộ tức thì lên Google Sheet 17iXM!</i>`
+      };
+    },
     adminGetUsers: async (session) => {
       const uList = (db.users||[]).map(u => `• <b>${u.username}</b> (<code>${u.role}</code>) — ${u.displayName||''} [${(u.branchScope||[]).join(',')||'Toàn bộ'}]`).join('\n');
       return { text: `👥 <b>DANH SÁCH TÀI KHOẢN HỆ THỐNG:</b>\n\n${uList}\n\n👉 Dùng <code>/capquyen &lt;user&gt; &lt;role&gt;</code> để đổi vai trò.` };
@@ -13814,6 +14111,155 @@ async function processTelegramUpdate(update, role){
           + lines.join('\n')
           + `\n\n💬 <i>Muốn đăng ký OFF hoặc đổi ca, bạn chỉ cần nhắn trực tiếp vào khung chat này nhé!</i>`
       };
+    },
+    getScheduleWithNextWeekStatus: async (telegramId) => {
+      const link = findTelegramLink(telegramId);
+      if (!link?.employeeId) return { text: '⚠️ <b>Bạn chưa liên kết tài khoản</b>\nVui lòng nhắn số điện thoại của bạn (hoặc /link <code>SĐT</code>) vào đây để liên kết nhé.' };
+      const emp = (db.employees || []).find(e => e.employeeId === link.employeeId);
+      if (!emp) return { text: 'Tài khoản liên kết không còn tồn tại.' };
+
+      const todayStr = getVietnamTodayStr();
+      const curMon = toVietnamDateStr(getMonday(new Date(todayStr)));
+      const nextMon = toVietnamDateStr(getNextMonday());
+
+      const curSchedule = (db.schedules || []).find(s => s.employeeId === emp.employeeId && s.weekStart === curMon);
+      let curLines = '';
+      if (curSchedule && curSchedule.days && curSchedule.days.length > 0) {
+        curLines = curSchedule.days.map(d => {
+          const isOff = d.status === 'OFF' || d.shift === 'OFF';
+          return `• <b>${fmtDMY(d.date)} (${d.dayName || ''})</b>: ${d.shift || 'Ca làm'} ${isOff ? '🏖️ (NGHỈ OFF)' : '💼 (LÀM VIỆC)'}`;
+        }).join('\n');
+      } else {
+        const upcoming = (db.schedules || []).filter(s => s.employeeId === emp.employeeId && s.date >= todayStr).slice(0, 7);
+        if (upcoming.length > 0) {
+          curLines = upcoming.map(s => {
+            const isOff = s.status === 'OFF' || s.shift === 'OFF';
+            return `• <b>${fmtDMY(s.date)}</b>: ${s.shift || 'Ca làm'} ${isOff ? '🏖️ (NGHỈ OFF)' : '💼 (LÀM VIỆC)'}`;
+          }).join('\n');
+        } else {
+          curLines = '• Chưa có lịch xếp sẵn cho tuần này.';
+        }
+      }
+
+      const nextSchedule = (db.schedules || []).find(s => s.employeeId === emp.employeeId && s.weekStart === nextMon);
+      let nextWeekText = '';
+      if (nextSchedule && nextSchedule.approvalStatus === 'APPROVED' && nextSchedule.days) {
+        const nextLines = nextSchedule.days.map(d => {
+          const isOff = d.status === 'OFF' || d.shift === 'OFF';
+          return `• <b>${fmtDMY(d.date)} (${d.dayName || ''})</b>: ${d.shift || 'Ca làm'} ${isOff ? '🏖️ (NGHỈ OFF)' : '💼 (LÀM VIỆC)'}`;
+        }).join('\n');
+        nextWeekText = `\n\n🎉 <b>LỊCH LÀM VIỆC TUẦN SAU (${fmtDMY(nextMon)}) — ĐÃ PHÊ DUYỆT:</b>\n${nextLines}`;
+      } else {
+        nextWeekText = `\n\n⏳ <b>LỊCH LÀM VIỆC TUẦN SAU (${fmtDMY(nextMon)}):</b>\n⚠️ <i>Lịch tuần sau của bạn HR chưa duyệt lịch và yêu cầu chờ HR duyệt lịch nhé... Khi HR duyệt, BOT telegram tự động thông báo lịch tuần sau cho nhân viên biết!</i>`;
+      }
+
+      return {
+        text: `📅 <b>LỊCH LÀM VIỆC HIỆN TẠI & TUẦN TỚI</b>\n`
+          + `👤 Nhân viên: <b>${emp.name}</b> (<code>${emp.employeeId}</code>)\n`
+          + `🏪 Chi nhánh: <b>${emp.branchId || 'Ụm Bò Milk'}</b>\n\n`
+          + `📋 <b>LỊCH TUẦN HIỆN TẠI:</b>\n`
+          + curLines
+          + nextWeekText
+          + `\n\n💬 <i>Nếu có nhu cầu đổi ca, bạn chỉ cần dùng lệnh <b>/doica</b> nhé!</i>`
+      };
+    },
+    checkExistingOffRegistration: async (telegramId, dates) => {
+      const link = findTelegramLink(telegramId);
+      if (!link || !link.employeeId) return { hasRegistered: false };
+      const emp = (db.employees || []).find(e => e.employeeId === link.employeeId);
+      if (!emp) return { hasRegistered: false };
+
+      const targetDateStr = dates && dates[0] ? dates[0] : getVietnamTodayStr();
+      const targetMon = toVietnamDateStr(getMonday(new Date(targetDateStr)));
+
+      const offReq = (db.offRequests || []).find(r => r.employeeId === emp.employeeId && r.status !== 'REJECTED' && (
+        (r.dates && r.dates.some(d => toVietnamDateStr(getMonday(new Date(d))) === targetMon)) ||
+        (r.weekStart && r.weekStart === targetMon)
+      ));
+
+      if (offReq && offReq.dates && offReq.dates.length >= 2) {
+        return {
+          hasRegistered: true,
+          dates: offReq.dates.map(d => fmtDMY(d)),
+          status: offReq.status
+        };
+      }
+
+      const sc = (db.schedules || []).find(s => s.employeeId === emp.employeeId && s.weekStart === targetMon);
+      if (sc && sc.days) {
+        const offDays = sc.days.filter(d => d.status === 'OFF' || d.shift === 'OFF');
+        if (offDays.length >= 2) {
+          return {
+            hasRegistered: true,
+            dates: offDays.map(d => fmtDMY(d.date)),
+            status: sc.approvalStatus
+          };
+        }
+      }
+
+      return { hasRegistered: false };
+    },
+    getBranchColleagues: async (telegramId) => {
+      const link = findTelegramLink(telegramId);
+      if (!link?.employeeId) return { colleagues: [] };
+      const emp = (db.employees || []).find(e => e.employeeId === link.employeeId);
+      if (!emp) return { colleagues: [] };
+
+      const colleagues = (db.employees || []).filter(e =>
+        e.branchId === emp.branchId &&
+        e.employeeId !== emp.employeeId &&
+        !['ARCHIVED', 'TERMINATED', 'RESIGNED'].includes(e.status)
+      ).slice(0, 10);
+
+      const bObj = (db.branches || []).find(b => b.id === emp.branchId);
+      const branchName = bObj ? bObj.name : emp.branchId;
+
+      return {
+        emp,
+        branchName,
+        colleagues: colleagues.map(c => ({
+          employeeId: c.employeeId,
+          name: c.name,
+          shift: c.shift
+        }))
+      };
+    },
+    getSwapComparison: async (telegramId, colleagueId) => {
+      const link = findTelegramLink(telegramId);
+      if (!link?.employeeId) return { ok: false, error: 'Chưa liên kết tài khoản' };
+      const empA = (db.employees || []).find(e => e.employeeId === link.employeeId);
+      const empB = findEmployeeByShortOrFullId(colleagueId);
+      if (!empA || !empB) return { ok: false, error: 'Không tìm thấy nhân viên' };
+      if (empA.branchId !== empB.branchId) {
+        return { ok: false, error: `Không cùng chi nhánh (${empA.branchId} vs ${empB.branchId})` };
+      }
+
+      const todayStr = getVietnamTodayStr();
+      const curMon = toVietnamDateStr(getMonday(new Date(todayStr)));
+      const scA = (db.schedules || []).find(s => s.employeeId === empA.employeeId && s.weekStart === curMon);
+      const scB = (db.schedules || []).find(s => s.employeeId === empB.employeeId && s.weekStart === curMon);
+
+      const scheduleCompareLines = [];
+      if (scA?.days && scB?.days) {
+        for (let i = 0; i < 7; i++) {
+          const dA = scA.days[i];
+          const dB = scB.days[i];
+          if (dA && dB && dA.date >= todayStr) {
+            scheduleCompareLines.push(`• <b>${fmtDMY(dA.date)} (${dA.dayName})</b>: Bạn [${dA.shift}] ⟷ ${empB.name} [${dB.shift}]`);
+          }
+        }
+      }
+
+      const comparisonText = `🔄 <b>SO SÁNH LỊCH ĐỔI CA — CÙNG CHI NHÁNH ${empA.branchId}</b>\n\n`
+        + `👤 <b>Bạn:</b> ${empA.name} (<code>${empA.employeeId}</code>)\n`
+        + `👤 <b>Đồng nghiệp:</b> ${empB.name} (<code>${empB.employeeId}</code>)\n\n`
+        + `📅 <b>LỊCH LÀM VIỆC TRONG TUẦN ĐỐI CHIẾU:</b>\n`
+        + (scheduleCompareLines.length > 0 ? scheduleCompareLines.join('\n') : `• Bạn: ${empA.shift} ⟷ ${empB.name}: ${empB.shift}`)
+        + `\n\n👉 <b>Để gửi yêu cầu đổi ca, bạn gõ cú pháp:</b>\n`
+        + `<code>/doica &lt;ngày_của_bạn&gt; &lt;ca_của_bạn&gt; sang ${empB.name} &lt;ngày_muốn_nhận&gt; &lt;ca_muốn_nhận&gt;</code>\n\n`
+        + `<i>(Lưu ý: Có thể đổi khác ngày, khác ca làm việc, miễn là cùng chi nhánh <b>${empA.branchId}</b>!)</i>`;
+
+      return { ok: true, empA, empB, text: comparisonText };
     },
     getTodayStatus: async (telegramId)=>{
       const link = findTelegramLink(telegramId);

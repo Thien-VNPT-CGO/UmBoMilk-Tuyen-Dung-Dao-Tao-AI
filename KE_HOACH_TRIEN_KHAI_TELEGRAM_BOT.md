@@ -1,6 +1,6 @@
-# 📋 KẾ HOẠCH TRIỂN KHAI & ĐẶC TẢ TÍNH NĂNG HỆ THỐNG TELEGRAM BOT ỤM BÒ MILK (V4.3)
+# 📋 KẾ HOẠCH TRIỂN KHAI & ĐẶC TẢ TÍNH NĂNG HỆ THỐNG TELEGRAM BOT ỤM BÒ MILK (V4.7)
 
-> **Phiên bản:** 4.3 (Cập nhật toàn diện ngày 18/09/2026)  
+> **Phiên bản:** 4.7 (Cập nhật ngày 18/09/2026 - Bổ sung Thông báo Nhân viên mới từ Form Google Sheet NHAN_VIEN_MOI & Bảo mật thông tin đăng nhập tuyệt đối)  
 > **Đơn vị áp dụng:** Toàn bộ hệ thống chuỗi cửa hàng & khối văn phòng Ụm Bò Milk  
 > **Mô hình kiến trúc:** Tam giác 3 Bot Telegram chuyên biệt + Telegram Mini App tối giản + Realtime Web App Dashboard & Google Sheet 17iXM + Google Sheet Phiếu Lương (Đồng bộ ngầm 100%)
 
@@ -13,27 +13,35 @@
    - [3.1. Cấu trúc Mini App tối giản: Điểm danh & Khóa học](#31-cấu-trúc-mini-app-tối-giản-điểm-danh--khóa-học)
    - [3.2. Điểm danh 2 bước (GPS $\le$ 300m + Ảnh 3 yếu tố) & Tự động đóng app](#32-điểm-danh-2-bước-gps--300m--ảnh-3-yếu-tố--tự-động-đóng-app)
    - [3.3. Chế tài phạt đi trễ & Khóa nghiêm ngặt Check-out sớm](#33-chế-tài-phạt-đi-trễ--khóa-nghiêm-ngặt-check-out-sớm)
-   - [3.4. Đăng ký lịch OFF 2 ngày/tuần](#34-đăng-ký-lịch-off-2-ngàytuần)
+   - [3.4. Đăng ký lịch OFF 2 ngày/tuần & Cảnh báo chống đăng ký lại](#34-đăng-ký-lịch-off-2-ngàytuần--cảnh-báo-chống-đăng-ký-lại)
    - [3.5. Chức năng Khóa học / Bài thi trắc nghiệm (25 câu - 8 phút - 3 mức đánh giá)](#35-chức-năng-khóa-học--bài-thi-trắc-nghiệm-25-câu---8-phút---3-mức-đánh-giá)
-4. [QUY TRÌNH ĐỔI CA LÀM VIỆC TRONG TUẦN (SHIFT SWAP)](#4-quy-trình-đổi-ca-làm-việc-trong-tuần-shift-swap)
-   - [4.1. Điều kiện áp dụng trong tuần](#41-điều-kiện-áp-dụng-trong-tuần)
-   - [4.2. Năm trường hợp đổi ca được hỗ trợ](#42-năm-trường-hợp-đổi-ca-được-hỗ-trợ)
-   - [4.3. Quy trình 3 bước phê duyệt: NV A $\rightarrow$ NV B $\rightarrow$ Bot Quản trị HR](#43-quy-trình-3-bước-phê-duyệt-nv-a-rightarrow-nv-b-rightarrow-bot-quản-trị-hr)
+   - [3.6. Xem Lịch làm việc (/lich), Cảnh báo chờ duyệt tuần sau & Tự động phát lịch](#36-xem-lịch-làm-việc-lich-cảnh-báo-chờ-duyệt-tuần-sau--tự-động-phát-lịch)
+4. [QUY TRÌNH ĐỔI CA LÀM VIỆC TRONG TUẦN (SHIFT SWAP V4.4)](#4-quy-trình-đổi-ca-làm-việc-trong-tuần-shift-swap-v44)
+   - [4.1. Điều kiện áp dụng & Phạm vi linh hoạt](#41-điều-kiện-áp-dụng--phạm-vi-linh-hoạt)
+   - [4.2. Cơ chế tự động hiển thị danh sách Đồng nghiệp cùng chi nhánh](#42-cơ-chế-tự-động-hiển-thị-danh-sách-đồng-nghiệp-cùng-chi-nhánh)
+   - [4.3. Các trường hợp đổi ca được hỗ trợ toàn diện](#43-các-trường-hợp-đổi-ca-được-hỗ-trợ-toàn-diện)
+   - [4.4. Quy trình 3 bước phê duyệt: NV A $\rightarrow$ NV B $\rightarrow$ Bot Quản trị HR](#44-quy-trình-3-bước-phê-duyệt-nv-a-rightarrow-nv-b-rightarrow-bot-quản-trị-hr)
 5. [BOT QUẢN TRỊ HR (@umbomilkhrbot)](#5-bot-quản-trị-hr-umbomilkhrbot)
-   - [5.1. Bắt buộc đăng nhập & Thời hạn phiên 24 tiếng](#51-bắt-buộc-đăng-nhập--thời-hạn-phiên-24-tiếng)
+   - [5.1. Bắt buộc đăng nhập & Hộp thư lưu trữ thông báo (Zero Miss + Chống trùng lặp)](#51-bắt-buộc-đăng-nhập--hộp-thư-lưu-trữ-thông-báo-zero-miss--chống-trùng-lặp)
    - [5.2. Lệnh đổi mật khẩu (/doi_mat_khau)](#52-lệnh-đổi-mật-khẩu-doi_mat_khau)
-   - [5.3. Bảng phân quyền 4 vai trò (Admin, HR, QL, MKT)](#53-bảng-phân-quyền-4-vai-trò-admin-hr-ql-mkt)
+   - [5.3. Bảng phân quyền 4 vai trò chuẩn hóa (Duyệt lương DUY NHẤT cho QL)](#53-bảng-phân-quyền-4-vai-trò-chuẩn-hóa-duyệt-lương-duy-nhất-cho-ql)
    - [5.4. Tra cứu Hồ sơ nhân viên (/hoso_nhanvien)](#54-tra-cứu-hồ-sơ-nhân-viên-hoso_nhanvien)
-   - [5.5. Quy trình Quản lý duyệt và phát 2 dạng Phiếu lương (/duyet_phieuluong)](#55-quy-trình-quản-lý-duyệt-và-phát-2-dạng-phiếu-lương-duyet_phieuluong)
+   - [5.5. Sửa thông tin nhân viên (/sua_thongtin_nhanvien - Đồng bộ Google Sheet)](#55-sửa-thông-tin-nhân-viên-sua_thongtin_nhanvien---đồng-bộ-google-sheet)
+   - [5.6. Lệnh Reset dữ liệu Google Sheet của Admin (/reset_hethong - CHỈ ADMIN)](#56-lệnh-reset-dữ-liệu-google-sheet-của-admin-reset_hethong---chỉ-admin)
+   - [5.7. Thông báo Nhân viên mới từ Form Google Sheet (NHAN_VIEN_MOI)](#57-thông-báo-nhân-viên-mới-từ-form-google-sheet-nhan_vien_moi)
+   - [5.8. Quy trình Quản lý (QL) duyệt và phát Phiếu lương (/duyet_phieuluong)](#58-quy-trình-quản-lý-ql-duyệt-và-phát-phiếu-lương-duyet_phieuluong)
 6. [BOT KẾ TOÁN TÀI CHÍNH (@umbomilkketoanbot)](#6-bot-kế-toán-tài-chính-umbomilkketoanbot)
 7. [KỊCH BẢN DEMO TRỰC QUAN TOÀN DIỆN](#7-kịch-bản-demo-trực-quan-toàn-diện)
    - [🎬 DEMO 1: Mini App Tối Giản & Điểm Danh Tự Đóng](#-demo-1-mini-app-tối-giản--điểm-danh-tự-đóng)
-   - [🎬 DEMO 2: Khóa Học & Bài Thi Trắc Nghiệm 25 Câu](#-demo-2-khóa-học--bài-thi-trắc-nghiệm-25-câu)
-   - [🎬 DEMO 3: Quy Trình Đổi Ca Làm Việc 3 Bước](#-demo-3-quy-trình-đổi-ca-làm-việc-3-bước)
-   - [🎬 DEMO 4: Phiên 24h & Đổi Mật Khẩu Bot HR](#-demo-4-phiên-24h--đổi-mật-khẩu-bot-hr)
-   - [🎬 DEMO 5: Tra Cứu Hồ Sơ Nhân Viên (/hoso_nhanvien)](#-demo-5-tra-cứu-hồ-sơ-nhân-viên-hoso_nhanvien)
-   - [🎬 DEMO 6A: Phiếu Lương Nhân Viên Cửa Hàng (Theo Ca)](#-demo-6a-phiếu-lương-nhân-viên-cửa-hàng-theo-ca)
-   - [🎬 DEMO 6B: Phiếu Lương Nhân Viên Văn Phòng (Lương Cơ Bản)](#-demo-6b-phiếu-lương-nhân-viên-văn-phòng-lương-cơ-bản)
+   - [🎬 DEMO 2: Cảnh Báo Khi Nhân Viên Đăng Ký Lại Lịch OFF](#-demo-2-cảnh-báo-khi-nhân-viên-đăng-ký-lại-lịch-off)
+   - [🎬 DEMO 3: Xem Lịch Làm Việc (/lich) & Tự Động Bắn Lịch Tuần Mới](#-demo-3-xem-lịch-làm-việc-lich--tự-động-bắn-lịch-tuần-mới)
+   - [🎬 DEMO 4: Quy Trình Đổi Ca Làm Việc V4.4 (Khác Ngày - Khác Ca)](#-demo-4-quy-trình-đổi-ca-làm-việc-v44-khác-ngày---khác-ca)
+   - [🎬 DEMO 5: Đăng Nhập Nhận Thông Báo Chờ & Lọc Trùng Tuyệt Đối](#-demo-5-đăng-nhập-nhận-thông-báo-chờ--lọc-trùng-tuyệt-đối)
+   - [🎬 DEMO 6: Sửa Thông Tin Nhân Viên (/sua_thongtin_nhanvien)](#-demo-6-sửa-thông-tin-nhân-viên-sua_thongtin_nhanvien)
+   - [🎬 DEMO 7: Reset Dữ Liệu Sheet của Admin (/reset_hethong)](#-demo-7-reset-dữ-liệu-sheet-của-admin-reset_hethong)
+   - [🎬 DEMO 8: Thông Báo Nhân Viên Mới Đăng Ký Form Google Sheet](#-demo-8-thông-báo-nhân-viên-mới-đăng-ký-form-google-sheet)
+   - [🎬 DEMO 9A: Phiếu Lương Nhân Viên Cửa Hàng (Chỉ QL phát)](#-demo-9a-phiếu-lương-nhân-viên-cửa-hàng-chỉ-ql-phát)
+   - [🎬 DEMO 9B: Phiếu Lương Nhân Viên Văn Phòng (Chỉ QL phát)](#-demo-9b-phiếu-lương-nhân-viên-văn-phòng-chỉ-ql-phát)
 
 ---
 
@@ -128,10 +136,17 @@ graph TD
 
 ---
 
-### 3.4. Đăng ký lịch OFF 2 ngày/tuần
+### 3.4. Đăng ký lịch OFF 2 ngày/tuần & Cảnh báo chống đăng ký lại
 * **Khung giờ mở cổng**: **12h00 Thứ 6 đến 15h00 Thứ 7** hàng tuần (Giờ VN).
-* Cú pháp: Nhắn tự nhiên `18/09/2026, 22/09/2026` hoặc `/off 18/09/2026, 22/09/2026`.
-* Ghi nhận 2 ngày OFF, 5 ngày còn lại thành WORKING, bắn thông báo ngay sang `@umbomilkhrbot`.
+* **Cú pháp gửi**: Nhắn tự nhiên `18/09/2026, 22/09/2026` hoặc `/off 18/09/2026, 22/09/2026`.
+* **RÀNG BUỘC CẢNH BÁO CHỐNG ĐĂNG KÝ LẠI (Anti-Overwrite Warning)**:
+  * Khi nhân viên gửi yêu cầu đăng ký OFF: Hệ thống kiểm tra trong tuần làm việc kế tiếp nhân viên đó đã có bản ghi đăng ký OFF (`OFF_REQUEST` hoặc trạng thái đã xếp 2 ngày OFF) hay chưa.
+  * **Nếu đã đăng ký rồi**: Khi nhân viên bấm đăng ký lại hoặc gửi lại ngày, **BOT Telegram lập tức bật cảnh báo**, hiển thị rõ:
+    * ⚠️ Cảnh báo bạn đã đăng ký lịch OFF tuần này rồi!
+    * Thông tin 2 ngày OFF đã đăng ký trước đó.
+    * Trạng thái hiện tại (Đang chờ HR duyệt hoặc Đã duyệt).
+    * Hướng dẫn nhân viên: Quy định chỉ đăng ký tối đa 2 ngày OFF/tuần, nếu cần điều chỉnh vui lòng liên hệ Quản lý hoặc dùng chức năng **"🔄 Đổi ca"** với đồng nghiệp.
+  * **Nếu chưa đăng ký**: Ghi nhận 2 ngày OFF, 5 ngày còn lại thành WORKING, gửi thông báo sang Bot Quản trị HR.
 * Tuyệt đối không nhắc từ khóa "Google Sheet" trong tin nhắn gửi nhân viên.
 
 ---
@@ -151,70 +166,121 @@ graph TD
 
 ---
 
-## 4. QUY TRÌNH ĐỔI CA LÀM VIỆC TRONG TUẦN (SHIFT SWAP)
-
-### 4.1. Điều kiện áp dụng trong tuần
-1. **Lịch đã duyệt**: Chỉ áp dụng khi đã có lịch làm việc chính thức do HR phê duyệt (`approvalStatus: 'APPROVED'`).
-2. **Chỉ áp dụng trong tuần đó**: Yêu cầu đổi ca chỉ có hiệu lực từ Thứ 2 đến Chủ nhật của tuần hiện tại, không đổi vượt sang tuần sau.
-3. **Cùng chi nhánh**: Cả 2 nhân viên A và B phải cùng làm việc tại 1 chi nhánh.
+### 3.6. Xem Lịch làm việc (/lich), Cảnh báo chờ duyệt tuần sau & Tự động phát lịch
+* **Khi nhân viên bấm "📅 Lịch làm việc" hoặc gõ `/lich`**:
+  1. **Cập nhật & Hiển thị Lịch tuần hiện tại**: Bot hiển thị chi tiết lịch làm việc 7 ngày của tuần này (Thứ 2 đến Chủ nhật), gồm ngày, thứ, ca làm (hoặc OFF) và chi nhánh.
+  2. **Kiểm tra trạng thái Lịch tuần sau**:
+     * **Nếu HR CHƯA DUYỆT**: Bot đính kèm thông báo rõ ràng:
+       > ⏳ **LỊCH TUẦN SAU (21/09 – 27/09/2026):**  
+       > ⚠️ **Lịch tuần sau của bạn HR chưa duyệt lịch, vui lòng chờ...**  
+       > 🔔 *Ngay khi HR phê duyệt, Bot Telegram sẽ tự động gửi thông báo lịch tuần mới tới bạn!*
+     * **Nếu HR ĐÃ DUYỆT**: Hiển thị luôn lịch làm việc tuần sau cho nhân viên.
+* **Cơ chế Tự động Bắn thông báo Lịch tuần mới (Push Notification)**:
+  * Ngay khi HR phê duyệt lịch tuần mới (qua Bot HR hoặc Web App), hệ thống kích hoạt tự động:
+  * **Bot Telegram chủ động bắn tin nhắn riêng** tới từng nhân viên thông báo lịch tuần mới đã được phê duyệt, kèm chi tiết ca làm việc từng ngày. Nhân viên không cần phải hỏi lại Quản lý!
 
 ---
 
-### 4.2. Năm trường hợp đổi ca được hỗ trợ
+## 4. QUY TRÌNH ĐỔI CA LÀM VIỆC TRONG TUẦN (SHIFT SWAP V4.4)
+
+### 4.1. Điều kiện áp dụng & Phạm vi linh hoạt
+1. **Lịch đã duyệt**: Chỉ áp dụng khi đã có lịch làm việc chính thức do HR phê duyệt (`approvalStatus: 'APPROVED'`).
+2. **CÙNG CHI NHÁNH (Bắt buộc 100%)**: Cả 2 nhân viên A và B phải làm việc tại cùng một chi nhánh (VD: cùng CN1 - 130 Vạn Kiếp).
+3. **ĐỔI KHÁC NGÀY & KHÁC CA HOÀN TOÀN LINH HOẠT**:
+   * **Không nhất thiết phải cùng một ngày**: Nhân viên có thể đổi ca ở **hai ngày hoàn toàn khác nhau** trong tuần.
+     * *Ví dụ:* Ca Sáng ngày 20/09 của NV A hoán đổi lấy Ca Tối ngày 22/09 của NV B.
+   * **Đổi khác ca làm việc**: Ca Sáng $\leftrightarrow$ Ca Chiều, Ca Sáng $\leftrightarrow$ Ca Tối, Ca Chiều $\leftrightarrow$ Ca Tối.
+   * **Đổi Ca làm việc $\leftrightarrow$ Ngày nghỉ (OFF)**: Hoán đổi ngày OFF của người này sang ca làm việc của người kia ở ngày khác.
+   * **Làm 2 ca / Nhường ca**: 1 bạn làm 2 ca để bạn kia được nghỉ nguyên ngày.
+4. **Áp dụng trong tuần**: Đảm bảo điều phối nhân sự gọn gàng theo chu kỳ tuần từ Thứ 2 đến Chủ nhật.
+
+---
+
+### 4.2. Cơ chế tự động hiển thị danh sách Đồng nghiệp cùng chi nhánh
+Khi nhân viên bấm nút **"🔄 Đổi ca"** trên bàn phím menu Bot hoặc gửi lệnh `/doica`:
+1. **Xác thực chi nhánh**: Bot tự động đối soát Telegram ID của nhân viên gửi để nhận diện Chi nhánh hiện tại (VD: `CN1 - 130 Vạn Kiếp`).
+2. **Lọc đồng nghiệp**: Hệ thống lọc danh sách toàn bộ nhân viên đang làm việc trong cùng chi nhánh đó (loại trừ chính mình và nhân viên đã nghỉ việc/lưu trữ).
+3. **Hiển thị nút bấm trực quan (Inline Keyboard)**: Bot gửi tin nhắn kèm các nút bấm mang tên từng đồng nghiệp để người dùng chạm chọn nhanh chóng:
+   * `[ 👤 Trần Thị Lan (NV1289) ]`
+   * `[ 👤 Lê Hoàng Nam (NV1290) ]`
+   * `[ 👤 Phạm Minh Tuấn (NV1295) ]`
+4. **Hiển thị đối chiếu lịch làm việc tuần này**: Khi chọn đồng nghiệp B, Bot liệt kê lịch làm việc tuần của cả A và B để A dễ dàng chọn ngày & ca muốn hoán đổi (cùng ngày hoặc khác ngày).
+5. **Hỗ trợ song song cú pháp nhanh**: Nhân viên vẫn có thể gõ trực tiếp cú pháp văn bản nhanh chóng:
+   * `Cú pháp:` `/doica <ngày_A> <ca_A> sang <NV_B> <ngày_B> <ca_B>`
+   * *Ví dụ đổi khác ngày, khác ca:* `/doica 20/09 Ca Sáng sang Lan 22/09 Ca Tối`
+   * *Ví dụ đổi khác ngày, cùng ca:* `/doica 19/09 Ca Chiều sang NV1289 21/09 Ca Chiều`
+   * *Ví dụ đổi cùng ngày, khác ca:* `/doica 20/09 Ca Sáng sang Lan 20/09 Ca Tối`
+   * *Ví dụ đổi ngày nghỉ sang ca làm:* `/doica 20/09 OFF sang Lan 21/09 Ca Tối`
+
+---
+
+### 4.3. Các trường hợp đổi ca được hỗ trợ toàn diện
 
 ```mermaid
 graph TD
-    SwapTypes["5 Trường Hợp Đổi Ca Làm Việc Trong Tuần"]
-    SwapTypes --> T1["1. Cùng chi nhánh + Cùng ca:<br/>Ca làm A ⟷ Ca làm B"]
-    SwapTypes --> T2["2. Cùng chi nhánh + Cùng ca:<br/>Ngày nghỉ A ⟷ Ca làm B"]
-    SwapTypes --> T3["3. Cùng chi nhánh + Khác ca:<br/>Ca làm A ⟷ Ca làm B"]
-    SwapTypes --> T4["4. Cùng chi nhánh + Khác ca:<br/>Ngày nghỉ A ⟷ Ca làm B"]
+    SwapTypes["Các Trường Hợp Đổi Ca Làm Việc (Cùng Chi Nhánh)"]
+    SwapTypes --> T1["1. Đổi KHÁC NGÀY + KHÁC CA:<br/>20/09 Ca Sáng (A) ⟷ 22/09 Ca Tối (B)"]
+    SwapTypes --> T2["2. Đổi KHÁC NGÀY + CÙNG CA:<br/>19/09 Ca Chiều (A) ⟷ 21/09 Ca Chiều (B)"]
+    SwapTypes --> T3["3. Đổi CÙNG NGÀY + KHÁC CA:<br/>20/09 Ca Sáng (A) ⟷ 20/09 Ca Tối (B)"]
+    SwapTypes --> T4["4. Đổi Ngày nghỉ OFF ⟷ Ca làm việc:<br/>20/09 OFF (A) ⟷ 21/09 Ca Tối (B)"]
     SwapTypes --> T5["5. Làm 2 ca / Nhường ca:<br/>1 người làm 2 ca, 1 người thành ngày OFF"]
 ```
 
-1. **Trường hợp 1 (Cùng chi nhánh + Cùng ca làm việc)**:
-   * Nhân viên A đổi ca làm việc của mình $\leftrightarrow$ ca làm việc của nhân viên B.
-2. **Trường hợp 2 (Cùng chi nhánh + Cùng ca làm việc)**:
-   * Nhân viên A đổi ngày nghỉ của mình $\leftrightarrow$ ca làm việc của nhân viên B.
-3. **Trường hợp 3 (Cùng chi nhánh + Khác ca làm việc)**:
-   * Nhân viên A đổi ca làm việc của mình $\leftrightarrow$ ca làm việc của nhân viên B.
-4. **Trường hợp 4 (Cùng chi nhánh + Khác ca làm việc)**:
-   * Nhân viên A đổi ngày nghỉ của mình $\leftrightarrow$ ca làm việc của nhân viên B khác ca.
-5. **Trường hợp 5 (Làm 2 ca / Nhường ca)**:
-   * Nhân viên A hoặc nhân viên B có thể làm 2 ca làm việc trong cùng 1 ngày nếu nhân viên còn lại đồng ý nhường ca.
-   * *Cơ chế sắp lịch*: Hệ thống sắp nhân viên nhận ca ngày đó làm **2 ca** (VD: Ca Sáng + Ca Chiều), nhân viên nhường ca sẽ chuyển thành **ngày OFF** (và ngược lại).
-
 ---
 
-### 4.3. Quy trình 3 bước phê duyệt: NV A $\rightarrow$ NV B $\rightarrow$ Bot Quản trị HR
-* **Bước 1**: NV A gửi yêu cầu: `/doica <ngày_A> <ca_A> sang <NV_B> <ngày_B> <ca_B>`.
-* **Bước 2**: NV B nhận tin nhắn riêng kèm 2 nút: `[✅ ĐỒNG Ý ĐỔI CA]` | `[❌ TỪ CHỐI]`.
-* **Bước 3**: NV B đồng ý $\rightarrow$ Phiếu chuyển tới BOT Admin/HR kèm 2 nút: `[✅ DUYỆT ĐỔI CA]` | `[❌ TỪ CHỐI]` $\rightarrow$ Cập nhật lịch cả 2 NV, đồng bộ ngầm Google Sheet.
+### 4.4. Quy trình 3 bước phê duyệt: NV A $\rightarrow$ NV B $\rightarrow$ Bot Quản trị HR
+* **Bước 1 (Gửi yêu cầu)**: NV A bấm nút chọn đồng nghiệp B + chọn ngày/ca của A và ngày/ca của B (hoặc gõ lệnh `/doica ...`). Bot tạo phiếu ở trạng thái chờ B xác nhận.
+* **Bước 2 (NV B xác nhận)**: NV B nhận tin nhắn riêng hiển thị rõ ràng 2 ngày và 2 ca hoán đổi kèm 2 nút tương tác: `[✅ ĐỒNG Ý ĐỔI CA]` | `[❌ TỪ CHỐI]`.
+* **Bước 3 (HR duyệt & Cập nhật)**: Khi NV B bấm đồng ý $\rightarrow$ Phiếu tự động chuyển sang Bot Quản trị HR kèm 2 nút: `[✅ PHÊ DUYỆT ĐỔI CA]` | `[❌ TỪ CHỐI]`. Khi HR duyệt $\rightarrow$ Hệ thống tự động cập nhật lịch của cả 2 bạn ở cả 2 ngày liên quan trên Database và đồng bộ ngầm Google Sheet 17iXM.
 
 ---
 
 ## 5. BOT QUẢN TRỊ HR (@umbomilkhrbot)
 
-### 5.1. Bắt buộc đăng nhập & Thời hạn phiên 24 tiếng
+### 5.1. Bắt buộc đăng nhập, Cảnh báo trạng thái tài khoản & Hộp thư lưu trữ (Zero Miss + Chống trùng lặp)
 * Mọi tương tác yêu cầu phải đăng nhập: `/login <tên_đăng_nhập> <mật_khẩu>`.
 * **Thời hạn phiên đúng 24 tiếng** (`24 * 60 * 60 * 1000` ms): Hết 24 giờ phiên tự hủy, yêu cầu đăng nhập lại.
+* **CẢNH BÁO TRẠNG THÁI HOẠT ĐỘNG CỦA TÀI KHOẢN (Active / Inactive Status Alert)**:
+  * Khi nhân sự gửi bất kỳ tin nhắn nào tới Bot Quản trị mà **chưa đăng nhập** (hoặc hết phiên 24h):
+    * **BOT lập tức hiển thị cảnh báo đỏ trực quan**:
+      > 🔴 **TRẠNG THÁI: TÀI KHOẢN CHƯA ĐĂNG NHẬP (CHƯA HOẠT ĐỘNG)**  
+      > ⚠️ *Hệ thống quản trị đang ở trạng thái TẠM KHÓA. Bạn cần đăng nhập để kích hoạt phiên làm việc và kiểm tra thông báo nhân sự.*  
+      > 👉 *Cú pháp đăng nhập:* `<code>/login &lt;tài_khoản&gt; &lt;mật_khẩu&gt;</code>`
+    * Nhờ đó nhân sự luôn nắm bắt chính xác tài khoản của mình có đang hoạt động hay không, không bị nhầm lẫn giữa lỗi mạng hay chưa đăng nhập!
+  * **Khi đã đăng nhập thành công**: Bot hiển thị rõ `🟢 TRẠNG THÁI: TÀI KHOẢN ĐANG HOẠT ĐỘNG (Hiệu lực: 24 giờ)`.
+* **Cơ chế Lưu trữ & Bù phát Thông báo Thông minh (Zero Miss)**:
+  * Khi có sự kiện phát sinh (yêu cầu đổi ca chờ HR duyệt, bài thi trắc nghiệm không đạt/thi lại, sự cố thiết bị khẩn cấp, cảnh báo check-out sớm...):
+    * **Nếu nhân sự/HR chưa đăng nhập vào Bot**: Hệ thống tự động ghi nhận thông báo vào hàng đợi an toàn (`adminNotificationQueue`).
+* **QUY TẮC CHỐNG TRÙNG LẶP DỮ LIỆU TUYỆT ĐỐI (Strict Deduplication)**:
+  * Mỗi thông báo được gán một định danh duy nhất `dedupeKey` (VD: `swap:uuid`, `quiz:empId:score`, `earlyCheckout:date:empId`).
+  * **Nếu thông báo nhân viên đó BOT đã gửi trước đó rồi và trên tài khoản quản trị đã có thông tin rồi thì BỎ QUA thông báo đó và chỉ gửi các thông báo mới còn lại**.
+  * Ngay khi nhân sự đăng nhập thành công (`/login`), Bot đối soát hộp thư chờ, lọc bỏ toàn bộ thông báo đã xử lý/đã gửi, và chỉ hiển thị các thông báo chưa đọc thực sự, **tránh hoàn toàn việc trùng lặp dữ liệu hay spam tin nhắn**!
+
+---
 
 ### 5.2. Lệnh đổi mật khẩu (/doi_mat_khau)
 * Cú pháp: `/doi_mat_khau <tên_đăng_nhập> <mật_khẩu_cu> <mật_khẩu_moi>`.
 * Áp dụng cho: **Admin, HR, QL (Quản lý), MKT (Marketing)**.
 
-### 5.3. Bảng phân quyền 4 vai trò (Admin, HR, QL, MKT)
-| Vai trò | Quyền hạn nghiệp vụ | Danh mục lệnh trên Telegram |
+---
+
+### 5.3. Bảng phân quyền 4 vai trò chuẩn hóa (Duyệt lương DUY NHẤT cho QL)
+> [!IMPORTANT]
+> **Chuẩn hóa phân quyền tuyệt đối**:
+> * Cú pháp và chức năng **Duyệt phiếu lương (`/duyet_phieuluong`) ĐÃ BỎ HOÀN TOÀN** trên tài khoản **HR, Admin và MKT**. Chức năng này **chỉ hiển thị và cho phép thực thi DUY NHẤT trên tài khoản Quản lý cửa hàng (QL)**.
+> * Nếu Admin, HR, MKT gõ `/duyet_phieuluong`, Bot lập tức từ chối và giải thích rõ thẩm quyền thuộc về QL.
+
+| Vai trò | Quyền hạn nghiệp vụ | Danh mục lệnh Telegram chuẩn |
 | :--- | :--- | :--- |
-| 👑 **Admin** | Toàn quyền hệ thống, cấp quyền, chạy test, đổi mật khẩu, tra hồ sơ | `/tonghop_lich`, `/sap_lich_nv`, `/duyet`, `/users`, `/capquyen`, `/phanquyen`, `/broadcast`, `/test`, `/delete_test`, `/doi_mat_khau`, `/hoso_nhanvien`, `/duyet_phieuluong`, `/logout` |
-| 🛡️ **HR** | Quản lý lịch tuần toàn bộ NV, duyệt phiếu đổi ca, báo cáo, gửi đề thi, tra hồ sơ | `/tonghop_lich`, `/sap_lich_nv`, `/duyet`, `/baocao`, `/broadcast`, `/gui_de_thi`, `/doi_mat_khau`, `/hoso_nhanvien`, `/duyet_phieuluong`, `/logout` |
-| 🏪 **QL** | Giới hạn đúng chi nhánh phụ trách (`branchScope`), duyệt & phát phiếu lương | `/diemdanh_cn`, `/lich_cn`, `/duyet_ca`, `/baohong_cn`, `/doi_mat_khau`, `/duyet_phieuluong`, `/logout` |
+| 👑 **Admin** | Toàn quyền hệ thống, cấp/phân quyền, chạy test, reset dữ liệu Google Sheet | `/tonghop_lich`, `/sap_lich_nv`, `/sua_thongtin_nhanvien`, `/duyet`, `/users`, `/capquyen`, `/phanquyen`, `/broadcast`, `/test`, `/delete_test`, `/doi_mat_khau`, `/hoso_nhanvien`, `/reset_hethong`, `/logout` |
+| 🛡️ **HR** | Quản lý lịch tuần NV, sửa thông tin NV, duyệt đổi ca, báo cáo, gửi đề thi, tra hồ sơ | `/tonghop_lich`, `/sap_lich_nv`, `/sua_thongtin_nhanvien`, `/duyet`, `/baocao`, `/broadcast`, `/gui_de_thi`, `/doi_mat_khau`, `/hoso_nhanvien`, `/logout` |
+| 🏪 **QL** | Giới hạn chi nhánh phụ trách (`branchScope`), **DUYỆT & PHÁT PHIẾU LƯƠNG THÁNG** | `/diemdanh_cn`, `/lich_cn`, `/duyet_ca`, `/baohong_cn`, `/doi_mat_khau`, `/duyet_phieuluong`, `/hoso_nhanvien`, `/logout` |
 | 📢 **MKT** | Đăng tin tức, sự kiện, phát khuyến mãi tới nhân viên | `/broadcast_mkt`, `/sukien`, `/tintuc`, `/doi_mat_khau`, `/logout` |
 
 ---
 
 ### 5.4. Tra cứu Hồ sơ nhân viên (/hoso_nhanvien)
-* **Quy định bảo mật**: Chức năng tra cứu hồ sơ nhân viên **chỉ thông báo và hiển thị duy nhất trên BOT Quản trị Admin/HR**.
+* **Quy định bảo mật**: Chức năng tra cứu hồ sơ nhân viên **chỉ thông báo và hiển thị duy nhất trên BOT Quản trị Admin/HR/QL**.
 * **Cú pháp thực hiện**: `/hoso_nhanvien: <mã_nhân_viên>` hoặc `/hoso_nhanvien <mã_nhân_viên>`.
 * **Nội dung hồ sơ gửi lên gồm 6 thông tin chuẩn hóa**:
   1. 👤 **Tên nhân viên**
@@ -226,7 +292,65 @@ graph TD
 
 ---
 
-### 5.5. Quy trình Quản lý duyệt và phát 2 dạng Phiếu lương (/duyet_phieuluong)
+### 5.5. Sửa thông tin nhân viên (/sua_thongtin_nhanvien - Đồng bộ Google Sheet)
+* **Mục đích**: Cho phép HR / Admin điều chỉnh nhanh ca làm việc hoặc chuyển chi nhánh cho nhân viên trực tiếp trên chat Bot mà không cần thao tác thủ công.
+* **Cú pháp gửi yêu cầu**:
+  * `/sua_thongtin_nhanvien: <Mã_NV> <ca_cu> sang <ca_moi>, <CN_cu> sang <CN_moi>`
+  * *Ví dụ đầy đủ:* `/sua_thongtin_nhanvien: NV1288 ca sáng sang ca tối, CN1 sang CN2`
+  * *Ví dụ chỉ đổi ca:* `/sua_thongtin_nhanvien: NV1288 ca sáng sang ca tối`
+  * *Ví dụ chỉ đổi chi nhánh:* `/sua_thongtin_nhanvien: NV1288 CN1 sang CN2`
+* **Cơ chế cập nhật & Đồng bộ tức thì**:
+  1. Bot tìm kiếm nhân viên theo mã (hỗ trợ mã ngắn `NV1288`, `1288` hoặc mã đầy đủ).
+  2. Cập nhật trường `shift` và `branchId` trong cơ sở dữ liệu `db.employees`.
+  3. **Đồng bộ ngầm ngay lập tức sang Google Sheet 17iXM** (các tab liên quan: `NHAN_VIEN_CHINH_THUC` / `NHAN_VIEN_TRAINING` và `LICH_LAM_VIEC`).
+  4. Bot phản hồi xác nhận thành công và gửi thông báo cập nhật tới nhân viên liên quan.
+
+---
+
+### 5.6. Lệnh Reset dữ liệu Google Sheet của Admin (/reset_hethong)
+> [!CAUTION]
+> **Ràng buộc phân quyền tối cao**:
+> * **Lệnh `/reset_hethong` CHỈ THỰC HIỆN MỖI TÀI KHOẢN ADMIN (👑)**.
+> * Các tài khoản còn lại (**HR, QL, MKT**) **TUYỆT ĐỐI KHÔNG CÓ QUYỀN** và hệ thống lập tức từ chối truy cập nếu cố tình thực thi!
+
+* **Cú pháp thực hiện**:
+  * `/reset_hethong: <tên_sheet>` hoặc `/reset_hethong <tên_sheet>`
+  * *Ví dụ:* `/reset_hethong LICH_LAM_VIEC`
+  * *Ví dụ:* `/reset_hethong RECORD_DIEM_DANH`
+* **Hành vi xử lý**:
+  1. Kết nối với Google Sheet 17iXM qua Google Sheets API.
+  2. Xóa sạch toàn bộ các dòng dữ liệu từ dòng 2 trở đi (`!A2:Z`) của tab sheet chỉ định, **bảo toàn nguyên vẹn dòng tiêu đề (header row 1)**.
+  3. Tùy chọn làm sạch bản ghi tương ứng trong cơ sở dữ liệu để đồng bộ 100%.
+  4. Bot phản hồi thông báo xác nhận số dòng đã dọn dẹp sạch sẽ.
+
+---
+
+### 5.7. Thông báo Nhân viên mới từ Form Google Sheet (NHAN_VIEN_MOI)
+* **Nguồn dữ liệu**: Lắng nghe và đồng bộ từ Google Form đổ về Sheet `NHAN_VIEN_MOI`:
+  * Link Google Sheet: `https://docs.google.com/spreadsheets/d/17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w/edit?usp=sharing`
+  * Sheet ID: `17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w`
+  * Tên tab: `NHAN_VIEN_MOI`
+* **Thông tin lấy chính xác từ các cột trên Sheet**:
+  1. 🆔 **Mã ứng viên (ID)**
+  2. 📅 **Ngày đăng ký**
+  3. 👤 **Họ và tên**
+  4. 🚻 **Giới tính & Năm sinh**
+  5. 🎓 **Trình độ học vấn & Quê quán**
+  6. 📱 **Số điện thoại liên hệ**
+  7. ⏰ **Ca đăng ký mong muốn**
+  8. 🏪 **Chi nhánh đăng ký làm việc**
+  9. 💼 **Kinh nghiệm làm việc & Khả năng xử lý đột xuất**
+  10. 🌐 **Facebook & Nguồn biết tin tuyển dụng**
+  11. 🤖 **Điểm AI đánh giá & Kết quả sơ loại**
+* **Cơ chế thông báo & Ràng buộc Không Miss / Không Trùng**:
+  * Khi có ứng viên/nhân viên mới nộp form đăng ký vào sheet `NHAN_VIEN_MOI`:
+    * Nếu tài khoản HR/Admin **đang đăng nhập**: Bot Quản trị (`@umbomilkhrbot`) lập tức gửi thông báo đẩy thời gian thực kèm đầy đủ các trường thông tin trên để HR phỏng vấn/xử lý ngay.
+    * Nếu HR/Admin **chưa đăng nhập**: Thông báo được lưu vào Hộp thư chờ (`adminNotificationQueue`) với khóa `dedupeKey: applicant:<ID>`. Khi nhân sự đăng nhập sẽ nhận lại đầy đủ (Zero Miss).
+    * Áp dụng quy tắc lọc trùng tuyệt đối: nếu ứng viên đó đã được thông báo trước đó thì bỏ qua, không gửi lặp lại (Zero Duplicate).
+
+---
+
+### 5.8. Quy trình Quản lý (QL) duyệt và phát Phiếu lương (/duyet_phieuluong)
 
 ```mermaid
 sequenceDiagram
@@ -322,51 +446,305 @@ Gồm chính xác **9 mục thông tin**:
 
 ---
 
-### 🎬 DEMO 2: KHÓA HỌC & BÀI THI TRẮC NGHIỆM 25 CÂU
-* *3 Mức đánh giá chuẩn:*
-  * $\ge 8$: **ĐẠT 🎆** $\rightarrow$ Báo nhân viên xuất sắc + Gửi kết quả sang Bot Admin.
-  * $5 \le \text{Điểm} < 8$: **THI LẠI** $\rightarrow$ Báo nhân viên + Gửi Bot Admin để HR gửi lịch thi lại.
-  * $< 5$: **KHÔNG ĐẠT** $\rightarrow$ Báo nhân viên đào tạo lại + Gửi Bot Admin.
+### 🎬 DEMO 2: CẢNH BÁO KHI NHÂN VIÊN ĐĂNG KÝ LẠI LỊCH OFF
 
----
+*Giả định: Nhân viên Nguyễn Văn A đã đăng ký 2 ngày OFF tuần sau là `18/09/2026, 22/09/2026`.*  
+*Khi nhân viên gửi lại tin nhắn đăng ký OFF:*
+`19/09/2026, 23/09/2026`
 
-### 🎬 DEMO 3: QUY TRÌNH ĐỔI CA LÀM VIỆC 3 BƯỚC
-* *NV A gửi `/doica` $\rightarrow$ NV B nhận tin kèm `[✅ ĐỒNG Ý]` / `[❌ TỪ CHỐI]` $\rightarrow$ HR nhận tin kèm `[✅ DUYỆT]` / `[❌ TỪ CHỐI]` $\rightarrow$ Hệ thống đổi lịch tự động.*
-
----
-
-### 🎬 DEMO 4: PHIÊN 24H & ĐỔI MẬT KHẨU BOT HR
-* *Hết 24h tự động khóa phiên an toàn $\rightarrow$ Yêu cầu `/login`.*
-* *Đổi mật khẩu: `/doi_mat_khau <user> <pass_cu> <pass_moi>`.*
-
----
-
-### 🎬 DEMO 5: TRA CỨU HỒ SƠ NHÂN VIÊN (/hoso_nhanvien)
-
-#### HR gửi lệnh trên `@umbomilkhrbot`:
-`/hoso_nhanvien: NV1288`
-
-#### BOT Quản trị HR phản hồi:
+#### Bot `@umbomilknvbot` lập tức gửi cảnh báo:
 ```html
-📋 <b>HỒ SƠ NHÂN VIÊN — ỤM BÒ MILK</b>
-<i>(Dữ liệu nhân sự nội bộ bảo mật)</i>
+⚠️ <b>CẢNH BÁO: BẠN ĐÃ ĐĂNG KÝ LỊCH OFF TUẦN NÀY RỒI!</b>
 
-👤 <b>Tên nhân viên:</b> Nguyễn Văn A
-📱 <b>Số điện thoại:</b> <code>0908.123.456</code>
-🆔 <b>Mã nhân viên:</b> <code>CN130_NV1288</code>
-📅 <b>Ngày bắt đầu tham gia:</b> 15/03/2026
-🏪 <b>Chi nhánh:</b> CN1 - 130 Vạn Kiếp (P.3, Q. Bình Thạnh)
-⏰ <b>Ca làm việc:</b> Ca Sáng (07:00 – 12:00)
-💰 <b>Lương chính thức:</b> <b>25.500đ / giờ</b> (127.500đ / ca)
-📊 <b>Trạng thái:</b> 🟢 Đang làm việc chính thức (OFFICIAL)
+📋 <b>Thông tin đăng ký hiện tại của bạn:</b>
+• <b>2 ngày OFF đã ghi nhận:</b> <code>18/09/2026, 22/09/2026</code>
+• <b>Trạng thái:</b> ⏳ Đang chờ HR phê duyệt lịch tuần
+
+📌 <b>Quy định công ty:</b> Mỗi nhân viên chỉ được đăng ký tối đa 2 ngày OFF trong 1 tuần làm việc. Hệ thống không cho phép tự ý ghi đè.
+👉 <i>Nếu bạn có nhu cầu thay đổi, vui lòng:</i>
+1. Liên hệ trực tiếp Quản lý cửa hàng hoặc HR để được hỗ trợ.
+2. Hoặc dùng chức năng <b>"🔄 Đổi ca"</b> để hoán đổi ngày làm việc với đồng nghiệp cùng chi nhánh.
 ```
 
 ---
 
-### 🎬 DEMO 6A: PHIẾU LƯƠNG NHÂN VIÊN CỬA HÀNG (THEO CA)
+### 🎬 DEMO 3: XEM LỊCH LÀM VIỆC (/lich) & TỰ ĐỘNG BẮN LỊCH TUẦN MỚI
 
-#### 1. Quản lý duyệt và phát:
-QL gửi lệnh: `/duyet_phieuluong` trên Bot HR.  
+#### 1. Nhân viên gõ lệnh `/lich` (khi HR chưa duyệt lịch tuần sau):
+*Bot phản hồi chi tiết lịch tuần hiện tại + cảnh báo chờ lịch tuần sau:*
+```html
+📅 <b>LỊCH LÀM VIỆC CỦA BẠN — ỤM BÒ MILK</b>
+👤 <b>Nhân viên:</b> Nguyễn Văn A (<code>CN130_NV1288</code>)
+🏪 <b>Chi nhánh:</b> CN1 - 130 Vạn Kiếp (P.3, Q. Bình Thạnh)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+🗓️ <b>LỊCH TUẦN HIỆN TẠI (14/09 – 20/09/2026):</b>
+• Thứ 2 (14/09): ☀️ Ca Sáng (07:00 – 12:00)
+• Thứ 3 (15/09): ☀️ Ca Sáng (07:00 – 12:00)
+• Thứ 4 (16/09): 🏖️ Nghỉ (OFF)
+• Thứ 5 (17/09): ☀️ Ca Sáng (07:00 – 12:00)
+• Thứ 6 (18/09): 🏖️ Nghỉ (OFF)
+• Thứ 7 (19/09): 🌙 Ca Tối (18:00 – 23:00)
+• Chủ nhật (20/09): ☀️ Ca Sáng (07:00 – 12:00)
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+⏳ <b>LỊCH TUẦN SAU (21/09 – 27/09/2026):</b>
+⚠️ <b>HR chưa duyệt lịch tuần sau của bạn. Vui lòng chờ...</b>
+🔔 <i>Ngay khi HR phê duyệt, Bot Telegram sẽ tự động gửi thông báo lịch tuần mới tới bạn!</i>
+```
+
+#### 2. Khi HR duyệt lịch tuần sau trên hệ thống:
+*Bot `@umbomilknvbot` tự động kích hoạt thông báo riêng tới từng nhân viên:*
+```html
+🎉 <b>THÔNG BÁO: LỊCH LÀM VIỆC TUẦN MỚI ĐÃ ĐƯỢC HR PHÊ DUYỆT!</b>
+📅 <b>Tuần làm việc:</b> 21/09/2026 – 27/09/2026
+🏪 <b>Chi nhánh:</b> CN1 - 130 Vạn Kiếp
+
+📋 <b>Chi tiết phân ca tuần mới của bạn:</b>
+• Thứ 2 (21/09): ☀️ Ca Sáng (07:00 – 12:00)
+• Thứ 3 (22/09): 🏖️ Nghỉ (OFF)
+• Thứ 4 (23/09): ⛅ Ca Chiều (12:00 – 18:00)
+• Thứ 5 (24/09): ☀️ Ca Sáng (07:00 – 12:00)
+• Thứ 6 (25/09): 🏖️ Nghỉ (OFF)
+• Thứ 7 (26/09): 🌙 Ca Tối (18:00 – 23:00)
+• Chủ nhật (27/09): ☀️ Ca Sáng (07:00 – 12:00)
+
+💪 <i>Chúc bạn một tuần làm việc tràn đầy năng lượng và hiệu quả!</i>
+```
+
+---
+
+### 🎬 DEMO 4: QUY TRÌNH ĐỔI CA LÀM VIỆC V4.4 (CHỌN ĐỒNG NGHIỆP TRỰC QUAN)
+
+#### Bước 1A: Nhân viên A (Nguyễn Văn A - CN1) bấm nút "🔄 Đổi ca" trên menu Bot Nhân viên
+*Bot `@umbomilknvbot` tự nhận diện chi nhánh CN1 và gửi danh sách đồng nghiệp cùng chi nhánh:*
+```html
+🔄 <b>YÊU CẦU ĐỔI CA — Đổi ca làm việc / Tráo ca trong tuần</b>
+🏪 <b>Chi nhánh:</b> CN1 - 130 Vạn Kiếp (P.3, Q. Bình Thạnh)
+👤 <b>Bạn:</b> Nguyễn Văn A (<code>CN130_NV1288</code>)
+
+👇 <b>Vui lòng chạm chọn bạn đồng nghiệp cùng chi nhánh bạn muốn đổi ca:</b>
+```
+**Bàn phím Inline tương tác:**
+```
+┌──────────────────────────────────────────────┐
+│  👤 Trần Thị Lan (NV1289)                     │
+├──────────────────────────────────────────────┤
+│  👤 Lê Hoàng Nam (NV1290)                     │
+├──────────────────────────────────────────────┤
+│  👤 Phạm Minh Tuấn (NV1295)                   │
+└──────────────────────────────────────────────┘
+```
+*(💡 Hoặc nhân viên có thể gõ cú pháp nhanh: `/doica 20/09 Ca Sáng sang Lan 20/09 Ca Tối`)*
+
+---
+
+#### Bước 1B: Nhân viên A chạm vào nút `[ 👤 Trần Thị Lan (NV1289) ]`
+*Bot đối chiếu và hiển thị lịch tuần này của cả bạn A và bạn Lan để A dễ dàng chọn hoán đổi (cùng ngày hoặc khác ngày):*
+```html
+🔄 <b>ĐỔI CA VỚI ĐỒNG NGHIỆP: Trần Thị Lan (CN130_NV1289)</b>
+🏪 <b>Chi nhánh:</b> CN1 - 130 Vạn Kiếp (P.3, Q. Bình Thạnh)
+
+📅 <b>LỊCH TUẦN NÀY CỦA BẠN (A):</b>
+• 20/09: ☀️ Ca Sáng (07:00 – 12:00)
+• 21/09: 🏖️ Nghỉ (OFF)
+• 22/09: 🌙 Ca Tối (18:00 – 23:00)
+
+📅 <b>LỊCH TUẦN NÀY CỦA LAN (B):</b>
+• 20/09: ⛅ Ca Chiều (12:00 – 18:00)
+• 21/09: ☀️ Ca Sáng (07:00 – 12:00)
+• 22/09: 🌙 Ca Tối (18:00 – 23:00)
+
+👉 <b>Chạm nút chọn ca muốn hoán đổi (Hoặc gõ cú pháp nhanh):</b>
+```
+**Bàn phím tương tác chọn ca nhanh (Hỗ trợ KHÁC NGÀY & KHÁC CA):**
+```
+┌──────────────────────────────────────────────┐
+│  🔁 Đổi: 20/09 Ca Sáng ⟷ Lan 22/09 Ca Tối   │
+├──────────────────────────────────────────────┤
+│  🔁 Đổi: 20/09 Ca Sáng ⟷ Lan 20/09 Ca Chiều │
+├──────────────────────────────────────────────┤
+│  🔁 Đổi: 21/09 OFF     ⟷ Lan 21/09 Ca Sáng  │
+├──────────────────────────────────────────────┤
+│  ✍️ Nhập cú pháp tự do khác ngày / khác ca    │
+└──────────────────────────────────────────────┘
+```
+*(💡 Nhân viên bấm chọn hoán đổi khác ngày: **20/09 Ca Sáng lấy 22/09 Ca Tối**).*  
+*Bot gửi xác nhận cho NV A:*
+```html
+🔄 <b>ĐÃ GỬI YÊU CẦU ĐỔI CA LÀM VIỆC THÀNH CÔNG!</b>
+
+📋 <b>Chi tiết yêu cầu hoán đổi (Khác ngày - Khác ca):</b>
+• <b>Người gửi:</b> Nguyễn Văn A (<code>CN130_NV1288</code>)
+• <b>Ca muốn nhượng của A:</b> 20/09 — <b>Ca Sáng</b> (07:00 – 12:00)
+• <b>Đồng nghiệp nhận ca:</b> Trần Thị Lan (<code>CN130_NV1289</code>)
+• <b>Ca nhận lại từ Lan:</b> 22/09 — <b>Ca Tối</b> (18:00 – 23:00)
+
+⏳ <i>Hệ thống đã gửi tin nhắn riêng cho bạn Trần Thị Lan để chờ xác nhận...</i>
+```
+
+---
+
+#### Bước 2: Bạn B (Trần Thị Lan) nhận tin nhắn riêng trên `@umbomilknvbot`
+```html
+🔔 <b>BẠN CÓ YÊU CẦU ĐỔI CA LÀM VIỆC MỚI!</b>
+
+👤 Đồng nghiệp <b>Nguyễn Văn A</b> (<code>CN130_NV1288</code>) gửi lời mời hoán đổi ca:
+🏪 <b>Chi nhánh:</b> CN1 - 130 Vạn Kiếp
+
+📅 <b>Ca của bạn A nhượng lại:</b> 20/09 — <b>Ca Sáng</b> (07:00 – 12:00)
+🔁 <b>Đổi lấy ca này của bạn:</b> 22/09 — <b>Ca Tối</b> (18:00 – 23:00)
+
+<i>(Nếu đồng ý: Bạn sẽ làm Ca Sáng 20/09 và được nghỉ hoặc đổi ca ngày 22/09)</i>
+
+Bạn có đồng ý hoán đổi lịch làm việc này không?
+```
+**Bàn phím Inline tương tác trên máy bạn Lan:**
+```
+┌────────────────────────┬─────────────────────┐
+│  ✅ ĐỒNG Ý ĐỔI CA      │  ❌ TỪ CHỐI         │
+└────────────────────────┴─────────────────────┘
+```
+*Bạn Lan bấm nút **[✅ ĐỒNG Ý ĐỔI CA]**.*  
+*Bot phản hồi bạn Lan:* `✅ Bạn đã đồng ý đổi ca! Phiếu đã được chuyển đến Quản lý / HR để phê duyệt chính thức.`
+
+---
+
+#### Bước 3: Bot Quản trị HR (`@umbomilkhrbot`) nhận phiếu chờ duyệt
+```html
+📋 <b>PHIẾU ĐỔI CA LÀM VIỆC CHỜ PHÊ DUYỆT</b>
+🏪 <b>Chi nhánh:</b> CN1 - 130 Vạn Kiếp (Đổi khác ngày trong tuần)
+
+👤 <b>Nhân viên A:</b> Nguyễn Văn A (<code>CN130_NV1288</code>)
+⏰ <b>Ca hoán đổi:</b> Nhượng 20/09 Ca Sáng ➔ Nhận 22/09 Ca Tối
+
+👤 <b>Nhân viên B:</b> Trần Thị Lan (<code>CN130_NV1289</code>)
+⏰ <b>Ca hoán đổi:</b> Nhượng 22/09 Ca Tối ➔ Nhận 20/09 Ca Sáng
+
+✅ <b>Trạng thái:</b> Đồng nghiệp B (Lan) đã bấm ĐỒNG Ý!
+```
+**Bàn phím duyệt của HR / Admin trên Bot Quản trị:**
+```
+┌────────────────────────┬─────────────────────┐
+│  ✅ PHÊ DUYỆT ĐỔI CA   │  ❌ TỪ CHỐI DUYỆT   │
+└────────────────────────┴─────────────────────┘
+```
+*Khi HR bấm **[✅ PHÊ DUYỆT ĐỔI CA]**:*
+1. Bot HR phản hồi: `✅ Đã phê duyệt và hoán đổi lịch làm việc thành công!`
+2. Hệ thống cập nhật lịch cả 2 bạn ở cả 2 ngày (20/09 và 22/09) tức thì trên Database và đồng bộ ngầm Google Sheet 17iXM.
+3. Bot tự động bắn thông báo kết quả tới cả bạn A và bạn Lan:
+   * *Gửi bạn A:* `🎉 HR đã phê duyệt yêu cầu đổi ca! Lịch làm việc mới của bạn: Ngày 20/09 bạn được OFF Ca Sáng, và ngày 22/09 bạn sẽ làm Ca Tối (18:00 – 23:00). Chúc bạn làm việc tốt!`
+   * *Gửi bạn Lan:* `🎉 Phiếu đổi ca với Nguyễn Văn A đã được HR duyệt! Lịch làm việc mới của bạn: Ngày 20/09 bạn sẽ làm Ca Sáng (07:00 – 12:00), và ngày 22/09 bạn được OFF Ca Tối. Chúc bạn làm việc tốt!`
+
+---
+
+---
+
+### 🎬 DEMO 5: ĐĂNG NHẬP NHẬN THÔNG BÁO CHỜ & LỌC TRÙNG TUYỆT ĐỐI
+
+*Giả định: Trong thời gian HR vắng mặt, có 3 sự kiện phát sinh. Trong đó sự kiện 1 đã được gửi trước đó và trên tài khoản quản trị đã có thông tin. Bot tự động lọc bỏ sự kiện 1, chỉ gửi 2 thông báo mới chưa trùng lặp.*
+
+#### Khi HR đăng nhập:
+`/login <tên_đăng_nhập> <mật_khẩu>`
+*(Hệ thống không hiển thị tài khoản và mật khẩu mẫu ra màn hình để bảo mật tuyệt đối).*
+
+#### Bot HR lập tức trả về Menu kèm danh sách thông báo đã lọc trùng:
+```html
+✅ <b>ĐĂNG NHẬP THÀNH CÔNG!</b>
+Chào mừng <b>Nguyễn Mai Phương</b> (Vai trò: <code>HR</code>).
+
+🔔 <b>HỘP THƯ CHỜ: BẠN CÓ 2 THÔNG BÁO MỚI (ĐÃ LỌC BỎ THÔNG BÁO TRÙNG LẶP):</b>
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+1️⃣ <b>[ĐỔI CA CHỜ DUYỆT]</b>: NV Nguyễn Văn A (CN1) đổi ca 20/09 Ca Sáng lấy 22/09 Ca Tối của Trần Thị Lan. Lan đã bấm ĐỒNG Ý! (Gõ <code>/duyet</code> để phê duyệt).
+2️⃣ <b>[KẾT QUẢ THI E-LEARNING]</b>: NV Phạm Minh Tuấn đạt <b>9.2/10 điểm</b> (Xuất sắc 🎆).
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+<i>Hệ thống tự động bỏ qua các thông báo đã tồn tại trên tài khoản quản trị, đảm bảo không trùng lặp dữ liệu!</i>
+```
+
+---
+
+### 🎬 DEMO 6: SỬA THÔNG TIN NHÂN VIÊN (/sua_thongtin_nhanvien)
+
+#### HR gửi lệnh điều chỉnh ca làm và chi nhánh:
+`/sua_thongtin_nhanvien: NV1288 ca sáng sang ca tối, CN1 sang CN2`
+
+#### Bot HR phản hồi & Tự động đồng bộ Google Sheet:
+```html
+✅ <b>CẬP NHẬT THÔNG TIN NHÂN VIÊN THÀNH CÔNG!</b>
+
+👤 <b>Nhân viên:</b> Nguyễn Văn A (<code>CN130_NV1288</code>)
+🔄 <b>Ca làm việc:</b> <code>Ca Sáng</code> ➔ <b>Ca Tối (18:00 – 23:00)</b>
+🏪 <b>Chi nhánh:</b> <code>CN1 - 130 Vạn Kiếp</code> ➔ <b>CN2 - 261 Tô Hiến Thành</b>
+📊 <b>Trạng thái:</b> Đã lưu database & đồng bộ tức thì sang Google Sheet 17iXM ✅
+
+<i>Hệ thống đã gửi thông báo cập nhật lịch mới đến Bot của bạn Nguyễn Văn A.</i>
+```
+
+---
+
+### 🎬 DEMO 7: RESET DỮ LIỆU SHEET CỦA ADMIN (/reset_hethong)
+
+#### 1. Admin gửi lệnh xóa sạch dữ liệu sheet:
+`/reset_hethong: LICH_LAM_VIEC`
+
+#### Bot Admin phản hồi:
+```html
+⚠️ <b>XÁC NHẬN DỌN DẸP DỮ LIỆU GOOGLE SHEET</b>
+Sheet mục tiêu: <code>LICH_LAM_VIEC</code>
+
+✅ <b>KẾT QUẢ:</b> Đã xóa sạch <b>142 dòng dữ liệu</b> từ dòng A2 đến Z trên Google Sheet!
+📌 Dòng tiêu đề (Headers hàng 1) được bảo vệ nguyên vẹn 100%.
+⏱️ Thời gian thực thi: 12:30:15 18/09/2026
+```
+
+#### 2. Trường hợp HR hoặc QL cố tình gõ lệnh Admin:
+*HR gõ:* `/reset_hethong: LICH_LAM_VIEC`  
+*Bot từ chối:*
+```html
+⛔ <b>TỪ CHỐI TRUY CẬP:</b> Chỉ duy nhất Quản trị viên tối cao (👑 Admin) mới có thẩm quyền reset dữ liệu Google Sheet!
+```
+
+---
+
+### 🎬 DEMO 8: THÔNG BÁO NHÂN VIÊN MỚI ĐĂNG KÝ FORM GOOGLE SHEET
+
+*Khi có ứng viên/nhân viên mới nộp đơn ứng tuyển qua Google Form (tự động điền dòng mới vào sheet `NHAN_VIEN_MOI`):*  
+*Bot Quản trị (`@umbomilkhrbot`) lập tức gửi thông báo đẩy thời gian thực với đầy đủ các cột thông tin từ Sheet:*
+
+```html
+🆕 <b>THÔNG BÁO: CÓ ỨNG VIÊN / NHÂN VIÊN MỚI ĐĂNG KÝ!</b>
+📊 <b>Nguồn:</b> Google Sheet <code>NHAN_VIEN_MOI</code> (Form Tuyển Dụng)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+🆔 <b>Mã ứng viên:</b> <code>UV_2026_0918_042</code>
+📅 <b>Ngày đăng ký:</b> 18/09/2026 13:25:40
+👤 <b>Họ và tên:</b> Hoàng Minh Thư
+🚻 <b>Giới tính:</b> Nữ  |  🎂 <b>Năm sinh:</b> 2004 (22 tuổi)
+🎓 <b>Trình độ:</b> Đại học (Năm 4 - ĐH Kinh Tế TP.HCM)
+🏡 <b>Quê quán:</b> Lâm Đồng
+📱 <b>Số điện thoại:</b> <code>0912345678</code>
+⏰ <b>Ca đăng ký:</b> Ca Sáng (07:00 – 12:00) & Ca Chiều (12:00 – 18:00)
+🏪 <b>Chi nhánh ĐK:</b> CN1 - 130 Vạn Kiếp (P.3, Q. Bình Thạnh)
+💼 <b>Kinh nghiệm:</b> 6 tháng Barista tại The Coffee House
+⚡ <b>Xử lý đột xuất:</b> Sẵn sàng tăng ca hoặc đổi ca khi cửa hàng đông khách
+🌐 <b>Facebook:</b> fb.com/minhthu.barista
+📣 <b>Nguồn biết tin:</b> Fanpage Tuyển dụng Ụm Bò Milk
+🤖 <b>Điểm AI đánh giá:</b> <b>8.8 / 10</b> (Phù hợp cao 🌟)
+🎯 <b>Kết quả sơ tuyển:</b> Đạt vòng hồ sơ ✅
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+👉 <i>Nhân sự / Quản lý vui lòng liên hệ ứng viên để hẹn lịch phỏng vấn trực tiếp tại chi nhánh.</i>
+```
+
+📌 **Cơ chế đảm bảo Zero Miss & Chống trùng (Zero Duplicate):**
+- **Trường hợp HR chưa đăng nhập**: Tin nhắn được đưa vào hàng đợi (`adminNotificationQueue`) với khóa `applicant:UV_2026_0918_042`. Ngay khi HR gõ `/login <tên_đăng_nhập> <mật_khẩu>`, hệ thống sẽ hiển thị lại thông báo này nguyên vẹn.
+- **Trường hợp đã thông báo trước đó**: Nếu thông tin ứng viên đã được gửi tới tài khoản quản trị trước đó, Bot sẽ tự động bỏ qua (skip), không gửi lặp lại để tránh làm phiền nhân sự.
+
+---
+
+### 🎬 DEMO 9A: PHIẾU LƯƠNG NHÂN VIÊN CỬA HÀNG (CHỈ QL PHÁT)
+
+#### 1. Khi Quản lý (QL) gửi lệnh duyệt & phát:
+QL gửi: `/duyet_phieuluong` trên Bot HR.  
 Bot hiển thị tiến độ:
 ```html
 🚀 <b>ĐANG TIẾN HÀNH PHÁT PHIẾU LƯƠNG CHI NHÁNH CN1...</b>
@@ -378,7 +756,15 @@ Bot hiển thị tiến độ:
 🎉 <b>TỔNG KẾT: ĐÃ GỬI THÀNH CÔNG 3/3 PHIẾU LƯƠNG NHÂN VIÊN!</b>
 ```
 
-#### 2. Nhân viên Cửa hàng nhận tin nhắn riêng tư trên `@umbomilknvbot`:
+#### 2. Khi HR hoặc Admin thử gõ lệnh:
+*HR gửi:* `/duyet_phieuluong`  
+*Bot phản hồi:*
+```html
+⛔ <b>QUYỀN HẠN BỊ TỪ CHỐI:</b>
+Chức năng Duyệt & Phát phiếu lương chỉ hiển thị và thực hiện DUY NHẤT trên tài khoản <b>Quản lý cửa hàng (QL)</b>. Tài khoản vai trò HR không có quyền thực hiện.
+```
+
+#### 3. Nhân viên Cửa hàng nhận phiếu lương riêng tư trên `@umbomilknvbot`:
 ```html
 💵 <b>PHIẾU LƯƠNG THÁNG 09/2026 — ỤM BÒ MILK</b>
 <i>Kính gửi bạn Nguyễn Văn A (Nhân viên Cửa hàng), chi tiết thu nhập của bạn:</i>
@@ -405,9 +791,8 @@ Bot hiển thị tiến độ:
 
 ---
 
-### 🎬 DEMO 6B: PHIẾU LƯƠNG NHÂN VIÊN VĂN PHÒNG (LƯƠNG CƠ BẢN)
+### 🎬 DEMO 9B: PHIẾU LƯƠNG NHÂN VIÊN VĂN PHÒNG (CHỈ QL PHÁT)
 
-#### Nhân viên Văn phòng nhận tin nhắn riêng tư trên `@umbomilknvbot`:
 ```html
 💵 <b>PHIẾU LƯƠNG THÁNG 09/2026 — ỤM BÒ MILK</b>
 <i>Kính gửi bạn Lê Thị Thu Thảo (Khối Văn phòng), chi tiết thu nhập của bạn:</i>
