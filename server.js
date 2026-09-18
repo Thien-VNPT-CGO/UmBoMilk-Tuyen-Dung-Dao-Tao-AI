@@ -13584,7 +13584,7 @@ async function hrApproveAndSendPayslips(session, branchArg) {
 
 function parseShiftCode(str) {
   if (!str) return 'CA_SANG';
-  const s = String(str).toLowerCase().replace(/[\s_-]+/g, '');
+  const s = String(str).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[đĐ]/g, 'd').replace(/[\s_-]+/g, '');
   if (s.includes('chieu') || s.includes('trua') || s === 'c2') return 'CA_CHIEU';
   if (s.includes('toi') || s === 'c3') return 'CA_TOI';
   if (s.includes('off') || s.includes('nghi')) return 'OFF';
@@ -13593,12 +13593,87 @@ function parseShiftCode(str) {
 
 function parseShiftDate(str) {
   if (!str) return null;
-  const m = str.match(/\b(\d{1,2})[/\-.](\d{1,2})(?:[/\-](\d{4}))?\b/);
+  const s = String(str).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const m = s.match(/\b(\d{1,2})[/\-.](\d{1,2})(?:[/\-](\d{4}))?\b/);
   if (!m) return null;
   const day = parseInt(m[1], 10);
   const month = parseInt(m[2], 10);
   const year = m[3] ? parseInt(m[3], 10) : 2026;
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function parseOfficialEmployeeArgs(rawArgs) {
+  if (!rawArgs || !rawArgs.trim()) return null;
+  const str = rawArgs.trim();
+
+  let name = '', phone = '', branchId = '', shift = '', startDate = '', code = 'auto', testScore = null;
+
+  if (str.includes(',')) {
+    const parts = str.split(',').map(s => s.trim()).filter(Boolean);
+    if (parts.length >= 5) {
+      name = parts[0];
+      phone = parts[1];
+      branchId = parts[2];
+      shift = parts[3];
+      startDate = parts[4];
+      if (parts.length >= 7) {
+        code = parts[5];
+        testScore = parseFloat(parts[6]);
+      } else if (parts.length === 6) {
+        const num = parseFloat(parts[5]);
+        if (!isNaN(num) && num >= 0 && num <= 10) {
+          testScore = num;
+          code = 'auto';
+        } else {
+          code = parts[5];
+        }
+      }
+      return { name, phone, branchId, shift, startDate, code, testScore };
+    }
+  }
+
+  // Space-separated parsing
+  const phoneMatch = str.match(/(?:^|\s)(0\d{9,10}|\+?84\d{9,10})(?:\s|$)/);
+  if (!phoneMatch) return null;
+  phone = phoneMatch[1].trim();
+  const phoneIdx = str.indexOf(phone);
+  name = str.slice(0, phoneIdx).trim();
+  let rest = str.slice(phoneIdx + phone.length).trim();
+
+  // Extract Branch
+  const branchMatch = rest.match(/\b(CN\d+|CN_[A-Z0-9]+)\b/i);
+  if (branchMatch) {
+    branchId = branchMatch[1].toUpperCase();
+    rest = rest.replace(branchMatch[0], ' ').trim();
+  }
+
+  // Extract Date
+  const dateMatch = rest.match(/\b(\d{1,2}[/\-.]\d{1,2}(?:[/\-.]\d{4})?|\d{4}-\d{2}-\d{2})\b/);
+  if (dateMatch) {
+    startDate = dateMatch[0];
+    rest = rest.replace(dateMatch[0], ' ').trim();
+  }
+
+  // Extract Shift
+  const shiftMatch = rest.match(/\b(ca\s+s[aáàảãạăắằẳẵặâấầẩẫậ]ng|ca\s+chi[eéèẻẽẹêếềểễệ]u|ca\s+t[oóòỏõọôốồổỗộơớờởỡợ]i|ca\s+tr[uúùủũụưứừửữự]a|s[aáàảãạăắằẳẵặâấầẩẫậ]ng|chi[eéèẻẽẹêếềểễệ]u|t[oóòỏõọôốồổỗộơớờởỡợ]i|tr[uúùủũụưứừửữự]a|ca_sang|ca_chieu|ca_toi)\b/iu);
+  if (shiftMatch) {
+    shift = shiftMatch[0];
+    rest = rest.replace(shiftMatch[0], ' ').trim();
+  }
+
+  // Remaining tokens: Mã NV and Điểm TEST
+  const tokens = rest.split(/\s+/).filter(Boolean);
+  for (const tok of tokens) {
+    const num = parseFloat(tok);
+    if (!isNaN(num) && num >= 0 && num <= 10 && testScore === null) {
+      testScore = num;
+    } else {
+      code = tok;
+    }
+  }
+
+  return { name, phone, branchId, shift, startDate, code, testScore };
 }
 
 async function handleRequestShiftSwap(telegramId, rawSwap, chatId) {
@@ -14553,6 +14628,207 @@ async function processTelegramUpdate(update, role){
 
       const res = await autoCleanDuplicatesAndResetOff(emp, `HR ${session.username} yêu cầu xóa OFF`);
       return { text: res.text, ...res };
+    },
+    hrCreateOfficialEmployee: async (session, rawArgs) => {
+      if (!session) return { text: '⛔ Bạn chưa đăng nhập tài khoản Quản trị.' };
+      const roleStr = String(session.role || '').toUpperCase();
+      if (roleStr !== 'ADMIN' && roleStr !== 'HR') {
+        return { text: '⛔ <b>TỪ CHỐI TRUY CẬP:</b> Lệnh thêm nhân viên chính thức chỉ dành cho 👑 <b>Admin</b> hoặc 🛡️ <b>HR</b>.' };
+      }
+
+      const trimmed = String(rawArgs || '').trim();
+      if (!trimmed) {
+        return {
+          text: '➕ <b>CÚ PHÁP THÊM NHÂN VIÊN CHÍNH THỨC:</b>\n\n'
+            + '👉 <code>/them_nv_chinhthuc &lt;Tên NV&gt; &lt;SĐT&gt; &lt;Chi Nhánh&gt; &lt;Ca làm việc&gt; &lt;ngày bắt đầu&gt; &lt;Mã NV - BOT Telegram tự động tạo&gt; &lt;Điểm TEST&gt;</code>\n\n'
+            + '• <i>Tự động sinh mã NV (nhập <code>auto</code> hoặc <code>bot</code>):</i>\n'
+            + '<code>/them_nv_chinhthuc Nguyễn Văn A 0905123456 CN1 Ca Sáng 20/09/2026 auto 9</code>\n\n'
+            + '• <i>Tự nhập mã NV tùy chọn:</i>\n'
+            + '<code>/them_nv_chinhthuc Nguyễn Văn A 0905123456 CN1 Ca Sáng 20/09/2026 NV1288 9</code>\n\n'
+            + '• <i>Hỗ trợ dấu phẩy:</i>\n'
+            + '<code>/them_nv_chinhthuc: Nguyễn Văn A, 0905123456, CN1, Ca Sáng, 20/09/2026, auto, 9.5</code>\n\n'
+            + '📌 <b>Cơ chế tự động hóa:</b>\n'
+            + '1. BOT tự động tạo mã NV chuẩn hóa theo tiền tố chi nhánh nếu chọn <code>auto</code>.\n'
+            + '2. Tự động cấp KEY kích hoạt Mini App (<code>KEY-XXXXXXXX</code>).\n'
+            + '3. Lưu cơ sở dữ liệu hệ thống và kích hoạt đồng bộ tức thì sang Google Sheet 17iXM (Tab: <code>NHAN_VIEN_CHINH_THUC</code>)!'
+        };
+      }
+
+      const parsed = parseOfficialEmployeeArgs(trimmed);
+      if (!parsed || !parsed.name || !parsed.phone) {
+        return {
+          text: '⚠️ <b>Lỗi cú pháp:</b> Không nhận diện được Tên nhân viên và Số điện thoại hợp lệ.\n\n'
+            + '👉 <b>Cú pháp chuẩn:</b>\n'
+            + '<code>/them_nv_chinhthuc &lt;Tên NV&gt; &lt;SĐT&gt; &lt;Chi Nhánh&gt; &lt;Ca làm việc&gt; &lt;ngày bắt đầu&gt; &lt;Mã NV hoặc auto&gt; &lt;Điểm TEST&gt;</code>\n\n'
+            + '• <i>Ví dụ:</i> <code>/them_nv_chinhthuc Nguyễn Văn A 0905123456 CN1 Ca Sáng 20/09/2026 auto 9</code>'
+        };
+      }
+
+      const cleanName = parsed.name.trim();
+      const cleanPhone = normalizePhone(parsed.phone);
+      if (!cleanPhone || cleanPhone.length < 9 || cleanPhone.length > 11) {
+        return { text: `⚠️ Số điện thoại không hợp lệ: <code>${parsed.phone}</code>. Vui lòng nhập số điện thoại 10 số (VD: 0905123456).` };
+      }
+
+      // 1. Ràng buộc chống trùng SĐT trên toàn bộ hệ thống & Sheet 17iXM
+      const dup = await isPhoneDuplicateEverywhere(cleanPhone);
+      if (dup.dup) {
+        return { text: `⚠️ <b>KHÔNG THỂ THÊM NHÂN VIÊN (TRÙNG SĐT):</b>\n${dupPhoneErrorMessage(cleanPhone, dup)}` };
+      }
+
+      // 2. Kiểm tra Chi nhánh
+      let branchId = (parsed.branchId || '').toUpperCase().trim();
+      let branch = (db.branches || []).find(b => b.id.toUpperCase() === branchId || b.prefix?.toUpperCase() === branchId || b.name?.toLowerCase().includes(branchId.toLowerCase()));
+      if (!branch) {
+        if (!branchId) {
+          branch = (db.branches || [])[0] || { id: 'CN1', name: 'CN1', prefix: 'CN130' };
+          branchId = branch.id;
+        } else {
+          const validBranches = (db.branches || []).map(b => b.id).join(', ');
+          return { text: `⚠️ Chi nhánh <code>${parsed.branchId}</code> không tồn tại trên hệ thống. Chi nhánh hợp lệ: <b>${validBranches}</b>` };
+        }
+      } else {
+        branchId = branch.id;
+      }
+
+      // Phân quyền chi nhánh cho HR
+      if (session.branchScope && Array.isArray(session.branchScope) && session.branchScope.length > 0 && roleStr !== 'ADMIN') {
+        if (!session.branchScope.includes(branchId)) {
+          return { text: `⛔ <b>Không có quyền:</b> Chi nhánh <b>${branchId}</b> nằm ngoài phạm vi quản lý của bạn (${session.branchScope.join(', ')}).` };
+        }
+      }
+
+      // 3. Ca làm việc
+      const shiftCode = parseShiftCode(parsed.shift || 'CA_SANG');
+
+      // 4. Ngày bắt đầu
+      let startDate = parseShiftDate(parsed.startDate);
+      if (!startDate) {
+        startDate = getVietnamTodayStr();
+      }
+
+      // 5. Điểm thi TEST & xếp loại
+      let score = parsed.testScore;
+      if (score === null || score === undefined || isNaN(score)) {
+        score = 10;
+      } else {
+        score = Math.max(0, Math.min(10, parseFloat(score)));
+      }
+      const testResult = score >= 8 ? 'DAT' : (score >= 5 ? 'CHUA_DU_DK' : 'FAILED');
+
+      // 6. Mã nhân viên (Tự động hoặc Tùy chọn)
+      let employeeId = '';
+      const rawCode = (parsed.code || '').trim();
+      const isAuto = !rawCode || ['auto', 'bot', 'tudong', 'tự động', 'tu_dong', 'none', 'null'].includes(rawCode.toLowerCase());
+
+      if (isAuto) {
+        try {
+          employeeId = generateEmployeeId(branch.id);
+        } catch (e) {
+          const rnd = String(Math.floor(1000 + Math.random() * 9000));
+          employeeId = `${branch.prefix || branch.id}_UBM_NV${rnd}`;
+        }
+      } else {
+        const existing = (db.employees || []).find(e => e.employeeId?.toUpperCase() === rawCode.toUpperCase());
+        if (existing) {
+          return { text: `⚠️ <b>Trùng mã nhân viên:</b> Mã <code>${rawCode}</code> đã thuộc về nhân viên <b>${existing.name}</b> (${existing.branchId}). Vui lòng dùng <code>auto</code> để BOT tự sinh mã duy nhất!` };
+        }
+        employeeId = rawCode;
+      }
+
+      // 7. Tạo đối tượng nhân viên chính thức
+      const isTest = session.isTest || isTestRecord({ name: cleanName, phone: cleanPhone, employeeId });
+      const newEmp = {
+        id: uuidv4(),
+        employeeId,
+        name: cleanName,
+        phone: cleanPhone,
+        branchId: branch.id,
+        shift: shiftCode,
+        startDate,
+        officialStartDate: startDate,
+        endDate: null,
+        trainingDays: 0,
+        status: 'OFFICIAL',
+        type: 'OFFICIAL',
+        testScore: score,
+        testResult,
+        category: 'STORE',
+        avatar: '',
+        checkHistory: [],
+        isTest: isTest || undefined,
+        version: 1,
+        updated_at: getVietnamISOString(),
+        updated_by: session.username || 'HR_BOT',
+        source: isTest ? 'TEST' : 'TELEGRAM_BOT',
+        sync_status: isTest ? 'TEST_BLOCKED' : 'PENDING'
+      };
+
+      if (!db.employees) db.employees = [];
+      db.employees.push(newEmp);
+
+      // 8. Tự tạo mã kích hoạt KEY
+      const newKey = {
+        id: uuidv4(),
+        employeeId,
+        key: 'KEY-' + Math.random().toString(36).substring(2, 10).toUpperCase(),
+        deviceId: null,
+        boundAt: null,
+        status: 'ACTIVE',
+        isTest: isTest || undefined,
+        version: 1,
+        updated_at: getVietnamISOString(),
+        sync_status: isTest ? 'TEST_BLOCKED' : 'PENDING'
+      };
+      if (!db.keys) db.keys = [];
+      db.keys.push(newKey);
+
+      // 9. Ghi Audit Log & Đẩy vào hàng đợi đồng bộ Sheet
+      try {
+        audit(session.username, 'CREATE_OFFICIAL_EMPLOYEE_BOT', 'EMPLOYEE', employeeId, {
+          employee: newEmp,
+          key: newKey.key,
+          testScore: score,
+          testResult,
+          branchId: branch.id
+        }, 'telegram_bot');
+      } catch (e) {}
+
+      if (!isTest && !isTestRecord(newEmp)) {
+        try {
+          addSyncQueue('EMPLOYEE', 'CREATE', newEmp, session.username, 'TELEGRAM_BOT');
+          if (typeof triggerRealtimeSheetSync === 'function') {
+            triggerRealtimeSheetSync('NHAN_VIEN_CHINH_THUC');
+          }
+        } catch (e) {}
+      }
+
+      saveDB();
+
+      try {
+        io.emit('employees:update', db.employees);
+        io.emit('keys:update', db.keys);
+        io.emit('hr:action', { action: 'create_official_employee', success: true, employeeId, name: cleanName });
+      } catch (e) {}
+
+      const resultLabel = testResult === 'DAT' ? 'ĐẠT CHUẨN (>= 8.0)' : (testResult === 'CHUA_DU_DK' ? 'CHƯA ĐỦ ĐIỀU KIỆN' : 'KHÔNG ĐẠT');
+      const branchDisplay = branch.name || branch.id;
+
+      return {
+        ok: true,
+        employee: newEmp,
+        key: newKey,
+        text: `🎉 <b>ĐÃ THÊM NHÂN VIÊN CHÍNH THỨC THÀNH CÔNG!</b>\n\n`
+          + `👤 <b>Họ và tên:</b> <b>${cleanName}</b>\n`
+          + `📞 <b>Số điện thoại:</b> <code>${cleanPhone}</code>\n`
+          + `🆔 <b>Mã nhân viên (BOT):</b> <code>${employeeId}</code>\n`
+          + `🏪 <b>Chi nhánh:</b> <b>${branchDisplay}</b> (<code>${branch.id}</code>)\n`
+          + `⏰ <b>Ca làm việc:</b> <b>${shiftCode}</b>\n`
+          + `📅 <b>Ngày chính thức:</b> <b>${fmtDMY(startDate)}</b>\n`
+          + `📝 <b>Điểm thi TEST:</b> <b>${score} / 10</b> (${resultLabel})\n`
+          + `🔑 <b>KEY kích hoạt Mini App:</b> <code>${newKey.key}</code>\n\n`
+          + `📊 <i>Đã lưu vào cơ sở dữ liệu hệ thống và tự động đẩy lên Google Sheet 17iXM (Tab: <b>NHAN_VIEN_CHINH_THUC</b>)!</i>`
+      };
     },
     adminGetUsers: async (session) => {
       const uList = (db.users||[]).map(u => `• <b>${u.username}</b> (<code>${u.role}</code>) — ${u.displayName||''} [${(u.branchScope||[]).join(',')||'Toàn bộ'}]`).join('\n');

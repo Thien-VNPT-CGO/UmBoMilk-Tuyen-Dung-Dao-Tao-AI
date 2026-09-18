@@ -277,8 +277,8 @@ graph TD
 
 | Vai trò | Quyền hạn nghiệp vụ | Danh mục lệnh Telegram chuẩn |
 | :--- | :--- | :--- |
-| 👑 **Admin** | Toàn quyền hệ thống, cấp/phân quyền, chạy test, reset dữ liệu Google Sheet, xóa nhân viên, xóa lịch OFF | `/tonghop_lich`, `/sap_lich_nv`, `/sua_thongtin_nhanvien`, `/xoa_nhanvien`, `/xoa_off`, `/duyet`, `/users`, `/capquyen`, `/phanquyen`, `/broadcast`, `/test`, `/delete_test`, `/doi_mat_khau`, `/hoso_nhanvien`, `/reset_hethong`, `/logout` |
-| 🛡️ **HR** | Quản lý lịch tuần NV, sửa thông tin NV, xóa NV, xóa lịch OFF, duyệt đổi ca, báo cáo, tra hồ sơ | `/tonghop_lich`, `/sap_lich_nv`, `/sua_thongtin_nhanvien`, `/xoa_nhanvien`, `/xoa_off`, `/duyet`, `/baocao`, `/broadcast`, `/gui_de_thi`, `/doi_mat_khau`, `/hoso_nhanvien`, `/logout` |
+| 👑 **Admin** | Toàn quyền hệ thống, thêm/sửa/xóa nhân viên, cấp/phân quyền, chạy test, reset dữ liệu Google Sheet, xóa lịch OFF | `/them_nv_chinhthuc`, `/tonghop_lich`, `/sap_lich_nv`, `/sua_thongtin_nhanvien`, `/xoa_nhanvien`, `/xoa_off`, `/duyet`, `/users`, `/capquyen`, `/phanquyen`, `/broadcast`, `/test`, `/delete_test`, `/doi_mat_khau`, `/hoso_nhanvien`, `/reset_hethong`, `/logout` |
+| 🛡️ **HR** | Quản lý thêm/sửa/xóa NV, lịch tuần NV, xóa lịch OFF, duyệt đổi ca, báo cáo, tra hồ sơ | `/them_nv_chinhthuc`, `/tonghop_lich`, `/sap_lich_nv`, `/sua_thongtin_nhanvien`, `/xoa_nhanvien`, `/xoa_off`, `/duyet`, `/baocao`, `/broadcast`, `/gui_de_thi`, `/doi_mat_khau`, `/hoso_nhanvien`, `/logout` |
 | 🏪 **QL** | Giới hạn chi nhánh phụ trách (`branchScope`), **DUYỆT & PHÁT PHIẾU LƯƠNG THÁNG** | `/diemdanh_cn`, `/lich_cn`, `/duyet_ca`, `/baohong_cn`, `/doi_mat_khau`, `/duyet_phieuluong`, `/hoso_nhanvien`, `/logout` |
 | 📢 **MKT** | Đăng tin tức, sự kiện, phát khuyến mãi tới nhân viên | `/broadcast_mkt`, `/sukien`, `/tintuc`, `/doi_mat_khau`, `/logout` |
 
@@ -294,6 +294,28 @@ graph TD
   4. 📅 **Ngày bắt đầu tham gia**
   5. 🏪 **Chi nhánh + Ca làm việc**
   6. 💰 **Lương chính thức**
+
+---
+
+### 5.4B. Thêm nhân viên chính thức (/them_nv_chinhthuc - Tự động tạo mã NV & Cấp Key)
+* **Mục đích**: Cho phép Admin và HR thêm mới nhân viên chính thức nhanh chóng trực tiếp qua Telegram Bot, tự động sinh mã nhân viên chuẩn hóa theo từng chi nhánh, tự sinh KEY kích hoạt tài khoản và đồng bộ tức thì lên Google Sheet 17iXM.
+* **Cú pháp chuẩn**:
+  * `/them_nv_chinhthuc <Tên NV> <SĐT> <Chi Nhánh> <Ca làm việc> <ngày bắt đầu> <Mã NV - BOT Telegram tự động tạo> <Điểm TEST>`
+* **Ví dụ cú pháp**:
+  * *Tự động sinh mã NV (nhập `auto` hoặc `bot`):*
+    `• /them_nv_chinhthuc Nguyễn Văn A 0905123456 CN1 Ca Sáng 20/09/2026 auto 9`
+  * *Tự nhập mã NV tùy chọn:*
+    `• /them_nv_chinhthuc Nguyễn Văn A 0905123456 CN1 Ca Sáng 20/09/2026 NV1288 9`
+  * *Hỗ trợ định dạng dấu phẩy:*
+    `• /them_nv_chinhthuc: Nguyễn Văn A, 0905123456, CN1, Ca Sáng, 20/09/2026, auto, 9.5`
+* **Quy trình xử lý tự động**:
+  1. **Kiểm tra quyền hạn**: Chỉ tài khoản `ADMIN` hoặc `HR` mới có quyền thực thi. HR bị ràng buộc bởi `branchScope`.
+  2. **Chống trùng SĐT đa tầng**: Kiểm tra với toàn bộ nhân viên, ứng viên và Google Sheet 17iXM.
+  3. **Tự sinh mã NV chuẩn hóa**: Nếu tham số là `auto`, BOT sẽ gọi `generateEmployeeId(branchId)` tạo mã định dạng `${prefix}_UBM${ddmmyyyy}_NV${rnd}` (VD: `CN130_UBM20092026_NV4521`).
+  4. **Tạo Key kích hoạt**: Tự động tạo mã `KEY-XXXXXXXX` (Status: `ACTIVE`) lưu vào `db.keys`.
+  5. **Đánh giá điểm TEST**: $\ge 8.0$: ĐẠT CHUẨN (`DAT`); $5.0 \le \text{điểm} < 8.0$: CHƯA ĐỦ ĐIỀU KIỆN (`CHUA_DU_DK`); $< 5.0$: KHÔNG ĐẠT (`FAILED`).
+  6. **Đồng bộ realtime**: Ghi nhận `db.employees` (`status: 'OFFICIAL'`, `type: 'OFFICIAL'`), phát WebSocket realtime và kích hoạt đẩy ngay sang Google Sheet 17iXM tab `NHAN_VIEN_CHINH_THUC`.
+  7. **Phản hồi chi tiết**: Gửi tin nhắn Telegram xác nhận với đầy đủ mã NV, Key kích hoạt và thông tin chi nhánh.
 
 ---
 

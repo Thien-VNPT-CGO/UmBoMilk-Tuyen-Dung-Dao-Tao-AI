@@ -766,5 +766,110 @@ test('Telegram V4.3 Features Suite', async (t) => {
     assert.ok(rExistingWarn[0].text.includes('CẢNH BÁO: BẠN ĐÃ ĐĂNG KÝ LỊCH OFF TUẦN NÀY RỒI'));
     assert.ok(rExistingWarn[0].text.includes('/dangky_lai_off'));
   });
+
+  await t.test('18. Thêm nhân viên chính thức qua cú pháp /them_nv_chinhthuc', async () => {
+    // 18.1 Gọi lệnh không có tham số -> trả về bảng hướng dẫn cú pháp chi tiết
+    const rHelp = await tg.handleTelegramUpdate({
+      message: { chat: { id: 99991 }, from: { id: 99991 }, text: '/them_nv_chinhthuc' }
+    }, {
+      role: 'hr',
+      getHrSession: async () => adminSession
+    });
+    assert.equal(rHelp.length, 1);
+    assert.ok(rHelp[0].text.includes('CÚ PHÁP THÊM NHÂN VIÊN CHÍNH THỨC'));
+    assert.ok(rHelp[0].text.includes('/them_nv_chinhthuc') && rHelp[0].text.includes('Tên NV') && rHelp[0].text.includes('SĐT') && rHelp[0].text.includes('Chi Nhánh') && rHelp[0].text.includes('Ca làm việc') && rHelp[0].text.includes('ngày bắt đầu') && rHelp[0].text.includes('Điểm TEST'));
+    assert.ok(rHelp[0].text.includes('auto') || rHelp[0].text.includes('bot'));
+    assert.ok(rHelp[0].text.includes('NHAN_VIEN_CHINH_THUC'));
+
+    // 18.2 Gọi lệnh từ tài khoản không phải Admin/HR (ví dụ QL) -> Từ chối truy cập
+    const rDeny = await tg.handleTelegramUpdate({
+      message: { chat: { id: 99993 }, from: { id: 99993 }, text: '/them_nv_chinhthuc Nguyễn Văn A 0905123456 CN1 Ca Sáng 20/09/2026 auto 9' }
+    }, {
+      role: 'hr',
+      getHrSession: async () => qlSession
+    });
+    assert.equal(rDeny.length, 1);
+    assert.ok(rDeny[0].text.includes('TỪ CHỐI TRUY CẬP'));
+    assert.ok(rDeny[0].text.includes('Admin') && rDeny[0].text.includes('HR'));
+
+    // 18.3 Thêm nhân viên chính thức với Mã NV BOT tự động tạo (auto)
+    let passedArgs = null;
+    const rCreateAuto = await tg.handleTelegramUpdate({
+      message: { chat: { id: 99991 }, from: { id: 99991 }, text: '/them_nv_chinhthuc Nguyễn Văn A 0905123456 CN1 Ca Sáng 20/09/2026 auto 9' }
+    }, {
+      role: 'hr',
+      getHrSession: async () => adminSession,
+      hrCreateOfficialEmployee: async (session, rawArgs) => {
+        passedArgs = rawArgs;
+        return {
+          ok: true,
+          employee: {
+            employeeId: 'CN130_UBM20092026_NV4521',
+            name: 'Nguyễn Văn A',
+            phone: '0905123456',
+            branchId: 'CN1',
+            shift: 'CA_SANG',
+            startDate: '2026-09-20',
+            type: 'OFFICIAL',
+            status: 'OFFICIAL',
+            testScore: 9,
+            testResult: 'DAT'
+          },
+          key: { key: 'KEY-TEST9999' },
+          text: `🎉 <b>ĐÃ THÊM NHÂN VIÊN CHÍNH THỨC THÀNH CÔNG!</b>\n\n`
+            + `👤 <b>Họ và tên:</b> <b>Nguyễn Văn A</b>\n`
+            + `📞 <b>Số điện thoại:</b> <code>0905123456</code>\n`
+            + `🆔 <b>Mã nhân viên (BOT):</b> <code>CN130_UBM20092026_NV4521</code>\n`
+            + `🏪 <b>Chi nhánh:</b> <b>CN1 - 130 Vạn kiếp</b> (<code>CN1</code>)\n`
+            + `⏰ <b>Ca làm việc:</b> <b>CA_SANG</b>\n`
+            + `📅 <b>Ngày chính thức:</b> <b>20/09/2026</b>\n`
+            + `📝 <b>Điểm thi TEST:</b> <b>9 / 10</b> (ĐẠT CHUẨN (>= 8.0))\n`
+            + `🔑 <b>KEY kích hoạt Mini App:</b> <code>KEY-TEST9999</code>\n\n`
+            + `📊 <i>Đã lưu vào cơ sở dữ liệu hệ thống và tự động đẩy lên Google Sheet 17iXM (Tab: <b>NHAN_VIEN_CHINH_THUC</b>)!</i>`
+        };
+      }
+    });
+
+    assert.equal(rCreateAuto.length, 1);
+    assert.ok(passedArgs.includes('Nguyễn Văn A 0905123456 CN1 Ca Sáng 20/09/2026 auto 9'));
+    assert.ok(rCreateAuto[0].text.includes('ĐÃ THÊM NHÂN VIÊN CHÍNH THỨC THÀNH CÔNG'));
+    assert.ok(rCreateAuto[0].text.includes('CN130_UBM20092026_NV4521'));
+    assert.ok(rCreateAuto[0].text.includes('KEY-TEST9999'));
+    assert.ok(rCreateAuto[0].text.includes('NHAN_VIEN_CHINH_THUC'));
+
+    // 18.4 Thêm nhân viên với dấu phẩy và mã NV tùy chọn (NV1288)
+    let passedCustomArgs = null;
+    const rCreateCustom = await tg.handleTelegramUpdate({
+      message: { chat: { id: 99992 }, from: { id: 99992 }, text: '/them_nv_chinhthuc: Trần Thị B, 0905999888, CN2, Ca Chiều, 21/09/2026, NV1288, 8.5' }
+    }, {
+      role: 'hr',
+      getHrSession: async () => hrSession,
+      hrCreateOfficialEmployee: async (session, rawArgs) => {
+        passedCustomArgs = rawArgs;
+        return {
+          ok: true,
+          text: `🎉 ĐÃ THÊM NHÂN VIÊN CHÍNH THỨC THÀNH CÔNG! Mã: NV1288, Điểm: 8.5`
+        };
+      }
+    });
+    assert.equal(rCreateCustom.length, 1);
+    assert.ok(passedCustomArgs.includes('Trần Thị B, 0905999888, CN2, Ca Chiều, 21/09/2026, NV1288, 8.5'));
+    assert.ok(rCreateCustom[0].text.includes('NV1288'));
+
+    // 18.5 Kiểm tra getHrRoleMenuText có chứa cú pháp /them_nv_chinhthuc
+    const adminMenuText = tg.getHrRoleMenuText(adminSession);
+    const hrMenuText = tg.getHrRoleMenuText(hrSession);
+    assert.ok(adminMenuText.includes('/them_nv_chinhthuc'));
+    assert.ok(hrMenuText.includes('/them_nv_chinhthuc'));
+
+    // 18.6 Kiểm tra getHrRoleKeyboard có nút '➕ Thêm NV'
+    const adminKb = tg.getHrRoleKeyboard('ADMIN');
+    const hrKb = tg.getHrRoleKeyboard('HR');
+    const flatAdminBtns = adminKb.reply_markup.inline_keyboard.flat();
+    const flatHrBtns = hrKb.reply_markup.inline_keyboard.flat();
+    assert.ok(flatAdminBtns.some(b => b.text === '➕ Thêm NV' && b.callback_data === '/them_nv_chinhthuc'));
+    assert.ok(flatHrBtns.some(b => b.text === '➕ Thêm NV' && b.callback_data === '/them_nv_chinhthuc'));
+  });
 });
+
 
