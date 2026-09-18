@@ -154,6 +154,7 @@ async function setTelegramCommands(botToken, role = 'employee') {
       { command: 'luong_nv', description: '💰 Lương 1 NV: /luong_nv <mã>' },
       { command: 'ds_cn', description: '👥 Danh sách CN: /ds_cn <CN> [ca]' },
       { command: 'don_dep_trung', description: '🧹 Dọn tin trùng: /don_dep_trung [mã]' },
+      { command: 'kiemtra_xoa', description: '🧪 Kiểm tra quyền xoá tin của Bot' },
       { command: 'duyet_phieuluong', description: '💳 Duyệt & gửi phiếu lương tháng cho NV' },
       { command: 'baocao', description: '📊 Báo cáo nhân sự hôm nay' },
       { command: 'broadcast', description: '📢 Phát thông báo' },
@@ -192,6 +193,7 @@ const HELP_TEXTS = {
     '/luong_nv <code>mã</code> — Lương tạm tính 1 NV',
     '/ds_cn <code>CN [ca]</code> — Danh sách NV theo CN/ca',
     '/don_dep_trung <code>[mã]</code> — Xoá tin trùng trên chat',
+    '/kiemtra_xoa — Kiểm tra Bot có quyền thu hồi tin nhắn không (Admin)',
     '/broadcast <code>nội dung</code> — Gửi Ed Mini App NV (quản lý Bot NV)',
     '/help — Hướng dẫn này',
   ].join('\n'),
@@ -391,6 +393,7 @@ function getHrRoleMenuText(user) {
       + `• <code>/luong_nv &lt;mã&gt;</code> — Lương tạm tính 1 NV\n`
       + `• <code>/ds_cn &lt;CN&gt; [ca]</code> — Danh sách NV theo CN/ca\n`
       + `• <code>/don_dep_trung [mã_NV]</code> — Xoá tin trùng trên chat, giữ bản mới nhất\n`
+      + `• <code>/kiemtra_xoa</code> — Kiểm tra quyền thu hồi tin nhắn của Bot (Admin)\n`
       + `• <code>/sua_thongtin_nhanvien: [mã] [ca_cũ] sang [ca_mới], [CN_cũ] sang [CN_mới]</code> — Sửa thông tin NV & đồng bộ Google Sheet\n`
       + `• <code>/xoa_nhanvien &lt;Mã_NV&gt;</code> — Xoá vĩnh viễn nhân viên trên Google Sheet 17iXM & Hệ thống\n`
       + `• <code>/xoa_off &lt;Mã_NV&gt;</code> — Xoá lịch OFF 2 ngày/tuần, dọn thông báo trùng & nhắc NV đăng ký lại\n`
@@ -773,6 +776,15 @@ async function handleTelegramUpdate(update, ctx) {
           actions.push({ chatId, text: r.text });
         } else {
           actions.push({ chatId, text: '👥 Chức năng danh sách CN tạm thời không khả dụng.' });
+        }
+      } else if (text.startsWith('/kiemtra_xoa')) {
+        if (String(hrSession.role || '').toUpperCase() !== 'ADMIN') {
+          actions.push({ chatId, text: '⛔ Lệnh <code>/kiemtra_xoa</code> chỉ dành cho 👑 <b>Admin</b>.' });
+        } else if (ctx?.hrTestDelete) {
+          const r = await ctx.hrTestDelete(hrSession, chatId);
+          actions.push({ chatId, text: r.text });
+        } else {
+          actions.push({ chatId, text: '🧪 Chức năng kiểm tra quyền xoá tạm thời không khả dụng.' });
         }
       } else if (text.startsWith('/don_dep_trung')) {
         const code = text.replace(/^\/don_dep_trung:?/, '').trim();

@@ -12482,10 +12482,16 @@ async function notifyHRMaster(kind, text, probe, extra = {}) {
             if (lastMsg.messageId) oldIds.push(lastMsg.messageId);
             if (Array.isArray(lastMsg.messageIds)) oldIds.push(...lastMsg.messageIds);
           }
+          const aliveIds = [];
           for (const mid of [...new Set(oldIds)].filter(Boolean)) {
-            try {
-              await tg.deleteTelegramMessage(cfg.botToken, c.chatId, mid);
-            } catch (err) {}
+            const dr = await deleteTrackedHrMessage(c.chatId, mid, `${kind}/${empId}`);
+            if (!dr.prune) aliveIds.push(mid);
+          }
+          // Giữ lại id xoá thất bại (chưa prune) để lần sau thử lại cùng bản mới nhất
+          if (aliveIds.length) {
+            db.lastAdminNotifMessages[chatMsgKey] = { messageId: aliveIds[aliveIds.length - 1], ids: aliveIds.slice(-5), sentAt: (lastMsg && lastMsg.sentAt) || getVietnamISOString() };
+          } else if (oldIds.length) {
+            delete db.lastAdminNotifMessages[chatMsgKey];
           }
           if (oldIds.length) needSave = true;
         }
@@ -14178,8 +14184,8 @@ async function hrCleanChatDuplicates(session, empQuery) {
     const emp = findEmployeeByShortOrFullId(q);
     if (!emp) return { text: `⚠️ Không tìm thấy nhân viên với mã: <code>${q}</code>` };
     const empId = emp.employeeId;
-    const cfg = getTelegramCfg('hr');
     if (!db.lastAdminNotifMessages) db.lastAdminNotifMessages = {};
+    let deleteFails = 0;
     for (const key of Object.keys(db.lastAdminNotifMessages)) {
       if (!key.endsWith('_' + empId)) continue;
       const parts = key.split('_');
@@ -14194,23 +14200,21 @@ async function hrCleanChatDuplicates(session, empQuery) {
       if (uniq.length <= 1) { keptMsgs++; continue; }
       const keepId = uniq[uniq.length - 1];
       for (const mid of uniq.slice(0, -1)) {
-        try {
-          if (!OUTBOUND_SYNC_DISABLED && cfg.botToken) {
-            await tg.deleteTelegramMessage(cfg.botToken, chatId, mid);
-          }
-          deletedMsgs++;
-        } catch (e) {}
+        const dr = await deleteTrackedHrMessage(chatId, mid, `dondep/${empId}`);
+        if (dr.ok) deletedMsgs++;
+        else deleteFails++;
       }
       db.lastAdminNotifMessages[key] = { messageId: keepId, ids: [keepId], sentAt: getVietnamISOString() };
       keptMsgs++;
     }
     try { saveDB(); } catch (e) {}
-    try { audit(session.username, 'CLEAN_CHAT_DUPLICATES', 'TELEGRAM', empId, { deletedMsgs, queueCleaned }, 'telegram_bot'); } catch (e) {}
+    try { audit(session.username, 'CLEAN_CHAT_DUPLICATES', 'TELEGRAM', empId, { deletedMsgs, deleteFails, queueCleaned }, 'telegram_bot'); } catch (e) {}
     return {
       text: `🧹 <b>DỌN TIN TRÙNG TRÊN CHAT HR</b>\n\n`
         + `👤 Nhân viên: <b>${emp.name}</b> (<code>${empId}</code>)\n`
         + `• Đã xoá <b>${deletedMsgs}</b> bản cũ trùng trên chat (giữ lại bản mới nhất mỗi loại tin)\n`
         + `• Đã lọc <b>${queueCleaned}</b> thông báo trùng trong hàng đợi\n`
+        + (deleteFails ? `• ⚠️ <b>${deleteFails}</b> tin xoá thất bại (xem log Admin → nhật ký, hoặc gõ <code>/kiemtra_xoa</code> để kiểm tra quyền xoá của Bot)\n` : ``)
         + `📌 <i>Từ nay BOT tự động xoá bản cũ khi có tin mới cùng NV (chế độ Xoá bản cũ, giữ bản mới).</i>`
     };
   }
@@ -14221,6 +14225,54 @@ async function hrCleanChatDuplicates(session, empQuery) {
       + `• Muốn xoá tin cũ của 1 NV cụ thể, gõ: <code>/don_dep_trung &lt;mã_NV&gt;</code> (VD: <code>/don_dep_trung NV8365</code>)\n`
       + `📌 <i>Từ nay BOT tự động xoá bản cũ khi có tin mới cùng NV.</i>`
   };
+}
+
+// Admin tự kiểm tra Bot có quyền thu hồi tin nhắn trên chính chat này không:
+// gửi 1 tin probe rồi xoá ngay, báo kết quả + lý do Telegram trả về.
+async function hrTestDeletePermission(session, chatId) {
+  if (!session) return { text: '⛔ Bạn chưa đăng nhập tài khoản Quản trị.' };
+  if (String(session.role || '').toUpperCase() !== 'ADMIN') {
+    return { text: '⛔ Lệnh <code>/kiemtra_xoa</code> chỉ dành cho 👑 <b>Admin</b>.' };
+  }
+  const cfg = getTelegramCfg('hr');
+  if (!cfg.botToken) return { text: '⚠️ Bot HR chưa cấu hình token nên không thể kiểm tra.' };
+  if (OUTBOUND_SYNC_DISABLED) return { text: '🧪 Chế độ test/CI: bỏ qua gọi mạng Telegram (không gửi tin probe).' };
+  const probe = await tg.sendTelegramMessage(cfg.botToken, chatId, '🤖 <i>Đang kiểm tra quyền thu hồi tin nhắn của Bot... (tin này sẽ tự xoá sau 2 giây)</i>');
+  if (!probe.ok || !probe.result?.message_id) {
+    return { text: `❌ <b>Bot KHÔNG gửi được tin nhắn tới chat này:</b> ${probe.error || 'lỗi không rõ'}\n📌 Kiểm tra Bot đã được thêm vào chat / chưa bị chặn.` };
+  }
+  const mid = probe.result.message_id;
+  const del = await tg.deleteTelegramMessage(cfg.botToken, chatId, mid);
+  try { audit(session.username, 'TEST_DELETE_PERMISSION', 'TELEGRAM', String(chatId), { messageId: mid, ok: del.ok, error: del.error || null }, 'telegram_bot'); } catch (e) {}
+  if (del.ok) {
+    return { text: `✅ <b>Bot CÓ quyền thu hồi tin nhắn trên chat này.</b>\n(Tin kiểm tra #${mid} đã gửi và xoá thành công.)\n📌 Từ nay tin trùng sẽ được tự động xoá khi có tin mới cùng NV.` };
+  }
+  return { text: `❌ <b>Bot KHÔNG thu hồi được tin nhắn:</b> ${del.error || 'lỗi không rõ'}\n\n📌 <b>Cách sửa:</b>\n`
+    + `• Nếu đây là <b>nhóm/chat chung</b>: đưa Bot lên <b>Quản trị viên nhóm</b> và bật quyền <b>“Xoá tin nhắn”</b>.\n`
+    + `• Tin quá <b>48 giờ</b> Telegram không cho xoá — chỉ tin mới mới tự xoá được.\n`
+    + `• Chat riêng 1-1 với Bot luôn xoá được.` };
+}
+
+// Xoá 1 tin nhắn HR đã lưu: ghi log kết quả, báo có nên tỉa id khỏi kho lưu hay không.
+// (Telegram không cho bot liệt kê lịch sử chat nên chỉ xoá được id đã lưu;
+// id báo "not found" nghĩa là tin đã mất — tỉa luôn để lần sau khỏi thử lại.)
+async function deleteTrackedHrMessage(chatId, messageId, label) {
+  const cfg = getTelegramCfg('hr');
+  try {
+    if (OUTBOUND_SYNC_DISABLED || !cfg.botToken) return { ok: false, skipped: true, prune: false };
+    const r = await tg.deleteTelegramMessage(cfg.botToken, chatId, messageId);
+    if (r.ok) {
+      logTelegram('OUT', chatId, `DELETE ${messageId} ${label || ''}`.trim(), 'DELETE_OK');
+      return { ok: true, prune: true };
+    }
+    const err = String(r.error || 'unknown');
+    logTelegram('OUT', chatId, `DELETE ${messageId} ${label || ''}`.trim(), 'DELETE_FAIL: ' + err.slice(0, 160));
+    const gone = /not found|message to delete|message_id_invalid|bad request/i.test(err);
+    return { ok: false, error: err, prune: gone };
+  } catch (e) {
+    logTelegram('OUT', chatId, `DELETE ${messageId} ${label || ''}`.trim(), 'DELETE_FAIL: ' + String(e.message || e).slice(0, 160));
+    return { ok: false, error: String(e.message || e), prune: false };
+  }
 }
 
 // Bản đồ sheet -> loại tin HR trên chat (key `chatId_kind_empId` trong lastAdminNotifMessages).
@@ -14239,7 +14291,6 @@ async function deleteHrChatMessagesByKinds(kinds) {
   try {
     const want = [...new Set((Array.isArray(kinds) ? kinds : []).map(k => String(k).toLowerCase()))].filter(Boolean);
     if (!want.length) return out;
-    const cfg = getTelegramCfg('hr');
     if (!db.lastAdminNotifMessages) db.lastAdminNotifMessages = {};
     for (const key of Object.keys(db.lastAdminNotifMessages)) {
       const matched = want.find(k => key.includes('_' + k + '_'));
@@ -14253,12 +14304,8 @@ async function deleteHrChatMessagesByKinds(kinds) {
         if (entry.messageId) ids.push(entry.messageId);
       }
       for (const mid of [...new Set(ids)].filter(Boolean)) {
-        try {
-          if (!OUTBOUND_SYNC_DISABLED && cfg.botToken) {
-            await tg.deleteTelegramMessage(cfg.botToken, chatId, mid);
-          }
-          out.deletedMsgs++;
-        } catch (e) {}
+        const dr = await deleteTrackedHrMessage(chatId, mid, `reset/${matched}`);
+        if (dr.ok) out.deletedMsgs++;
       }
       delete db.lastAdminNotifMessages[key];
       out.clearedEntries++;
@@ -14839,6 +14886,7 @@ async function processTelegramUpdate(update, role){
     hrGetSalaryByEmployee: async (session, empQuery, monthArg) => hrGetSalaryByEmployee(session, empQuery, monthArg),
     hrGetListByBranch: async (session, branchArg, shiftArg) => hrGetListByBranch(session, branchArg, shiftArg),
     hrCleanChatDuplicates: async (session, empQuery) => hrCleanChatDuplicates(session, empQuery),
+    hrTestDelete: async (session, chatId) => hrTestDeletePermission(session, chatId),
     hrApproveAndSendPayslips: async (session, branchArg) => {
       return hrApproveAndSendPayslips(session, branchArg);
     },
