@@ -9094,61 +9094,10 @@ app.post('/api/off-requests', (req,res)=>{
       addSyncQueue('SCHEDULE', 'UPDATE', sched, employeeId, 'WEB_EMPLOYEE');
     });
   } else {
-    // Với Nhân viên Chính Thức: AI tự động cập nhật lịch tuần sau (T2→CN)
-    const nextWeekMonday = getMonday(new Date(getVietnamNow().getTime() + 7*24*60*60*1000));
-    const weekStr = toVietnamDateStr(nextWeekMonday);
-    let sched = db.schedules.find(s => s.employeeId === employeeId && s.weekStart === weekStr);
-    if(!sched){
-      const days = [];
-      for(let i=0; i<7; i++){
-        const d = new Date(nextWeekMonday);
-        d.setDate(nextWeekMonday.getDate() + i);
-        const ds = toVietnamDateStr(d);
-        const isOff = dates.includes(ds);
-        days.push({
-          date: ds,
-          dayName: ['T2','T3','T4','T5','T6','T7','CN'][i],
-          shift: isOff ? 'OFF' : emp.shift,
-          status: isOff ? 'OFF' : 'WORKING',
-          substituteFor: null
-        });
-      }
-      sched = { id: uuidv4(), employeeId, weekStart: weekStr, days, version: 1, updated_at: getVietnamISOString(), approvalStatus: 'APPROVED' };
-      db.schedules.push(sched);
-    } else {
-      sched.days.forEach(d => {
-        if(dates.includes(d.date)) {
-          d.status = 'OFF';
-          d.shift = 'OFF';
-        } else if(d.status==='OFF' && !dates.includes(d.date)) {
-          d.status = 'WORKING';
-          d.shift = emp.shift;
-        }
-      });
-      for(let i=0; i<7; i++){
-        const d = new Date(nextWeekMonday);
-        d.setDate(nextWeekMonday.getDate() + i);
-        const ds = toVietnamDateStr(d);
-        const dayRec = sched.days.find(x => x.date === ds);
-        if(dayRec){
-          dayRec.status = dates.includes(ds) ? 'OFF' : 'WORKING';
-          dayRec.shift = dates.includes(ds) ? 'OFF' : emp.shift;
-        }
-      }
-      sched.version = (sched.version || 1) + 1;
-      sched.updated_at = getVietnamISOString();
-      sched.approvalStatus = 'APPROVED';
-    }
-
-    // AI cân lịch chống trùng ca theo đúng 3 điều kiện:
-    // 1. Cùng CN + Cùng Ca: không trùng ca làm việc trong 1 ngày (giữ tối đa 1 NV WORKING)
-    // 2. Cùng CN + Khác Ca: ĐƯỢC trùng ngày làm việc
-    // 3. Khác CN: ĐƯỢC trùng ngày làm việc
-    // Test guard: NV test khong can lich voi NV that (giu 2 OFF / 5 WORKING chuan cho test)
-    const _isTestActor = emp.isTest || isTestRecord(emp);
-    const coord = _isTestActor ? null : coordinateBranchShifts(weekStr, employeeId);
-    if(coord && coord.resolved) coordResult = coord;
-    addSyncQueue('SCHEDULE', 'UPDATE', sched, employeeId, 'WEB_EMPLOYEE');
+    // NV Chính thức: RÀNG BUỘC AI SAU 15:00 T7 — trong khung đăng ký chỉ lưu phiếu OFF,
+    // KHÔNG dựng lịch tuần sau ngay. AI batch xếp lịch cho TẤT CẢ NV đã đăng ký sau khi
+    // cổng đóng (AUTO_T7_15:00 -> generateNextWeekDraft, draft PENDING_APPROVAL),
+    // HR bấm tay /generate-next-week-draft khi cần chạy lại, rồi duyệt ở /approve-next-week.
   }
 
   audit(employeeId, 'OFF_WEEKLY_AI_AUTO', 'OFF_REQUEST', null, newReq, req.ip);
@@ -9156,7 +9105,6 @@ app.post('/api/off-requests', (req,res)=>{
   saveDB();
 
   io.emit('offRequests:update', db.offRequests);
-  io.emit('schedules:update', db.schedules);
 
   notifyAdminAndHR({
     action: isTraining ? 'register_off_training' : 'register_off_official',
@@ -9164,7 +9112,9 @@ app.post('/api/off-requests', (req,res)=>{
     employeeName: emp.name,
     branchId: emp.branchId,
     title: isTraining ? `NV Training ${emp.name} đăng ký OFF` : `NV Chính thức ${emp.name} đăng ký OFF`,
-    message: `${emp.name} (${employeeId}) vừa đăng ký ${dates.length} ngày OFF: ${dates.map(d=>fmtDMY(d)).join(', ')}. AI đã tự động duyệt và xếp lịch.`,
+    message: isTraining
+      ? `${emp.name} (${employeeId}) vừa đăng ký ${dates.length} ngày OFF: ${dates.map(d=>fmtDMY(d)).join(', ')}. AI đã tự động duyệt và xếp lịch.`
+      : `${emp.name} (${employeeId}) vừa đăng ký ${dates.length} ngày OFF: ${dates.map(d=>fmtDMY(d)).join(', ')}. Phiếu đã duyệt — AI sẽ xếp lịch sau 15:00 Thứ 7.`,
     type: 'info',
     data: { requestId: reqId, dates }
   });
@@ -9180,14 +9130,14 @@ app.post('/api/off-requests', (req,res)=>{
     type: 'OFF_APPROVED', 
     content: isTraining
       ? `Đăng ký OFF ${dates.length} ngày đã được Auto Approve: ${dates.join(', ')}`
-      : `OFF tuần sau đã được Auto Approve: ${dates.join(', ')}${coordResult.resolved.length ? ` • AI cân lịch: ${coordResult.resolved.length} ca trùng đã chuyển OFF` : ''}`, 
+      : `Phiếu OFF tuần sau đã được Auto Approve: ${dates.join(', ')} — AI xếp lịch sau 15:00 Thứ 7`, 
     status: 'SENT', 
     error: '' 
   };
   db.zaloRecords.unshift(zr);
   io.emit('zalo:update', db.zaloRecords);
 
-  res.json({ ...newReq, coordinated: coordResult.resolved.length, coordSkipped: (coordResult.skippedMin12||[]).length });
+  res.json({ ...newReq, coordinated: 0, coordSkipped: 0, deferred: isOfficial ? true : undefined, message: isTraining ? undefined : 'Đã ghi nhận phiếu OFF. AI sẽ xếp lịch sau 15:00 Thứ 7.' });
 });
 // AI cân lịch chống trùng ca: cùng Chi nhánh + cùng Ngày + cùng Ca → giữ tối đa 1 NV WORKING.
 // Ưu tiên FCFS (ai được duyệt OFF trước giữ slot). Người bị chuyển sang OFF nhận TB + audit.
@@ -16040,6 +15990,11 @@ async function processTelegramUpdate(update, role){
       const dayNames = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
       const updatedWeeks = [];
 
+      // RÀNG BUỘC AI SAU 15:00 T7 (NV Chính thức): trong khung đăng ký chỉ lưu phiếu OFF,
+      // KHÔNG dựng lịch ngay. AI batch xếp cho tất cả NV sau cổng đóng (AUTO_T7_15:00).
+      // NV Training không bị khung giờ nên vẫn xếp lịch ngay như cũ.
+      const isTrainingEmp = (emp.type === 'TRAINING' || emp.status === 'TRAINING');
+      if (isTrainingEmp) {
       weekMap.forEach((offDatesInWeek, weekStr) => {
         const monParts = weekStr.split('-').map(Number);
         const monDate = new Date(monParts[0], monParts[1] - 1, monParts[2]);
@@ -16192,7 +16147,8 @@ async function processTelegramUpdate(update, role){
           }
         }
         updatedWeeks.push(weekStr);
-      });
+      }); // end weekMap.forEach (chỉ NV Training dựng lịch ngay)
+      } // end if (isTrainingEmp)
 
       // Tạo phiếu OFF
       if(!db.offRequests) db.offRequests = [];
@@ -16233,7 +16189,9 @@ async function processTelegramUpdate(update, role){
         employeeName: emp.name,
         branchId: emp.branchId,
         title: `NV ${emp.name} đăng ký OFF qua Telegram`,
-        message: `${emp.name} (${emp.employeeId}) vừa đăng ký OFF ngày ${dates.map(fmtDMY).join(', ')} qua Telegram Bot. Đã cập nhật lịch làm việc và đồng bộ Google Sheet.`,
+        message: isTrainingEmp
+          ? `${emp.name} (${emp.employeeId}) vừa đăng ký OFF ngày ${dates.map(fmtDMY).join(', ')} qua Telegram Bot. Đã cập nhật lịch làm việc và đồng bộ Google Sheet.`
+          : `${emp.name} (${emp.employeeId}) vừa đăng ký OFF ngày ${dates.map(fmtDMY).join(', ')} qua Telegram Bot. Phiếu đã ghi nhận — AI sẽ xếp lịch sau 15:00 Thứ 7.`,
         type: 'info',
         data: { employeeId: emp.employeeId, dates }
       });
@@ -16250,13 +16208,16 @@ async function processTelegramUpdate(update, role){
           + `⏰ Ca làm việc: <b>${emp.shift || 'Chưa gán'}</b>\n`
           + `📅 Ngày xin nghỉ OFF (2 ngày):\n${dates.map(d => `• <b>${fmtDMY(d)}</b> (Nghỉ)`).join('\n')}\n`
           + `⏱️ Thời gian gửi: <b>${getVietnamDateTimeStr()}</b> (Giờ VN)\n`
+          + (isTrainingEmp
+              ? `📌 Trạng thái: Đã cập nhật lịch làm việc & sẵn sàng đối soát`
+              : `📌 Trạng thái: Đã ghi nhận phiếu đăng ký — chờ AI xếp lịch sau 15:00 Thứ 7`);
         const offDedupeKey = `off_${emp.employeeId}_${dates.slice().sort().join('_')}`;
         await notifyHRMaster('off', hrAlert, emp, { dedupeKey: offDedupeKey, employeeId: emp.employeeId });
       } catch(e) {}
 
       const offFormatted = dates.map(d => `• <b>${fmtDMY(d)}</b> (Nghỉ OFF)`).join('\n');
       let colleagueNote = '';
-      if (sameShiftColleagues.length > 0) {
+      if (isTrainingEmp && sameShiftColleagues.length > 0) {
         const cNames = sameShiftColleagues.map(c => `<b>${c.name}</b> (<code>${c.employeeId}</code>)`).join(', ');
         colleagueNote = `\n\n🔄 <b>Tự động điều phối ca trực (Zero Collision):</b>\n`
           + `• Đã sắp xếp luân phiên với đồng nghiệp cùng ca (${cNames}) để <b>KHÔNG TRÙNG CA LÀM VIỆC TRONG 1 NGÀY</b>.\n`
@@ -16264,13 +16225,19 @@ async function processTelegramUpdate(update, role){
       }
 
       return {
-        text: `✅ <b>ĐÃ ĐĂNG KÝ LỊCH OFF THÀNH CÔNG</b>\n\n`
-          + `👤 Nhân viên: <b>${emp.name}</b> (<code>${emp.employeeId}</code>)\n`
-          + `🏪 Chi nhánh: <b>${emp.branchId || '—'}</b> • Ca: <b>${emp.shift || '—'}</b>\n\n`
-          + `🏖️ <b>Ngày nghỉ OFF:</b>\n${offFormatted}\n\n`
-          + `💼 <b>Các ngày còn lại trong tuần:</b> Đã cập nhật trạng thái làm việc tự động.`
-          + colleagueNote
-          + `\n\n📌 <b>Trạng thái:</b> Đã ghi nhận thành công, đang chờ HR duyệt và chốt lịch tuần!`
+        text: isTrainingEmp
+          ? `✅ <b>ĐÃ ĐĂNG KÝ LỊCH OFF THÀNH CÔNG</b>\n\n`
+            + `👤 Nhân viên: <b>${emp.name}</b> (<code>${emp.employeeId}</code>)\n`
+            + `🏪 Chi nhánh: <b>${emp.branchId || '—'}</b> • Ca: <b>${emp.shift || '—'}</b>\n\n`
+            + `🏖️ <b>Ngày nghỉ OFF:</b>\n${offFormatted}\n\n`
+            + `💼 <b>Các ngày còn lại trong tuần:</b> Đã cập nhật trạng thái làm việc tự động.`
+            + colleagueNote
+            + `\n\n📌 <b>Trạng thái:</b> Đã ghi nhận thành công, đang chờ HR duyệt và chốt lịch tuần!`
+          : `✅ <b>ĐÃ GHI NHẬN ĐĂNG KÝ OFF</b>\n\n`
+            + `👤 Nhân viên: <b>${emp.name}</b> (<code>${emp.employeeId}</code>)\n`
+            + `🏪 Chi nhánh: <b>${emp.branchId || '—'}</b> • Ca: <b>${emp.shift || '—'}</b>\n\n`
+            + `🏖️ <b>Ngày nghỉ OFF:</b>\n${offFormatted}\n\n`
+            + `🤖 <b>AI sẽ tự động xếp lịch cho tất cả NV sau 15:00 Thứ 7</b>, rồi HR duyệt và phát lịch tuần mới cho bạn!`
       };
     },
     employeeResetOff: async (telegramId) => {

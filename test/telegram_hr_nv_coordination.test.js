@@ -55,7 +55,7 @@ describe('Telegram Bot — Phối hợp 2 Bot (HR & NV), Phân quyền Role & Ma
       ctxAfter
     );
     assert.ok(actAfter[0].text.includes('ĐÃ HẾT HẠN KHUNG GIỜ ĐĂNG KÝ LỊCH OFF'));
-    assert.ok(actAfter[0].text.includes('CHỜ NHÂN SỰ CẬP NHẬT LỊCH'));
+    assert.ok(actAfter[0].text.includes('AI đang xếp lịch'));
     assert.ok(actAfter[0].text.includes('/sos'));
 
     // Trường hợp ĐANG MỞ (OPEN)
