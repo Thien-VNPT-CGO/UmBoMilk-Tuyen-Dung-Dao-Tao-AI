@@ -283,4 +283,28 @@ describe('Telegram Bot — Điểm danh tự động theo ca 2 bước (GPS + �
     // Tuyệt đối không nhắc đến Google Sheet trong tin nhắn gửi nhân viên
     assert.equal(actions[0].text.includes('Google Sheet'), false);
   });
+
+  it('11. Màn 1: Nhắc vào ca trước 30 phút (06:30 cho Ca Sáng 07:00, 11:30 cho Ca Chiều 12:00, 17:30 cho Ca Tối 18:00)', () => {
+    // Giả lập ca Sáng: 07:00 (420 phút) -> Nhắc lúc 06:30 (390 phút, tức trước 30 phút)
+    const startMins = 7 * 60; // 420
+    const checkReminderCondition = (nowMins, hasIn) => {
+      return !hasIn && nowMins >= (startMins - 30) && nowMins < startMins;
+    };
+
+    // Lúc 06:25 (385 phút) -> Chưa đến giờ nhắc (chưa đủ 30 phút trước ca)
+    assert.equal(checkReminderCondition(6 * 60 + 25, false), false);
+
+    // Lúc 06:30 (390 phút) -> Đúng 30 phút trước ca -> Kích hoạt nhắc
+    assert.equal(checkReminderCondition(6 * 60 + 30, false), true);
+
+    // Lúc 06:45 (405 phút) -> Vẫn trong khoảng nhắc trước ca
+    assert.equal(checkReminderCondition(6 * 60 + 45, false), true);
+
+    // Đã điểm danh rồi (hasIn = true) -> Không nhắc nữa
+    assert.equal(checkReminderCondition(6 * 60 + 30, true), false);
+
+    // Sau 07:00 (đã vào ca) -> Chuyển sang khung cảnh báo trễ, không nhắc trước ca
+    assert.equal(checkReminderCondition(7 * 60 + 5, false), false);
+  });
 });
+

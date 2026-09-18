@@ -12995,14 +12995,14 @@ async function checkAutoShiftAttendance() {
       const hasIn = !!(att && (att.checkIn || att.checkInAt));
       const hasOut = !!(att && (att.checkOut || att.checkOutAt));
 
-      // 1. Nhắc nhở trước ca 15 phút (gửi nút GPS)
-      if (!hasIn && nowMins >= (startMins - 15) && nowMins < startMins) {
-        const k = `${emp.employeeId}_${todayStr}_REMIND_15M`;
+      // 1. Nhắc nhở trước ca 30 phút (gửi nút GPS)
+      if (!hasIn && nowMins >= (startMins - 30) && nowMins < startMins) {
+        const k = `${emp.employeeId}_${todayStr}_REMIND_30M`;
         if (!shiftAlertTracking[k]) {
           shiftAlertTracking[k] = true;
-          const msg = `🔔 <b>NHẮC NHỞ VÀO CA LÀM VIỆC (CÒN 15 PHÚT)</b>\n\n`
-            + `Chào <b>${emp.name}</b>, ca làm <b>${shiftCfg.name} (${shiftCfg.start} – ${shiftCfg.end})</b> tại <b>${emp.branchId || 'cửa hàng'}</b> sắp bắt đầu!\n\n`
-            + `👉 Hãy có mặt tại quầy và nhấn nút <b>[📍 Gửi vị trí GPS hiện tại]</b> bên dưới để điểm danh đúng giờ nhé.`;
+          const msg = `🔔 <b>NHẮC NHỞ VÀO CA LÀM VIỆC (CÒN 30 PHÚT)</b>\n\n`
+            + `Chào <b>${emp.name}</b>, ca làm <b>${shiftCfg.name} (${shiftCfg.start} – ${shiftCfg.end})</b> tại <b>${emp.branchId || 'cửa hàng'}</b> sẽ bắt đầu lúc <b>${shiftCfg.start}</b>!\n\n`
+            + `👉 Hãy chuẩn bị có mặt tại quầy và nhấn nút <b>[📍 Gửi vị trí GPS hiện tại]</b> bên dưới để điểm danh đúng giờ nhé.`;
           tg.sendTelegramMessage(cfg.botToken, link.chatId, msg, tg.attendanceGpsKeyboard()).catch(() => {});
         }
       }
