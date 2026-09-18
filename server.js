@@ -14273,6 +14273,65 @@ async function hrCleanChatDuplicates(session, empQuery) {
   };
 }
 
+// Bản đồ sheet -> loại tin HR trên chat (key `chatId_kind_empId` trong lastAdminNotifMessages).
+// /reset_hethong <sheet> sẽ tự động xoá tin nhắn thuộc các loại tương ứng, giữ chat gọn.
+const RESET_SHEET_KIND_MAP = {
+  NHAN_VIEN_MOI: ['applicant'],
+  LICH_LAM_VIEC: ['off'],
+  PHIEU_OFF_HANG_TUAN: ['off'],
+  PHIEU_OFF_DOT_XUAT: ['emergency'],
+  RECORD_DIEM_DANH: ['checkin', 'checkout', 'violation', 'penalty'],
+  KET_QUA_TEST: ['quiz']
+};
+// Xoá tin nhắn HR đã lưu thuộc các loại kind cho trước. Trả về số liệu để báo cáo.
+async function deleteHrChatMessagesByKinds(kinds) {
+  const out = { deletedMsgs: 0, clearedEntries: 0, clearedQueue: 0, clearedKeys: 0 };
+  try {
+    const want = [...new Set((Array.isArray(kinds) ? kinds : []).map(k => String(k).toLowerCase()))].filter(Boolean);
+    if (!want.length) return out;
+    const cfg = getTelegramCfg('hr');
+    if (!db.lastAdminNotifMessages) db.lastAdminNotifMessages = {};
+    for (const key of Object.keys(db.lastAdminNotifMessages)) {
+      const matched = want.find(k => key.includes('_' + k + '_'));
+      if (!matched) continue;
+      const chatId = String(key).split('_')[0];
+      const entry = db.lastAdminNotifMessages[key];
+      const ids = [];
+      if (entry) {
+        if (Array.isArray(entry.ids)) ids.push(...entry.ids);
+        if (Array.isArray(entry.messageIds)) ids.push(...entry.messageIds);
+        if (entry.messageId) ids.push(entry.messageId);
+      }
+      for (const mid of [...new Set(ids)].filter(Boolean)) {
+        try {
+          if (!OUTBOUND_SYNC_DISABLED && cfg.botToken) {
+            await tg.deleteTelegramMessage(cfg.botToken, chatId, mid);
+          }
+          out.deletedMsgs++;
+        } catch (e) {}
+      }
+      delete db.lastAdminNotifMessages[key];
+      out.clearedEntries++;
+    }
+    // Dọn hàng đợi + khoá chống trùng thuộc các loại vừa reset để chu kỳ mới thông báo lại từ đầu
+    if (Array.isArray(db.adminNotificationQueue) && db.adminNotificationQueue.length) {
+      const before = db.adminNotificationQueue.length;
+      const wantSet = new Set(want);
+      db.adminNotificationQueue = db.adminNotificationQueue.filter(n => !wantSet.has(String(n.kind || '').toLowerCase()));
+      out.clearedQueue = before - db.adminNotificationQueue.length;
+    }
+    if (Array.isArray(db.sentAdminNotifKeys) && db.sentAdminNotifKeys.length) {
+      const before = db.sentAdminNotifKeys.length;
+      db.sentAdminNotifKeys = db.sentAdminNotifKeys.filter(k => {
+        const ks = String(k).toLowerCase();
+        return !want.some(kind => ks === kind || ks.startsWith(kind + '_') || ks.startsWith(kind + ':'));
+      });
+      out.clearedKeys = before - db.sentAdminNotifKeys.length;
+    }
+  } catch (e) {}
+  return out;
+}
+
 // BOT telegram tự động xoá các thông báo trùng và các lịch đăng ký OFF 2 ngày /tuần và gửi thông báo yêu cầu nhân viên đó đăng ký lại lịch OFF 2 ngày/tuần
 async function autoCleanDuplicatesAndResetOff(empQuery, reason = 'Hệ thống tự động làm mới lịch') {
   let emp = null;
@@ -14856,7 +14915,7 @@ async function processTelegramUpdate(update, role){
       const cleanName = String(sheetName || '').trim();
       if (!cleanName) {
         return {
-          text: '⚠️ <b>CÚ PHÁP RESET GOOGLE SHEET (ADMIN ONLY):</b>\n\n👉 <code>/reset_hethong: &lt;tên_sheet&gt;</code>\n<i>Ví dụ:</i> <code>/reset_hethong: LICH_LAM_VIEC</code>'
+          text: '⚠️ <b>CÚ PHÁP RESET GOOGLE SHEET (ADMIN ONLY):</b>\n\n👉 <code>/reset_hethong: &lt;tên_sheet&gt;</code>\n<i>Ví dụ:</i> <code>/reset_hethong: LICH_LAM_VIEC</code> • <code>/reset_hethong: PHIEU_OFF_HANG_TUAN</code>\n\n📌 <i>Lưu ý: Toàn bộ dữ liệu từ dòng A2 đến Z trên sheet mục tiêu sẽ bị xóa sạch, dòng tiêu đề Header hàng 1 được giữ nguyên.</i>\n🤖 <i>BOT tự động xoá tin nhắn tương ứng trên chat HR (OFF / chấm công / khẩn cấp theo từng sheet).</i>'
         };
       }
       const spreadsheetId = db.settings?.googleSheet?.spreadsheetId || '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w';
@@ -14884,6 +14943,10 @@ async function processTelegramUpdate(update, role){
           triggerRealtimeSheetSync('PHIEU_OFF_HANG_TUAN');
         }
 
+        // BOT tự động xoá tin nhắn OFF tương ứng trên chat HR (giữ chat gọn sau reset)
+        const delOff = await deleteHrChatMessagesByKinds(RESET_SHEET_KIND_MAP.LICH_LAM_VIEC);
+        try { saveDB(); } catch (e) {}
+
         // 1. BOT quản trị gửi thông báo đến BOT nhân viên yêu cầu đăng ký lại lịch OFF 2 ngày/tuần
         const resetNotice = `📢 <b>THÔNG BÁO TỪ QUẢN TRỊ VIÊN — LÀM MỚI LỊCH LÀM VIỆC & ĐĂNG KÝ LẠI LỊCH OFF</b>\n\n`
           + `Lịch làm việc tuần đã được Quản trị viên (Admin) làm mới để chuẩn bị sắp lịch mới.\n\n`
@@ -14896,7 +14959,7 @@ async function processTelegramUpdate(update, role){
         const checkResult = await checkAndPromptMissingOffRegistrations();
 
         try {
-          audit(session.username, 'RESET_GOOGLE_SHEET', 'GOOGLE_SHEET', null, { sheetName: cleanName, spreadsheetId, missingOff: checkResult.missingCount }, 'telegram_bot');
+          audit(session.username, 'RESET_GOOGLE_SHEET', 'GOOGLE_SHEET', null, { sheetName: cleanName, spreadsheetId, missingOff: checkResult.missingCount, deletedChatMsgs: delOff.deletedMsgs, clearedQueue: delOff.clearedQueue }, 'telegram_bot');
         } catch (e) {}
 
         return {
@@ -14909,16 +14972,42 @@ async function processTelegramUpdate(update, role){
             + `• Đã kiểm tra đối soát trên Google Sheet tab <code>PHIEU_OFF_HANG_TUAN</code>:\n`
             + `  ➔ Phát hiện <b>${checkResult.missingCount}</b> nhân viên chưa đăng ký.\n`
             + `  ➔ Đã tự động gửi thông báo nhắc nhở riêng tới các nhân viên đó!\n`
+            + `• 🤖 BOT đã tự động xoá <b>${delOff.deletedMsgs}</b> tin nhắn OFF tương ứng trên chat HR${delOff.clearedQueue ? ` (lọc thêm ${delOff.clearedQueue} tin chờ trùng)` : ''}.\n`
             + `📌 Dòng tiêu đề (Headers hàng 1) được bảo vệ nguyên vẹn 100%.`,
           checkResult
         };
       }
+      if (cleanName.toUpperCase() === 'PHIEU_OFF_HANG_TUAN') {
+        db.offRequests = [];
+        saveDB();
+        try { io.emit('offRequests:update', db.offRequests); } catch (e) {}
+        if (typeof triggerRealtimeSheetSync === 'function') {
+          triggerRealtimeSheetSync('PHIEU_OFF_HANG_TUAN');
+        }
+        const delOff = await deleteHrChatMessagesByKinds(RESET_SHEET_KIND_MAP.PHIEU_OFF_HANG_TUAN);
+        try { saveDB(); } catch (e) {}
+        try {
+          audit(session.username, 'RESET_GOOGLE_SHEET', 'GOOGLE_SHEET', null, { sheetName: cleanName, spreadsheetId, deletedChatMsgs: delOff.deletedMsgs, clearedQueue: delOff.clearedQueue }, 'telegram_bot');
+        } catch (e) {}
+        return {
+          text: `⚠️ <b>XÁC NHẬN DỌN DẸP PHIẾU OFF HÀNG TUẦN</b>\n`
+            + `Sheet mục tiêu: <code>${cleanName}</code>\n`
+            + `Quyền thực thi: 👑 <b>Quản trị viên tối cao (ADMIN)</b>\n\n`
+            + `✅ <b>KẾT QUẢ:</b>\n`
+            + `• Đã xóa sạch dữ liệu từ dòng A2 đến Z trên Google Sheet tab <code>PHIEU_OFF_HANG_TUAN</code> + phiếu OFF local.\n`
+            + `• 🤖 BOT đã tự động xoá <b>${delOff.deletedMsgs}</b> tin nhắn OFF tương ứng trên chat HR${delOff.clearedQueue ? ` (lọc thêm ${delOff.clearedQueue} tin chờ trùng)` : ''}.\n`
+            + `📌 Dòng tiêu đề (Headers hàng 1) được bảo vệ nguyên vẹn 100%.`
+        };
+      }
+      const resetKinds = RESET_SHEET_KIND_MAP[String(cleanName).toUpperCase()] || [];
+      const delGen = await deleteHrChatMessagesByKinds(resetKinds);
+      try { saveDB(); } catch (e) {}
       try {
-        audit(session.username, 'RESET_GOOGLE_SHEET', 'GOOGLE_SHEET', null, { sheetName: cleanName, spreadsheetId }, 'telegram_bot');
+        audit(session.username, 'RESET_GOOGLE_SHEET', 'GOOGLE_SHEET', null, { sheetName: cleanName, spreadsheetId, deletedChatMsgs: delGen.deletedMsgs, clearedQueue: delGen.clearedQueue }, 'telegram_bot');
       } catch (e) {}
 
       return {
-        text: `⚠️ <b>XÁC NHẬN DỌN DẸP DỮ LIỆU GOOGLE SHEET</b>\nSheet mục tiêu: <code>${cleanName}</code>\nQuyền thực thi: 👑 <b>Quản trị viên tối cao (ADMIN)</b>\n\n✅ <b>KẾT QUẢ:</b> Đã xóa sạch dữ liệu từ dòng A2 đến Z trên Google Sheet!\n📌 Dòng tiêu đề (Headers hàng 1) được bảo vệ nguyên vẹn 100%.`
+        text: `⚠️ <b>XÁC NHẬN DỌN DẸP DỮ LIỆU GOOGLE SHEET</b>\nSheet mục tiêu: <code>${cleanName}</code>\nQuyền thực thi: 👑 <b>Quản trị viên tối cao (ADMIN)</b>\n\n✅ <b>KẾT QUẢ:</b> Đã xóa sạch dữ liệu từ dòng A2 đến Z trên Google Sheet!${delGen.deletedMsgs ? `\n🤖 BOT đã tự động xoá <b>${delGen.deletedMsgs}</b> tin nhắn tương ứng trên chat HR.` : ''}\n📌 Dòng tiêu đề (Headers hàng 1) được bảo vệ nguyên vẹn 100%.`
       };
     },
     hrUpdateEmployeeInfo: async (session, rawArgs) => {

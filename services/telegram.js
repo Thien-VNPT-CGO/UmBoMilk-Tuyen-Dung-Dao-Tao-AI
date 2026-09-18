@@ -928,7 +928,7 @@ async function handleTelegramUpdate(update, ctx) {
           if (!sheetName) {
             actions.push({
               chatId,
-              text: '⚠️ <b>CÚ PHÁP RESET GOOGLE SHEET (ADMIN ONLY):</b>\n\n👉 <code>/reset_hethong: &lt;tên_sheet&gt;</code>\n<i>Ví dụ:</i> <code>/reset_hethong: LICH_LAM_VIEC</code>\n\n📌 <i>Lưu ý: Toàn bộ dữ liệu từ dòng A2 đến Z trên sheet mục tiêu sẽ bị xóa sạch, dòng tiêu đề Header hàng 1 được giữ nguyên.</i>'
+              text: '⚠️ <b>CÚ PHÁP RESET GOOGLE SHEET (ADMIN ONLY):</b>\n\n👉 <code>/reset_hethong: &lt;tên_sheet&gt;</code>\n<i>Ví dụ:</i> <code>/reset_hethong: LICH_LAM_VIEC</code> • <code>/reset_hethong: PHIEU_OFF_HANG_TUAN</code>\n\n📌 <i>Lưu ý: Toàn bộ dữ liệu từ dòng A2 đến Z trên sheet mục tiêu sẽ bị xóa sạch, dòng tiêu đề Header hàng 1 được giữ nguyên.</i>\n🤖 <i>BOT tự động xoá tin nhắn tương ứng trên chat HR: LICH_LAM_VIEC / PHIEU_OFF_HANG_TUAN → tin OFF • RECORD_DIEM_DANH → tin chấm công • PHIEU_OFF_DOT_XUAT → tin khẩn cấp.</i>'
             });
           } else if (ctx?.adminResetSheet) {
             const r = await ctx.adminResetSheet(hrSession, sheetName);
