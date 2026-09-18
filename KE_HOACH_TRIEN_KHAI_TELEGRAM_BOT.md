@@ -277,8 +277,8 @@ graph TD
 
 | Vai trò | Quyền hạn nghiệp vụ | Danh mục lệnh Telegram chuẩn |
 | :--- | :--- | :--- |
-| 👑 **Admin** | Toàn quyền hệ thống, thêm/sửa/xóa nhân viên, cấp/phân quyền, chạy test, reset dữ liệu Google Sheet, xóa lịch OFF | `/them_nv_chinhthuc`, `/tonghop_lich`, `/sap_lich_nv`, `/sua_thongtin_nhanvien`, `/xoa_nhanvien`, `/xoa_off`, `/duyet`, `/users`, `/capquyen`, `/phanquyen`, `/broadcast`, `/test`, `/delete_test`, `/doi_mat_khau`, `/hoso_nhanvien`, `/reset_hethong`, `/logout` |
-| 🛡️ **HR** | Quản lý thêm/sửa/xóa NV, lịch tuần NV, xóa lịch OFF, duyệt đổi ca, báo cáo, tra hồ sơ | `/them_nv_chinhthuc`, `/tonghop_lich`, `/sap_lich_nv`, `/sua_thongtin_nhanvien`, `/xoa_nhanvien`, `/xoa_off`, `/duyet`, `/baocao`, `/broadcast`, `/gui_de_thi`, `/doi_mat_khau`, `/hoso_nhanvien`, `/logout` |
+| 👑 **Admin** | Toàn quyền hệ thống, thêm/sửa/xóa nhân viên, chuyển chính thức, cấp/phân quyền, chạy test, reset dữ liệu Google Sheet, xóa lịch OFF | `/them_nv_chinhthuc`, `/capnhat_nv_chinhthuc`, `/tonghop_lich`, `/sap_lich_nv`, `/sua_thongtin_nhanvien`, `/xoa_nhanvien`, `/xoa_off`, `/duyet`, `/users`, `/capquyen`, `/phanquyen`, `/broadcast`, `/test`, `/delete_test`, `/doi_mat_khau`, `/hoso_nhanvien`, `/reset_hethong`, `/logout` |
+| 🛡️ **HR** | Quản lý thêm/sửa/xóa NV, chuyển chính thức, lịch tuần NV, xóa lịch OFF, duyệt đổi ca, báo cáo, tra hồ sơ (Full quyền tất cả CN) | `/them_nv_chinhthuc`, `/capnhat_nv_chinhthuc`, `/tonghop_lich`, `/sap_lich_nv`, `/sua_thongtin_nhanvien`, `/xoa_nhanvien`, `/xoa_off`, `/duyet`, `/baocao`, `/broadcast`, `/gui_de_thi`, `/doi_mat_khau`, `/hoso_nhanvien`, `/logout` |
 | 🏪 **QL** | Giới hạn chi nhánh phụ trách (`branchScope`), **DUYỆT & PHÁT PHIẾU LƯƠNG THÁNG** | `/diemdanh_cn`, `/lich_cn`, `/duyet_ca`, `/baohong_cn`, `/doi_mat_khau`, `/duyet_phieuluong`, `/hoso_nhanvien`, `/logout` |
 | 📢 **MKT** | Đăng tin tức, sự kiện, phát khuyến mãi tới nhân viên | `/broadcast_mkt`, `/sukien`, `/tintuc`, `/doi_mat_khau`, `/logout` |
 
@@ -319,6 +319,25 @@ graph TD
 
 ---
 
+### 5.4C. Chuyển nhân viên Training lên Chính thức (/capnhat_nv_chinhthuc - Đồng bộ 2 Tab Sheet)
+* **Mục đích**: Cho phép HR / Admin chuyển nhanh nhân viên từ Thử việc (Training) sang Chính thức trực tiếp qua chat Telegram Bot với giao diện nút bấm inline chọn nhanh.
+* **Cú pháp chuẩn**:
+  * Gõ `/capnhat_nv_chinhthuc` không tham số: BOT tự động quét và hiển thị danh sách toàn bộ các bạn nhân viên Training (tab: `NHAN_VIEN_TRAINING`) kèm nút bấm inline `[⭐ <Tên NV> (<Mã_NV> - <CN>)]`.
+  * Hoặc gõ trực tiếp kèm mã NV: `/capnhat_nv_chinhthuc <Mã_NV>` (Ví dụ: `/capnhat_nv_chinhthuc NV1288`).
+* **Cơ chế chuyển đổi tự động**:
+  1. Khi HR/Admin chọn một nhân viên:
+     - Chuyển `type: 'OFFICIAL'`, `status: 'OFFICIAL'`, ngày chính thức là ngày hiện tại (`today`).
+     - Tự động gán mức lương chính thức (`officialSalary` / `hourlyRate`).
+     - Tạo lịch làm việc tuần cho nhân viên chính thức trong `schedules`.
+  2. **Đồng bộ chuyển tab Google Sheet 17iXM**:
+     - Tự động xóa/loại bỏ bản ghi khỏi tab `NHAN_VIEN_TRAINING`.
+     - Tự động thêm/ghi nhận bản ghi mới vào tab `NHAN_VIEN_CHINH_THUC`.
+  3. **Giao tiếp Realtime hai chiều**:
+     - BOT Nhân viên gửi ngay tin nhắn chúc mừng Realtime tới Telegram cá nhân của nhân viên đó.
+     - Phát sự kiện WebSocket `employees:update`, `schedules:update` tức thì lên giao diện Web App.
+
+---
+
 ### 5.5. Sửa thông tin nhân viên (/sua_thongtin_nhanvien - Đồng bộ Google Sheet)
 * **Mục đích**: Cho phép HR / Admin điều chỉnh nhanh ca làm việc hoặc chuyển chi nhánh cho nhân viên trực tiếp trên chat Bot mà không cần thao tác thủ công.
 * **Cú pháp gửi yêu cầu**:
@@ -343,12 +362,11 @@ graph TD
 * **Cú pháp thực hiện**:
   * `/reset_hethong: <tên_sheet>` hoặc `/reset_hethong <tên_sheet>`
   * *Ví dụ:* `/reset_hethong LICH_LAM_VIEC`
-  * *Ví dụ:* `/reset_hethong RECORD_DIEM_DANH`
-* **Hành vi xử lý**:
-  1. Kết nối với Google Sheet 17iXM qua Google Sheets API.
-  2. Xóa sạch toàn bộ các dòng dữ liệu từ dòng 2 trở đi (`!A2:Z`) của tab sheet chỉ định, **bảo toàn nguyên vẹn dòng tiêu đề (header row 1)**.
-  3. Tùy chọn làm sạch bản ghi tương ứng trong cơ sở dữ liệu để đồng bộ 100%.
-  4. Bot phản hồi thông báo xác nhận số dòng đã dọn dẹp sạch sẽ.
+* **Hành vi khi reset `LICH_LAM_VIEC`**:
+  1. Xóa sạch dữ liệu dòng A2:Z trên Google Sheet tab `LICH_LAM_VIEC` (giữ Header).
+  2. Xóa dữ liệu lịch làm việc và phiếu OFF trong cơ sở dữ liệu hệ thống.
+  3. **BOT Quản trị gửi thông báo đến BOT Nhân viên**: Phát tin nhắn tới toàn bộ nhân viên thông báo lịch làm việc đã reset và yêu cầu đăng ký lại lịch OFF 2 ngày/tuần.
+  4. **Kiểm tra đối soát Google Sheet**: BOT tự động kiểm tra trên Google Sheet tab `PHIEU_OFF_HANG_TUAN`. Bất kỳ nhân viên nào chưa có dữ liệu đăng ký OFF, BOT sẽ tự động gửi tin nhắn Telegram riêng yêu cầu đăng ký OFF ngay.
 
 ---
 
@@ -404,6 +422,21 @@ graph TD
 * **2. Lệnh tự phục vụ trên Bot Nhân viên (`@umbomilknvbot`)**:
   * **Cú pháp thực hiện**: `/dangky_lai_off` hoặc `/huy_off` (hoặc `/reset_off`).
   * **Hành vi**: Tự động dọn dẹp phiếu OFF cũ và thông báo trùng của chính nhân viên đó, sau đó hướng dẫn gửi lại 2 ngày nghỉ mới ngay lập tức.
+
+---
+
+### 5.6D. Giao tiếp Realtime hai chiều giữa BOT Quản trị và BOT Nhân viên (Bi-directional Cross-Bot Event Bus)
+> [!IMPORTANT]
+> **Nguyên tắc cốt lõi**:
+> Hệ thống duy trì kênh liên lạc hai chiều tức thời (Realtime) giữa BOT Quản trị (`@umbomilkhrbot`) và BOT Nhân viên (`@umbomilknvbot`), đảm bảo mọi hành động thay đổi dữ liệu đều được thông báo và đồng bộ thông suốt.
+
+* **1. Chiều đi (Nhân viên ➔ Quản trị)**:
+  * Khi nhân viên đăng ký bất kỳ dữ liệu nào (Đăng ký OFF `/off`, Yêu cầu đổi ca `/doica`, Điểm danh Check-in/out, Báo hỏng thiết bị, Mã khẩn cấp):
+  * BOT Nhân viên lưu dữ liệu vào hệ thống (DB + Google Sheet 17iXM), đồng thời gọi ngay `notifyHRMaster()` để bắn thông báo trực tiếp sang BOT Quản trị cho HR và Admin duyệt kịp thời.
+* **2. Chiều về (Quản trị ➔ Nhân viên)**:
+  * Khi Quản trị xóa hoặc thay đổi bất kỳ thông tin nào của nhân viên (Xóa vĩnh viễn nhân viên `/xoa_nhanvien`, Xóa lịch đăng ký OFF `/xoa_off`, Hủy/từ chối yêu cầu đổi ca, Reset hệ thống `/reset_hethong`):
+  * BOT Quản trị gọi ngay `notifyEmployeeActionDeleted()` để bắn tín hiệu Realtime ngược lại cho BOT Nhân viên.
+  * BOT Nhân viên tự động gửi tin nhắn thông báo trực tiếp tới Telegram của bạn nhân viên đó (kèm giải thích lý do hoặc yêu cầu đăng ký lại) và kích hoạt sự kiện WebSocket `employee:deletedAction` tức thì.
 
 ---
 

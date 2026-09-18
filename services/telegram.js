@@ -257,22 +257,25 @@ function hrMenuKeyboard(role, webAppUrl) {
       ],
       [
         { text: '➕ Thêm NV', callback_data: '/them_nv_chinhthuc' },
-        { text: '📋 Hồ sơ NV', callback_data: '/hoso_nhanvien' }
+        { text: '⭐ Lên chính thức', callback_data: '/capnhat_nv_chinhthuc' }
       ],
       [
-        { text: '✏️ Sửa NV', callback_data: '/sua_thongtin_nhanvien' },
-        { text: '🗑️ Xóa NV', callback_data: '/xoa_nhanvien' }
+        { text: '📋 Hồ sơ NV', callback_data: '/hoso_nhanvien' },
+        { text: '✏️ Sửa NV', callback_data: '/sua_thongtin_nhanvien' }
       ],
       [
-        { text: '🏖️ Xóa OFF', callback_data: '/xoa_off' },
-        { text: '👥 Danh sách User', callback_data: '/users' }
+        { text: '🗑️ Xóa NV', callback_data: '/xoa_nhanvien' },
+        { text: '🏖️ Xóa OFF', callback_data: '/xoa_off' }
       ],
       [
-        { text: '✅ Duyệt phiếu', callback_data: '/duyet' },
-        { text: '🗑️ Reset Sheet', callback_data: '/reset_hethong' }
+        { text: '👥 Danh sách User', callback_data: '/users' },
+        { text: '✅ Duyệt phiếu', callback_data: '/duyet' }
       ],
       [
-        { text: '🧪 Chạy Test', callback_data: '/test' },
+        { text: '🗑️ Reset Sheet', callback_data: '/reset_hethong' },
+        { text: '🧪 Chạy Test', callback_data: '/test' }
+      ],
+      [
         { text: '🚪 Đăng xuất', callback_data: '/logout' }
       ]
     ];
@@ -284,18 +287,21 @@ function hrMenuKeyboard(role, webAppUrl) {
       ],
       [
         { text: '➕ Thêm NV', callback_data: '/them_nv_chinhthuc' },
-        { text: '📋 Hồ sơ NV', callback_data: '/hoso_nhanvien' }
+        { text: '⭐ Lên chính thức', callback_data: '/capnhat_nv_chinhthuc' }
       ],
       [
-        { text: '✏️ Sửa NV', callback_data: '/sua_thongtin_nhanvien' },
-        { text: '🗑️ Xóa NV', callback_data: '/xoa_nhanvien' }
+        { text: '📋 Hồ sơ NV', callback_data: '/hoso_nhanvien' },
+        { text: '✏️ Sửa NV', callback_data: '/sua_thongtin_nhanvien' }
       ],
       [
-        { text: '🏖️ Xóa OFF', callback_data: '/xoa_off' },
-        { text: '✅ Duyệt phiếu', callback_data: '/duyet' }
+        { text: '🗑️ Xóa NV', callback_data: '/xoa_nhanvien' },
+        { text: '🏖️ Xóa OFF', callback_data: '/xoa_off' }
       ],
       [
-        { text: '📋 Báo cáo ngày', callback_data: '/baocao' },
+        { text: '✅ Duyệt phiếu', callback_data: '/duyet' },
+        { text: '📋 Báo cáo ngày', callback_data: '/baocao' }
+      ],
+      [
         { text: '🚪 Đăng xuất', callback_data: '/logout' }
       ]
     ];
@@ -343,6 +349,7 @@ function getHrRoleMenuText(user) {
       + `👤 Người dùng: <b>${name}</b> (Role: <code>ADMIN</code>)\n\n`
       + `👉 <b>Lệnh vận hành nhân sự & ca lịch:</b>\n`
       + `• <code>/them_nv_chinhthuc &lt;Tên NV&gt; &lt;SĐT&gt; &lt;Chi Nhánh&gt; &lt;Ca&gt; &lt;Ngày&gt; &lt;Mã NV/auto&gt; &lt;Điểm&gt;</code> — Thêm NV chính thức & đồng bộ 17iXM\n`
+      + `• <code>/capnhat_nv_chinhthuc [mã_NV]</code> — Chọn/chuyển NV Training lên Chính thức (đồng bộ Sheet)\n`
       + `• <code>/tonghop_lich [tuần]</code> — Ma trận lịch tuần 🟢/🔴 theo chi nhánh & ca\n`
       + `• <code>/sap_lich_nv [mã] [lịch]</code> — Xếp/chỉnh lịch NV (VD: <code>/sap_lich_nv NV1288 T2-ON, T5-OFF, CN-ON</code>)\n`
       + `• <code>/hoso_nhanvien [mã]</code> — Tra cứu chi tiết hồ sơ nhân viên\n`
@@ -366,6 +373,7 @@ function getHrRoleMenuText(user) {
     return `🛡️ <b>BẢNG CHỨC NĂNG NHÂN SỰ (HR) — ỤM BÒ MILK</b>\n`
       + `👤 Người dùng: <b>${name}</b> (Role: <code>HR</code>)\n\n`
       + `• <code>/them_nv_chinhthuc &lt;Tên NV&gt; &lt;SĐT&gt; &lt;Chi Nhánh&gt; &lt;Ca&gt; &lt;Ngày&gt; &lt;Mã NV/auto&gt; &lt;Điểm&gt;</code> — Thêm NV chính thức & đồng bộ 17iXM\n`
+      + `• <code>/capnhat_nv_chinhthuc [mã_NV]</code> — Chọn/chuyển NV Training lên Chính thức (đồng bộ Sheet)\n`
       + `• <code>/tonghop_lich [tuần]</code> — Ma trận lịch tuần 🟢/🔴 theo chi nhánh & ca\n`
       + `• <code>/sap_lich_nv [mã] [lịch]</code> — Xếp/chỉnh lịch làm việc cho nhân viên\n`
       + `• <code>/hoso_nhanvien [mã]</code> — Tra cứu chi tiết hồ sơ nhân viên\n`
@@ -480,6 +488,18 @@ async function handleTelegramUpdate(update, ctx) {
             text: comp.text,
             extra: comp.extra || {}
           });
+          return actions;
+        }
+      } else if (cbData.startsWith('promote_official:')) {
+        const empId = cbData.replace('promote_official:', '').trim();
+        const hrSession = ctx?.getHrSession ? await ctx.getHrSession(chatId) : null;
+        if (!hrSession) {
+          actions.push({ chatId, text: '⛔ Bạn chưa đăng nhập tài khoản Quản trị để thực hiện thao tác này.' });
+          return actions;
+        }
+        if (ctx?.hrPromoteToOfficial) {
+          const r = await ctx.hrPromoteToOfficial(hrSession, empId);
+          actions.push({ chatId, text: r.text });
           return actions;
         }
       }
@@ -677,6 +697,42 @@ async function handleTelegramUpdate(update, ctx) {
           actions.push({ chatId, text: r.text });
         } else {
           actions.push({ chatId, text: 'Chức năng thêm nhân viên chính thức tạm thời không khả dụng.' });
+        }
+      } else if (text.startsWith('/capnhat_nv_chinhthuc')) {
+        const rawArgs = text.replace(/^\/capnhat_nv_chinhthuc:?/, '').trim();
+        const roleStr = String(hrSession.role || '').toUpperCase();
+        if (roleStr !== 'ADMIN' && roleStr !== 'HR') {
+          actions.push({
+            chatId,
+            text: '⛔ <b>TỪ CHỐI TRUY CẬP:</b> Bạn không có quyền thực hiện thao tác này.\nLệnh chuyển nhân viên chính thức chỉ dành cho 👑 <b>Admin</b> hoặc 🛡️ <b>HR</b>.'
+          });
+        } else if (rawArgs) {
+          if (ctx?.hrPromoteToOfficial) {
+            const r = await ctx.hrPromoteToOfficial(hrSession, rawArgs);
+            actions.push({ chatId, text: r.text });
+          } else {
+            actions.push({ chatId, text: 'Chức năng chuyển nhân viên chính thức tạm thời không khả dụng.' });
+          }
+        } else {
+          if (ctx?.hrGetTrainingEmployees) {
+            const r = await ctx.hrGetTrainingEmployees(hrSession);
+            if (r.employees && r.employees.length > 0) {
+              const inlineKb = r.employees.slice(0, 10).map(e => ([{
+                text: `⭐ ${e.name} (${e.employeeId} - ${e.branchId || 'CN'})`,
+                callback_data: `promote_official:${e.employeeId}`
+              }]));
+              inlineKb.push([{ text: '🔙 Đóng', callback_data: '/menu' }]);
+              actions.push({
+                chatId,
+                text: r.text,
+                extra: { reply_markup: { inline_keyboard: inlineKb } }
+              });
+            } else {
+              actions.push({ chatId, text: r.text });
+            }
+          } else {
+            actions.push({ chatId, text: 'Chức năng lấy danh sách training tạm thời không khả dụng.' });
+          }
         }
       } else if (text.startsWith('/sua_thongtin_nhanvien')) {
         const rawArgs = text.replace(/^\/sua_thongtin_nhanvien:?/, '').trim();

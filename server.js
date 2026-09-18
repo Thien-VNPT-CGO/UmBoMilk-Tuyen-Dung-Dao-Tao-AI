@@ -13958,15 +13958,16 @@ async function handleHrApproveShiftSwap(swapId, isApproved, hrSession) {
   return { text: `✅ Đã phê duyệt và cập nhật lịch đổi ca thành công cho <b>${swap.fromEmployeeName}</b> và <b>${swap.toEmployeeName}</b>.` };
 }
 
-// Tự động dọn dẹp các thông báo trùng lặp trong hàng đợi adminNotificationQueue và notifications
+// Tự động dọn dẹp các thông báo trùng lặp và các thông báo đăng ký OFF của nhân viên
 function cleanDuplicateNotifications(targetEmployeeId = null) {
   let cleanedCount = 0;
   if (db.adminNotificationQueue && db.adminNotificationQueue.length > 0) {
     const seen = new Set();
     const before = db.adminNotificationQueue.length;
     db.adminNotificationQueue = db.adminNotificationQueue.filter(n => {
-      if (targetEmployeeId && (n.employeeId === targetEmployeeId || n.data?.employeeId === targetEmployeeId)) {
-        return false;
+      if (targetEmployeeId) {
+        const isMatchEmp = (n.employeeId === targetEmployeeId || n.data?.employeeId === targetEmployeeId || String(n.text || '').includes(targetEmployeeId) || String(n.title || '').includes(targetEmployeeId));
+        if (isMatchEmp) return false;
       }
       const k = n.dedupeKey || n.id || `${n.action || ''}_${n.employeeId || ''}_${n.title || ''}`;
       if (seen.has(k)) return false;
@@ -13978,7 +13979,10 @@ function cleanDuplicateNotifications(targetEmployeeId = null) {
 
   if (db.sentAdminNotifKeys && targetEmployeeId) {
     const before = db.sentAdminNotifKeys.length;
-    db.sentAdminNotifKeys = (db.sentAdminNotifKeys || []).filter(k => !String(k).includes(targetEmployeeId));
+    db.sentAdminNotifKeys = (db.sentAdminNotifKeys || []).filter(k => {
+      const kStr = String(k);
+      return !kStr.includes(targetEmployeeId) && !kStr.toLowerCase().includes(`off_${targetEmployeeId.toLowerCase()}`);
+    });
     cleanedCount += (before - db.sentAdminNotifKeys.length);
   }
 
@@ -13986,8 +13990,11 @@ function cleanDuplicateNotifications(targetEmployeeId = null) {
     const seenNotif = new Set();
     const before = db.notifications.length;
     db.notifications = db.notifications.filter(n => {
-      if (targetEmployeeId && (n.employeeId === targetEmployeeId || n.data?.employeeId === targetEmployeeId) && (n.title?.toLowerCase().includes('off') || n.message?.toLowerCase().includes('off'))) {
-        return false;
+      if (targetEmployeeId) {
+        const isMatchEmp = (n.employeeId === targetEmployeeId || n.data?.employeeId === targetEmployeeId || String(n.title || '').includes(targetEmployeeId) || String(n.message || '').includes(targetEmployeeId));
+        if (isMatchEmp && (n.title?.toLowerCase().includes('off') || n.message?.toLowerCase().includes('off') || String(n.action || '').toLowerCase().includes('off'))) {
+          return false;
+        }
       }
       const k = `${n.employeeId || ''}_${n.title || ''}_${n.message || ''}`;
       if (seenNotif.has(k)) return false;
@@ -14137,6 +14144,325 @@ async function autoCleanDuplicatesAndResetOff(empQuery, reason = 'Hệ thống t
   };
 }
 
+// Gửi thông báo Realtime hai chiều từ BOT Quản trị sang BOT Nhân viên khi Quản trị xóa/thay đổi thông tin của nhân viên
+async function notifyEmployeeActionDeleted(emp, deleteType, details = {}) {
+  try {
+    if (!emp) return;
+    const empId = emp.employeeId || emp.convertedEmployeeId || emp.id;
+    const empName = emp.name || 'Nhân viên';
+    const cfgNv = getTelegramCfg('employee');
+    const link = (db.telegramLinks || []).find(l => (l.employeeId === empId || l.employeeId === emp.id) && l.chatId);
+
+    let message = '';
+    if (deleteType === 'DELETE_EMPLOYEE') {
+      message = `⚠️ <b>THÔNG BÁO TỪ QUẢN TRỊ VIÊN — ỤM BÒ MILK</b>\n\n`
+        + `Chào bạn <b>${empName}</b> (<code>${empId}</code>),\n`
+        + `Hồ sơ tài khoản nhân sự của bạn đã được Quản trị viên/HR xóa khỏi hệ thống.\n`
+        + `📌 <i>Nếu cần hỗ trợ thêm thông tin, vui lòng liên hệ trực tiếp Quản lý hoặc Bộ phận Nhân sự (HR).</i>`;
+    } else if (deleteType === 'DELETE_OFF') {
+      message = `🔔 <b>THÔNG BÁO TỪ QUẢN TRỊ VIÊN — HỦY / LÀM MỚI LỊCH ĐĂNG KÝ OFF</b>\n\n`
+        + `Chào bạn <b>${empName}</b> (<code>${empId}</code>),\n`
+        + `Quản trị viên đã xóa/làm mới lịch đăng ký OFF của bạn để chuẩn bị sắp lịch mới.\n\n`
+        + `👉 <b>Vui lòng gửi lại 2 ngày bạn muốn nghỉ OFF trong tuần này:</b>\n`
+        + `<code>dd/mm/yyyy, dd/mm/yyyy</code> (Ví dụ: <code>20/09, 24/09</code>)`;
+    } else if (deleteType === 'REJECT_SWAP') {
+      message = `⚠️ <b>THÔNG BÁO TỪ QUẢN TRỊ VIÊN — YÊU CẦU ĐỔI CA</b>\n\n`
+        + `Chào bạn <b>${empName}</b>,\n`
+        + `Yêu cầu đổi ca làm việc của bạn đã bị từ chối/hủy bởi Quản trị viên.\n`
+        + `• Lý do: <i>${details.reason || 'Không phù hợp ca trực'}</i>`;
+    } else if (deleteType === 'RESET_SCHEDULE') {
+      message = `📢 <b>THÔNG BÁO TỪ QUẢN TRỊ VIÊN — LÀM MỚI LỊCH LÀM VIỆC</b>\n\n`
+        + `Chào bạn <b>${empName}</b>,\n`
+        + `Quản trị viên (Admin) vừa làm mới toàn bộ lịch làm việc tuần của hệ thống.\n\n`
+        + `👉 <b>Vui lòng gửi lại ngay 2 ngày bạn muốn nghỉ OFF (2 ngày/tuần):</b>\n`
+        + `<code>dd/mm/yyyy, dd/mm/yyyy</code> để hệ thống sắp xếp ca kịp thời cho bạn nhé!`;
+    } else {
+      message = `⚠️ <b>THÔNG BÁO TỪ QUẢN TRỊ VIÊN</b>\n\n`
+        + `Chào bạn <b>${empName}</b>,\n`
+        + `Quản trị viên đã cập nhật/xóa thông tin: <b>${details.title || deleteType}</b>.\n`
+        + `${details.message || ''}`;
+    }
+
+    if (link && link.chatId && cfgNv.botToken && !OUTBOUND_SYNC_DISABLED) {
+      await tg.sendTelegramMessage(cfgNv.botToken, link.chatId, message).catch(() => {});
+    }
+
+    // Phát socket realtime cho nhân viên
+    try {
+      io.emit('employee:deletedAction', {
+        employeeId: empId,
+        deleteType,
+        details,
+        message,
+        timestamp: getVietnamISOString()
+      });
+    } catch (e) {}
+
+    // Ghi nhận thông báo vào DB
+    if (!db.notifications) db.notifications = [];
+    db.notifications.unshift({
+      id: 'del_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+      employeeId: empId,
+      title: `Thông báo quản trị: ${deleteType}`,
+      message,
+      type: 'warning',
+      read: false,
+      createdAt: getVietnamISOString()
+    });
+    saveDB();
+  } catch (e) {
+    console.error('[NOTIFY_EMPLOYEE_ACTION_DELETED] Error:', e.message);
+  }
+}
+
+// Kiểm tra đối soát trên Google Sheet tab PHIEU_OFF_HANG_TUAN và nhắc nhở nhân viên chưa đăng ký OFF
+async function checkAndPromptMissingOffRegistrations() {
+  try {
+    const spreadsheetId = db.settings?.googleSheet?.spreadsheetId || '17iXM0zc1m17aX9AZrFMjOkPRMy2_CwWfjTRZSUPQF2w';
+    const sheetRegisteredPhonesOrIds = new Set();
+
+    // 1. Đọc dữ liệu từ tab PHIEU_OFF_HANG_TUAN trên Google Sheet 17iXM
+    try {
+      const token = await getGoogleAccessToken();
+      if (token && spreadsheetId && !OUTBOUND_SYNC_DISABLED) {
+        const resp = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent('PHIEU_OFF_HANG_TUAN')}!A2:Z5000`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          const rows = data.values || [];
+          for (const row of rows) {
+            if (row[1]) sheetRegisteredPhonesOrIds.add(String(row[1]).trim().toUpperCase());
+            if (row[3]) sheetRegisteredPhonesOrIds.add(String(row[3]).replace(/\D/g, ''));
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[CHECK_MISSING_OFF] Read Google Sheet error, fallback to DB:', e.message);
+    }
+
+    // Fallback: nếu chưa đồng bộ Sheet hoặc đang ở chế độ offline/test, đọc từ db.offRequests
+    if (sheetRegisteredPhonesOrIds.size === 0 && db.offRequests) {
+      db.offRequests.forEach(o => {
+        if (o.employeeId) sheetRegisteredPhonesOrIds.add(String(o.employeeId).trim().toUpperCase());
+        if (o.phone) sheetRegisteredPhonesOrIds.add(String(o.phone).replace(/\D/g, ''));
+      });
+    }
+
+    // 2. Tìm nhân viên đang hoạt động mà chưa có dữ liệu đăng ký OFF
+    const activeEmps = (db.employees || []).filter(e => !['ARCHIVED', 'TERMINATED', 'RESIGNED'].includes(e.status));
+    const missingEmps = activeEmps.filter(e => {
+      const empId = String(e.employeeId || '').trim().toUpperCase();
+      const phone = String(e.phone || '').replace(/\D/g, '');
+      return !sheetRegisteredPhonesOrIds.has(empId) && (!phone || !sheetRegisteredPhonesOrIds.has(phone));
+    });
+
+    const cfgNv = getTelegramCfg('employee');
+    let promptedCount = 0;
+
+    for (const emp of missingEmps) {
+      const empId = emp.employeeId || emp.id;
+      const empName = emp.name || 'Nhân viên';
+      const link = (db.telegramLinks || []).find(l => (l.employeeId === empId || l.employeeId === emp.id) && l.chatId);
+
+      const promptMsg = `⚠️ <b>NHẮC NHỞ: BẠN CHƯA ĐĂNG KÝ LỊCH NGHỈ OFF TUẦN NÀY</b>\n\n`
+        + `Chào bạn <b>${empName}</b> (<code>${empId}</code>),\n`
+        + `Hệ thống vừa kiểm tra trên dữ liệu Google Sheet 17iXM và nhận thấy bạn <b>chưa có thông tin đăng ký lịch nghỉ OFF 2 ngày/tuần</b> tại chi nhánh <b>${emp.branchId || 'Ụm Bò Milk'}</b>.\n\n`
+        + `👉 <b>Vui lòng gửi lại 2 ngày bạn muốn đăng ký nghỉ OFF ngay:</b>\n`
+        + `<code>dd/mm/yyyy, dd/mm/yyyy</code>\n\n`
+        + `• <i>Ví dụ:</i> <code>20/09, 24/09</code>\n\n`
+        + `📱 <i>(Hoặc mở Mini App để đăng ký trực tiếp để hệ thống kịp thời xếp ca).</i>`;
+
+      if (link && link.chatId && cfgNv.botToken && !OUTBOUND_SYNC_DISABLED) {
+        try {
+          await tg.sendTelegramMessage(cfgNv.botToken, link.chatId, promptMsg);
+          promptedCount++;
+        } catch (e) {}
+      }
+    }
+
+    return { totalActive: activeEmps.length, missingCount: missingEmps.length, promptedCount, missingEmps };
+  } catch (err) {
+    console.error('[CHECK_MISSING_OFF] General error:', err.message);
+    return { totalActive: 0, missingCount: 0, promptedCount: 0, missingEmps: [] };
+  }
+}
+
+// Lấy danh sách nhân viên Training (tab: NHAN_VIEN_TRAINING) cho HR Bot
+function hrGetTrainingEmployeesList(session) {
+  if (!session) return { ok: false, text: '⛔ Bạn chưa đăng nhập tài khoản Quản trị.' };
+  const roleStr = String(session.role || '').toUpperCase();
+  if (roleStr !== 'ADMIN' && roleStr !== 'HR') {
+    return { ok: false, text: '⛔ Cú pháp chuyển nhân viên chính thức chỉ dành cho 👑 <b>Admin</b> hoặc 🛡️ <b>HR</b>.' };
+  }
+
+  let list = (db.employees || []).filter(e => {
+    if (['ARCHIVED', 'TERMINATED', 'RESIGNED'].includes(e.status)) return false;
+    return e.type === 'TRAINING' || e.status === 'TRAINING' || (e.status !== 'OFFICIAL' && e.type !== 'OFFICIAL');
+  });
+
+  if (session.branchScope && Array.isArray(session.branchScope) && session.branchScope.length > 0 && roleStr !== 'ADMIN' && roleStr !== 'HR') {
+    list = list.filter(e => session.branchScope.includes(e.branchId));
+  }
+
+  if (list.length === 0) {
+    return {
+      ok: true,
+      text: 'ℹ️ Hiện không có nhân viên Training nào chờ lên chính thức (toàn bộ nhân sự đã là Chính thức hoặc chưa có dữ liệu mới).',
+      employees: []
+    };
+  }
+
+  const items = list.map((e, idx) => `${idx + 1}. <b>${e.name}</b> (<code>${e.employeeId}</code>) • ${e.branchId || 'CN'} • Ca: ${e.shift || '—'}`).join('\n');
+  return {
+    ok: true,
+    text: `📋 <b>DANH SÁCH NHÂN VIÊN TRAINING CHỜ LÊN CHÍNH THỨC (${list.length} NV):</b>\n\n`
+      + items + `\n\n`
+      + `👉 <i>Chọn nhân viên bằng các nút bấm bên dưới hoặc gõ:</i>\n`
+      + `<code>/capnhat_nv_chinhthuc &lt;Mã_NV&gt;</code> (Ví dụ: <code>/capnhat_nv_chinhthuc ${list[0].employeeId}</code>)`,
+    employees: list
+  };
+}
+
+// Chuyển nhân viên Training lên Chính thức và đồng bộ 2 tab Google Sheet (NHAN_VIEN_TRAINING -> NHAN_VIEN_CHINH_THUC)
+async function hrPromoteToOfficial(session, empCode) {
+  if (!session) return { ok: false, text: '⛔ Bạn chưa đăng nhập tài khoản Quản trị.' };
+  const roleStr = String(session.role || '').toUpperCase();
+  if (roleStr !== 'ADMIN' && roleStr !== 'HR') {
+    return { ok: false, text: '⛔ Cú pháp chuyển nhân viên chính thức chỉ dành cho 👑 <b>Admin</b> hoặc 🛡️ <b>HR</b>.' };
+  }
+
+  const cleanCode = String(empCode || '').trim();
+  if (!cleanCode) {
+    return hrGetTrainingEmployeesList(session);
+  }
+
+  const emp = findEmployeeByShortOrFullId(cleanCode);
+  if (!emp) {
+    return { ok: false, text: `⚠️ Không tìm thấy nhân viên với mã: <code>${cleanCode}</code>` };
+  }
+
+  if (session.branchScope && Array.isArray(session.branchScope) && session.branchScope.length > 0 && roleStr !== 'ADMIN' && roleStr !== 'HR') {
+    if (emp.branchId && !session.branchScope.includes(emp.branchId)) {
+      return { text: `⛔ <b>Không có quyền:</b> Nhân viên <b>${emp.name}</b> (${emp.branchId}) nằm ngoài chi nhánh quản lý của bạn.` };
+    }
+  }
+
+  if (emp.type === 'OFFICIAL' && emp.status === 'OFFICIAL') {
+    return { ok: false, text: `ℹ️ Nhân viên <b>${emp.name}</b> (<code>${emp.employeeId}</code>) đã là <b>Nhân viên Chính thức</b> từ trước.` };
+  }
+
+  const before = { ...emp };
+  const todayStr = getVietnamTodayStr();
+
+  // 1. Chuyển trạng thái sang Chính thức
+  emp.type = 'OFFICIAL';
+  emp.status = 'OFFICIAL';
+  emp.officialStartDate = todayStr;
+  emp.officialSalary = emp.officialSalary || emp.hourlyRate || 25500;
+  emp.hourlyRate = emp.officialSalary;
+  emp.version = (emp.version || 1) + 1;
+  emp.updated_at = getVietnamISOString();
+  emp.sync_status = 'PENDING';
+
+  // 2. Đảm bảo có key kích hoạt
+  if (!db.keys) db.keys = [];
+  let userKey = db.keys.find(k => k.employeeId === emp.employeeId || k.phone === emp.phone);
+  if (userKey) {
+    userKey.role = 'OFFICIAL';
+    userKey.status = 'ACTIVE';
+  } else {
+    userKey = {
+      key: generateSecureKey(),
+      employeeId: emp.employeeId,
+      phone: emp.phone,
+      role: 'OFFICIAL',
+      status: 'ACTIVE',
+      createdAt: getVietnamISOString()
+    };
+    db.keys.push(userKey);
+  }
+
+  // 3. Khởi tạo lịch làm việc tuần cho nhân viên chính thức nếu chưa có
+  const weekStart = toVietnamDateStr(getMonday(getVietnamNow()));
+  let sched = (db.schedules || []).find(s => s.employeeId === emp.employeeId && s.weekStart === weekStart);
+  if (!sched) {
+    const days = [];
+    const mon = getMonday(getVietnamNow());
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(mon); d.setDate(mon.getDate() + i);
+      days.push({
+        date: toVietnamDateStr(d),
+        dayName: ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'][i],
+        shift: emp.shift || 'CA_SANG',
+        status: 'WORKING',
+        substituteFor: null
+      });
+    }
+    if (!db.schedules) db.schedules = [];
+    db.schedules.push({
+      id: uuidv4(),
+      employeeId: emp.employeeId,
+      weekStart,
+      days,
+      version: 1,
+      updated_at: getVietnamISOString()
+    });
+  }
+
+  // 4. Đồng bộ Google Sheet hai tab: Xóa/chuyển khỏi NHAN_VIEN_TRAINING và thêm vào NHAN_VIEN_CHINH_THUC
+  addSyncQueue('EMPLOYEE', 'UPDATE', emp, emp.employeeId, 'TELEGRAM_BOT');
+  if (typeof triggerRealtimeSheetSync === 'function') {
+    triggerRealtimeSheetSync('NHAN_VIEN_TRAINING');
+    triggerRealtimeSheetSync('NHAN_VIEN_CHINH_THUC');
+    triggerRealtimeSheetSync('LICH_LAM_VIEC');
+  }
+
+  // 5. Lưu DB & emit socket realtime
+  saveDB();
+  try {
+    io.emit('employees:update', db.employees);
+    io.emit('schedules:update', db.schedules);
+    io.emit('keys:update', db.keys);
+  } catch (e) {}
+
+  // 6. Ghi Audit log
+  try {
+    audit(session.username, 'PROMOTE_TO_OFFICIAL_BOT', 'EMPLOYEE', before, emp, 'telegram_bot');
+  } catch (e) {}
+
+  // 7. Gửi thông báo chúc mừng Realtime tới BOT Nhân viên của bạn đó
+  const cfgNv = getTelegramCfg('employee');
+  const link = (db.telegramLinks || []).find(l => (l.employeeId === emp.employeeId || l.employeeId === emp.id) && l.chatId);
+  const empCongrats = `🎉 <b>CHÚC MỪNG BẠN ĐÃ ĐƯỢC CHUYỂN LÊN NHÂN VIÊN CHÍNH THỨC!</b>\n\n`
+    + `Chào bạn <b>${emp.name}</b> (<code>${emp.employeeId}</code>),\n`
+    + `Bộ phận Quản lý & Nhân sự (HR) vừa hoàn tất duyệt và chuyển bạn sang <b>Nhân viên Chính thức</b> của Ụm Bò Milk!\n\n`
+    + `🏪 <b>Chi nhánh:</b> ${emp.branchId || '—'}\n`
+    + `⏰ <b>Ca làm việc:</b> ${emp.shift || '—'}\n`
+    + `📅 <b>Ngày chính thức:</b> ${fmtDMY(emp.officialStartDate)}\n`
+    + `💵 <b>Mức lương chính thức:</b> ${Number(emp.officialSalary || 25500).toLocaleString('vi-VN')}đ / giờ\n\n`
+    + `📌 <i>Bạn hãy mở Mini App trên Telegram để xem lịch làm việc và đăng ký lịch nghỉ OFF 2 ngày/tuần nhé!</i>`;
+  if (link && link.chatId && cfgNv.botToken && !OUTBOUND_SYNC_DISABLED) {
+    tg.sendTelegramMessage(cfgNv.botToken, link.chatId, empCongrats).catch(() => {});
+  }
+
+  return {
+    ok: true,
+    employee: emp,
+    text: `🎉 <b>ĐÃ CHUYỂN LÊN NHÂN VIÊN CHÍNH THỨC THÀNH CÔNG!</b>\n\n`
+      + `👤 <b>Họ tên:</b> ${emp.name}\n`
+      + `🆔 <b>Mã NV:</b> <code>${emp.employeeId}</code>\n`
+      + `📞 <b>SĐT:</b> ${emp.phone || '—'}\n`
+      + `🏪 <b>Chi nhánh:</b> ${emp.branchId} • Ca: ${emp.shift}\n`
+      + `📅 <b>Ngày chính thức:</b> ${fmtDMY(emp.officialStartDate)}\n`
+      + `💵 <b>Lương chính thức:</b> ${Number(emp.officialSalary || 25500).toLocaleString('vi-VN')}đ / giờ\n\n`
+      + `📊 <b>Đồng bộ Google Sheet 17iXM:</b>\n`
+      + `• ❌ Đã chuyển/xóa khỏi tab: <code>NHAN_VIEN_TRAINING</code>\n`
+      + `• ✅ Đã ghi nhận vào tab: <code>NHAN_VIEN_CHINH_THUC</code>\n`
+      + `• ⚡ Đã gửi thông báo chúc mừng Realtime tới BOT Nhân viên!`
+  };
+}
+
 async function processTelegramUpdate(update, role){
   role = ['hr','employee','finance'].includes(role) ? role : 'hr';
   const cfg = getTelegramCfg(role);
@@ -14271,8 +14597,46 @@ async function processTelegramUpdate(update, role){
 
       if (cleanName === 'LICH_LAM_VIEC') {
         db.schedules = [];
+        db.offRequests = [];
         saveDB();
-        io.emit('schedules:update', db.schedules);
+        try {
+          io.emit('schedules:update', db.schedules);
+          io.emit('offRequests:update', db.offRequests);
+        } catch (e) {}
+
+        if (typeof triggerRealtimeSheetSync === 'function') {
+          triggerRealtimeSheetSync('LICH_LAM_VIEC');
+          triggerRealtimeSheetSync('PHIEU_OFF_HANG_TUAN');
+        }
+
+        // 1. BOT quản trị gửi thông báo đến BOT nhân viên yêu cầu đăng ký lại lịch OFF 2 ngày/tuần
+        const resetNotice = `📢 <b>THÔNG BÁO TỪ QUẢN TRỊ VIÊN — LÀM MỚI LỊCH LÀM VIỆC & ĐĂNG KÝ LẠI LỊCH OFF</b>\n\n`
+          + `Lịch làm việc tuần đã được Quản trị viên (Admin) làm mới để chuẩn bị sắp lịch mới.\n\n`
+          + `👉 <b>Tất cả nhân viên vui lòng gửi lại 2 ngày muốn nghỉ OFF trong tuần (2 ngày/tuần):</b>\n`
+          + `<code>dd/mm/yyyy, dd/mm/yyyy</code> (Ví dụ: <code>20/09/2026, 24/09/2026</code>)\n\n`
+          + `📱 <i>(Hoặc mở Mini App trên Telegram để đăng ký nhanh).</i>`;
+        await broadcastTelegramEmployees(resetNotice, null, 'telegram_admin');
+
+        // 2. BOT nhân viên kiểm tra trên Google Sheet xem dữ liệu có hay không, nếu không có thì tự động thông báo
+        const checkResult = await checkAndPromptMissingOffRegistrations();
+
+        try {
+          audit(session.username, 'RESET_GOOGLE_SHEET', 'GOOGLE_SHEET', null, { sheetName: cleanName, spreadsheetId, missingOff: checkResult.missingCount }, 'telegram_bot');
+        } catch (e) {}
+
+        return {
+          text: `⚠️ <b>XÁC NHẬN DỌN DẸP DỮ LIỆU LỊCH LÀM VIỆC</b>\n`
+            + `Sheet mục tiêu: <code>${cleanName}</code>\n`
+            + `Quyền thực thi: 👑 <b>Quản trị viên tối cao (ADMIN)</b>\n\n`
+            + `✅ <b>KẾT QUẢ:</b>\n`
+            + `• Đã xóa sạch dữ liệu từ dòng A2 đến Z trên Google Sheet tab <code>LICH_LAM_VIEC</code>.\n`
+            + `• Đã gửi thông báo yêu cầu đăng ký lại lịch OFF 2 ngày/tuần tới toàn bộ nhân viên qua BOT Nhân viên.\n`
+            + `• Đã kiểm tra đối soát trên Google Sheet tab <code>PHIEU_OFF_HANG_TUAN</code>:\n`
+            + `  ➔ Phát hiện <b>${checkResult.missingCount}</b> nhân viên chưa đăng ký.\n`
+            + `  ➔ Đã tự động gửi thông báo nhắc nhở riêng tới các nhân viên đó!\n`
+            + `📌 Dòng tiêu đề (Headers hàng 1) được bảo vệ nguyên vẹn 100%.`,
+          checkResult
+        };
       }
       try {
         audit(session.username, 'RESET_GOOGLE_SHEET', 'GOOGLE_SHEET', null, { sheetName: cleanName, spreadsheetId }, 'telegram_bot');
@@ -14428,6 +14792,9 @@ async function processTelegramUpdate(update, role){
       const normPhone = normalizePhone(emp.phone);
 
       console.log(`[BOT DELETE EMPLOYEE] Triggered by ${session.username} (${session.role}) for ${empName} (${empId})...`);
+
+      // Realtime 2 chiều: BOT Quản trị thông báo ngược lại cho BOT Nhân viên để thông báo cho nhân viên đó
+      await notifyEmployeeActionDeleted(emp, 'DELETE_EMPLOYEE', { by: session.username });
 
       // 1. Delete on Google Sheets (17iXM)
       let sheetResult = { deletedRows: 0, details: [] };
@@ -15563,7 +15930,11 @@ async function processTelegramUpdate(update, role){
       };
     },
     cleanDuplicateNotifications: (empId) => cleanDuplicateNotifications(empId),
-    autoCleanDuplicatesAndResetOff: (empQuery, reason) => autoCleanDuplicatesAndResetOff(empQuery, reason)
+    autoCleanDuplicatesAndResetOff: (empQuery, reason) => autoCleanDuplicatesAndResetOff(empQuery, reason),
+    hrGetTrainingEmployees: (session) => hrGetTrainingEmployeesList(session),
+    hrPromoteToOfficial: (session, empCode) => hrPromoteToOfficial(session, empCode),
+    notifyEmployeeActionDeleted: (emp, deleteType, details) => notifyEmployeeActionDeleted(emp, deleteType, details),
+    checkAndPromptMissingOffRegistrations: () => checkAndPromptMissingOffRegistrations()
   };
   if (update.callback_query?.id && cfg.botToken) {
     try { await tg.answerTelegramCallbackQuery(cfg.botToken, update.callback_query.id); } catch(e) {}

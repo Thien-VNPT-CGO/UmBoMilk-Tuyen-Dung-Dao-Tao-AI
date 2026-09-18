@@ -917,6 +917,173 @@ test('Telegram V4.3 Features Suite', async (t) => {
     // 19.5 Kiểm tra QL chỉ thao tác trong branchScope của mình
     assert.equal(qlSession.branchScope.includes('CN4'), false);
   });
+
+  await t.test('20. /xoa_off, /reset_hethong LICH_LAM_VIEC, Realtime 2 chiều Quản trị ⟷ Nhân viên & /capnhat_nv_chinhthuc', async () => {
+    const adminSession = {
+      username: 'admin',
+      role: 'ADMIN',
+      displayName: 'Quản trị viên',
+      branchScope: ['CN1', 'CN2', 'CN3', 'CN4']
+    };
+
+    const hrSession = {
+      username: 'hr',
+      role: 'HR',
+      displayName: 'HR Manager',
+      branchScope: ['CN1', 'CN2', 'CN3', 'CN4']
+    };
+
+    // 20.1 /xoa_off: Tự động dọn dẹp thông báo OFF và gửi lại thông báo đăng ký cho nhân viên
+    let empPromptSent = false;
+    const rXoaOff = await tg.handleTelegramUpdate({
+      message: { chat: { id: 88881 }, from: { id: 88881 }, text: '/xoa_off NV1288' }
+    }, {
+      role: 'hr',
+      getHrSession: async () => hrSession,
+      hrResetEmployeeOff: async (session, empCode) => {
+        empPromptSent = true;
+        return {
+          ok: true,
+          empId: 'NV1288',
+          cleanedNotifs: 3,
+          removedOffCount: 1,
+          telegramSent: true,
+          text: `✅ <b>ĐÃ XÓA LỊCH OFF & DỌN DẸP THÔNG BÁO TRÙNG THÀNH CÔNG</b>\nPhiếu OFF đã xóa: 1\nThông báo gửi đi: ✅ Đã gửi tin nhắn tới Telegram của bạn NV1288 yêu cầu đăng ký lại.`
+        };
+      }
+    });
+
+    assert.equal(rXoaOff.length, 1);
+    assert.ok(empPromptSent);
+    assert.ok(rXoaOff[0].text.includes('ĐÃ XÓA LỊCH OFF'));
+    assert.ok(rXoaOff[0].text.includes('yêu cầu đăng ký lại'));
+
+    // 20.2 /reset_hethong LICH_LAM_VIEC: Reset lịch Google Sheet, gửi thông báo sang BOT NV, kiểm tra đối soát Sheet và nhắc NV
+    let checkedMissingOff = false;
+    const rResetLich = await tg.handleTelegramUpdate({
+      message: { chat: { id: 88882 }, from: { id: 88882 }, text: '/reset_hethong: LICH_LAM_VIEC' }
+    }, {
+      role: 'hr',
+      getHrSession: async () => adminSession,
+      adminResetSheet: async (session, sheetName) => {
+        assert.equal(sheetName, 'LICH_LAM_VIEC');
+        checkedMissingOff = true;
+        return {
+          ok: true,
+          text: `⚠️ <b>XÁC NHẬN DỌN DẸP DỮ LIỆU LỊCH LÀM VIỆC</b>\n`
+            + `• Đã xóa sạch dữ liệu từ dòng A2 đến Z trên Google Sheet tab LICH_LAM_VIEC.\n`
+            + `• Đã gửi thông báo yêu cầu đăng ký lại lịch OFF 2 ngày/tuần tới toàn bộ nhân viên qua BOT Nhân viên.\n`
+            + `• Đã kiểm tra đối soát trên Google Sheet tab PHIEU_OFF_HANG_TUAN:\n`
+            + `  ➔ Phát hiện 2 nhân viên chưa đăng ký.\n`
+            + `  ➔ Đã tự động gửi thông báo nhắc nhở riêng tới các nhân viên đó!`
+        };
+      }
+    });
+
+    assert.equal(rResetLich.length, 1);
+    assert.ok(checkedMissingOff);
+    assert.ok(rResetLich[0].text.includes('XÁC NHẬN DỌN DẸP DỮ LIỆU LỊCH LÀM VIỆC'));
+    assert.ok(rResetLich[0].text.includes('PHIEU_OFF_HANG_TUAN'));
+    assert.ok(rResetLich[0].text.includes('nhắc nhở riêng'));
+
+    // 20.3 Realtime 2 chiều: Quản trị xóa nhân viên -> BOT Quản trị thông báo ngược lại cho BOT Nhân viên và gửi tin cho NV
+    let notifiedEmpDeleted = false;
+    const rDeleteEmp = await tg.handleTelegramUpdate({
+      message: { chat: { id: 88883 }, from: { id: 88883 }, text: '/xoa_nhanvien NV9999' }
+    }, {
+      role: 'hr',
+      getHrSession: async () => adminSession,
+      hrDeleteEmployee: async (session, empCode) => {
+        notifiedEmpDeleted = true;
+        return {
+          ok: true,
+          text: `🗑️ <b>ĐÃ XÓA VĨNH VIỄN NHÂN VIÊN THÀNH CÔNG!</b>\n`
+            + `• Đã xóa sạch dữ liệu trên Google Sheet 17iXM.\n`
+            + `• Đã gửi thông báo Realtime tới BOT Nhân viên thông báo cho nhân viên đó.`
+        };
+      }
+    });
+
+    assert.equal(rDeleteEmp.length, 1);
+    assert.ok(notifiedEmpDeleted);
+    assert.ok(rDeleteEmp[0].text.includes('ĐÃ XÓA VĨNH VIỄN NHÂN VIÊN THÀNH CÔNG'));
+    assert.ok(rDeleteEmp[0].text.includes('Realtime'));
+
+    // 20.4 Cú pháp /capnhat_nv_chinhthuc: Hiển thị danh sách Training kèm inline keyboard
+    const rShowTraining = await tg.handleTelegramUpdate({
+      message: { chat: { id: 88884 }, from: { id: 88884 }, text: '/capnhat_nv_chinhthuc' }
+    }, {
+      role: 'hr',
+      getHrSession: async () => hrSession,
+      hrGetTrainingEmployees: async (session) => {
+        return {
+          ok: true,
+          employees: [
+            { employeeId: 'NV_TR1', name: 'Lê Văn Training', branchId: 'CN1', shift: 'CA_SANG' },
+            { employeeId: 'NV_TR2', name: 'Phạm Thị Thử Việc', branchId: 'CN2', shift: 'CA_CHIEU' }
+          ],
+          text: `📋 <b>DANH SÁCH NHÂN VIÊN TRAINING CHỜ LÊN CHÍNH THỨC (2 NV):</b>\n1. Lê Văn Training (NV_TR1)\n2. Phạm Thị Thử Việc (NV_TR2)`
+        };
+      }
+    });
+
+    assert.equal(rShowTraining.length, 1);
+    assert.ok(rShowTraining[0].text.includes('DANH SÁCH NHÂN VIÊN TRAINING'));
+    assert.ok(rShowTraining[0].extra?.reply_markup?.inline_keyboard);
+    const flatButtons = rShowTraining[0].extra.reply_markup.inline_keyboard.flat();
+    assert.ok(flatButtons.some(b => b.callback_data === 'promote_official:NV_TR1'));
+    assert.ok(flatButtons.some(b => b.callback_data === 'promote_official:NV_TR2'));
+
+    // 20.5 Khi chọn nhân viên qua callback query hoặc gõ mã: Chuyển thành chính thức & đồng bộ 2 tab Google Sheet
+    let sheetTrainingCleaned = false;
+    let sheetOfficialAdded = false;
+    const rPromoteCallback = await tg.handleTelegramUpdate({
+      callback_query: {
+        id: 'cb_991',
+        from: { id: 88885 },
+        message: { chat: { id: 88885 } },
+        data: 'promote_official:NV_TR1'
+      }
+    }, {
+      role: 'hr',
+      getHrSession: async () => hrSession,
+      hrPromoteToOfficial: async (session, empCode) => {
+        assert.equal(empCode, 'NV_TR1');
+        sheetTrainingCleaned = true;
+        sheetOfficialAdded = true;
+        return {
+          ok: true,
+          text: `🎉 <b>ĐÃ CHUYỂN LÊN NHÂN VIÊN CHÍNH THỨC THÀNH CÔNG!</b>\n`
+            + `👤 <b>Họ tên:</b> Lê Văn Training\n`
+            + `🆔 <b>Mã NV:</b> <code>NV_TR1</code>\n`
+            + `📊 <b>Đồng bộ Google Sheet 17iXM:</b>\n`
+            + `• ❌ Đã chuyển/xóa khỏi tab: <code>NHAN_VIEN_TRAINING</code>\n`
+            + `• ✅ Đã ghi nhận vào tab: <code>NHAN_VIEN_CHINH_THUC</code>\n`
+            + `• ⚡ Đã gửi thông báo chúc mừng Realtime tới BOT Nhân viên!`
+        };
+      }
+    });
+
+    assert.equal(rPromoteCallback.length, 1);
+    assert.ok(sheetTrainingCleaned);
+    assert.ok(sheetOfficialAdded);
+    assert.ok(rPromoteCallback[0].text.includes('ĐÃ CHUYỂN LÊN NHÂN VIÊN CHÍNH THỨC THÀNH CÔNG'));
+    assert.ok(rPromoteCallback[0].text.includes('NHAN_VIEN_TRAINING'));
+    assert.ok(rPromoteCallback[0].text.includes('NHAN_VIEN_CHINH_THUC'));
+
+    // 20.6 Kiểm tra menu và bàn phím có chứa /capnhat_nv_chinhthuc và nút ⭐ Lên chính thức
+    const adminMenuText = tg.getHrRoleMenuText(adminSession);
+    const hrMenuText = tg.getHrRoleMenuText(hrSession);
+    assert.ok(adminMenuText.includes('/capnhat_nv_chinhthuc'));
+    assert.ok(hrMenuText.includes('/capnhat_nv_chinhthuc'));
+
+    const adminKb = tg.getHrRoleKeyboard('ADMIN');
+    const hrKb = tg.getHrRoleKeyboard('HR');
+    const allAdminBtns = adminKb.reply_markup.inline_keyboard.flat();
+    const allHrBtns = hrKb.reply_markup.inline_keyboard.flat();
+    assert.ok(allAdminBtns.some(b => b.text === '⭐ Lên chính thức' && b.callback_data === '/capnhat_nv_chinhthuc'));
+    assert.ok(allHrBtns.some(b => b.text === '⭐ Lên chính thức' && b.callback_data === '/capnhat_nv_chinhthuc'));
+  });
 });
 
 
