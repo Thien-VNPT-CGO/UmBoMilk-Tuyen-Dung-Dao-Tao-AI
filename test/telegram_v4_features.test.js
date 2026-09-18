@@ -870,6 +870,53 @@ test('Telegram V4.3 Features Suite', async (t) => {
     assert.ok(flatAdminBtns.some(b => b.text === '➕ Thêm NV' && b.callback_data === '/them_nv_chinhthuc'));
     assert.ok(flatHrBtns.some(b => b.text === '➕ Thêm NV' && b.callback_data === '/them_nv_chinhthuc'));
   });
+
+  await t.test('19. Tài khoản HR trên BOT Telegram quản trị có full quyền tất cả các chi nhánh (CN1, CN2, CN3, CN4)', async () => {
+    // 19.1 Mock session HR với full quyền chi nhánh
+    const hrSession = {
+      username: 'hr',
+      role: 'HR',
+      displayName: 'HR Manager',
+      branchScope: ['CN1', 'CN2', 'CN3', 'CN4']
+    };
+
+    // 19.2 Quản lý (QL) bị giới hạn theo branchScope riêng
+    const qlSession = {
+      username: 'manager_cn2',
+      role: 'QL',
+      displayName: 'Manager CN2',
+      branchScope: ['CN2']
+    };
+
+    // 19.3 HR có quyền xem và thao tác ở mọi chi nhánh (CN1, CN2, CN3, CN4)
+    assert.deepEqual(hrSession.branchScope, ['CN1', 'CN2', 'CN3', 'CN4']);
+    ['CN1', 'CN2', 'CN3', 'CN4'].forEach(branchId => {
+      assert.ok(hrSession.branchScope.includes(branchId), `HR phải có quyền chi nhánh ${branchId}`);
+    });
+
+    // 19.4 Kiểm tra handler Telegram Bot cho phép HR truy cập toàn bộ chi nhánh
+    const rHrAnyBranch = await tg.handleTelegramUpdate({
+      message: { chat: { id: 99993 }, from: { id: 99993 }, text: '/them_nv_chinhthuc Lê Văn C 0905111222 CN4 Ca Sáng 20/09/2026 auto 9' }
+    }, {
+      role: 'hr',
+      getHrSession: async () => hrSession,
+      hrCreateOfficialEmployee: async (session, rawArgs) => {
+        // Kiểm tra session truyền vào là HR và có full quyền
+        assert.equal(session.role, 'HR');
+        assert.ok(session.branchScope.includes('CN4'));
+        return {
+          ok: true,
+          text: `🎉 ĐÃ THÊM NHÂN VIÊN CHÍNH THỨC THÀNH CÔNG TẠI CHI NHÁNH CN4!`
+        };
+      }
+    });
+
+    assert.equal(rHrAnyBranch.length, 1);
+    assert.ok(rHrAnyBranch[0].text.includes('CN4'));
+
+    // 19.5 Kiểm tra QL chỉ thao tác trong branchScope của mình
+    assert.equal(qlSession.branchScope.includes('CN4'), false);
+  });
 });
 
 

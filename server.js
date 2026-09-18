@@ -462,7 +462,7 @@ function initEmpty() {
   const hashed = bcrypt.hashSync('Master@@2027', 10);
   db.users = [
     { id: uuidv4(), username: 'admin', password: hashed, role: 'Admin', branchScope: ['CN1','CN2','CN3','CN4'], displayName: 'Administrator' },
-    { id: uuidv4(), username: 'hr', password: bcrypt.hashSync('hr123',10), role: 'HR', branchScope: ['CN1','CN2'], displayName: 'HR Manager' },
+    { id: uuidv4(), username: 'hr', password: bcrypt.hashSync('hr123',10), role: 'HR', branchScope: ['CN1','CN2','CN3','CN4'], displayName: 'HR Manager' },
     { id: uuidv4(), username: 'manager', password: bcrypt.hashSync('manager123',10), role: 'Manager', branchScope: ['CN2'], displayName: 'Manager CN2' },
     { id: uuidv4(), username: 'umbomilk', password: bcrypt.hashSync('view123',10), role: 'Umbomilk', branchScope: ['CN1','CN2','CN3','CN4'], displayName: 'Umbomilk Viewer' }
   ];
@@ -12620,7 +12620,7 @@ function getWeeklyScheduleMatrix(weekStr, session){
   }
 
   let emps = (db.employees||[]).filter(e=> !['ARCHIVED','TERMINATED','RESIGNED'].includes(e.status));
-  if(session && session.branchScope && Array.isArray(session.branchScope) && session.branchScope.length > 0 && String(session.role).toUpperCase() !== 'ADMIN'){
+  if(session && session.branchScope && Array.isArray(session.branchScope) && session.branchScope.length > 0 && String(session.role).toUpperCase() !== 'ADMIN' && String(session.role).toUpperCase() !== 'HR'){
     emps = emps.filter(e=> session.branchScope.includes(e.branchId));
   }
 
@@ -13434,7 +13434,7 @@ function hrGetEmployeeProfile(session, empQuery) {
     };
   }
 
-  if (session && session.branchScope && Array.isArray(session.branchScope) && session.branchScope.length > 0 && String(session.role).toUpperCase() !== 'ADMIN') {
+  if (session && session.branchScope && Array.isArray(session.branchScope) && session.branchScope.length > 0 && String(session.role).toUpperCase() !== 'ADMIN' && String(session.role).toUpperCase() !== 'HR') {
     if (emp.branchId && !session.branchScope.includes(emp.branchId)) {
       return {
         text: `⛔ <b>Không có quyền truy cập:</b> Nhân viên <b>${emp.name}</b> (${emp.branchId}) nằm ngoài phạm vi quản lý của bạn.`
@@ -13473,7 +13473,7 @@ async function hrApproveAndSendPayslips(session, branchArg) {
     const bClean = branchArg.trim().toUpperCase();
     emps = emps.filter(e => String(e.branchId || '').toUpperCase() === bClean || String(e.branchId || '').toUpperCase().includes(bClean));
   }
-  if (session.branchScope && Array.isArray(session.branchScope) && session.branchScope.length > 0 && roleUpper !== 'ADMIN') {
+  if (session.branchScope && Array.isArray(session.branchScope) && session.branchScope.length > 0 && roleUpper !== 'ADMIN' && roleUpper !== 'HR') {
     emps = emps.filter(e => session.branchScope.includes(e.branchId));
   }
 
@@ -14174,6 +14174,9 @@ async function processTelegramUpdate(update, role){
           return null;
         }
       }
+      if (c.auth && (String(c.auth.role).toUpperCase() === 'HR' || String(c.auth.role).toUpperCase() === 'ADMIN')) {
+        c.auth.branchScope = (db.branches && db.branches.length > 0) ? db.branches.map(b => b.id) : ['CN1', 'CN2', 'CN3', 'CN4'];
+      }
       return c.auth;
     },
     hrLogin: async (chatId, username, password) => {
@@ -14187,11 +14190,13 @@ async function processTelegramUpdate(update, role){
         c = { chatId: String(chatId), createdAt: getVietnamISOString() };
         db.hrBotChats.push(c);
       }
+      const isHrOrAdmin = ['ADMIN', 'HR'].includes(String(user.role || '').toUpperCase());
+      const allBranches = (db.branches && db.branches.length > 0) ? db.branches.map(b => b.id) : ['CN1', 'CN2', 'CN3', 'CN4'];
       c.auth = {
         username: user.username,
         role: user.role,
         displayName: user.displayName || user.username,
-        branchScope: user.branchScope || [],
+        branchScope: isHrOrAdmin ? allBranches : (user.branchScope || []),
         allowedTabs: user.allowedTabs || [],
         loggedInAt: getVietnamISOString()
       };
@@ -14297,7 +14302,7 @@ async function processTelegramUpdate(update, role){
         return { text: `⚠️ Không tìm thấy nhân viên với mã: <code>${empCode}</code>` };
       }
 
-      if (session.branchScope && Array.isArray(session.branchScope) && session.branchScope.length > 0 && String(session.role).toUpperCase() !== 'ADMIN') {
+      if (session.branchScope && Array.isArray(session.branchScope) && session.branchScope.length > 0 && String(session.role).toUpperCase() !== 'ADMIN' && String(session.role).toUpperCase() !== 'HR') {
         if (emp.branchId && !session.branchScope.includes(emp.branchId)) {
           return { text: `⛔ <b>Không có quyền:</b> Nhân viên <b>${emp.name}</b> (${emp.branchId}) nằm ngoài chi nhánh quản lý của bạn.` };
         }
@@ -14411,7 +14416,7 @@ async function processTelegramUpdate(update, role){
         return { text: `⚠️ Không tìm thấy nhân viên với mã: <code>${empCode}</code>` };
       }
 
-      if (session.branchScope && Array.isArray(session.branchScope) && session.branchScope.length > 0 && roleStr !== 'ADMIN') {
+      if (session.branchScope && Array.isArray(session.branchScope) && session.branchScope.length > 0 && roleStr !== 'ADMIN' && roleStr !== 'HR') {
         if (emp.branchId && !session.branchScope.includes(emp.branchId)) {
           return { text: `⛔ <b>Không có quyền:</b> Nhân viên <b>${emp.name}</b> (${emp.branchId}) nằm ngoài chi nhánh quản lý của bạn.` };
         }
@@ -14620,7 +14625,7 @@ async function processTelegramUpdate(update, role){
       const emp = findEmployeeByShortOrFullId(empCode);
       if (!emp) return { text: `⚠️ Không tìm thấy nhân viên với mã: <code>${empCode}</code>` };
 
-      if (session.branchScope && Array.isArray(session.branchScope) && session.branchScope.length > 0 && roleStr !== 'ADMIN') {
+      if (session.branchScope && Array.isArray(session.branchScope) && session.branchScope.length > 0 && roleStr !== 'ADMIN' && roleStr !== 'HR') {
         if (emp.branchId && !session.branchScope.includes(emp.branchId)) {
           return { text: `⛔ <b>Không có quyền:</b> Nhân viên <b>${emp.name}</b> (${emp.branchId}) nằm ngoài chi nhánh quản lý của bạn.` };
         }
@@ -14691,8 +14696,8 @@ async function processTelegramUpdate(update, role){
         branchId = branch.id;
       }
 
-      // Phân quyền chi nhánh cho HR
-      if (session.branchScope && Array.isArray(session.branchScope) && session.branchScope.length > 0 && roleStr !== 'ADMIN') {
+      // Phân quyền chi nhánh cho Quản lý (HR & Admin full quyền các chi nhánh)
+      if (session.branchScope && Array.isArray(session.branchScope) && session.branchScope.length > 0 && roleStr !== 'ADMIN' && roleStr !== 'HR') {
         if (!session.branchScope.includes(branchId)) {
           return { text: `⛔ <b>Không có quyền:</b> Chi nhánh <b>${branchId}</b> nằm ngoài phạm vi quản lý của bạn (${session.branchScope.join(', ')}).` };
         }
@@ -14850,7 +14855,8 @@ async function processTelegramUpdate(update, role){
     },
     getBranchAttendance: async (session) => {
       const today = getVietnamTodayStr();
-      const scope = session?.branchScope || [];
+      const isFullScope = ['ADMIN', 'HR'].includes(String(session?.role || '').toUpperCase());
+      const scope = isFullScope ? [] : (session?.branchScope || []);
       const atts = (db.attendances||[]).filter(a=> String(a.date||'').split('T')[0]===today && (scope.length===0 || scope.includes(a.branchId)));
       const lines = atts.map(a=> `• <b>${a.employeeName||a.employeeId}</b> (${a.branchId||''}): Vào [${a.checkIn||'Chưa'}] — Ra [${a.checkOut||'Chưa'}]`).join('\n');
       return { text: `📍 <b>ĐIỂM DANH HÔM NAY (${scope.join(',')||'Tất cả chi nhánh'}):</b>\n\n${lines || 'Chưa có lượt chấm công hôm nay.'}` };
@@ -14859,13 +14865,15 @@ async function processTelegramUpdate(update, role){
       return getWeeklyScheduleMatrix(null, session);
     },
     getBranchSwapRequests: async (session) => {
-      const scope = session?.branchScope || [];
+      const isFullScope = ['ADMIN', 'HR'].includes(String(session?.role || '').toUpperCase());
+      const scope = isFullScope ? [] : (session?.branchScope || []);
       const swaps = (db.shiftSwapRequests||[]).filter(s=> s.status==='PENDING' && (scope.length===0 || scope.includes(s.branchId)));
       const lines = swaps.map(s=> `• <b>${s.fromEmployeeName}</b> ➔ <b>${s.toEmployeeName}</b> (${s.date}): ${s.reason||'Đổi ca'}`).join('\n');
       return { text: `🔄 <b>PHIẾU ĐỔI CA CHỜ DUYỆT:</b>\n\n${lines || 'Không có phiếu đổi ca chờ duyệt.'}` };
     },
     getBranchDeviceRequests: async (session) => {
-      const scope = session?.branchScope || [];
+      const isFullScope = ['ADMIN', 'HR'].includes(String(session?.role || '').toUpperCase());
+      const scope = isFullScope ? [] : (session?.branchScope || []);
       const devs = (db.deviceRequests||[]).filter(d=> d.status==='PENDING' && (scope.length===0 || scope.includes(d.branchId)));
       const lines = devs.map(d=> `• <b>${d.branchId}</b>: ${d.deviceName || d.description} (${d.urgency||'Bình thường'})`).join('\n');
       return { text: `🛠️ <b>SỰ CỐ THIẾT BỊ CHỜ XỬ LÝ:</b>\n\n${lines || 'Không có sự cố thiết bị.'}` };
