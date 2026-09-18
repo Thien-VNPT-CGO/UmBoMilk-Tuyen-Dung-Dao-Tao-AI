@@ -209,6 +209,29 @@ function employeeMenuKeyboard(webAppUrl) {
   return { reply_markup: { inline_keyboard } };
 }
 
+function attendanceGpsKeyboard() {
+  return {
+    reply_markup: {
+      keyboard: [
+        [{ text: '📍 BƯỚC 1: GỬI VỊ TRÍ GPS HIỆN TẠI', request_location: true }],
+        [{ text: '📱 Bảng chức năng', callback_data: '/menu' }]
+      ],
+      resize_keyboard: true,
+      one_time_keyboard: true
+    }
+  };
+}
+
+function attendancePhotoKeyboard(webAppUrl) {
+  const inline_keyboard = [];
+  if (webAppUrl) {
+    inline_keyboard.push([{ text: '📸 BƯỚC 2: CHỤP ẢNH XÁC THỰC (CAMERA)', web_app: { url: webAppUrl + (webAppUrl.includes('?') ? '&' : '?') + 'action=attendance_photo' } }]);
+  } else {
+    inline_keyboard.push([{ text: '📸 Gửi ảnh xác thực tại quầy', callback_data: '/chup_anh' }]);
+  }
+  return { reply_markup: { inline_keyboard } };
+}
+
 function hrMenuKeyboard(role, webAppUrl) {
   const r = String(role || '').toUpperCase();
   let inline_keyboard = [];
@@ -371,7 +394,7 @@ async function handleTelegramUpdate(update, ctx) {
     const msg = update.message || update.edited_message || update.callback_query?.message;
     const chatId = msg?.chat?.id;
     const from = update.message?.from || update.edited_message?.from || update.callback_query?.from;
-    const text = (update.message?.text || update.edited_message?.text || update.callback_query?.data || '').trim();
+    let text = (update.message?.text || update.edited_message?.text || update.callback_query?.data || '').trim();
     if (!chatId) return actions;
     const webAppUrl = ctx?.webAppUrl || '';
     const role = ctx?.role && START_TEXTS[ctx.role] ? ctx.role : 'employee';
@@ -380,6 +403,46 @@ async function handleTelegramUpdate(update, ctx) {
     const caption = (update.message?.caption || update.edited_message?.caption || '').trim();
     if (photoList && photoList.length > 0 && !text) {
       text = caption ? `${caption} (Đính kèm ảnh)` : 'Báo cáo sự cố thiết bị (Đính kèm ảnh)';
+    }
+
+    // --- BƯỚC 1: XỬ LÝ VỊ TRÍ GPS TELEGRAM (LOCATION) CHO ĐIỂM DANH ---
+    const location = update.message?.location || update.edited_message?.location;
+    if (location && typeof location.latitude === 'number' && typeof location.longitude === 'number') {
+      if (ctx?.handleAttendanceLocation) {
+        const r = await ctx.handleAttendanceLocation(String(from?.id), location, from?.username || '', chatId);
+        actions.push({
+          chatId,
+          text: r.text,
+          extra: r.extra !== undefined ? r.extra : (r.step === 'WAITING_PHOTO' ? attendancePhotoKeyboard(webAppUrl) : {})
+        });
+        return actions;
+      }
+    }
+
+    // --- BƯỚC 2: XỬ LÝ ẢNH CHỤP XÁC THỰC (PHOTO) KHI ĐANG TRONG PHIÊN ĐIỂM DANH ---
+    if (photoList && photoList.length > 0) {
+      if (ctx?.hasPendingAttendance && await ctx.hasPendingAttendance(String(from?.id))) {
+        const r = await ctx.handleAttendancePhoto(String(from?.id), photoList, { caption, username: from?.username || '', chatId, ...(ctx.photoMeta || {}) });
+        actions.push({
+          chatId,
+          text: r.text,
+          extra: r.extra || {}
+        });
+        return actions;
+      }
+    }
+
+    // Hỗ trợ lệnh test / text chụp ảnh xác thực
+    if (text.startsWith('/chup_anh') || text.startsWith('/xac_thuc_anh')) {
+      if (ctx?.hasPendingAttendance && await ctx.hasPendingAttendance(String(from?.id))) {
+        const r = await ctx.handleAttendancePhoto(String(from?.id), [{ file_id: 'mock_photo' }], { caption: text, username: from?.username || '', chatId, ...(ctx.photoMeta || {}) });
+        actions.push({
+          chatId,
+          text: r.text,
+          extra: r.extra || {}
+        });
+        return actions;
+      }
     }
 
     // --- PHÂN LUỒNG XỬ LÝ RIÊNG CHO BOT QUẢN TRỊ HR (@umbomilkhrbot) ---
@@ -739,10 +802,10 @@ async function handleTelegramUpdate(update, ctx) {
       } else {
         actions.push({ chatId, text: '📅 Chưa thể lấy thông tin lịch lúc này.' });
       }
-    } else if (text.startsWith('/diemdanh') || text.includes('Điểm danh') || /^điểm danh$|^diem danh$/i.test(text)) {
+    } else if (text.startsWith('/diemdanh') || text.startsWith('/checkin') || text.startsWith('/checkout') || text.includes('Điểm danh') || /^điểm danh$|^diem danh$/i.test(text)) {
       if (ctx?.getTodayStatus) {
         const r = await ctx.getTodayStatus(String(from?.id));
-        actions.push({ chatId, text: r.text });
+        actions.push({ chatId, text: r.text, ...(r.extra ? { extra: r.extra } : {}) });
       } else {
         actions.push({ chatId, text: '📍 Chưa thể kiểm tra điểm danh lúc này.' });
       }
@@ -828,6 +891,26 @@ async function handleTelegramUpdate(update, ctx) {
   return actions;
 }
 
+const DEFAULT_SHIFTS = {
+  CA_SANG: { name: 'Ca Sáng', start: '07:00', end: '12:00', hours: 5 },
+  CA_CHIEU: { name: 'Ca Chiều', start: '12:00', end: '18:00', hours: 6 },
+  CA_TRUA: { name: 'Ca Chiều', start: '12:00', end: '18:00', hours: 6 },
+  CA_TOI: { name: 'Ca Tối', start: '18:00', end: '23:00', hours: 5 }
+};
+
+function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371e3;
+  const toRad = deg => (deg * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 module.exports = {
   parseTelegramInitData,
   verifyTelegramInitData,
@@ -841,6 +924,8 @@ module.exports = {
   extractOffDates,
   isOffRegistration,
   employeeMenuKeyboard,
+  attendanceGpsKeyboard,
+  attendancePhotoKeyboard,
   hrMenuKeyboard,
   getHrRoleMenuText,
   HELP_TEXT,
@@ -848,4 +933,7 @@ module.exports = {
   START_TEXTS,
   BOT_ROLES,
   webAppKeyboard,
+  DEFAULT_SHIFTS,
+  calculateDistanceMeters,
 };
+

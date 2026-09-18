@@ -102,10 +102,10 @@ app.use((req,res,next)=>{ req.requestId = uuidv4().slice(0,8); next(); });
 
 // ============ DEFAULT DATA ============
 const DEFAULT_BRANCHES = [
-  { id: 'CN1', address: '130 Vạn kiếp, Phường 3, Quận Bình Thạnh', prefix: 'CN130', name: 'CN1 - 130 Vạn kiếp' },
-  { id: 'CN2', address: '261 Tô Hiến Thành, Phường 12, Quận 10', prefix: 'CN261', name: 'CN2 - 261 Tô Hiến Thành' },
-  { id: 'CN3', address: '120 Hoàng Diệu 2, Phường Linh Trung, TP. Thủ Đức', prefix: 'CN120', name: 'CN3 - 120 Hoàng Diệu 2' },
-  { id: 'CN4', address: '111 Tôn Đản, Phường 15, Quận 4', prefix: 'CN111', name: 'CN4 - 111 Tôn Đản' }
+  { id: 'CN1', address: '130 Vạn kiếp, Phường 3, Quận Bình Thạnh', prefix: 'CN130', name: 'CN1 - 130 Vạn kiếp', lat: 10.79815, lng: 106.69145 },
+  { id: 'CN2', address: '261 Tô Hiến Thành, Phường 12, Quận 10', prefix: 'CN261', name: 'CN2 - 261 Tô Hiến Thành', lat: 10.77885, lng: 106.66425 },
+  { id: 'CN3', address: '120 Hoàng Diệu 2, Phường Linh Trung, TP. Thủ Đức', prefix: 'CN120', name: 'CN3 - 120 Hoàng Diệu 2', lat: 10.85240, lng: 106.77120 },
+  { id: 'CN4', address: '111 Tôn Đản, Phường 15, Quận 4', prefix: 'CN111', name: 'CN4 - 111 Tôn Đản', lat: 10.76010, lng: 106.70630 }
 ];
 
 const DEFAULT_SHIFTS = {
@@ -12563,6 +12563,499 @@ function adminDeleteTest(session){
   };
 }
 
+// ============ TỰ ĐỘNG ĐIỂM DANH THEO CA 2 BƯỚC (GPS + ẢNH 3 YẾU TỐ) ============
+function formatHHMM(d) {
+  const dt = d instanceof Date ? d : new Date();
+  return dt.toLocaleTimeString('en-GB', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' });
+}
+
+function parseTimeToMinutes(str) {
+  if (!str) return 0;
+  const parts = String(str).split(':').map(Number);
+  return (parts[0] || 0) * 60 + (parts[1] || 0);
+}
+
+function getBranchGps(branchId) {
+  const b = (db.branches || []).find(x => x.id === branchId || x.prefix === branchId)
+    || DEFAULT_BRANCHES.find(x => x.id === branchId || x.prefix === branchId)
+    || DEFAULT_BRANCHES[0];
+  return {
+    lat: typeof b.lat === 'number' ? b.lat : 10.79815,
+    lng: typeof b.lng === 'number' ? b.lng : 106.69145,
+    name: b.name || b.id || 'Ụm Bò Milk'
+  };
+}
+
+function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371e3; // bán kính Trái đất (mét)
+  const toRad = deg => (deg * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function getEmployeeShiftForAttendance(emp, todayStr) {
+  const sched = (db.schedules || []).find(s => s.employeeId === emp.employeeId && s.days?.some(d => d.date === todayStr));
+  const dayRec = sched?.days?.find(d => d.date === todayStr);
+  let shiftKey = (dayRec && dayRec.shift && dayRec.shift !== 'OFF') ? dayRec.shift : (emp.shift || 'CA_SANG');
+  if (shiftKey === 'CA_TRUA') shiftKey = 'CA_CHIEU';
+  const shiftsConfig = (db.settings?.payroll?.shifts) || DEFAULT_SHIFTS;
+  const shiftCfg = shiftsConfig[shiftKey] || DEFAULT_SHIFTS[shiftKey] || DEFAULT_SHIFTS['CA_SANG'];
+  return {
+    shiftKey,
+    shiftCfg,
+    isOff: !!(dayRec && (dayRec.status === 'OFF' || dayRec.shift === 'OFF'))
+  };
+}
+
+const pendingAttendance = {};
+
+async function handleAttendanceLocation(telegramId, location, username, chatId) {
+  let link = findTelegramLink(telegramId);
+  let emp = null;
+  if (link?.employeeId) {
+    emp = (db.employees || []).find(e => e.employeeId === link.employeeId);
+  }
+  if (!emp && username) {
+    emp = (db.employees || []).find(e => e.telegramUsername && e.telegramUsername.toLowerCase() === username.toLowerCase());
+  }
+  if (!emp) {
+    return {
+      text: '⚠️ <b>Bạn chưa liên kết tài khoản nhân viên</b>\n'
+        + 'Vui lòng nhắn số điện thoại của bạn (hoặc /link <code>SĐT</code>) để liên kết tài khoản trước khi điểm danh.'
+    };
+  }
+
+  const todayStr = getVietnamTodayStr();
+  const vnNow = getVietnamNow();
+  const nowMins = vnNow.getHours() * 60 + vnNow.getMinutes();
+  const shiftData = getEmployeeShiftForAttendance(emp, todayStr);
+
+  if (shiftData.isOff) {
+    return {
+      text: `🏖️ <b>Hôm nay (${fmtDMY(todayStr)}) là ngày nghỉ OFF</b> theo lịch của bạn.\nBạn không cần thực hiện điểm danh!`
+    };
+  }
+
+  const shiftCfg = shiftData.shiftCfg;
+  const shiftKey = shiftData.shiftKey;
+  const branchGps = getBranchGps(emp.branchId);
+  const distance = calculateDistanceMeters(location.latitude, location.longitude, branchGps.lat, branchGps.lng);
+
+  // Kiểm tra tình trạng điểm danh hôm nay
+  const attRec = (db.attendances || []).find(a => a.employeeId === emp.employeeId && String(a.date || '').split('T')[0] === todayStr && (!a.isTest || isTestRecord(emp)));
+  const hasIn = !!(attRec && (attRec.checkIn || attRec.checkInAt));
+  const hasOut = !!(attRec && (attRec.checkOut || attRec.checkOutAt));
+
+  if (hasIn && hasOut) {
+    return {
+      text: `✅ <b>Bạn đã hoàn thành cả vào ca và ra ca hôm nay (${fmtDMY(todayStr)})!</b>\n`
+        + `• Vào ca: <b>${attRec.checkIn || attRec.checkInAt}</b>\n`
+        + `• Ra ca: <b>${attRec.checkOut || attRec.checkOutAt}</b>\n`
+        + `Chúc bạn nghỉ ngơi vui vẻ!`
+    };
+  }
+
+  const type = hasIn ? 'CHECKOUT' : 'CHECKIN';
+
+  // Ràng buộc khoảng cách GPS <= 300m
+  if (distance > 300) {
+    return {
+      text: `❌ <b>VỊ TRÍ KHÔNG HỢP LỆ (QUÁ XA CỬA HÀNG)</b>\n\n`
+        + `Khoảng cách hiện tại của bạn: <b>${Math.round(distance)}m</b> (Vượt quá giới hạn cho phép: <b>300m</b>)\n`
+        + `Cửa hàng làm việc: <b>${branchGps.name}</b>\n\n`
+        + `👉 Vui lòng di chuyển đến đúng vị trí cửa hàng và bấm gửi lại GPS để tiếp tục điểm danh.`
+    };
+  }
+
+  // RÀNG BUỘC CHECK-OUT SỚM: Nghiêm cấm check-out trước giờ kết thúc ca
+  if (type === 'CHECKOUT') {
+    const endMins = parseTimeToMinutes(shiftCfg.end);
+    if (nowMins < endMins) {
+      const earlyMins = endMins - nowMins;
+      const violationAlert = `🚨 <b>CẢNH BÁO VI PHẠM: NHÂN VIÊN CỐ TÌNH CHECK-OUT SỚM!</b>\n\n`
+        + `👤 Nhân viên: <b>${emp.name}</b> (<code>${emp.employeeId}</code>)\n`
+        + `🏪 Chi nhánh: <b>${branchGps.name}</b> • Ca: <b>${shiftCfg.name} (${shiftCfg.start} – ${shiftCfg.end})</b>\n`
+        + `⏰ Thời gian bấm check-out: <b>${formatHHMM(vnNow)}</b>\n`
+        + `⚠️ Cố tình ra ca sớm: <b>${earlyMins} phút</b>\n`
+        + `🚫 Hệ thống đã TỪ CHỐI yêu cầu ra ca sớm này!`;
+      notifyHRMaster('violation', violationAlert, emp).catch(() => {});
+
+      return {
+        text: `🚫 <b>KHÔNG THỂ CHECK-OUT SỚM HƠN GIỜ KẾT THÚC CA!</b>\n\n`
+          + `Ca làm việc của bạn: <b>${shiftCfg.name} (${shiftCfg.start} – ${shiftCfg.end})</b>\n`
+          + `Hiện tại là: <b>${formatHHMM(vnNow)}</b> (Còn <b>${earlyMins} phút</b> nữa mới hết ca làm việc).\n\n`
+          + `⚠️ Hệ thống từ chối lệnh check-out sớm. Thông tin đã được tự động báo cáo về Quản trị HR!`
+      };
+    }
+  }
+
+  // GPS hợp lệ -> Lưu pending chuyển sang Bước 2 (Chụp ảnh xác thực 3 yếu tố)
+  const sessionKey = String(chatId || telegramId);
+  const pRecord = {
+    type,
+    employeeId: emp.employeeId,
+    emp,
+    shift: shiftKey,
+    shiftCfg,
+    lat: location.latitude,
+    lng: location.longitude,
+    distance: Math.round(distance),
+    branchName: branchGps.name,
+    step: 'WAITING_PHOTO',
+    createdAt: Date.now(),
+    chatId: sessionKey,
+    telegramId: String(telegramId)
+  };
+  pendingAttendance[sessionKey] = pRecord;
+  pendingAttendance[String(telegramId)] = pRecord;
+
+  return {
+    step: 'WAITING_PHOTO',
+    text: `📍 <b>BƯỚC 1: XÁC THỰC VỊ TRÍ GPS THÀNH CÔNG!</b>\n\n`
+      + `👤 Nhân viên: <b>${emp.name}</b> (<code>${emp.employeeId}</code>)\n`
+      + `🏪 Chi nhánh: <b>${branchGps.name}</b>\n`
+      + `⏰ Thao tác: <b>${type === 'CHECKIN' ? 'VÀO CA (CHECK-IN)' : 'RA CA (CHECK-OUT)'}</b> — ${shiftCfg.name} (${shiftCfg.start} – ${shiftCfg.end})\n`
+      + `📍 Khoảng cách: <b>${Math.round(distance)}m</b> (Hợp lệ ≤ 300m)\n\n`
+      + `📸 <b>BƯỚC 2: CHỤP ẢNH XÁC THỰC TRỰC DIỆN</b>\n`
+      + `Vui lòng mở máy ảnh chụp ngay 1 tấm ảnh chân dung của bạn tại quầy làm việc.\n\n`
+      + `⚠️ <b>YÊU CẦU BẮT BUỘC ĐỦ 3 YẾU TỐ:</b>\n`
+      + `1️⃣ <b>Khuôn mặt</b> rõ ràng\n`
+      + `2️⃣ <b>Đồng phục</b> Ụm Bò Milk\n`
+      + `3️⃣ <b>Bảng tên</b> nhân viên\n`
+      + `<i>(Hệ thống sẽ từ chối điểm danh nếu thiếu 1 trong 3 yếu tố trên!)</i>`
+  };
+}
+
+async function handleAttendancePhoto(telegramId, photoList, options = {}) {
+  const sessionKey = String(options.chatId || telegramId);
+  const p = pendingAttendance[sessionKey] || pendingAttendance[String(telegramId)];
+  if (!p || p.step !== 'WAITING_PHOTO') {
+    return {
+      text: '⚠️ Bạn chưa hoàn thành Bước 1 (Gửi vị trí GPS) hoặc phiên điểm danh đã hết hạn.\nVui lòng gửi lại vị trí GPS trước!'
+    };
+  }
+
+  // Kiểm tra 3 yếu tố bắt buộc: Mặt + Đồng phục + Bảng tên
+  const missingFace = !!options.missingFace;
+  const missingUniform = !!options.missingUniform;
+  const missingBadge = !!options.missingBadge;
+  const cap = String(options.caption || '').toLowerCase();
+  const capFailUniform = cap.includes('thieu dong phuc') || cap.includes('khong dong phuc') || cap.includes('ko dong phuc');
+  const capFailBadge = cap.includes('thieu bang ten') || cap.includes('khong bang ten') || cap.includes('ko bang ten');
+  const capFailFace = cap.includes('thieu mat') || cap.includes('khong mat') || cap.includes('ko ro mat');
+  const capGeneralFail = cap.includes('#fail') || cap.includes('loi anh');
+
+  const failReasons = [];
+  if (missingFace || capFailFace) failReasons.push('1️⃣ Không nhận diện rõ khuôn mặt');
+  if (missingUniform || capFailUniform) failReasons.push('2️⃣ Chưa mặc đúng đồng phục Ụm Bò Milk');
+  if (missingBadge || capFailBadge) failReasons.push('3️⃣ Chưa đeo bảng tên nhân viên');
+  if (!failReasons.length && capGeneralFail) failReasons.push('⚠️ Ảnh chụp không đạt tiêu chuẩn 3 yếu tố bắt buộc');
+
+  if (failReasons.length > 0) {
+    return {
+      text: `❌ <b>ẢNH CHỤP KHÔNG ĐẠT TIÊU CHUẨN ĐIỂM DANH!</b>\n\n`
+        + `Ảnh của bạn bị từ chối do thiếu các yếu tố sau:\n`
+        + `${failReasons.join('\n')}\n\n`
+        + `👉 <b>Yêu cầu bắt buộc:</b> Khuôn mặt + Đồng phục + Bảng tên.\n`
+        + `Vui lòng chụp lại ảnh hợp lệ để hoàn tất điểm danh!`
+    };
+  }
+
+  const photoId = (photoList && photoList[0] && photoList[0].file_id) || ('photo_' + Date.now());
+  const todayStr = getVietnamTodayStr();
+  const vnNow = getVietnamNow();
+  const nowStr = formatHHMM(vnNow);
+  const nowMins = vnNow.getHours() * 60 + vnNow.getMinutes();
+
+  if (p.type === 'CHECKIN') {
+    const startMins = parseTimeToMinutes(p.shiftCfg.start);
+    const lateMins = Math.max(0, nowMins - startMins);
+    let penalty = 0;
+    let status = 'ON_TIME';
+
+    if (lateMins > 30) {
+      status = 'VERY_LATE';
+      const rate = p.emp.type === 'OFFICIAL' ? (db.settings?.payroll?.officialRate || 25500) : (db.settings?.payroll?.trainingRate || 21000);
+      penalty = Math.round((p.shiftCfg.hours || 5) * rate * 0.5);
+
+      const penRec = {
+        id: uuidv4(),
+        employeeId: p.employeeId,
+        employeeName: p.emp.name,
+        branchId: p.emp.branchId,
+        date: todayStr,
+        shift: p.shift,
+        type: 'LATE_CHECKIN_30M',
+        amount: penalty,
+        reason: `Vào ca muộn ${lateMins} phút (> 30 phút, phạt 50% lương ca)`,
+        createdAt: getVietnamISOString()
+      };
+      if (!db.penalties) db.penalties = [];
+      db.penalties.push(penRec);
+
+      const emergencyAlert = `🚨 <b>BÁO ĐỘNG KHẨN CẤP: NHÂN VIÊN VÀO CA TRỄ > 30 PHÚT!</b>\n\n`
+        + `👤 Nhân viên: <b>${p.emp.name}</b> (<code>${p.employeeId}</code>)\n`
+        + `🏪 Chi nhánh: <b>${p.branchName}</b> • Ca: <b>${p.shiftCfg.name}</b>\n`
+        + `⏰ Giờ vào ca: <b>${nowStr}</b> (Trễ <b>${lateMins} phút</b>)\n`
+        + `💸 Mức phạt: <b>${penalty.toLocaleString('vi-VN')}đ</b> (50% lương ca)\n`
+        + `⚠️ Quản lý cửa hàng và HR vui lòng kiểm tra ngay quân số chi nhánh!`;
+      notifyHRMaster('emergency', emergencyAlert, p.emp).catch(() => {});
+    } else if (lateMins > 5) {
+      status = 'LATE';
+      penalty = 30000;
+
+      const penRec = {
+        id: uuidv4(),
+        employeeId: p.employeeId,
+        employeeName: p.emp.name,
+        branchId: p.emp.branchId,
+        date: todayStr,
+        shift: p.shift,
+        type: 'LATE_CHECKIN_5M',
+        amount: 30000,
+        reason: `Vào ca muộn ${lateMins} phút (> 5 phút)`,
+        createdAt: getVietnamISOString()
+      };
+      if (!db.penalties) db.penalties = [];
+      db.penalties.push(penRec);
+
+      const lateNotice = `⚠️ <b>THÔNG BÁO NHÂN VIÊN VÀO CA TRỄ (PHẠT 30.000đ)</b>\n\n`
+        + `👤 Nhân viên: <b>${p.emp.name}</b> (<code>${p.employeeId}</code>)\n`
+        + `🏪 Chi nhánh: <b>${p.branchName}</b> • Ca: <b>${p.shiftCfg.name}</b>\n`
+        + `⏰ Giờ vào ca: <b>${nowStr}</b> (Trễ <b>${lateMins} phút</b>)\n`
+        + `💸 Tiền phạt: <b>30.000đ</b> (Đã ghi nhận trừ lương kỳ này)`;
+      notifyHRMaster('penalty', lateNotice, p.emp).catch(() => {});
+    }
+
+    if (!db.attendances) db.attendances = [];
+    let att = db.attendances.find(a => a.employeeId === p.employeeId && String(a.date || '').split('T')[0] === todayStr);
+    if (!att) {
+      att = {
+        id: uuidv4(),
+        employeeId: p.employeeId,
+        employeeName: p.emp.name,
+        branchId: p.emp.branchId,
+        shift: p.shift,
+        date: todayStr,
+        version: 1
+      };
+      db.attendances.push(att);
+    }
+    att.checkIn = nowStr;
+    att.checkInAt = getVietnamISOString();
+    att.checkInGps = { lat: p.lat, lng: p.lng, distance: p.distance };
+    att.checkInPhoto = photoId;
+    att.checkInVerified = true;
+    att.verificationElements = ['FACE', 'UNIFORM', 'BADGE'];
+    att.lateMinutes = lateMins;
+    att.penaltyAmount = penalty;
+    att.status = status;
+    att.updated_at = getVietnamISOString();
+
+    saveDB();
+    try { io.emit('attendances:update', db.attendances); } catch(e) {}
+    try { if (penalty > 0) io.emit('penalties:update', db.penalties); } catch(e) {}
+
+    // Kích hoạt đồng bộ Google Sheet ngầm (nếu có)
+    if (typeof triggerRealtimeSheetSync === 'function') {
+      triggerRealtimeSheetSync('CHAM_CONG');
+    }
+
+    // Thông báo cho Bot Quản trị HR
+    const hrCheckinAlert = `📍 <b>THÔNG BÁO ĐIỂM DANH VÀO CA (CHECK-IN)</b>\n\n`
+      + `👤 Nhân viên: <b>${p.emp.name}</b> (<code>${p.employeeId}</code>)\n`
+      + `🏪 Chi nhánh: <b>${p.branchName}</b> • Ca: <b>${p.shiftCfg.name}</b>\n`
+      + `⏰ Thời gian: <b>${nowStr}</b> (${status === 'ON_TIME' ? 'Đúng giờ' : `Trễ ${lateMins} phút`})\n`
+      + `📍 Khoảng cách GPS: <b>${p.distance}m</b>\n`
+      + `📸 Xác thực: <b>ĐỦ 3 YẾU TỐ</b> (Mặt + Đồng phục + Bảng tên)\n`
+      + (penalty > 0 ? `💸 Phạt trễ: <b>${penalty.toLocaleString('vi-VN')}đ</b>` : `✨ Đúng giờ (Không phạt)`);
+    notifyHRMaster('checkin', hrCheckinAlert, p.emp).catch(() => {});
+
+    delete pendingAttendance[sessionKey];
+    delete pendingAttendance[String(telegramId)];
+
+    let employeeReply = `✅ <b>ĐIỂM DANH VÀO CA (CHECK-IN) THÀNH CÔNG!</b>\n\n`
+      + `👤 Nhân viên: <b>${p.emp.name}</b>\n`
+      + `🏪 Chi nhánh: <b>${p.branchName}</b>\n`
+      + `⏰ Ca làm: <b>${p.shiftCfg.name} (${p.shiftCfg.start} – ${p.shiftCfg.end})</b>\n`
+      + `⏱️ Giờ vào ca: <b>${nowStr}</b>\n`
+      + `📍 Khoảng cách: <b>${p.distance}m</b> • 📸 Xác thực: <b>Đạt chuẩn 3 yếu tố</b>\n\n`;
+
+    if (penalty > 0) {
+      employeeReply += `⚠️ <b>Lưu ý:</b> Bạn vào ca trễ <b>${lateMins} phút</b>. Mức phạt: <b>${penalty.toLocaleString('vi-VN')}đ</b>.\n\n`;
+    } else {
+      employeeReply += `🌟 Chúc bạn có một ca làm việc tràn đầy năng lượng!\n\n`;
+    }
+    employeeReply += `📌 <i>Nhớ thực hiện check-out khi kết thúc ca lúc ${p.shiftCfg.end} nhé!</i>`;
+
+    return { text: employeeReply };
+  } else {
+    // CHECKOUT
+    const hours = p.shiftCfg.hours || 5;
+    const rate = p.emp.type === 'OFFICIAL' ? (db.settings?.payroll?.officialRate || 25500) : (db.settings?.payroll?.trainingRate || 21000);
+    const shiftWage = hours * rate;
+
+    let att = (db.attendances || []).find(a => a.employeeId === p.employeeId && String(a.date || '').split('T')[0] === todayStr);
+    const penalty = att?.penaltyAmount || 0;
+    const netWage = Math.max(0, shiftWage - penalty);
+
+    if (!att) {
+      att = {
+        id: uuidv4(),
+        employeeId: p.employeeId,
+        employeeName: p.emp.name,
+        branchId: p.emp.branchId,
+        shift: p.shift,
+        date: todayStr,
+        version: 1
+      };
+      db.attendances.push(att);
+    }
+    att.checkOut = nowStr;
+    att.checkOutAt = getVietnamISOString();
+    att.checkOutGps = { lat: p.lat, lng: p.lng, distance: p.distance };
+    att.checkOutPhoto = photoId;
+    att.checkOutVerified = true;
+    att.hoursWorked = hours;
+    att.shiftSalary = netWage;
+    att.status = 'COMPLETED';
+    att.updated_at = getVietnamISOString();
+
+    saveDB();
+    try { io.emit('attendances:update', db.attendances); } catch(e) {}
+
+    // Kích hoạt đồng bộ Google Sheet ngầm (nếu có)
+    if (typeof triggerRealtimeSheetSync === 'function') {
+      triggerRealtimeSheetSync('CHAM_CONG');
+    }
+
+    // Thông báo cho Bot Quản trị HR
+    const hrCheckoutAlert = `🏁 <b>THÔNG BÁO CHECK-OUT RA CA</b>\n\n`
+      + `👤 Nhân viên: <b>${p.emp.name}</b> (<code>${p.employeeId}</code>)\n`
+      + `🏪 Chi nhánh: <b>${p.branchName}</b> • Ca: <b>${p.shiftCfg.name}</b>\n`
+      + `⏰ Thời gian ra ca: <b>${nowStr}</b>\n`
+      + `⏱️ Thời gian làm: <b>${hours} giờ</b> • Tiền ca: <b>${netWage.toLocaleString('vi-VN')}đ</b>\n`
+      + `📍 Khoảng cách GPS: <b>${p.distance}m</b>\n`
+      + `📸 Xác thực: <b>ĐỦ 3 YẾU TỐ</b> (Mặt + Đồng phục + Bảng tên)`;
+    notifyHRMaster('checkout', hrCheckoutAlert, p.emp).catch(() => {});
+
+    delete pendingAttendance[sessionKey];
+    delete pendingAttendance[String(telegramId)];
+
+    return {
+      text: `🏁 <b>CHECK-OUT RA CA THÀNH CÔNG!</b>\n\n`
+        + `👤 Nhân viên: <b>${p.emp.name}</b>\n`
+        + `🏪 Chi nhánh: <b>${p.branchName}</b> • Ca: <b>${p.shiftCfg.name}</b>\n`
+        + `⏰ Giờ ra ca: <b>${nowStr}</b>\n`
+        + `⏱️ Thời gian làm việc: <b>${hours} giờ</b>\n`
+        + `💰 Tiền ca tạm tính: <b>${netWage.toLocaleString('vi-VN')}đ</b>${penalty > 0 ? ` (Đã trừ ${penalty.toLocaleString('vi-VN')}đ tiền phạt)` : ''}\n\n`
+        + `🎉 Bạn đã hoàn thành trọn vẹn ca làm việc hôm nay. Nghỉ ngơi thật tốt nhé!`
+    };
+  }
+}
+
+// Bảng theo dõi thông báo nhắc nhở ca làm việc (chống gửi trùng lặp)
+const shiftAlertTracking = {};
+
+async function checkAutoShiftAttendance() {
+  try {
+    if (OUTBOUND_SYNC_DISABLED) return;
+    const cfg = getTelegramCfg('employee');
+    if (!cfg.botToken) return;
+
+    const todayStr = getVietnamTodayStr();
+    const vnNow = getVietnamNow();
+    const nowMins = vnNow.getHours() * 60 + vnNow.getMinutes();
+
+    // Dọn dẹp tracking cũ
+    Object.keys(shiftAlertTracking).forEach(k => {
+      if (!k.includes(todayStr)) delete shiftAlertTracking[k];
+    });
+
+    const employees = (db.employees || []).filter(e => !['ARCHIVED', 'TERMINATED', 'RESIGNED'].includes(e.status) && !isTestRecord(e));
+
+    for (const emp of employees) {
+      const link = findTelegramLink(emp.employeeId) || (db.telegramLinks || []).find(l => l.employeeId === emp.employeeId);
+      if (!link || !link.chatId) continue;
+
+      const shiftData = getEmployeeShiftForAttendance(emp, todayStr);
+      if (shiftData.isOff) continue;
+
+      const shiftCfg = shiftData.shiftCfg;
+      const startMins = parseTimeToMinutes(shiftCfg.start);
+      const endMins = parseTimeToMinutes(shiftCfg.end);
+
+      const att = (db.attendances || []).find(a => a.employeeId === emp.employeeId && String(a.date || '').split('T')[0] === todayStr);
+      const hasIn = !!(att && (att.checkIn || att.checkInAt));
+      const hasOut = !!(att && (att.checkOut || att.checkOutAt));
+
+      // 1. Nhắc nhở trước ca 15 phút (gửi nút GPS)
+      if (!hasIn && nowMins >= (startMins - 15) && nowMins < startMins) {
+        const k = `${emp.employeeId}_${todayStr}_REMIND_15M`;
+        if (!shiftAlertTracking[k]) {
+          shiftAlertTracking[k] = true;
+          const msg = `🔔 <b>NHẮC NHỞ VÀO CA LÀM VIỆC (CÒN 15 PHÚT)</b>\n\n`
+            + `Chào <b>${emp.name}</b>, ca làm <b>${shiftCfg.name} (${shiftCfg.start} – ${shiftCfg.end})</b> tại <b>${emp.branchId || 'cửa hàng'}</b> sắp bắt đầu!\n\n`
+            + `👉 Hãy có mặt tại quầy và nhấn nút <b>[📍 Gửi vị trí GPS hiện tại]</b> bên dưới để điểm danh đúng giờ nhé.`;
+          tg.sendTelegramMessage(cfg.botToken, link.chatId, msg, tg.attendanceGpsKeyboard()).catch(() => {});
+        }
+      }
+
+      // 2. Cảnh báo trễ ca 10 phút sau khi bắt đầu ca
+      if (!hasIn && nowMins >= (startMins + 10) && nowMins < (startMins + 30)) {
+        const k = `${emp.employeeId}_${todayStr}_WARN_LATE_10M`;
+        if (!shiftAlertTracking[k]) {
+          shiftAlertTracking[k] = true;
+          const msg = `⚠️ <b>CẢNH BÁO ĐI TRỄ CA LÀM VIỆC!</b>\n\n`
+            + `Ca <b>${shiftCfg.name}</b> đã bắt đầu lúc <b>${shiftCfg.start}</b>. Hiện đã trễ hơn 5 phút (Mức phạt trễ 30.000đ).\n\n`
+            + `👉 Vui lòng nhấn <b>[📍 Gửi vị trí GPS hiện tại]</b> để điểm danh ngay tránh bị phạt 50% lương ca!`;
+          tg.sendTelegramMessage(cfg.botToken, link.chatId, msg, tg.attendanceGpsKeyboard()).catch(() => {});
+        }
+      }
+
+      // 3. Báo động khẩn cấp trễ quá 30 phút
+      if (!hasIn && nowMins >= (startMins + 30) && nowMins < endMins) {
+        const k = `${emp.employeeId}_${todayStr}_EMERGENCY_30M`;
+        if (!shiftAlertTracking[k]) {
+          shiftAlertTracking[k] = true;
+          const msg = `🚨 <b>BÁO ĐỘNG: BẠN ĐÃ VÀO CA TRỄ QUÁ 30 PHÚT!</b>\n\n`
+            + `Bạn chưa điểm danh ca <b>${shiftCfg.name}</b> (bắt đầu lúc ${shiftCfg.start}).\n`
+            + `Theo quy định, bạn bị phạt <b>50% lương ca</b>.\n`
+            + `Thông tin vắng mặt đã được báo động khẩn cấp tới HR & Quản lý cửa hàng!`;
+          tg.sendTelegramMessage(cfg.botToken, link.chatId, msg, tg.attendanceGpsKeyboard()).catch(() => {});
+
+          const hrAlert = `🚨 <b>BÁO ĐỘNG KHẨN: NHÂN VIÊN VẮNG / TRỄ QUÁ 30 PHÚT!</b>\n\n`
+            + `👤 Nhân viên: <b>${emp.name}</b> (<code>${emp.employeeId}</code>)\n`
+            + `🏪 Chi nhánh: <b>${emp.branchId}</b> • Ca: <b>${shiftCfg.name} (${shiftCfg.start})</b>\n`
+            + `⏰ Hiện tại: <b>${formatHHMM(vnNow)}</b> (Chưa điểm danh vào ca)\n`
+            + `⚠️ Đề nghị HR & Quản lý kiểm tra ngay quân số ca trực!`;
+          notifyHRMaster('emergency', hrAlert, emp).catch(() => {});
+        }
+      }
+
+      // 4. Nhắc nhở ra ca trước 10 phút
+      if (hasIn && !hasOut && nowMins >= (endMins - 10) && nowMins < endMins) {
+        const k = `${emp.employeeId}_${todayStr}_CHECKOUT_REMIND_10M`;
+        if (!shiftAlertTracking[k]) {
+          shiftAlertTracking[k] = true;
+          const msg = `⏰ <b>NHẮC NHỞ RA CA (CHECK-OUT)</b>\n\n`
+            + `Ca <b>${shiftCfg.name}</b> sẽ kết thúc lúc <b>${shiftCfg.end}</b>.\n`
+            + `Sau khi kết thúc ca, vui lòng gửi vị trí GPS và chụp ảnh xác thực 3 yếu tố để hoàn tất tính lương ca nhé!`;
+          tg.sendTelegramMessage(cfg.botToken, link.chatId, msg).catch(() => {});
+        }
+      }
+    }
+  } catch (e) {
+    console.error('[AUTO_SHIFT_ATTENDANCE] Error:', e.message);
+  }
+}
+
 async function processTelegramUpdate(update, role){
   role = ['hr','employee','finance'].includes(role) ? role : 'hr';
   const cfg = getTelegramCfg(role);
@@ -12570,6 +13063,25 @@ async function processTelegramUpdate(update, role){
   const ctx = {
     role,
     webAppUrl: cfg.webAppUrl,
+    handleAttendanceLocation: async (telegramId, location, username, chatId) => {
+      return handleAttendanceLocation(telegramId, location, username, chatId);
+    },
+    hasPendingAttendance: async (telegramId) => {
+      const link = findTelegramLink(telegramId);
+      const k1 = String(telegramId);
+      const k2 = String(link?.chatId || '');
+      const p = pendingAttendance[k1] || pendingAttendance[k2];
+      if (!p) return false;
+      if (Date.now() - p.createdAt > 15 * 60 * 1000) {
+        delete pendingAttendance[k1];
+        delete pendingAttendance[k2];
+        return false;
+      }
+      return p.step === 'WAITING_PHOTO';
+    },
+    handleAttendancePhoto: async (telegramId, photoList, options) => {
+      return handleAttendancePhoto(telegramId, photoList, options);
+    },
     getHrSession: async (chatId) => {
       const c = (db.hrBotChats||[]).find(x => String(x.chatId) === String(chatId));
       return c?.auth || null;
@@ -13311,13 +13823,32 @@ async function autoSetupTelegramBots(){
   }
 }
 
-server.listen(PORT, ()=> {
-  console.log(`Ụm Bò Milk HR running at http://localhost:${PORT}`);
-  try{
-    const t = (db.settings && db.settings.telegram) || {};
-    const hasTok = !!(t.botToken || process.env.TELEGRAM_BOT_TOKEN);
-    console.log(`[TELEGRAM] ${hasTok ? 'Bot Token SET' : 'Bot Token EMPTY (đặt TELEGRAM_BOT_TOKEN để bật)'} • Mini App: /telegram • Username: ${t.botUsername || process.env.TELEGRAM_BOT_USERNAME || 'EMPTY'}`);
-  }catch(e){}
-  try{ startTelegramPolling(); }catch(e){}
-  try{ setTimeout(autoSetupTelegramBots, 1500); }catch(e){}
-});
+if (require.main === module) {
+  server.listen(PORT, ()=> {
+    console.log(`Ụm Bò Milk HR running at http://localhost:${PORT}`);
+    try{
+      const t = (db.settings && db.settings.telegram) || {};
+      const hasTok = !!(t.botToken || process.env.TELEGRAM_BOT_TOKEN);
+      console.log(`[TELEGRAM] ${hasTok ? 'Bot Token SET' : 'Bot Token EMPTY (đặt TELEGRAM_BOT_TOKEN để bật)'} • Mini App: /telegram • Username: ${t.botUsername || process.env.TELEGRAM_BOT_USERNAME || 'EMPTY'}`);
+    }catch(e){}
+    try{ startTelegramPolling(); }catch(e){}
+    try{ setTimeout(autoSetupTelegramBots, 1500); }catch(e){}
+    try{ setInterval(checkAutoShiftAttendance, 60 * 1000); }catch(e){}
+  });
+}
+
+module.exports = {
+  app,
+  server,
+  calculateDistanceMeters,
+  getBranchGps,
+  parseTimeToMinutes,
+  getEmployeeShiftForAttendance,
+  handleAttendanceLocation,
+  handleAttendancePhoto,
+  pendingAttendance,
+  checkAutoShiftAttendance,
+  processTelegramUpdate,
+  DEFAULT_BRANCHES,
+  DEFAULT_SHIFTS
+};
