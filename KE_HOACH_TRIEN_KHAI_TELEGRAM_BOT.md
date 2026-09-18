@@ -146,7 +146,12 @@ graph TD
     * Thông tin 2 ngày OFF đã đăng ký trước đó.
     * Trạng thái hiện tại (Đang chờ HR duyệt hoặc Đã duyệt).
     * Hướng dẫn nhân viên: Quy định chỉ đăng ký tối đa 2 ngày OFF/tuần, nếu cần điều chỉnh vui lòng liên hệ Quản lý hoặc dùng chức năng **"🔄 Đổi ca"** với đồng nghiệp.
-  * **Nếu chưa đăng ký**: Ghi nhận 2 ngày OFF, 5 ngày còn lại thành WORKING, gửi thông báo sang Bot Quản trị HR.
+* **CẢNH BÁO XUNG ĐỘT TRÙNG NGÀY NGHỈ CÙNG CA (Colleague Off Conflict)**:
+  * Nếu đồng nghiệp **CÙNG CHI NHÁNH + CÙNG CA LÀM VIỆC** đã đăng ký nghỉ trước đó trên một trong các ngày mà nhân viên đang chọn, Bot lập tức cảnh báo từ chối: hai nhân viên cùng ca không thể cùng nghỉ 1 ngày (đảm bảo luôn có người trực ca tại cửa hàng).
+* **3 NGUYÊN TẮC TỰ ĐỘNG SẮP LỊCH TRÊN BOT TELEGRAM (Auto-Scheduling Rules)**:
+  1. 🚫 **Nhân viên A và B cùng Chi nhánh + CÙNG ca làm việc**: BOT telegram tự động sắp lịch sao cho 2 nhân viên này **KHÔNG TRÙNG CA LÀM VIỆC TRONG 1 NGÀY** (người này làm thì người kia nghỉ luân phiên qua thuật toán phân bổ công bằng `pickFair`).
+  2. 👥 **Nhân viên A và B cùng Chi nhánh + KHÁC ca làm việc** (VD: A ca sáng, B ca tối): BOT telegram tự động sắp lịch sao cho 2 nhân viên này **ĐƯỢC TRÙNG CA LÀM VIỆC TRONG 1 NGÀY** (cả hai cùng đi làm bình thường tại chi nhánh trong ngày đó).
+  3. 🌐 **Nhân viên A và B KHÁC chi nhánh + KHÁC ca làm việc** (hoặc khác chi nhánh nói chung): BOT telegram tự động sắp lịch sao cho 2 nhân viên này **ĐƯỢC TRÙNG CA LÀM VIỆC TRONG 1 NGÀY** (lịch làm việc độc lập theo từng chi nhánh).
 * Tuyệt đối không nhắc từ khóa "Google Sheet" trong tin nhắn gửi nhân viên.
 
 ---

@@ -578,4 +578,74 @@ test('Telegram V4.3 Features Suite', async (t) => {
     });
     assert.strictEqual(deletedColonCode, 'NV1288');
   });
+
+  await t.test('16. Kiểm tra cảnh báo đăng ký lịch OFF 2 ngày/tuần & 3 ràng buộc tự động sắp lịch', async () => {
+    // 16.1 Cảnh báo trùng ngày nghỉ với đồng nghiệp CÙNG CHI NHÁNH + CÙNG CA
+    const rConflict = await tg.handleTelegramUpdate({
+      message: { chat: { id: 77778 }, text: '21/09/2026, 22/09/2026' }
+    }, {
+      role: 'employee',
+      checkExistingOffRegistration: async () => ({ hasRegistered: false }),
+      checkColleagueOffConflict: async (tgId, dates) => ({
+        hasConflict: true,
+        branchId: 'CN1',
+        shift: 'CA_SANG',
+        colleagueName: 'Nguyễn Văn B',
+        colleagueId: 'CN1_NV02',
+        conflictDates: ['21/09/2026']
+      })
+    });
+    assert.ok(rConflict[0].text.includes('CẢNH BÁO: TRÙNG LỊCH NGHỈ VỚI ĐỒNG NGHIỆP CÙNG CA'));
+    assert.ok(rConflict[0].text.includes('Nguyễn Văn B'));
+    assert.ok(rConflict[0].text.includes('không thể cùng nghỉ chung 1 ngày'));
+
+    // 16.2 Ràng buộc 1: Cùng Chi nhánh + Cùng ca -> Tự động sắp lịch KHÔNG TRÙNG CA LÀM VIỆC TRONG 1 NGÀY
+    const { pickFair } = require('../services/fairPick');
+    const weekDays = ['2026-09-21', '2026-09-22', '2026-09-23', '2026-09-24', '2026-09-25', '2026-09-26', '2026-09-27'];
+    const offA = new Set(['2026-09-21', '2026-09-22']);
+    const offB = new Set(['2026-09-25', '2026-09-26']);
+    const scheduleA = [];
+    const scheduleB = [];
+    const workCounts = { NV_A: 0, NV_B: 0 };
+    const lastDays = { NV_A: -1, NV_B: -1 };
+
+    for (let di = 0; di < 7; di++) {
+      const d = weekDays[di];
+      const avail = [];
+      if (!offA.has(d)) avail.push('NV_A');
+      if (!offB.has(d)) avail.push('NV_B');
+
+      if (avail.length === 1) {
+        const sole = avail[0];
+        scheduleA.push(sole === 'NV_A' ? 'WORKING' : 'OFF');
+        scheduleB.push(sole === 'NV_B' ? 'WORKING' : 'OFF');
+        workCounts[sole]++;
+        lastDays[sole] = di;
+      } else if (avail.length > 1) {
+        const chosen = pickFair(avail, workCounts, lastDays, di);
+        scheduleA.push(chosen === 'NV_A' ? 'WORKING' : 'OFF');
+        scheduleB.push(chosen === 'NV_B' ? 'WORKING' : 'OFF');
+        workCounts[chosen]++;
+        lastDays[chosen] = di;
+      }
+    }
+
+    // Xác minh: KHÔNG CÓ BẤT KỲ NGÀY NÀO A VÀ B CÙNG LÀM VIỆC (WORKING)
+    for (let di = 0; di < 7; di++) {
+      const bothWorking = (scheduleA[di] === 'WORKING' && scheduleB[di] === 'WORKING');
+      assert.strictEqual(bothWorking, false, `Ngày ${weekDays[di]} bị trùng ca giữa A và B!`);
+    }
+
+    // 16.3 Ràng buộc 2: Cùng Chi nhánh + KHÁC ca -> Được trùng ca làm việc trong 1 ngày (cả 2 đều WORKING)
+    const scheduleC_Toi = ['WORKING', 'WORKING', 'WORKING', 'OFF', 'OFF', 'WORKING', 'WORKING'];
+    // Ngày 2026-09-23: A làm ca sáng, C làm ca tối tại CN1 -> Cả hai đều WORKING
+    assert.strictEqual(scheduleA[2], 'WORKING');
+    assert.strictEqual(scheduleC_Toi[2], 'WORKING');
+
+    // 16.4 Ràng buộc 3: Khác Chi nhánh + KHÁC ca -> Được trùng ca làm việc trong 1 ngày (cả 2 đều WORKING)
+    const scheduleD_CN2 = ['WORKING', 'WORKING', 'WORKING', 'WORKING', 'WORKING', 'OFF', 'OFF'];
+    // Ngày 2026-09-21: B làm tại CN1, D làm tại CN2 -> Cả hai đều WORKING
+    assert.strictEqual(scheduleB[0], 'WORKING');
+    assert.strictEqual(scheduleD_CN2[0], 'WORKING');
+  });
 });

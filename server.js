@@ -14563,6 +14563,61 @@ async function processTelegramUpdate(update, role){
 
       return { hasRegistered: false };
     },
+    checkColleagueOffConflict: async (telegramId, dates) => {
+      const link = findTelegramLink(telegramId);
+      if (!link || !link.employeeId) return { hasConflict: false };
+      const emp = (db.employees || []).find(e => e.employeeId === link.employeeId);
+      if (!emp || !emp.branchId || !emp.shift) return { hasConflict: false };
+
+      const requestedDates = Array.isArray(dates) ? dates : [];
+      if (requestedDates.length === 0) return { hasConflict: false };
+
+      // Tìm đồng nghiệp CÙNG CHI NHÁNH + CÙNG CA LÀM VIỆC
+      const sameShiftColleagues = (db.employees || []).filter(o =>
+        o.employeeId !== emp.employeeId &&
+        o.branchId === emp.branchId &&
+        o.shift === emp.shift &&
+        !['ARCHIVED', 'TERMINATED', 'RESIGNED'].includes(o.status)
+      );
+
+      for (const colleague of sameShiftColleagues) {
+        // 1. Kiểm tra trong offRequests
+        const cReq = (db.offRequests || []).find(r =>
+          r.employeeId === colleague.employeeId &&
+          r.status !== 'REJECTED' &&
+          r.dates && r.dates.some(d => requestedDates.includes(d))
+        );
+        if (cReq) {
+          const conflictDates = cReq.dates.filter(d => requestedDates.includes(d)).map(fmtDMY);
+          return {
+            hasConflict: true,
+            branchId: emp.branchId,
+            shift: emp.shift,
+            colleagueName: colleague.name,
+            colleagueId: colleague.employeeId,
+            conflictDates
+          };
+        }
+
+        // 2. Kiểm tra trong schedules
+        const cScheds = (db.schedules || []).filter(s => s.employeeId === colleague.employeeId);
+        for (const s of cScheds) {
+          const offDays = (s.days || []).filter(d => (d.status === 'OFF' || d.shift === 'OFF') && requestedDates.includes(d.date));
+          if (offDays.length > 0) {
+            return {
+              hasConflict: true,
+              branchId: emp.branchId,
+              shift: emp.shift,
+              colleagueName: colleague.name,
+              colleagueId: colleague.employeeId,
+              conflictDates: offDays.map(d => fmtDMY(d.date))
+            };
+          }
+        }
+      }
+
+      return { hasConflict: false };
+    },
     getBranchColleagues: async (telegramId) => {
       const link = findTelegramLink(telegramId);
       if (!link?.employeeId) return { colleagues: [] };
@@ -14718,6 +14773,34 @@ async function processTelegramUpdate(update, role){
         };
       }
 
+      // Ràng buộc cảnh báo: Kiểm tra trùng ngày nghỉ với đồng nghiệp CÙNG CHI NHÁNH + CÙNG CA LÀM VIỆC
+      const sameShiftColleagues = (db.employees || []).filter(o =>
+        o.employeeId !== emp.employeeId &&
+        o.branchId === emp.branchId &&
+        o.shift === emp.shift &&
+        !['ARCHIVED', 'TERMINATED', 'RESIGNED'].includes(o.status)
+      );
+
+      for (const colleague of sameShiftColleagues) {
+        const cReq = (db.offRequests || []).find(r =>
+          r.employeeId === colleague.employeeId &&
+          r.status !== 'REJECTED' &&
+          r.dates && r.dates.some(d => dates.includes(d))
+        );
+        if (cReq) {
+          const conflicts = cReq.dates.filter(d => dates.includes(d)).map(fmtDMY);
+          return {
+            text: `⚠️ <b>CẢNH BÁO: TRÙNG LỊCH NGHỈ VỚI ĐỒNG NGHIỆP CÙNG CA!</b>\n\n`
+              + `🏪 Chi nhánh: <b>${emp.branchId}</b> • Ca làm: <b>${emp.shift}</b>\n`
+              + `👤 Đồng nghiệp: <b>${colleague.name}</b> (<code>${colleague.employeeId}</code>)\n`
+              + `📅 Đã đăng ký nghỉ trước các ngày: <code>${conflicts.join(', ')}</code>\n\n`
+              + `📌 <b>Ràng buộc vận hành:</b> Hai nhân viên cùng chi nhánh và cùng ca làm việc <b>không thể cùng nghỉ trong 1 ngày</b> để đảm bảo luôn có nhân sự trực ca.\n`
+              + `(Các nhân viên khác ca hoặc khác chi nhánh vẫn được phép làm việc hoặc nghỉ cùng ngày bình thường).\n\n`
+              + `👉 <i>Vui lòng chọn ngày nghỉ khác hoặc liên hệ Quản lý cửa hàng / HR để điều phối!</i>`
+          };
+        }
+      }
+
       // Nhóm ngày theo tuần (Thứ 2 bắt đầu tuần)
       const weekMap = new Map();
       dates.forEach(dStr => {
@@ -14732,16 +14815,124 @@ async function processTelegramUpdate(update, role){
       const updatedWeeks = [];
 
       weekMap.forEach((offDatesInWeek, weekStr) => {
-        let sched = (db.schedules||[]).find(s => s.employeeId === emp.employeeId && s.weekStart === weekStr);
         const monParts = weekStr.split('-').map(Number);
         const monDate = new Date(monParts[0], monParts[1] - 1, monParts[2]);
+        const weekDates = [];
+        for (let i = 0; i < 7; i++) {
+          const d = new Date(monDate);
+          d.setDate(monDate.getDate() + i);
+          weekDates.push(toVietnamDateStr(d));
+        }
 
-        if(!sched) {
+        // Quy tắc 1: CÙNG CHI NHÁNH + CÙNG CA LÀM VIỆC -> Tự động sắp lịch KHÔNG TRÙNG CA LÀM VIỆC TRONG 1 NGÀY
+        if (sameShiftColleagues.length > 0) {
+          const group = [emp, ...sameShiftColleagues];
+          const groupOffMap = {};
+          group.forEach(e => {
+            groupOffMap[e.employeeId] = new Set();
+            if (e.employeeId === emp.employeeId) {
+              offDatesInWeek.forEach(d => groupOffMap[e.employeeId].add(d));
+            } else {
+              (db.offRequests || []).filter(r => r.employeeId === e.employeeId && r.status !== 'REJECTED').forEach(r => {
+                (r.dates || []).forEach(d => { if (weekDates.includes(d)) groupOffMap[e.employeeId].add(d); });
+              });
+              const exSc = (db.schedules || []).find(s => s.employeeId === e.employeeId && s.weekStart === weekStr);
+              if (exSc && exSc.days) {
+                exSc.days.filter(d => d.status === 'OFF' || d.shift === 'OFF').forEach(d => groupOffMap[e.employeeId].add(d.date));
+              }
+            }
+          });
+
+          const groupWorkCount = {};
+          const groupLastDay = {};
+          group.forEach(e => {
+            groupWorkCount[e.employeeId] = 0;
+            groupLastDay[e.employeeId] = -1;
+          });
+
+          const groupDays = {};
+          group.forEach(e => { groupDays[e.employeeId] = []; });
+
+          for (let di = 0; di < 7; di++) {
+            const dateStr = weekDates[di];
+            const available = group.filter(e => !groupOffMap[e.employeeId].has(dateStr));
+
+            if (available.length === 0) {
+              group.forEach(e => {
+                groupDays[e.employeeId].push({
+                  date: dateStr,
+                  dayName: dayNames[di],
+                  shift: 'OFF',
+                  status: 'OFF',
+                  substituteFor: null
+                });
+              });
+            } else if (available.length === 1) {
+              const sole = available[0];
+              group.forEach(e => {
+                const isWork = (e.employeeId === sole.employeeId);
+                groupDays[e.employeeId].push({
+                  date: dateStr,
+                  dayName: dayNames[di],
+                  shift: isWork ? (e.shift || 'CA_SANG') : 'OFF',
+                  status: isWork ? 'WORKING' : 'OFF',
+                  substituteFor: null
+                });
+              });
+              groupWorkCount[sole.employeeId]++;
+              groupLastDay[sole.employeeId] = di;
+            } else {
+              // Hai nhân viên cùng rảnh -> Dùng pickFair để chọn ĐÚNG 1 NGƯỜI LÀM (KHÔNG TRÙNG CA TRONG 1 NGÀY)
+              const chosenId = pickFair(available.map(e => e.employeeId), groupWorkCount, groupLastDay, di);
+              const chosen = available.find(e => e.employeeId === chosenId) || available[0];
+              groupLastDay[chosen.employeeId] = di;
+
+              group.forEach(e => {
+                const isWork = (e.employeeId === chosen.employeeId);
+                groupDays[e.employeeId].push({
+                  date: dateStr,
+                  dayName: dayNames[di],
+                  shift: isWork ? (e.shift || 'CA_SANG') : 'OFF',
+                  status: isWork ? 'WORKING' : 'OFF',
+                  substituteFor: null
+                });
+              });
+              groupWorkCount[chosen.employeeId]++;
+            }
+          }
+
+          // Cập nhật schedules cho các nhân viên trong nhóm cùng chi nhánh & ca
+          group.forEach(member => {
+            let memberSched = (db.schedules || []).find(s => s.employeeId === member.employeeId && s.weekStart === weekStr);
+            if (!memberSched) {
+              memberSched = {
+                id: uuidv4(),
+                employeeId: member.employeeId,
+                weekStart: weekStr,
+                days: groupDays[member.employeeId],
+                version: 1,
+                updated_at: getVietnamISOString(),
+                approvalStatus: 'APPROVED'
+              };
+              if (!db.schedules) db.schedules = [];
+              db.schedules.push(memberSched);
+              addSyncQueue('SCHEDULE', 'CREATE', memberSched, member.employeeId, 'TELEGRAM_BOT');
+            } else {
+              memberSched.days = groupDays[member.employeeId];
+              memberSched.days.sort((a, b) => a.date.localeCompare(b.date));
+              memberSched.version = (memberSched.version || 1) + 1;
+              memberSched.updated_at = getVietnamISOString();
+              memberSched.approvalStatus = 'APPROVED';
+              addSyncQueue('SCHEDULE', 'UPDATE', memberSched, member.employeeId, 'TELEGRAM_BOT');
+            }
+          });
+        } else {
+          // Quy tắc 2 & 3: Độc lập ca/chi nhánh -> Nhân viên đơn lẻ ca này có lịch độc lập
+          // Nhân viên CÙNG CHI NHÁNH + KHÁC CA hoặc KHÁC CHI NHÁNH ĐƯỢC TRÙNG CA LÀM VIỆC TRONG 1 NGÀY
+          let sched = (db.schedules || []).find(s => s.employeeId === emp.employeeId && s.weekStart === weekStr);
           const days = [];
-          for(let i=0; i<7; i++){
-            const d = new Date(monDate);
-            d.setDate(monDate.getDate() + i);
-            const ds = toVietnamDateStr(d);
+          for (let i = 0; i < 7; i++) {
+            const ds = weekDates[i];
             const isOff = offDatesInWeek.includes(ds);
             days.push({
               date: ds,
@@ -14751,44 +14942,28 @@ async function processTelegramUpdate(update, role){
               substituteFor: null
             });
           }
-          sched = {
-            id: uuidv4(),
-            employeeId: emp.employeeId,
-            weekStart: weekStr,
-            days,
-            version: 1,
-            updated_at: getVietnamISOString(),
-            approvalStatus: 'APPROVED'
-          };
-          if(!db.schedules) db.schedules = [];
-          db.schedules.push(sched);
-          addSyncQueue('SCHEDULE', 'CREATE', sched, emp.employeeId, 'TELEGRAM_BOT');
-        } else {
-          for(let i=0; i<7; i++){
-            const d = new Date(monDate);
-            d.setDate(monDate.getDate() + i);
-            const ds = toVietnamDateStr(d);
-            const isOff = offDatesInWeek.includes(ds);
-            let dayRec = sched.days.find(x => x.date === ds);
-            if(!dayRec){
-              dayRec = {
-                date: ds,
-                dayName: dayNames[i],
-                shift: isOff ? 'OFF' : (emp.shift || 'CA_SANG'),
-                status: isOff ? 'OFF' : 'WORKING',
-                substituteFor: null
-              };
-              sched.days.push(dayRec);
-            } else {
-              dayRec.status = isOff ? 'OFF' : 'WORKING';
-              dayRec.shift = isOff ? 'OFF' : (emp.shift || 'CA_SANG');
-            }
+
+          if (!sched) {
+            sched = {
+              id: uuidv4(),
+              employeeId: emp.employeeId,
+              weekStart: weekStr,
+              days,
+              version: 1,
+              updated_at: getVietnamISOString(),
+              approvalStatus: 'APPROVED'
+            };
+            if (!db.schedules) db.schedules = [];
+            db.schedules.push(sched);
+            addSyncQueue('SCHEDULE', 'CREATE', sched, emp.employeeId, 'TELEGRAM_BOT');
+          } else {
+            sched.days = days;
+            sched.days.sort((a, b) => a.date.localeCompare(b.date));
+            sched.version = (sched.version || 1) + 1;
+            sched.updated_at = getVietnamISOString();
+            sched.approvalStatus = 'APPROVED';
+            addSyncQueue('SCHEDULE', 'UPDATE', sched, emp.employeeId, 'TELEGRAM_BOT');
           }
-          sched.days.sort((a, b) => a.date.localeCompare(b.date));
-          sched.version = (sched.version || 1) + 1;
-          sched.updated_at = getVietnamISOString();
-          sched.approvalStatus = 'APPROVED';
-          addSyncQueue('SCHEDULE', 'UPDATE', sched, emp.employeeId, 'TELEGRAM_BOT');
         }
         updatedWeeks.push(weekStr);
       });
@@ -14854,13 +15029,22 @@ async function processTelegramUpdate(update, role){
       } catch(e) {}
 
       const offFormatted = dates.map(d => `• <b>${fmtDMY(d)}</b> (Nghỉ OFF)`).join('\n');
+      let colleagueNote = '';
+      if (sameShiftColleagues.length > 0) {
+        const cNames = sameShiftColleagues.map(c => `<b>${c.name}</b> (<code>${c.employeeId}</code>)`).join(', ');
+        colleagueNote = `\n\n🔄 <b>Tự động điều phối ca trực (Zero Collision):</b>\n`
+          + `• Đã sắp xếp luân phiên với đồng nghiệp cùng ca (${cNames}) để <b>KHÔNG TRÙNG CA LÀM VIỆC TRONG 1 NGÀY</b>.\n`
+          + `• Các nhân viên khác ca tại chi nhánh hoặc khác chi nhánh vẫn làm việc song song bình thường (được trùng ngày làm việc).`;
+      }
+
       return {
         text: `✅ <b>ĐÃ ĐĂNG KÝ LỊCH OFF THÀNH CÔNG</b>\n\n`
           + `👤 Nhân viên: <b>${emp.name}</b> (<code>${emp.employeeId}</code>)\n`
           + `🏪 Chi nhánh: <b>${emp.branchId || '—'}</b> • Ca: <b>${emp.shift || '—'}</b>\n\n`
           + `🏖️ <b>Ngày nghỉ OFF:</b>\n${offFormatted}\n\n`
-          + `💼 <b>Các ngày còn lại trong tuần:</b> Đã cập nhật là ngày <b>LÀM VIỆC (WORKING)</b>.\n`
-          + `📌 <b>Trạng thái:</b> Đã ghi nhận thành công, đang chờ HR duyệt và chốt lịch tuần!`
+          + `💼 <b>Các ngày còn lại trong tuần:</b> Đã cập nhật trạng thái làm việc tự động.`
+          + colleagueNote
+          + `\n\n📌 <b>Trạng thái:</b> Đã ghi nhận thành công, đang chờ HR duyệt và chốt lịch tuần!`
       };
     }
   };

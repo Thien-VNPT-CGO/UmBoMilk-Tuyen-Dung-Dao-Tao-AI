@@ -1080,6 +1080,18 @@ async function handleTelegramUpdate(update, ctx) {
             + `1. Liên hệ trực tiếp Quản lý cửa hàng hoặc HR để được hỗ trợ.\n`
             + `2. Hoặc dùng chức năng <b>"🔄 Đổi ca"</b> để hoán đổi ngày làm việc với đồng nghiệp cùng chi nhánh.</i>`
         });
+      } else if (ctx?.checkColleagueOffConflict && (await ctx.checkColleagueOffConflict(String(from?.id), dates))?.hasConflict) {
+        const conflict = await ctx.checkColleagueOffConflict(String(from?.id), dates);
+        actions.push({
+          chatId,
+          text: `⚠️ <b>CẢNH BÁO: TRÙNG LỊCH NGHỈ VỚI ĐỒNG NGHIỆP CÙNG CA!</b>\n\n`
+            + `🏪 Chi nhánh: <b>${conflict.branchId || '—'}</b> • Ca: <b>${conflict.shift || '—'}</b>\n`
+            + `👤 Đồng nghiệp: <b>${conflict.colleagueName}</b> (<code>${conflict.colleagueId}</code>)\n`
+            + `📅 Đã đăng ký nghỉ trước ngày: <code>${conflict.conflictDates.join(', ')}</code>\n\n`
+            + `📌 <b>Ràng buộc vận hành:</b> Hai nhân viên cùng chi nhánh và cùng ca làm việc <b>không thể cùng nghỉ chung 1 ngày</b> để đảm bảo luôn có nhân sự trực ca.\n`
+            + `(Các nhân viên khác ca hoặc khác chi nhánh vẫn được phép làm việc hoặc nghỉ cùng ngày).\n\n`
+            + `👉 <i>Vui lòng chọn ngày nghỉ khác hoặc liên hệ Quản lý cửa hàng / HR để được điều phối!</i>`
+        });
       } else if (ctx?.registerOffSchedule) {
         const win = ctx?.checkOffWindow ? ctx.checkOffWindow() : { isOpen: true, state: 'OPEN' };
         if (win.state === 'BEFORE' && !ctx?.bypassWindow) {
